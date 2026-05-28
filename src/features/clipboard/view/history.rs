@@ -23,6 +23,7 @@ pub(super) fn history_page(
     query_input: Entity<TextInput>,
     selected_record: Option<ClipboardRecord>,
     item_count: usize,
+    current_filter: ClipboardFilter,
     status_text: String,
     history_scroll: VirtualListScrollHandle,
     preview_file_scroll: VirtualListScrollHandle,
@@ -48,6 +49,7 @@ pub(super) fn history_page(
                             handle.clone(),
                             item_count,
                             query_input,
+                            current_filter,
                             status_text.clone(),
                             dark,
                         ))
@@ -82,6 +84,7 @@ fn history_left_header(
     handle: Entity<ClipboardPanel>,
     item_count: usize,
     query_input: Entity<TextInput>,
+    current_filter: ClipboardFilter,
     status_text: String,
     dark: bool,
 ) -> impl IntoElement {
@@ -134,6 +137,7 @@ fn history_left_header(
                     },
                 )),
         )
+        .child(render_filter_tabs(handle.clone(), current_filter, dark))
         .child(
             div()
                 .flex()
@@ -152,6 +156,65 @@ fn history_left_header(
                         .child(format!("{item_count} 条")),
                 ),
         )
+}
+
+fn render_filter_tabs(
+    handle: Entity<ClipboardPanel>,
+    active: ClipboardFilter,
+    dark: bool,
+) -> impl IntoElement {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(6.0))
+        .children(keyboard_filters().into_iter().map(|filter| {
+            let is_active = active == filter;
+            let h = handle.clone();
+            div()
+                .h(px(26.0))
+                .px(px(10.0))
+                .rounded(px(6.0))
+                .bg(if is_active {
+                    theme::rgba_with_alpha(theme::launcher_accent(dark), 0.12)
+                } else {
+                    theme::token("color-bg-elevated", dark)
+                })
+                .border_1()
+                .border_color(if is_active {
+                    theme::launcher_accent(dark)
+                } else {
+                    theme::token("color-border-default", dark)
+                })
+                .text_color(if is_active {
+                    theme::launcher_accent(dark)
+                } else {
+                    theme::token("color-text-secondary", dark)
+                })
+                .text_size(px(12.0))
+                .font_weight(if is_active {
+                    gpui::FontWeight::SEMIBOLD
+                } else {
+                    gpui::FontWeight::NORMAL
+                })
+                .cursor_pointer()
+                .hover(move |style| {
+                    if !is_active {
+                        style.bg(theme::token("color-row-hover", dark))
+                    } else {
+                        style
+                    }
+                })
+                .on_click(move |_, _, cx| {
+                    let _ = cx.update_entity(&h, |panel, cx| {
+                        panel.set_filter_async(filter, cx);
+                        cx.notify();
+                    });
+                })
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(filter.label())
+        }))
 }
 
 fn history_list(
@@ -188,7 +251,8 @@ fn history_virtual_list(
                 handle.clone(),
                 "clipboard-history-list",
                 item_sizes,
-                move |_, range, _, _| {
+                move |panel, range, _, cx| {
+                    panel.maybe_prefetch_history(range.end, cx);
                     range
                         .map(|index| {
                             let item = items[index].clone();

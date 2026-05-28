@@ -1,9 +1,10 @@
-use std::{sync::Arc, time::Duration};
+use std::{rc::Rc, sync::Arc, time::Duration};
 
 use gpui::{
     AnyElement, App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
     KeyDownEvent, ParentElement, Render, ScrollStrategy, StatefulInteractiveElement, Styled,
-    Subscription, UniformListScrollHandle, Window, div, prelude::FluentBuilder, px, uniform_list,
+    Subscription, Task, UniformListScrollHandle, Window, div, prelude::FluentBuilder, px,
+    uniform_list,
 };
 
 use crate::{
@@ -28,6 +29,9 @@ pub struct AppLauncherRuntime {
     service: Arc<AppIndexService>,
     watch_started: bool,
 }
+
+const APP_PAGE_SIZE: usize = 120;
+const APP_PREFETCH_THRESHOLD: usize = 40;
 
 impl AppLauncherRuntime {
     pub fn new(paths: AppPaths) -> Self {
@@ -250,9 +254,14 @@ struct AppLauncherView {
     service: Arc<AppIndexService>,
     query_input: Entity<TextInput>,
     query: String,
-    page_offset: usize,
+    rows: Rc<Vec<AppEntry>>,
+    total_matches: usize,
     selected: usize,
     notice: Option<String>,
+    loading: bool,
+    has_more: bool,
+    load_generation: u64,
+    load_task: Option<Task<()>>,
     focus_pending: bool,
     list_scroll: UniformListScrollHandle,
     _subscriptions: Vec<Subscription>,
@@ -277,14 +286,20 @@ impl AppLauncherView {
             service,
             query_input,
             query: String::new(),
-            page_offset: 0,
+            rows: Rc::new(Vec::new()),
+            total_matches: 0,
             selected: 0,
             notice: None,
+            loading: false,
+            has_more: false,
+            load_generation: 0,
+            load_task: None,
             focus_pending: true,
             list_scroll: UniformListScrollHandle::new(),
             _subscriptions: Vec::new(),
         };
         this.observe_query_input(cx);
+        this.refresh_async(cx);
         this
     }
 
@@ -298,19 +313,22 @@ impl AppLauncherView {
     }
 
     fn page_limit(&self) -> usize {
-        AppIndexService::DEFAULT_PAGE_LIMIT
+        APP_PAGE_SIZE
     }
 
     fn filtered_page(&self) -> Page<AppEntry> {
-        self.service
-            .search_page(&self.query, self.page_offset, self.page_limit())
+        Page {
+            rows: self.rows.as_ref().clone(),
+            total: self.total_matches,
+            offset: 0,
+            limit: self.page_limit(),
+        }
     }
 
-    fn sync_query(&mut self, cx: &App) {
+    fn sync_query(&mut self, cx: &mut Context<Self>) {
         self.query = self.query_input.read(cx).text();
-        self.page_offset = 0;
-        self.selected = 0;
         self.notice = None;
+        self.refresh_async(cx);
     }
 
     fn refresh_index(&mut self) {
@@ -322,30 +340,30 @@ impl AppLauncherView {
     }
 
     fn move_selection(&mut self, delta: isize, cx: &mut Context<Self>) {
-        let filtered = self.filtered_page();
-        if filtered.rows.is_empty() {
+        if self.rows.is_empty() {
             self.selected = 0;
             cx.notify();
             return;
         }
 
-        let len = filtered.rows.len() as isize;
+        let len = self.rows.len() as isize;
         self.selected = (self.selected as isize + delta).clamp(0, len - 1) as usize;
         self.list_scroll
             .scroll_to_item(self.selected, ScrollStrategy::Top);
+        self.maybe_prefetch(self.selected.saturating_add(12), cx);
         self.notice = None;
         cx.notify();
     }
 
     fn select(&mut self, index: usize, cx: &mut Context<Self>) {
-        self.selected = index.min(self.filtered_page().rows.len().saturating_sub(1));
+        self.selected = index.min(self.rows.len().saturating_sub(1));
+        self.maybe_prefetch(self.selected.saturating_add(12), cx);
         self.notice = None;
         cx.notify();
     }
 
     fn launch_selected(&mut self, cx: &mut Context<Self>) {
-        let filtered = self.filtered_page();
-        let Some(app) = filtered.rows.get(self.selected) else {
+        let Some(app) = self.rows.get(self.selected) else {
             self.notice = Some(String::from("没有可启动的应用"));
             cx.notify();
             return;
@@ -367,41 +385,71 @@ impl AppLauncherView {
         self.query_input
             .update(cx, |input, input_cx| input.clear(input_cx));
         self.query.clear();
-        self.page_offset = 0;
-        self.selected = 0;
         self.notice = None;
+        self.refresh_async(cx);
         cx.notify();
     }
 
-    fn can_page_backward(&self) -> bool {
-        self.page_offset > 0
+    fn refresh_async(&mut self, cx: &mut Context<Self>) {
+        self.rows = Rc::new(Vec::new());
+        self.total_matches = 0;
+        self.selected = 0;
+        self.loading = true;
+        self.has_more = false;
+        self.list_scroll.scroll_to_item(0, ScrollStrategy::Top);
+        self.schedule_load(true, cx);
     }
 
-    fn can_page_forward(&self) -> bool {
-        let page = self.filtered_page();
-        page.offset + page.rows.len() < page.total
-    }
-
-    fn page_backward(&mut self, cx: &mut Context<Self>) {
-        if !self.can_page_backward() {
+    fn maybe_prefetch(&mut self, visible_end: usize, cx: &mut Context<Self>) {
+        if self.loading || !self.has_more {
             return;
         }
-        let step = self.page_limit();
-        self.page_offset = self.page_offset.saturating_sub(step);
-        self.selected = 0;
-        self.notice = None;
-        cx.notify();
+        let remaining = self.rows.len().saturating_sub(visible_end);
+        if remaining <= APP_PREFETCH_THRESHOLD {
+            self.loading = true;
+            self.schedule_load(false, cx);
+        }
     }
 
-    fn page_forward(&mut self, cx: &mut Context<Self>) {
-        let page = self.filtered_page();
-        if page.offset + page.rows.len() >= page.total {
-            return;
+    fn schedule_load(&mut self, reset: bool, cx: &mut Context<Self>) {
+        self.load_generation = self.load_generation.wrapping_add(1);
+        let generation = self.load_generation;
+        let service = Arc::clone(&self.service);
+        let query = self.query.clone();
+        let offset = if reset { 0 } else { self.rows.len() };
+        let limit = self.page_limit();
+
+        self.load_task = Some(cx.spawn(async move |view, async_cx| {
+            let page = async_cx
+                .background_executor()
+                .spawn(async move { service.search_page(&query, offset, limit) })
+                .await;
+
+            let _ = view.update(async_cx, |view, cx| {
+                if view.load_generation != generation {
+                    return;
+                }
+                view.loading = false;
+                view.apply_loaded_page(page, reset);
+                if reset && !view.rows.is_empty() {
+                    view.list_scroll.scroll_to_item(0, ScrollStrategy::Top);
+                }
+                cx.notify();
+            });
+        }));
+    }
+
+    fn apply_loaded_page(&mut self, page: Page<AppEntry>, reset: bool) {
+        self.total_matches = page.total;
+        self.has_more = page.offset + page.rows.len() < page.total;
+        if reset {
+            self.rows = Rc::new(page.rows);
+        } else {
+            let mut rows = self.rows.as_ref().clone();
+            rows.extend(page.rows);
+            self.rows = Rc::new(rows);
         }
-        self.page_offset += self.page_limit();
-        self.selected = 0;
-        self.notice = None;
-        cx.notify();
+        self.selected = self.selected.min(self.rows.len().saturating_sub(1));
     }
 
     fn status_text(&self, snapshot: &AppIndexSnapshot, total_matches: usize) -> String {
@@ -411,6 +459,13 @@ impl AppLauncherView {
 
         if let Some(error) = snapshot.last_error.as_ref() {
             return error.clone();
+        }
+
+        if self.loading {
+            if self.rows.is_empty() {
+                return String::from("正在加载应用列表");
+            }
+            return format!("已加载 {} 个应用，正在预取更多", self.rows.len());
         }
 
         if snapshot.scan_running {
@@ -428,9 +483,28 @@ impl AppLauncherView {
                 return String::from("暂无应用缓存，可手动刷新索引");
             }
             if let Some(last_scan) = snapshot.last_scan.as_ref() {
-                return format!("已索引 {} 个应用 · {}", snapshot.apps.len(), last_scan);
+                let more = if self.has_more {
+                    " · 继续滚动加载更多"
+                } else {
+                    ""
+                };
+                return format!(
+                    "已索引 {} 个应用 · 已加载 {} 个{more} · {}",
+                    snapshot.apps.len(),
+                    self.rows.len(),
+                    last_scan
+                );
             }
-            return format!("已缓存 {} 个应用", snapshot.apps.len());
+            let more = if self.has_more {
+                " · 继续滚动加载更多"
+            } else {
+                ""
+            };
+            return format!(
+                "已缓存 {} 个应用 · 已加载 {} 个{more}",
+                snapshot.apps.len(),
+                self.rows.len()
+            );
         }
 
         if total_matches == 0 {
@@ -475,11 +549,7 @@ impl Render for AppLauncherView {
         let handle = cx.entity();
         let dark = crate::app::theme_mode::is_dark();
         let snapshot = self.service.snapshot();
-        let mut filtered = self.filtered_page();
-        if filtered.rows.is_empty() && filtered.total > 0 && self.page_offset >= filtered.total {
-            self.page_offset = last_page_offset(filtered.total, self.page_limit());
-            filtered = self.filtered_page();
-        }
+        let filtered = self.filtered_page();
         let rows = filtered.rows;
         let selected = self.selected.min(rows.len().saturating_sub(1));
         let has_query = !self.query.trim().is_empty();
@@ -528,14 +598,11 @@ impl Render for AppLauncherView {
                     ),
             )
             .child(search_row(handle.clone(), query_input, dark))
-            .child(pagination_row(
-                handle.clone(),
-                dark,
-                self.page_offset,
-                self.page_limit(),
+            .child(loaded_range_row(
+                rows.len(),
                 filtered.total,
-                self.can_page_backward(),
-                self.can_page_forward(),
+                self.loading,
+                dark,
             ))
             .child({
                 let list_container = div()
@@ -556,7 +623,10 @@ impl Render for AppLauncherView {
                     let total = rows.len();
                     list_container
                         .child(
-                            uniform_list("app-launcher-rows", total, move |range, _window, _cx| {
+                            uniform_list("app-launcher-rows", total, move |range, _window, cx| {
+                                let _ = cx.update_entity(&handle, |view, cx| {
+                                    view.maybe_prefetch(range.end, cx);
+                                });
                                 range
                                     .map(|index| {
                                         let app = rows[index].clone();
@@ -614,15 +684,15 @@ fn search_row(
         }))
 }
 
-fn pagination_row(
-    handle: Entity<AppLauncherView>,
-    dark: bool,
-    page_offset: usize,
-    page_limit: usize,
-    total: usize,
-    can_page_backward: bool,
-    can_page_forward: bool,
-) -> impl IntoElement {
+fn loaded_range_row(loaded: usize, total: usize, loading: bool, dark: bool) -> impl IntoElement {
+    let label = if total == 0 {
+        String::from("暂无应用")
+    } else if loading {
+        format!("已加载 {loaded} / {total} · 正在预取")
+    } else {
+        format!("已加载 {loaded} / {total}")
+    };
+
     div()
         .h(px(28.0))
         .flex()
@@ -633,28 +703,7 @@ fn pagination_row(
                 .text_size(px(11.0))
                 .font_family("SF Mono")
                 .text_color(theme::token("color-text-secondary", dark))
-                .child(page_range_text(page_offset, page_limit, total)),
-        )
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(page_button("上一页", 0, dark, can_page_backward, {
-                    let handle = handle.clone();
-                    move |_, cx| {
-                        let _ = cx.update_entity(&handle, |view, cx| view.page_backward(cx));
-                    }
-                }))
-                .child(page_button(
-                    "下一页",
-                    1,
-                    dark,
-                    can_page_forward,
-                    move |_, cx| {
-                        let _ = cx.update_entity(&handle, |view, cx| view.page_forward(cx));
-                    },
-                )),
+                .child(label),
         )
 }
 
@@ -903,59 +952,12 @@ fn action_button(
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
-fn page_button(
-    label: &'static str,
-    id_suffix: usize,
-    dark: bool,
-    enabled: bool,
-    on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
-) -> impl IntoElement {
-    div()
-        .id(("app-launcher-page-button", id_suffix))
-        .h(px(24.0))
-        .px_2()
-        .rounded(px(6.0))
-        .border_1()
-        .border_color(theme::token("color-border-default", dark))
-        .bg(theme::token("color-bg-surface", dark))
-        .when(enabled, |button| {
-            button
-                .hover(move |style| {
-                    style
-                        .bg(theme::launcher_row_selected(dark))
-                        .cursor_pointer()
-                })
-                .on_click(move |event, _window, cx| on_click(event, cx))
-        })
-        .when(!enabled, |button| button.opacity(0.45))
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .text_color(theme::token("color-text-primary", dark))
-        .child(label)
-}
-
-fn page_range_text(offset: usize, limit: usize, total: usize) -> String {
-    match page_row_start(total, offset) {
-        Some(start) => {
-            let end = ((offset + limit).min(total)).max(start);
-            format!("{start}-{end} / {total}")
-        }
-        None => String::from("0-0 / 0"),
-    }
-}
-
 fn page_row_start(total: usize, offset: usize) -> Option<usize> {
     (total > 0).then_some(offset + 1)
 }
 
 fn page_row_end(page: &Page<AppEntry>) -> Option<usize> {
     (!page.rows.is_empty()).then_some(page.offset + page.rows.len())
-}
-
-fn last_page_offset(total: usize, page_limit: usize) -> usize {
-    total.saturating_sub(1) / page_limit * page_limit
 }
 
 #[cfg(test)]
@@ -972,22 +974,5 @@ mod tests {
     fn match_count_is_reported_for_active_query() {
         assert_eq!(match_count_for_query("safari", 0), Some(0));
         assert_eq!(match_count_for_query("app", 7), Some(7));
-    }
-
-    #[test]
-    fn page_range_text_uses_human_indices() {
-        assert_eq!(page_range_text(0, 40, 83), "1-40 / 83");
-        assert_eq!(page_range_text(40, 40, 83), "41-80 / 83");
-        assert_eq!(page_range_text(80, 40, 83), "81-83 / 83");
-        assert_eq!(page_range_text(0, 40, 0), "0-0 / 0");
-    }
-
-    #[test]
-    fn last_page_offset_clamps_to_page_boundary() {
-        assert_eq!(last_page_offset(0, 40), 0);
-        assert_eq!(last_page_offset(1, 40), 0);
-        assert_eq!(last_page_offset(40, 40), 0);
-        assert_eq!(last_page_offset(41, 40), 40);
-        assert_eq!(last_page_offset(83, 40), 80);
     }
 }

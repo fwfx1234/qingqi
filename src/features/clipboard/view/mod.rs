@@ -30,6 +30,9 @@ mod shared;
 use history::{history_page, keyboard_filters};
 use settings::{format_ignore_patterns, settings_page};
 
+const HISTORY_PAGE_SIZE: usize = 120;
+const HISTORY_PREFETCH_THRESHOLD: usize = 40;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ClipboardTab {
     History,
@@ -52,6 +55,7 @@ pub struct ClipboardPanel {
     focus_pending: bool,
     load_generation: u64,
     loading: bool,
+    has_more: bool,
     load_task: Option<Task<()>>,
     history_scroll: VirtualListScrollHandle,
     preview_file_scroll: VirtualListScrollHandle,
@@ -76,6 +80,7 @@ impl ClipboardPanel {
             focus_pending: true,
             load_generation: 0,
             loading: false,
+            has_more: false,
             load_task: None,
             history_scroll: VirtualListScrollHandle::new(),
             preview_file_scroll: VirtualListScrollHandle::new(),
@@ -91,11 +96,12 @@ impl ClipboardPanel {
     pub(crate) fn refresh_async(&mut self, cx: &mut Context<Self>) {
         self.items.clear();
         self.selected = 0;
+        self.has_more = false;
         self.loading = true;
         self.history_scroll.scroll_to_item(0, ScrollStrategy::Top);
         self.preview_file_scroll
             .scroll_to_item(0, ScrollStrategy::Top);
-        self.schedule_load(cx);
+        self.schedule_load(true, cx);
     }
 
     pub(crate) fn reopen(&mut self, cx: &mut Context<Self>) {
@@ -218,12 +224,26 @@ impl ClipboardPanel {
         self.refresh_async(cx);
     }
 
-    fn schedule_load(&mut self, cx: &mut Context<Self>) {
+    fn maybe_prefetch_history(&mut self, visible_end: usize, cx: &mut Context<Self>) {
+        if self.loading || !self.has_more {
+            return;
+        }
+
+        let remaining = self.items.len().saturating_sub(visible_end);
+        if remaining <= HISTORY_PREFETCH_THRESHOLD {
+            self.loading = true;
+            self.schedule_load(false, cx);
+        }
+    }
+
+    fn schedule_load(&mut self, reset: bool, cx: &mut Context<Self>) {
         self.load_generation = self.load_generation.wrapping_add(1);
         let generation = self.load_generation;
         let service = Arc::clone(&self.service);
         let query = self.query.clone();
         let filter = self.filter;
+        let offset = if reset { 0 } else { self.items.len() };
+        let limit = HISTORY_PAGE_SIZE;
 
         self.load_task = Some(cx.spawn(async move |panel, async_cx| {
             let rows_result = async_cx
@@ -232,7 +252,7 @@ impl ClipboardPanel {
                     let service = service
                         .lock()
                         .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
-                    service.search_all(&query, filter)
+                    service.search(&query, filter, offset, limit + 1)
                 })
                 .await;
 
@@ -242,10 +262,10 @@ impl ClipboardPanel {
                 }
                 panel.loading = false;
                 match rows_result {
-                    Ok(rows) => panel.apply_loaded_rows(rows),
+                    Ok(rows) => panel.apply_loaded_rows(rows, reset, limit),
                     Err(error) => panel.message = format!("加载失败: {error}"),
                 }
-                if !panel.items.is_empty() {
+                if reset && !panel.items.is_empty() {
                     panel
                         .history_scroll
                         .scroll_to_item(panel.selected, ScrollStrategy::Top);
@@ -256,8 +276,18 @@ impl ClipboardPanel {
         }));
     }
 
-    fn apply_loaded_rows(&mut self, rows: Vec<ClipboardRecord>) {
-        self.items = rows;
+    fn apply_loaded_rows(&mut self, mut rows: Vec<ClipboardRecord>, reset: bool, limit: usize) {
+        self.has_more = rows.len() > limit;
+        if self.has_more {
+            rows.truncate(limit);
+        }
+
+        if reset {
+            self.items = rows;
+        } else {
+            self.items.extend(rows);
+        }
+
         if self.selected >= self.items.len() {
             self.selected = self.items.len().saturating_sub(1);
         }
@@ -832,6 +862,10 @@ impl ClipboardPanel {
         }
 
         if self.loading {
+            let count = self.items.len();
+            if count > 0 {
+                return format!("{} · 已加载 {} 条，正在预取...", self.filter.label(), count);
+            }
             return format!("{} · 正在加载...", self.filter.label());
         }
 
@@ -844,16 +878,89 @@ impl ClipboardPanel {
 
         let count = self.items.len();
         if self.query.trim().is_empty() {
-            format!("{} · 已加载 {} 条记录", self.filter.label(), count)
+            let more = if self.has_more {
+                " · 继续滚动加载更多"
+            } else {
+                ""
+            };
+            format!("{} · 已加载 {} 条记录{more}", self.filter.label(), count)
         } else {
+            let more = if self.has_more {
+                " · 继续滚动加载更多"
+            } else {
+                ""
+            };
             format!(
-                "{} · 关键词“{}”匹配到 {} 条记录",
+                "{} · 关键词“{}”已加载 {} 条记录{more}",
                 self.filter.label(),
                 self.query,
                 count
             )
         }
     }
+}
+
+fn render_tab_bar(
+    handle: Entity<ClipboardPanel>,
+    active: ClipboardTab,
+    dark: bool,
+) -> impl IntoElement {
+    let tabs = [
+        (ClipboardTab::History, "历史记录"),
+        (ClipboardTab::Settings, "设置"),
+    ];
+
+    div()
+        .h(px(36.0))
+        .px(px(16.0))
+        .border_b_1()
+        .border_color(theme::token("color-border-default", dark))
+        .bg(theme::token("color-bg-page", dark))
+        .flex()
+        .items_center()
+        .gap(px(4.0))
+        .children(tabs.into_iter().map(|(tab, label)| {
+            let is_active = active == tab;
+            let h = handle.clone();
+            div()
+                .h(px(28.0))
+                .px(px(12.0))
+                .rounded(px(6.0))
+                .bg(if is_active {
+                    theme::token("color-bg-surface", dark)
+                } else {
+                    hsla(0.0, 0.0, 0.0, 0.0)
+                })
+                .text_color(if is_active {
+                    theme::token("color-text-primary", dark)
+                } else {
+                    theme::token("color-text-secondary", dark)
+                })
+                .font_weight(if is_active {
+                    gpui::FontWeight::SEMIBOLD
+                } else {
+                    gpui::FontWeight::NORMAL
+                })
+                .text_size(px(12.0))
+                .cursor_pointer()
+                .hover(move |style| {
+                    if !is_active {
+                        style.bg(theme::token("color-row-hover", dark))
+                    } else {
+                        style
+                    }
+                })
+                .on_click(move |_, _, cx| {
+                    let _ = cx.update_entity(&h, |panel, cx| {
+                        panel.set_tab(tab);
+                        cx.notify();
+                    });
+                })
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(label)
+        }))
 }
 
 impl Render for ClipboardPanel {
@@ -866,6 +973,8 @@ impl Render for ClipboardPanel {
         }
 
         let handle = cx.entity();
+        let tab = self.tab;
+        let current_filter = self.filter;
         let items = self.items.clone();
         let selected = self.selected;
         let query = self.query.clone();
@@ -893,7 +1002,8 @@ impl Render for ClipboardPanel {
             .text_color(theme::token("color-text-primary", dark))
             .font_family("PingFang SC")
             .capture_key_down(cx.listener(Self::handle_panel_key))
-            .child(if self.tab == ClipboardTab::History {
+            .child(render_tab_bar(handle.clone(), tab, dark))
+            .child(if tab == ClipboardTab::History {
                 history_page(
                     handle.clone(),
                     items,
@@ -902,6 +1012,7 @@ impl Render for ClipboardPanel {
                     query_input,
                     selected_record,
                     item_count,
+                    current_filter,
                     status_text,
                     self.history_scroll.clone(),
                     self.preview_file_scroll.clone(),

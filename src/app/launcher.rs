@@ -52,6 +52,7 @@ const LAUNCHER_WIDTH: f32 = 800.0;
 const EMPTY_RESULTS_HEIGHT: f32 = 180.0;
 const SEARCH_DEBOUNCE: Duration = Duration::from_millis(70);
 const COMMAND_SEARCH_LIMIT: usize = 120;
+const PLUGIN_LIST_PREFETCH_THRESHOLD: usize = 40;
 static PLUGIN_OPEN_TRACE_ID: AtomicU64 = AtomicU64::new(1);
 
 enum LauncherMode {
@@ -653,7 +654,6 @@ impl Launcher {
 
     fn move_selection(&mut self, delta: isize, cx: &mut Context<Self>) {
         let started = Instant::now();
-        let query_for_lazy = self.query(cx);
         let (len, selected, visible_start, scroll_handle) = match &mut self.mode {
             LauncherMode::Search => (
                 self.results.len(),
@@ -683,20 +683,28 @@ impl Launcher {
         }
         *selected = next;
         scroll_selection_into_view(next, len, visible_start, scroll_handle);
-        if let LauncherMode::ListPlugin { session, items, .. } = &mut self.mode
-            && next.saturating_add(8) >= items.len()
-        {
-            let more_items = session.on_input_changed(&query_for_lazy, cx);
-            if more_items.len() > items.len() {
-                *items = Rc::new(more_items);
-            }
-        }
+        self.maybe_prefetch_plugin_items(next.saturating_add(VISIBLE_ROWS), cx);
         log_slow_launcher_interaction(
             "move selection",
             started,
             &[("selected", next.to_string()), ("items", len.to_string())],
         );
         cx.notify();
+    }
+
+    fn maybe_prefetch_plugin_items(&mut self, visible_end: usize, cx: &mut Context<Self>) {
+        let query = self.query(cx);
+        if let LauncherMode::ListPlugin { session, items, .. } = &mut self.mode {
+            let remaining = items.len().saturating_sub(visible_end);
+            if remaining > PLUGIN_LIST_PREFETCH_THRESHOLD {
+                return;
+            }
+
+            let more_items = session.on_input_changed(&query, cx);
+            if more_items.len() > items.len() {
+                *items = Rc::new(more_items);
+            }
+        }
     }
 
     fn select_prev(&mut self, cx: &mut Context<Self>) {
@@ -1119,7 +1127,8 @@ fn plugin_list(
             .expect("launcher handle missing for plugin list"),
         "launcher-plugin-list",
         Launcher::virtual_item_sizes(count),
-        move |_, range, _window, _cx| {
+        move |launcher, range, _window, cx| {
+            launcher.maybe_prefetch_plugin_items(range.end, cx);
             range
                 .map(|idx| {
                     let item = items[idx].clone();

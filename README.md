@@ -1,35 +1,71 @@
 # Qingqi
 
-`qingqi` 是 `suishou` 的 Rust + GPUI 重写实验版。首要目标是保留核心体验：应用常驻、启动器唤起内置能力、优先实现剪贴板历史；暂不支持第三方插件加载。
+`qingqi` 是一个基于 Rust + GPUI 的桌面工具集合，聚焦“常驻启动器 + 内置高频工具”体验。
 
-## 当前范围
+项目目标：
 
-- Rust 2024 + `gpui = 0.2.2`，macOS 使用 `macos-blade` 后端以避免构建期依赖 Xcode `metal` 命令。
-- 内置插件注册表，不扫描第三方插件目录。
-- 剪贴板插件后台轻量轮询，历史写入 SQLite。
-- 插件窗口按需创建，关闭时丢弃视图状态，释放插件 session。
-- 常驻进程只保留核心状态和剪贴板监听，不把历史列表长期放在内存里。
+- 启动快、交互轻，优先保证启动器和核心功能响应速度。
+- 内置常用工具（剪贴板、应用启动、下载、SFTP/SSH 等）统一入口。
+- 以本地数据和本地执行为主，避免不必要的运行时耦合。
 
-## 运行
+## 核心能力
+
+- 全局启动器：统一搜索命令、插件入口和上下文动作。
+- 应用快速启动：本机应用索引、搜索、启动、使用排序。
+- 剪贴板历史：文本/图片/文件历史管理、筛选、快捷操作。
+- 下载管理：多任务下载、状态追踪与持久化。
+- FTP/SFTP/SSH：连接配置、文件传输、终端与日志视图。
+- 系统设置：主题、行为、缓存与运行参数管理。
+
+## 技术栈
+
+- Rust 2024
+- GPUI `0.2.2`
+- SQLite（本地状态与索引持久化）
+- 平台能力封装（`src/platform`）
+
+## 项目结构
+
+- `src/app`：应用入口、启动器、主题、窗口与运行时编排。
+- `src/core`：命令、插件协议、快捷键、存储和基础抽象。
+- `src/features`：各业务功能模块（插件实现）。
+- `src/platform`：系统相关能力（应用扫描、剪贴板、shell、tray 等）。
+- `assets`：图标与静态资源。
+
+## 本地开发
 
 ```bash
 cargo check
 cargo run
 ```
 
-当前机器若没有 Rust 工具链，请先安装 `rustup`。数据默认写到系统数据目录下的 `qingqi/`，也可以用 `QINGQI_DATA_DIR` 覆盖。
+可选：
 
-如果改回 GPUI 默认 macOS Metal 后端，需要安装完整 Xcode，并确认 `xcrun -sdk macosx metal` 可用；当前项目先选择 `macos-blade` 来降低本地构建门槛。
+```bash
+cargo test
+```
 
-## 设计取舍
+数据默认写入系统数据目录下的 `qingqi/`，可通过 `QINGQI_DATA_DIR` 覆盖。
 
-- 第三方插件加载先不做，避免常驻进程引入动态加载、隔离和卸载复杂度。
-- 剪贴板监听只比较文本内容，优先把内存占用压低；图片和文件历史会在后续补齐。
-- UI 打开时分页读取历史，关闭时释放 `ClipboardPanel` 的列表、搜索和选择状态。
-- `PluginManager` 常驻只保存 runtime 工厂；插件窗口持有 session，窗口关闭后 session drop，后台剪贴板服务不持有历史列表。
+## 日志
 
-## 架构文档
+默认日志级别为 `qingqi=info,warn`。可通过 `RUST_LOG` 调整：
 
-- [核心架构规范](docs/core-architecture-spec.md)：后续修改 `app`、`core`、`platform`、事件、后台任务、插件生命周期时的准则。
-- [架构调整方案](docs/architecture-adjustment-plan.md)：Rust/GPUI 专家视角的阶段化调整建议。
-- [当前架构概览](docs/architecture.md)：现有分层、事件流、长期任务和迁移规则摘要。
+```bash
+RUST_LOG="qingqi=trace,warn" cargo run
+```
+
+## 自动打包
+
+项目已配置 GitHub Actions 自动打包工作流：`.github/workflows/release.yml`
+
+- 触发方式：
+  - 推送 tag（如 `v0.1.0`）
+  - 手动触发 `workflow_dispatch`
+- 构建目标：
+  - Linux `x86_64-unknown-linux-gnu`
+  - macOS `aarch64-apple-darwin`
+  - Windows `x86_64-pc-windows-msvc`
+- 产物：
+  - Workflow Artifacts
+  - Tag 场景下自动上传到 GitHub Release

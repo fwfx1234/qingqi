@@ -970,16 +970,12 @@ fn top_bar(
         .items_center()
         .gap(px(10.0))
         .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(2.0))
-                .child(
-                    div()
-                        .text_size(px(13.0))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child("大象本地云盘"),
-                ),
+            div().flex().flex_col().gap(px(2.0)).child(
+                div()
+                    .text_size(px(13.0))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child("大象本地云盘"),
+            ),
         )
         .child(div().flex_1())
         .child(
@@ -1214,17 +1210,15 @@ fn connection_card(
                         .flex()
                         .items_center()
                         .justify_start()
-                        .child(
-                            div().child(status_pill(
-                                status_text,
-                                if is_connected {
-                                    rgb(0x16a34a)
-                                } else {
-                                    theme::launcher_faint_text(dark)
-                                },
-                                dark,
-                            )),
-                        ),
+                        .child(div().child(status_pill(
+                            status_text,
+                            if is_connected {
+                                rgb(0x16a34a)
+                            } else {
+                                theme::launcher_faint_text(dark)
+                            },
+                            dark,
+                        ))),
                 ),
         )
         .child(
@@ -2485,124 +2479,116 @@ fn profile_editor_overlay(
                     .flex_col()
                     .gap(px(14.0))
                     .child(editor_notice(editor.notice, dark))
-                    .child(
-                        profile_form_section(
-                            "通用",
-                            dark,
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(10.0))
-                                .child(profile_inline_field("名称", inputs.name.clone(), dark))
-                                .child(
-                                    profile_label_value_row(
-                                        "协议",
-                                        div().flex().gap(px(8.0)).children(
-                                            [
-                                                RemoteProtocol::Sftp,
-                                                RemoteProtocol::Ftp,
-                                                RemoteProtocol::Ftps,
-                                                RemoteProtocol::Ssh,
-                                            ]
-                                            .into_iter()
-                                            .map(|protocol_item| {
-                                                segmented_chip(
-                                                    protocol_item.label(),
-                                                    protocol_item == protocol,
-                                                    dark,
-                                                )
-                                                .id((
-                                                    "ftp-editor-protocol",
-                                                    protocol_index(protocol_item),
-                                                ))
-                                                .on_click({
-                                                    let panel = Rc::clone(&panel);
-                                                    move |_, window, cx| {
-                                                        panel
-                                                            .borrow_mut()
-                                                            .set_editor_protocol(protocol_item, cx);
-                                                        window.refresh();
-                                                    }
-                                                })
-                                            }),
-                                        ),
-                                        dark,
-                                    ),
+                    .child(profile_form_section(
+                        "通用",
+                        dark,
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(10.0))
+                            .child(profile_inline_field("名称", inputs.name.clone(), dark))
+                            .child(profile_label_value_row(
+                                "协议",
+                                div().flex().gap(px(8.0)).children(
+                                    [
+                                        RemoteProtocol::Sftp,
+                                        RemoteProtocol::Ftp,
+                                        RemoteProtocol::Ftps,
+                                        RemoteProtocol::Ssh,
+                                    ]
+                                    .into_iter()
+                                    .map(|protocol_item| {
+                                        segmented_chip(
+                                            protocol_item.label(),
+                                            protocol_item == protocol,
+                                            dark,
+                                        )
+                                        .id(("ftp-editor-protocol", protocol_index(protocol_item)))
+                                        .on_click({
+                                            let panel = Rc::clone(&panel);
+                                            move |_, window, cx| {
+                                                panel
+                                                    .borrow_mut()
+                                                    .set_editor_protocol(protocol_item, cx);
+                                                window.refresh();
+                                            }
+                                        })
+                                    }),
                                 ),
-                        ),
-                    )
-                    .child(
-                        profile_form_section(
-                            "服务器",
-                            dark,
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(10.0))
-                                .child(profile_inline_field("主机", inputs.host.clone(), dark))
-                                .child(profile_inline_field("端口", inputs.port.clone(), dark))
-                                .child(profile_inline_field("用户名", inputs.username.clone(), dark)),
-                        ),
-                    )
-                    .child(
-                        profile_form_section(
-                            "身份认证",
-                            dark,
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(10.0))
-                                .child(
-                                    profile_label_value_row(
-                                        "方式",
-                                        div().flex().gap(px(8.0)).children(
-                                            [
-                                                AuthMethod::Password,
-                                                AuthMethod::PrivateKey,
-                                                AuthMethod::Agent,
-                                            ]
-                                            .into_iter()
-                                            .map(|auth_method| {
-                                                segmented_chip(
-                                                    auth_method.label(),
-                                                    auth_method == editor.auth_method,
-                                                    dark,
-                                                )
-                                                .id((
-                                                    "ftp-editor-auth",
-                                                    auth_method_index(auth_method),
-                                                ))
-                                                .on_click({
-                                                    let panel = Rc::clone(&panel);
-                                                    move |_, window, cx| {
-                                                        panel
-                                                            .borrow_mut()
-                                                            .set_editor_auth_method(auth_method);
-                                                        window.refresh();
-                                                    }
-                                                })
-                                            }),
-                                        ),
-                                        dark,
-                                    ),
-                                )
-                                .when(editor.auth_method == AuthMethod::Password, |col| {
-                                    col.child(profile_inline_field("密码", inputs.password.clone(), dark))
-                                })
-                                .when(editor.auth_method == AuthMethod::PrivateKey, |col| {
-                                    col.child(profile_inline_field(
-                                        "私钥路径",
-                                        inputs.private_key_path.clone(),
-                                        dark,
-                                    ))
-                                    .child(profile_inline_field(
-                                        "私钥口令",
-                                        inputs.private_key_passphrase.clone(),
-                                        dark,
-                                    ))
-                                }),
-                        ),
-                    )
+                                dark,
+                            )),
+                    ))
+                    .child(profile_form_section(
+                        "服务器",
+                        dark,
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(10.0))
+                            .child(profile_inline_field("主机", inputs.host.clone(), dark))
+                            .child(profile_inline_field("端口", inputs.port.clone(), dark))
+                            .child(profile_inline_field(
+                                "用户名",
+                                inputs.username.clone(),
+                                dark,
+                            )),
+                    ))
+                    .child(profile_form_section(
+                        "身份认证",
+                        dark,
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(10.0))
+                            .child(profile_label_value_row(
+                                "方式",
+                                div().flex().gap(px(8.0)).children(
+                                    [
+                                        AuthMethod::Password,
+                                        AuthMethod::PrivateKey,
+                                        AuthMethod::Agent,
+                                    ]
+                                    .into_iter()
+                                    .map(|auth_method| {
+                                        segmented_chip(
+                                            auth_method.label(),
+                                            auth_method == editor.auth_method,
+                                            dark,
+                                        )
+                                        .id(("ftp-editor-auth", auth_method_index(auth_method)))
+                                        .on_click({
+                                            let panel = Rc::clone(&panel);
+                                            move |_, window, cx| {
+                                                panel
+                                                    .borrow_mut()
+                                                    .set_editor_auth_method(auth_method);
+                                                window.refresh();
+                                            }
+                                        })
+                                    }),
+                                ),
+                                dark,
+                            ))
+                            .when(editor.auth_method == AuthMethod::Password, |col| {
+                                col.child(profile_inline_field(
+                                    "密码",
+                                    inputs.password.clone(),
+                                    dark,
+                                ))
+                            })
+                            .when(editor.auth_method == AuthMethod::PrivateKey, |col| {
+                                col.child(profile_inline_field(
+                                    "私钥路径",
+                                    inputs.private_key_path.clone(),
+                                    dark,
+                                ))
+                                .child(profile_inline_field(
+                                    "私钥口令",
+                                    inputs.private_key_passphrase.clone(),
+                                    dark,
+                                ))
+                            }),
+                    ))
                     .child(
                         div()
                             .rounded(px(12.0))
@@ -2647,113 +2633,115 @@ fn profile_editor_overlay(
                             ),
                     )
                     .when(editor.show_advanced, |col| {
-                        col.child(
-                            profile_form_section(
-                                "高级配置",
-                                dark,
-                                div()
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(10.0))
-                                    .child(profile_inline_field(
-                                        "连接超时(秒)",
-                                        inputs.connect_timeout_secs.clone(),
+                        col.child(profile_form_section(
+                            "高级配置",
+                            dark,
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(10.0))
+                                .child(profile_inline_field(
+                                    "连接超时(秒)",
+                                    inputs.connect_timeout_secs.clone(),
+                                    dark,
+                                ))
+                                .child(profile_inline_field("编码", inputs.encoding.clone(), dark))
+                                .when(protocol != RemoteProtocol::Ssh, |advanced| {
+                                    advanced.child(profile_inline_field(
+                                        "默认远程目录",
+                                        inputs.remote_dir.clone(),
+                                        dark,
+                                    ))
+                                })
+                                .child(profile_inline_field(
+                                    "本地默认目录",
+                                    inputs.local_dir.clone(),
+                                    dark,
+                                ))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .gap(px(8.0))
+                                        .child(
+                                            segmented_chip(
+                                                "FTP 被动模式",
+                                                editor.passive_mode,
+                                                dark,
+                                            )
+                                            .id("ftp-editor-passive")
+                                            .on_click(
+                                                {
+                                                    let panel = Rc::clone(&panel);
+                                                    move |_, window, cx| {
+                                                        panel
+                                                            .borrow_mut()
+                                                            .toggle_editor_passive_mode();
+                                                        window.refresh();
+                                                    }
+                                                },
+                                            ),
+                                        )
+                                        .child(
+                                            segmented_chip("使用跳板机", editor.jump_enabled, dark)
+                                                .id("ftp-editor-jump")
+                                                .on_click({
+                                                    let panel = Rc::clone(&panel);
+                                                    move |_, window, cx| {
+                                                        panel
+                                                            .borrow_mut()
+                                                            .toggle_editor_jump_enabled();
+                                                        window.refresh();
+                                                    }
+                                                }),
+                                        )
+                                        .child(
+                                            segmented_chip("固定到顶部", editor.pinned, dark)
+                                                .id("ftp-editor-pinned")
+                                                .on_click({
+                                                    let panel = Rc::clone(&panel);
+                                                    move |_, window, cx| {
+                                                        panel.borrow_mut().toggle_editor_pinned();
+                                                        window.refresh();
+                                                    }
+                                                }),
+                                        ),
+                                )
+                                .when(editor.jump_enabled, |jump| {
+                                    jump.child(profile_inline_field(
+                                        "跳板机主机",
+                                        inputs.jump_host.clone(),
                                         dark,
                                     ))
                                     .child(profile_inline_field(
-                                        "编码",
-                                        inputs.encoding.clone(),
+                                        "跳板机端口",
+                                        inputs.jump_port.clone(),
                                         dark,
                                     ))
-                                    .when(protocol != RemoteProtocol::Ssh, |advanced| {
-                                        advanced.child(profile_inline_field(
-                                            "默认远程目录",
-                                            inputs.remote_dir.clone(),
-                                            dark,
-                                        ))
-                                    })
                                     .child(profile_inline_field(
-                                        "本地默认目录",
-                                        inputs.local_dir.clone(),
+                                        "跳板机用户",
+                                        inputs.jump_username.clone(),
+                                        dark,
+                                    ))
+                                    .child(profile_inline_field(
+                                        "跳板机密码",
+                                        inputs.jump_password.clone(),
+                                        dark,
+                                    ))
+                                    .child(profile_inline_field(
+                                        "跳板机私钥路径",
+                                        inputs.jump_private_key_path.clone(),
                                         dark,
                                     ))
                                     .child(
-                                        div()
-                                            .flex()
-                                            .gap(px(8.0))
-                                            .child(
-                                                segmented_chip("FTP 被动模式", editor.passive_mode, dark)
-                                                    .id("ftp-editor-passive")
-                                                    .on_click({
-                                                        let panel = Rc::clone(&panel);
-                                                        move |_, window, cx| {
-                                                            panel
-                                                                .borrow_mut()
-                                                                .toggle_editor_passive_mode();
-                                                            window.refresh();
-                                                        }
-                                                    }),
-                                            )
-                                            .child(
-                                                segmented_chip("使用跳板机", editor.jump_enabled, dark)
-                                                    .id("ftp-editor-jump")
-                                                    .on_click({
-                                                        let panel = Rc::clone(&panel);
-                                                        move |_, window, cx| {
-                                                            panel
-                                                                .borrow_mut()
-                                                                .toggle_editor_jump_enabled();
-                                                            window.refresh();
-                                                        }
-                                                    }),
-                                            )
-                                            .child(
-                                                segmented_chip("固定到顶部", editor.pinned, dark)
-                                                    .id("ftp-editor-pinned")
-                                                    .on_click({
-                                                        let panel = Rc::clone(&panel);
-                                                        move |_, window, cx| {
-                                                            panel.borrow_mut().toggle_editor_pinned();
-                                                            window.refresh();
-                                                        }
-                                                    }),
-                                            ),
-                                    )
-                                    .when(editor.jump_enabled, |jump| {
-                                        jump.child(profile_inline_field(
-                                            "跳板机主机",
-                                            inputs.jump_host.clone(),
-                                            dark,
-                                        ))
-                                        .child(profile_inline_field(
-                                            "跳板机端口",
-                                            inputs.jump_port.clone(),
-                                            dark,
-                                        ))
-                                        .child(profile_inline_field(
-                                            "跳板机用户",
-                                            inputs.jump_username.clone(),
-                                            dark,
-                                        ))
-                                        .child(profile_inline_field(
-                                            "跳板机密码",
-                                            inputs.jump_password.clone(),
-                                            dark,
-                                        ))
-                                        .child(profile_inline_field(
-                                            "跳板机私钥路径",
-                                            inputs.jump_private_key_path.clone(),
-                                            dark,
-                                        ))
-                                        .child(profile_inline_field(
+                                        profile_inline_field(
                                             "跳板机私钥口令",
                                             inputs.jump_private_key_passphrase.clone(),
                                             dark,
-                                        ))
-                                    })
-                                    .child(profile_inline_field("备注", inputs.notes.clone(), dark)),
-                            ),
-                        )
+                                        ),
+                                    )
+                                })
+                                .child(profile_inline_field("备注", inputs.notes.clone(), dark)),
+                        ))
                     })
                     .child(protocol_hint_card(
                         dark,

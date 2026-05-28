@@ -57,4 +57,3 @@ pub(super) fn theme_button(
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
-
