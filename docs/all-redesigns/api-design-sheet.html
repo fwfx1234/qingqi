@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API 调试 · 设计稿</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&family=JetBrains+Mono:wght@400;500&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #e8e4f4;
+    min-height: 100vh; padding: 30px 24px 80px;
+  }
+  .wrapper { max-width: 1300px; margin: 0 auto; }
+  .hdr { margin-bottom: 32px; }
+  .hdr h1 { font-size: 1.5rem; font-weight: 700; background: linear-gradient(135deg,#7b5fff,#5555cc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .hdr .sub { color: #8888aa; font-size: 0.85rem; margin-top: 4px; }
+
+  .glass {
+    border-radius: 16px; overflow: hidden; position: relative;
+    background: rgba(255,255,255,0.62);
+    backdrop-filter: blur(48px) saturate(1.7);
+    -webkit-backdrop-filter: blur(48px) saturate(1.7);
+    border: 1px solid rgba(255,255,255,0.55);
+    box-shadow: 0 12px 70px rgba(50,30,120,0.06);
+  }
+
+  .row { display: flex; gap: 28px; margin-bottom: 28px; }
+  .col { flex: 1; }
+  .sec-title {
+    font-size: 12px; font-weight: 600; color: #8888aa; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .sec-title .tag {
+    font-size: 9px; padding: 2px 10px; border-radius: 20px;
+    background: rgba(120,80,255,0.06); color: #7b5fff; font-weight: 500;
+  }
+
+  /* ===== 主界面 ===== */
+  .main-flex { display: flex; min-height: 640px; }
+
+  /* ---- Tree ---- */
+  .tree { width: 240px; flex-shrink: 0; border-right: 1px solid rgba(0,0,0,0.04); display: flex; flex-direction: column; }
+  .thd { padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(0,0,0,0.04); font-size: 12px; font-weight: 600; color: #444458; }
+  .thd button { width: 22px; height: 22px; border-radius: 6px; border: none; cursor: pointer; background: rgba(120,80,255,0.06); color: #7b5fff; font-size: 14px; font-family: inherit; }
+  .ts { flex: 1; overflow-y: auto; padding: 4px 0; }
+  .ts::-webkit-scrollbar { width: 3px; }
+  .ts::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.04); border-radius: 3px; }
+
+  .grp { }
+  .grp .gh { display: flex; align-items: center; padding: 5px 8px 5px 8px; gap: 4px; font-size: 11px; font-weight: 500; color: #9999bb; cursor: default; }
+  .grp .gh .ar { font-size: 7px; width: 14px; text-align: center; }
+  .grp .gh .ar.o { transform: rotate(90deg); }
+  .grp .gh .ctx { margin-left: auto; font-size: 10px; color: #bbb; opacity: 0; cursor: pointer; }
+  .grp .gh:hover .ctx { opacity: 0.6; }
+
+  .ti {
+    display: flex; align-items: center; padding: 5px 12px 5px 18px; gap: 5px;
+    cursor: pointer; font-size: 12px; color: #555568; transition: 0.1s; border-left: 2px solid transparent;
+  }
+  .ti:hover { background: rgba(0,0,0,0.015); }
+  .ti.s { background: rgba(120,80,255,0.04); color: #6b4fcf; border-left-color: #7b5fff; }
+  .ti .m { font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 3px; font-family: 'JetBrains Mono', monospace; }
+  .gx { background: rgba(0,160,80,0.06); color: #338855; }
+  .px { background: rgba(60,140,220,0.06); color: #336699; }
+  .dx { background: rgba(200,40,40,0.06); color: #994444; }
+  .ox { background: rgba(180,130,30,0.06); color: #997733; }
+  .ti .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ti .ct { font-size: 8px; padding: 1px 6px; border-radius: 10px; background: rgba(120,80,255,0.04); color: #7b5fff; }
+  .ti-sc { padding-left: 36px !important; font-size: 11px; border-left: 2px solid rgba(120,80,255,0.06); }
+  .ti-sc .st { font-size: 9px; }
+  .ti-sc.s { border-left-color: #7b5fff; }
+  .sp { height: 1px; background: rgba(0,0,0,0.04); margin: 3px 10px; }
+  .sub-tree { padding-left: 14px; }
+
+  /* ---- Content ---- */
+  .cnt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .tabs { display: flex; align-items: center; padding: 0 10px; border-bottom: 1px solid rgba(0,0,0,0.04); min-height: 38px; overflow-x: auto; }
+  .tab { padding: 9px 12px; font-size: 11px; cursor: pointer; border-bottom: 2px solid transparent; color: #9999bb; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .tab.s { border-bottom-color: #7b5fff; color: #6b4fcf; font-weight: 500; }
+  .tab .x { font-size: 10px; opacity: 0; }
+  .tab:hover .x { opacity: 0.4; }
+  .act { display: flex; align-items: center; padding: 8px 10px; gap: 6px; border-bottom: 1px solid rgba(0,0,0,0.04); }
+  .msel { display: flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.06); font-size: 12px; font-weight: 700; font-family: 'JetBrains Mono', monospace; background: rgba(0,0,0,0.02); color: #338855; cursor: pointer; }
+  .url { flex: 1; display: flex; align-items: center; padding: 0 10px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.05); background: rgba(0,0,0,0.01); }
+  .url .b { font-size: 11px; color: #9999bb; flex-shrink: 0; }
+  .url input { flex: 1; background: none; border: none; outline: none; font-size: 12px; font-family: 'JetBrains Mono', monospace; padding: 6px 0; color: #444; }
+  .sbtn { padding: 6px 18px; border-radius: 8px; border: none; font-size: 12px; font-weight: 600; background: rgba(120,80,255,0.08); color: #7b5fff; cursor: pointer; font-family: inherit; }
+  .sbn { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .sbn .e { font-size: 10px; color: #9999bb; cursor: pointer; padding: 3px 10px; border-radius: 6px; display: flex; align-items: center; gap: 4px; }
+  .sbn .e:hover { background: rgba(0,0,0,0.02); }
+
+  /* banner */
+  .ban { display: flex; align-items: center; padding: 7px 12px; gap: 8px; background: rgba(120,80,255,0.02); border-bottom: 1px solid rgba(0,0,0,0.04); font-size: 11px; }
+  .ban .nm { font-weight: 500; color: #6b4fcf; }
+  .ban .stg { font-size: 9px; padding: 1px 8px; border-radius: 10px; background: rgba(180,130,30,0.06); color: #997733; }
+  .ban .src { margin-left: auto; font-size: 10px; color: #9999bb; }
+
+  /* split */
+  .split { display: flex; flex: 1; min-height: 0; }
+  .earea { flex: 1; display: flex; flex-direction: column; border-right: 1px solid rgba(0,0,0,0.04); min-width: 280px; }
+  .etabs { display: flex; padding: 0 10px; border-bottom: 1px solid rgba(0,0,0,0.03); background: rgba(0,0,0,0.005); overflow-x: auto; }
+  .etab { padding: 7px 10px; font-size: 10px; cursor: pointer; border-bottom: 2px solid transparent; color: #9999bb; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+  .etab.s { border-bottom-color: #7b5fff; color: #6b4fcf; font-weight: 500; }
+  .etab .bc { font-size: 9px; padding: 0 5px; border-radius: 8px; background: rgba(120,80,255,0.05); color: #7b5fff; }
+  .etable { padding: 6px 10px; flex: 1; }
+  .erow4 { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+  .erow4 .ck { width: 14px; height: 14px; border: 1px solid rgba(0,0,0,0.08); border-radius: 3px; background: rgba(120,80,255,0.04); flex-shrink: 0; cursor: pointer; display: inline-block; }
+  .erow4 .k { flex: 2; }
+  .erow4 .tp { flex: 1.2; padding: 4px 6px; border-radius: 5px; border: 1px solid rgba(0,0,0,0.06); font-size: 10px; font-family: inherit; background: rgba(0,0,0,0.01); color: #66668a; outline: none; cursor: pointer; }
+  .erow4 .v { flex: 3; }
+  .erow4 .rm { font-size: 10px; color: #bbb; cursor: pointer; width: 18px; text-align: center; flex-shrink: 0; }
+  .erow4 .rm:hover { color: #cc6666; }
+  .erow4 input { padding: 5px 8px; border-radius: 5px; border: 1px solid rgba(0,0,0,0.04); font-size: 11px; font-family: 'JetBrains Mono', monospace; background: rgba(0,0,0,0.01); outline: none; color: #444; }
+  .erow4 input:focus { border-color: rgba(120,80,255,0.1); }
+
+  /* response */
+  .rpanel { flex: 1; display: flex; flex-direction: column; min-width: 280px; }
+  .rhd { display: flex; align-items: center; padding: 7px 12px; gap: 10px; background: rgba(0,0,0,0.005); border-bottom: 1px solid rgba(0,0,0,0.04); }
+  .rsc { font-size: 12px; font-weight: 700; font-family: 'JetBrains Mono', monospace; padding: 2px 10px; border-radius: 6px; background: rgba(0,160,80,0.06); color: #338855; }
+  .rme { font-size: 10px; display: flex; gap: 10px; color: #9999bb; margin-left: auto; }
+  .rtabs { display: flex; padding: 0 10px; border-bottom: 1px solid rgba(0,0,0,0.03); min-height: 32px; align-items: center; gap: 2px; background: rgba(0,0,0,0.005); }
+  .rtab { padding: 5px 10px; font-size: 10px; cursor: pointer; border-radius: 5px; color: #9999bb; display: flex; align-items: center; gap: 4px; }
+  .rtab.s { background: rgba(0,0,0,0.03); color: #6b4fcf; font-weight: 500; }
+  .rb { flex: 1; padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.6; background: rgba(0,0,0,0.01); color: #444458; overflow-y: auto; }
+  .rb .k { color: #336699; }
+  .rb .s { color: #338855; }
+  .rb .n { color: #997733; }
+
+  /* ===== 环境选择弹窗 ===== */
+  .env-pop {
+    width: 260px; border-radius: 12px; overflow: hidden;
+    background: rgba(255,255,255,0.88);
+    backdrop-filter: blur(40px) saturate(1.8); -webkit-backdrop-filter: blur(40px) saturate(1.8);
+    border: 1px solid rgba(0,0,0,0.06);
+    box-shadow: 0 12px 60px rgba(60,40,140,0.12);
+  }
+  .env-pop .it { display: flex; align-items: center; padding: 10px 14px; gap: 10px; cursor: pointer; }
+  .env-pop .it:hover { background: rgba(0,0,0,0.015); }
+  .env-pop .it.s { background: rgba(120,80,255,0.04); }
+  .env-pop .it .c { width: 24px; height: 24px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .env-pop .it .i { flex: 1; }
+  .env-pop .it .i .t { font-size: 12px; color: #444458; font-weight: 500; }
+  .env-pop .it .i .u { font-size: 10px; color: #9999bb; margin-top: 1px; }
+  .env-pop .it .ck { color: #7b5fff; font-size: 12px; }
+  .env-pop .ft { padding: 8px 14px; border-top: 1px solid rgba(0,0,0,0.04); font-size: 11px; color: #7b5fff; cursor: pointer; text-align: center; }
+
+  /* ===== 环境管理弹窗 ===== */
+  .env-dlg {
+    width: 780px; border-radius: 14px; overflow: hidden;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(48px) saturate(1.8); -webkit-backdrop-filter: blur(48px) saturate(1.8);
+    border: 1px solid rgba(0,0,0,0.06);
+    box-shadow: 0 20px 100px rgba(60,40,140,0.12);
+  }
+  .env-dlg .hd { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid rgba(0,0,0,0.04); }
+  .env-dlg .hd .t { font-size: 14px; font-weight: 600; color: #444458; display: flex; align-items: center; gap: 8px; }
+  .env-dlg .hd .t .c { font-size: 11px; color: #9999bb; font-weight: 400; }
+  .env-dlg .hd button { padding: 5px 14px; border-radius: 6px; border: none; font-size: 11px; cursor: pointer; background: rgba(0,0,0,0.03); color: #8888aa; font-family: inherit; }
+  .env-dlg .bd { display: flex; min-height: 380px; }
+  .env-dlg .sd { width: 240px; flex-shrink: 0; background: rgba(0,0,0,0.01); border-right: 1px solid rgba(0,0,0,0.04); padding: 12px 14px; display: flex; flex-direction: column; }
+  .env-dlg .sd .sh { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #9999bb; font-weight: 600; margin-bottom: 10px; }
+  .env-dlg .sd .sh button { font-size: 10px; padding: 3px 10px; border-radius: 5px; border: 1px solid rgba(0,0,0,0.04); background: transparent; color: #7b5fff; cursor: pointer; font-family: inherit; }
+  .env-dlg .el { flex: 1; overflow-y: auto; }
+  .env-dlg .el::-webkit-scrollbar { width: 3px; }
+  .env-dlg .el::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.04); border-radius: 3px; }
+  .env-dlg .li { display: flex; align-items: center; padding: 8px 10px; gap: 10px; cursor: pointer; border-radius: 8px; margin-bottom: 2px; }
+  .env-dlg .li:hover { background: rgba(0,0,0,0.015); }
+  .env-dlg .li.s { background: rgba(120,80,255,0.04); border: 1px solid rgba(120,80,255,0.1); }
+  .env-dlg .li .av { width: 28px; height: 28px; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .env-dlg .li .ei { flex: 1; }
+  .env-dlg .li .ei .n { font-size: 12px; color: #444458; font-weight: 500; }
+  .env-dlg .li .ei .u { font-size: 10px; color: #9999bb; margin-top: 1px; }
+  .env-dlg .dt { flex: 1; padding: 16px 20px; display: flex; flex-direction: column; }
+  .env-dlg .dt .dh { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .env-dlg .dt .dh .nn { font-size: 14px; font-weight: 600; color: #444458; }
+  .env-dlg .dt .dh .uu { font-size: 11px; color: #9999bb; font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+  .env-dlg .dt .dh .ac { display: flex; gap: 6px; }
+  .env-dlg .dt .dh .ac button { padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.04); font-size: 10px; cursor: pointer; background: transparent; color: #8888aa; font-family: inherit; }
+  .env-dlg .fm { display: grid; grid-template-columns: 60px 1fr; gap: 8px 12px; margin-bottom: 14px; }
+  .env-dlg .fm label { font-size: 11px; color: #66668a; align-self: center; }
+  .env-dlg .fm input { padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.04); font-size: 12px; outline: none; color: #444; font-family: inherit; background: rgba(0,0,0,0.005); }
+  .env-dlg .fm input:focus { border-color: rgba(120,80,255,0.1); }
+  .env-dlg .dtt { display: flex; gap: 6px; margin-bottom: 10px; align-items: center; }
+  .env-dlg .dtn { padding: 5px 14px; border-radius: 6px; font-size: 11px; cursor: pointer; background: transparent; color: #9999bb; border: 1px solid transparent; }
+  .env-dlg .dtn.s { background: rgba(120,80,255,0.04); color: #6b4fcf; border-color: rgba(120,80,255,0.1); font-weight: 500; }
+  .env-dlg .dtn .bc { color: #7b5fff; margin-left: 4px; }
+  .env-dlg .dtn.add { color: #7b5fff; border-style: dashed; border-color: rgba(120,80,255,0.15); }
+
+  .env-dlg .tbl { flex: 1; border-radius: 8px; border: 1px solid rgba(0,0,0,0.04); overflow: hidden; background: rgba(0,0,0,0.005); }
+  .env-dlg .tbl .th { display: flex; padding: 7px 12px; border-bottom: 1px solid rgba(0,0,0,0.04); font-size: 10px; color: #9999bb; font-weight: 600; background: rgba(0,0,0,0.01); }
+  .env-dlg .tbl .th .c1 { width: 40px; }
+  .env-dlg .tbl .th .c2 { flex: 2; }
+  .env-dlg .tbl .th .c3 { flex: 3; }
+  .env-dlg .tbl .th .c4 { width: 30px; }
+  .env-dlg .row { display: flex; align-items: center; padding: 5px 12px; border-bottom: 1px solid rgba(0,0,0,0.03); }
+  .env-dlg .row:last-child { border-bottom: none; }
+  .env-dlg .row .c1 { width: 40px; }
+  .env-dlg .row .c1 .ck { width: 14px; height: 14px; border: 1px solid rgba(0,0,0,0.08); border-radius: 3px; background: rgba(120,80,255,0.04); display: inline-block; }
+  .env-dlg .row .c2 { flex: 2; }
+  .env-dlg .row .c3 { flex: 3; }
+  .env-dlg .row .c4 { width: 30px; text-align: center; color: #bbb; cursor: pointer; font-size: 11px; }
+  .env-dlg .row input { width: 100%; padding: 4px 6px; border-radius: 4px; border: none; font-size: 11px; font-family: 'JetBrains Mono', monospace; background: transparent; outline: none; color: #444; }
+  .env-dlg .row input:focus { background: rgba(120,80,255,0.03); }
+
+  .env-dlg .ft { padding: 12px 20px; border-top: 1px solid rgba(0,0,0,0.04); display: flex; align-items: center; gap: 12px; }
+  .env-dlg .ft .b { font-size: 11px; cursor: pointer; font-family: inherit; }
+  .env-dlg .ft .p { color: #7b5fff; font-weight: 500; }
+  .env-dlg .ft .m { color: #9999bb; }
+  .env-dlg .ft .r { margin-left: auto; }
+  .env-dlg .ft .d { color: #cc6666; }
+
+  /* ===== 右键菜单 ===== */
+  .ctx {
+    width: 200px; border-radius: 12px; overflow: hidden;
+    background: rgba(255,255,255,0.88);
+    backdrop-filter: blur(40px) saturate(1.8); -webkit-backdrop-filter: blur(40px) saturate(1.8);
+    border: 1px solid rgba(0,0,0,0.06);
+    box-shadow: 0 8px 40px rgba(60,40,140,0.08);
+  }
+  .ctx .i { padding: 10px 14px; font-size: 12px; color: #444458; cursor: pointer; display: flex; align-items: center; gap: 10px; }
+  .ctx .i:hover { background: rgba(120,80,255,0.04); color: #6b4fcf; }
+  .ctx .i .hk { margin-left: auto; font-size: 10px; color: #bbb; }
+  .ctx .dv { height: 1px; background: rgba(0,0,0,0.04); margin: 4px 0; }
+  .ctx .i.da { color: #cc6666; }
+  .ctx .i.da:hover { background: rgba(200,40,40,0.04) !important; }
+
+  .pop-pad { padding: 28px; display: flex; justify-content: center; align-items: flex-start; gap: 28px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+<div class="hdr">
+  <h1>🧪 API 调试 · 设计稿</h1>
+  <div class="sub">Deep Frost · 所有界面铺开展示</div>
+</div>
+
+<!-- ===== 主界面全貌 ===== -->
+<div class="sec-title">📐 界面一 · 主界面全貌 <span class="tag">完整布局</span></div>
+<div class="glass" style="margin-bottom:28px;">
+  <div class="main-flex">
+    <!-- 目录树 -->
+    <div class="tree">
+      <div class="thd"><span>📂 集合</span><button>+</button></div>
+      <div class="ts">
+        <div class="grp">
+          <div class="gh"><span class="ar o">▶</span> 用户模块 <span class="ctx">⋯</span></div>
+          <div class="ti s"><span class="m gx">GET</span><span class="nm">/user/info</span><span class="ct">3</span></div>
+          <div class="ti ti-sc"><span class="st" style="color:#338855;">✓</span><span class="nm">查询基本用户信息</span></div>
+          <div class="ti ti-sc s"><span class="st" style="color:#997733;">⏳</span><span class="nm">更新用户邮箱和角色</span></div>
+          <div class="ti ti-sc"><span class="st" style="color:#994444;">✗</span><span class="nm">不存在的用户 404</span></div>
+          <div class="sp"></div>
+          <div class="ti"><span class="m px">POST</span><span class="nm">/user/login</span></div>
+          <div class="sub-tree">
+            <div class="grp">
+              <div class="gh"><span class="ar o">▶</span> 用户管理</div>
+              <div class="ti"><span class="m px">POST</span><span class="nm">/user/create</span></div>
+              <div class="ti"><span class="m ox">PATCH</span><span class="nm">/user/update</span></div>
+              <div class="sub-tree">
+                <div class="grp">
+                  <div class="gh"><span class="ar">▶</span> 权限</div>
+                  <div class="ti"><span class="m gx">GET</span><span class="nm">/user/role/list</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="grp">
+          <div class="gh"><span class="ar o">▶</span> 数据模块 <span class="ctx">⋯</span></div>
+          <div class="ti"><span class="m gx">GET</span><span class="nm">/data/list</span></div>
+          <div class="ti ti-sc"><span class="st" style="color:#338855;">✓</span><span class="nm">分页查询数据</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 内容 -->
+    <div class="cnt">
+      <div class="tabs">
+        <div class="tab s">更新用户邮箱和角色 <span class="x">✕</span></div>
+        <div class="tab">查询基本用户信息 <span class="x">✕</span></div>
+        <div class="tab">POST /user/login <span class="x">✕</span></div>
+        <div style="flex:1;"></div>
+        <div class="sbn">
+          <span class="e"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#338855;"></span> 开发环境 ▾</span>
+        </div>
+      </div>
+
+      <div class="act">
+        <div class="msel">POST <span style="font-size:8px;opacity:0.5;">▾</span></div>
+        <div class="url"><span class="b">http://localhost:8080</span><input value="/api/v1/user/info"></div>
+        <button class="sbtn">📤 发送</button>
+      </div>
+
+      <!-- 编辑器+响应分栏 -->
+      <div class="split">
+        <div class="earea">
+          <div class="etabs">
+            <div class="etab">Params</div>
+            <div class="etab">Path</div>
+            <div class="etab s">Body</div>
+            <div class="etab">Headers</div>
+            <div class="etab">Cookies</div>
+            <div class="etab">Auth</div>
+          </div>
+          <div class="etable">
+            <!-- Params 四列 -->
+            <div style="display:flex;align-items:center;gap:4px;padding:3px 0;margin-bottom:2px;border-bottom:1px solid rgba(0,0,0,0.04);font-size:9px;color:#9999bb;font-weight:600;">
+              <span style="width:14px;margin-right:4px;"></span>
+              <span style="flex:2;">Key</span>
+              <span style="flex:1.2;">类型</span>
+              <span style="flex:3;">Value</span>
+              <span style="width:18px;text-align:center;"></span>
+            </div>
+            <div class="erow4"><span class="ck"></span><input value="page" placeholder="Key" class="k"><select class="tp"><option>String</option></select><input value="1" placeholder="Value" class="v"><span class="rm">✕</span></div>
+            <div class="erow4"><span class="ck"></span><input value="limit" placeholder="Key" class="k"><select class="tp"><option>Number</option></select><input value="20" placeholder="Value" class="v"><span class="rm">✕</span></div>
+            <div class="erow4"><span class="ck"></span><input placeholder="Key" class="k"><select class="tp"><option>String</option></select><input placeholder="Value" class="v"><span class="rm">✕</span></div>
+
+            <!-- 分割 -->
+            <div style="height:1px;background:rgba(0,0,0,0.04);margin:10px 0;"></div>
+
+            <!-- Body 模式选择 -->
+            <div style="font-size:10px;font-weight:600;color:#8888aa;margin-bottom:6px;">📄 Body · 文件上传</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+              <span style="font-size:10px;padding:3px 10px;border-radius:6px;background:rgba(120,80,255,0.04);color:#6b4fcf;border:1px solid rgba(120,80,255,0.08);cursor:pointer;font-weight:500;">📄 文件</span>
+              <span style="font-size:10px;padding:3px 10px;border-radius:6px;background:rgba(0,0,0,0.02);color:#9999bb;border:1px solid rgba(0,0,0,0.04);cursor:pointer;">none</span>
+              <span style="font-size:10px;padding:3px 10px;border-radius:6px;background:rgba(0,0,0,0.02);color:#9999bb;border:1px solid rgba(0,0,0,0.04);cursor:pointer;">form-data</span>
+              <span style="font-size:10px;padding:3px 10px;border-radius:6px;background:rgba(0,0,0,0.02);color:#9999bb;border:1px solid rgba(0,0,0,0.04);cursor:pointer;">x-www-form-urlencoded</span>
+              <span style="font-size:10px;padding:3px 10px;border-radius:6px;background:rgba(0,0,0,0.02);color:#9999bb;border:1px solid rgba(0,0,0,0.04);cursor:pointer;">raw</span>
+              <span style="font-size:10px;padding:3px 10px;border-radius:6px;background:rgba(0,0,0,0.02);color:#9999bb;border:1px solid rgba(0,0,0,0.04);cursor:pointer;">binary</span>
+            </div>
+            <!-- 文件拖拽区 -->
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;border:1px dashed rgba(120,80,255,0.15);background:rgba(120,80,255,0.02);">
+              <span style="font-size:18px;">📁</span>
+              <div style="flex:1;">
+                <div style="font-size:11px;font-weight:500;color:#444458;">选择上传文件</div>
+                <div style="font-size:10px;color:#9999bb;margin-top:1px;">或拖拽文件到此处</div>
+              </div>
+              <span style="font-size:10px;color:#8888aa;">avatar.png</span>
+              <button style="padding:4px 12px;border-radius:6px;border:1px solid rgba(120,80,255,0.1);font-size:10px;background:rgba(120,80,255,0.04);color:#6b4fcf;cursor:pointer;font-family:inherit;">浏览...</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
+              <span style="font-size:10px;color:#66668a;">参数名:</span>
+              <input value="file" style="padding:3px 8px;border-radius:5px;border:1px solid rgba(0,0,0,0.04);font-size:10px;font-family:'JetBrains Mono',monospace;outline:none;color:#444;width:120px;background:transparent;">
+              <span style="font-size:10px;color:#9999bb;">1.2 MB</span>
+              <span style="font-size:10px;color:#9999bb;">image/png</span>
+              <span style="font-size:10px;color:#9999bb;">已选择</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="rpanel">
+          <div class="rhd">
+            <span class="rsc">200 OK</span>
+            <div class="rme"><span>342 ms</span><span>2.4 KB</span></div>
+          </div>
+          <div class="rtabs">
+            <div class="rtab s">Body</div>
+            <div class="rtab">Headers</div>
+            <div class="rtab">Request</div>
+            <div class="rtab">cURL</div>
+            <div class="rtab">日志</div>
+          </div>
+          <div class="rb">
+            {<br>
+            &nbsp;&nbsp;<span class="k">"code"</span>: <span class="n">200</span>,<br>
+            &nbsp;&nbsp;<span class="k">"message"</span>: <span class="s">"success"</span>,<br>
+            &nbsp;&nbsp;<span class="k">"data"</span>: {<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span class="k">"email"</span>: <span class="s">"old@test.com"</span>,<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span class="k">"role"</span>: <span class="s">"admin"</span><br>
+            &nbsp;&nbsp;}<br>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 三个弹窗平铺 ===== -->
+<div class="sec-title">🪟 界面二 · 弹窗组件 <span class="tag">Popup Components</span></div>
+
+<div class="row">
+  <!-- 环境选择 -->
+  <div class="col">
+    <div class="glass" style="min-height:340px;">
+      <div class="pop-pad">
+        <div class="env-pop">
+          <div class="it s">
+            <span class="c" style="background:#338855;">开</span>
+            <div class="i"><div class="t">开发环境</div><div class="u">http://localhost:8080</div></div>
+            <span class="ck">✓</span>
+          </div>
+          <div class="it">
+            <span class="c" style="background:#336699;">测</span>
+            <div class="i"><div class="t">测试环境</div><div class="u">http://test.api.company.com</div></div>
+          </div>
+          <div class="it">
+            <span class="c" style="background:#994444;">正</span>
+            <div class="i"><div class="t">正式环境</div><div class="u">https://api.company.com</div></div>
+          </div>
+          <div class="it">
+            <span class="c" style="background:#997733;">M</span>
+            <div class="i"><div class="t">Mock 服务</div><div class="u">http://127.0.0.1:3000</div></div>
+          </div>
+          <div class="ft">⚙ 管理环境</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右键菜单 -->
+  <div class="col">
+    <div class="glass" style="min-height:340px;">
+      <div class="pop-pad">
+        <div class="ctx" style="margin:auto;">
+          <div class="i" style="font-weight:500;color:#6b4fcf;border-bottom:1px solid rgba(0,0,0,0.04);margin-bottom:4px;">📂 GET /user/info</div>
+          <div class="i">📄 新建端点 <span class="hk">⌘N</span></div>
+          <div class="i">📋 新建场景 <span class="hk">⌘⇧N</span></div>
+          <div class="i">📁 新建分组 <span class="hk">⌘⇧G</span></div>
+          <div class="dv"></div>
+          <div class="i">✏️ 重命名</div>
+          <div class="i">📋 复制端点</div>
+          <div class="i">🔁 移动到...</div>
+          <div class="dv"></div>
+          <div class="i">📤 导出为 OpenAPI</div>
+          <div class="i">📋 导入 OpenAPI</div>
+          <div class="dv"></div>
+          <div class="i da">🗑 删除</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 环境管理弹窗 ===== -->
+<div class="sec-title">🪟 界面三 · 环境管理对话框 <span class="tag">EnvManagerDialog</span></div>
+<div class="glass">
+  <div class="env-dlg" style="margin:20px auto;box-shadow:none;">
+    <div class="hd">
+      <span class="t">🌐 环境管理 <span class="c">4 个环境</span></span>
+      <button>关闭</button>
+    </div>
+    <div class="bd">
+      <div class="sd">
+        <div class="sh"><span>环境</span><button>+ 新建</button></div>
+        <div class="el">
+          <div class="li s"><span class="av" style="background:#338855;">开</span><div class="ei"><div class="n">开发环境</div><div class="u">http://localhost:8080</div></div></div>
+          <div class="li"><span class="av" style="background:#336699;">测</span><div class="ei"><div class="n">测试环境</div><div class="u">http://test.api.company.com</div></div></div>
+          <div class="li"><span class="av" style="background:#994444;">正</span><div class="ei"><div class="n">正式环境</div><div class="u">https://api.company.com</div></div></div>
+          <div class="li"><span class="av" style="background:#997733;">M</span><div class="ei"><div class="n">Mock</div><div class="u">http://127.0.0.1:3000</div></div></div>
+        </div>
+      </div>
+      <div class="dt">
+        <div class="dh">
+          <div><div class="nn">开发环境</div><div class="uu">http://localhost:8080</div></div>
+          <div class="ac"><button>📋 复制</button><button>🗑 删除</button></div>
+        </div>
+        <div class="fm">
+          <label>名称</label><input value="开发环境">
+          <label>Base URL</label><input value="http://localhost:8080">
+        </div>
+        <div class="dtt">
+          <div class="dtn s">变量 <span class="bc">3</span></div>
+          <div class="dtn">公共 Headers <span class="bc">2</span></div>
+          <div class="dtn add">+ 新增变量</div>
+        </div>
+        <div class="tbl">
+          <div class="th"><span class="c1">启用</span><span class="c2">变量名</span><span class="c3">变量值</span><span class="c4"></span></div>
+          <div class="row"><span class="c1"><span class="ck"></span></span><span class="c2"><input value="BASE_URL"></span><span class="c3"><input value="http://localhost:8080"></span><span class="c4">✕</span></div>
+          <div class="row"><span class="c1"><span class="ck"></span></span><span class="c2"><input value="API_KEY"></span><span class="c3"><input value="sk-proj-****" style="color:#9999bb;"></span><span class="c4">✕</span></div>
+          <div class="row"><span class="c1"><span class="ck"></span></span><span class="c2"><input value="AUTH_TOKEN"></span><span class="c3"><input value="eyJhbGciOiJIUzI1NiIs..."></span><span class="c4">✕</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="ft">
+      <span class="b p">💾 保存更改</span>
+      <span class="b m">↩ 重置</span>
+      <span class="b m r">📤 导出</span>
+      <span class="b m">📥 导入</span>
+      <span class="b d">🗑 删除此环境</span>
+    </div>
+  </div>
+</div>
+
+</div>
+
+</body>
+</html>

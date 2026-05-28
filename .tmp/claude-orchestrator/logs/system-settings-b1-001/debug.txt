@@ -1,0 +1,500 @@
+2026-05-27T14:00:27.163Z [DEBUG] MDM settings load completed in 0ms
+2026-05-27T14:00:27.186Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json
+2026-05-27T14:00:27.187Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/fwfx1234/develop/qingqi/.claude/settings.json
+2026-05-27T14:00:27.188Z [DEBUG] CA certs: Config fallback - globalEnv keys: , settingsEnv keys: ANTHROPIC_AUTH_TOKEN,ANTHROPIC_BASE_URL,ANTHROPIC_DEFAULT_HAIKU_MODEL,ANTHROPIC_DEFAULT_OPUS_MODEL,ANTHROPIC_DEFAULT_OPUS_MODEL_NAME,ANTHROPIC_DEFAULT_SONNET_MODEL,ANTHROPIC_DEFAULT_SONNET_MODEL_NAME,ANTHROPIC_MODEL
+2026-05-27T14:00:27.188Z [DEBUG] [init] configureGlobalMTLS starting
+2026-05-27T14:00:27.188Z [DEBUG] [init] configureGlobalMTLS complete
+2026-05-27T14:00:27.189Z [DEBUG] [init] configureGlobalAgents starting
+2026-05-27T14:00:27.189Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-05-27T14:00:27.189Z [DEBUG] CA certs: Loaded 145 bundled root certificates
+2026-05-27T14:00:27.199Z [DEBUG] CA certs: system store returned empty
+2026-05-27T14:00:27.199Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-05-27T14:00:27.199Z [DEBUG] [init] configureGlobalAgents complete
+2026-05-27T14:00:27.200Z [DEBUG] Error log sink initialized
+2026-05-27T14:00:27.215Z [DEBUG] Applying permission update: Adding 30 allow rule(s) to destination 'localSettings': ["Bash(cargo check *)","Read(//Users/fwfx1234/.cargo/bin/**)","Read(//usr/local/bin/**)","Read(//opt/homebrew/bin/**)","Read(//Users/fwfx1234/.rustup/toolchains/**)","Read(//Users/fwfx1234/.rustup/**)","Bash(export PATH=\"$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH\")","Bash(cargo build *)","Bash(rustup show *)","Bash(export PATH=\"$HOME/.cargo/bin:$PATH\")","Bash(rustup which *)","Bash(~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo build *)","Bash(export PATH=\"$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$HOME/.cargo/bin:$PATH\")","Bash(cargo doc *)","Bash(cargo clean *)","Bash(cargo run *)","Bash(kill %1)","Bash(cargo test *)","Bash(echo \"exit: $?\")","Bash(grep -E \"/\\(main|lib|mod|launcher|runtime|ui|app_launcher|clipboard\\)\\\\.\\(rs\\)$\")","Bash(cargo fmt *)","Bash(grep -vE \"warning: \\\\`\")","Bash(grep -v \"is never used\\\\|warning: \\\\`qingqi\\\\`\")","Bash(echo \"EXIT:$?\")","Bash(git -C /Users/fwfx1234/develop/qingqi log --all --oneline -30)","Bash(git -C /Users/fwfx1234/develop/qingqi status)","Bash(python3 *)","Bash(wait)","Bash(xxd)","Read(//Users/fwfx1234/.cargo/registry/src/**)"]
+2026-05-27T14:00:27.216Z [DEBUG] [claudeai-mcp] Disabled: API-key auth precedence active
+2026-05-27T14:00:27.216Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-05-27T14:00:27.216Z [DEBUG] [STARTUP] Running setup()...
+2026-05-27T14:00:27.219Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json
+2026-05-27T14:00:27.220Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/fwfx1234/develop/qingqi/.claude/settings.json
+2026-05-27T14:00:27.221Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/fwfx1234/.claude/skills, project=[]
+2026-05-27T14:00:27.221Z [DEBUG] Error log sink initialized
+2026-05-27T14:00:27.236Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/commands: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/commands'
+2026-05-27T14:00:27.236Z [DEBUG] Failed to stat directory /Users/fwfx1234/.claude/commands: ENOENT: no such file or directory, stat '/Users/fwfx1234/.claude/commands'
+2026-05-27T14:00:27.236Z [DEBUG] Loaded 0 unique skills (0 unconditional, 0 conditional, managed: 0, user: 0, project: 0, additional: 0, legacy commands: 0)
+2026-05-27T14:00:27.236Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/agents: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/agents'
+2026-05-27T14:00:27.236Z [DEBUG] Failed to stat directory /Users/fwfx1234/.claude/agents: ENOENT: no such file or directory, stat '/Users/fwfx1234/.claude/agents'
+2026-05-27T14:00:27.238Z [DEBUG] [STARTUP] setup() completed in 22ms
+2026-05-27T14:00:27.238Z [DEBUG] Cleared CA certificates cache
+2026-05-27T14:00:27.238Z [DEBUG] Cleared mTLS configuration cache
+2026-05-27T14:00:27.238Z [DEBUG] Cleared proxy agent cache
+2026-05-27T14:00:27.238Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-05-27T14:00:27.238Z [DEBUG] CA certs: Loaded 145 bundled root certificates
+2026-05-27T14:00:27.238Z [DEBUG] CA certs: system store returned empty
+2026-05-27T14:00:27.238Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-05-27T14:00:27.238Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-05-27T14:00:27.239Z [DEBUG] [ToolSearch:optimistic] disabled: ANTHROPIC_BASE_URL=https://token-plan-cn.xiaomimimo.com/anthropic is not a first-party Anthropic host. Set ENABLE_TOOL_SEARCH=true (or auto / auto:N) if your proxy forwards tool_reference blocks.
+2026-05-27T14:00:27.251Z [DEBUG] Loaded 1 installed plugins from /Users/fwfx1234/.claude/plugins/installed_plugins.json
+2026-05-27T14:00:27.254Z [DEBUG] Plugin rust-analyzer-lsp has no entry.skills defined
+2026-05-27T14:00:27.254Z [DEBUG] Found 1 plugins (1 enabled, 0 disabled)
+2026-05-27T14:00:27.255Z [DEBUG] getPluginSkills: Processing 1 enabled plugins
+2026-05-27T14:00:27.255Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-05-27T14:00:27.255Z [DEBUG] Registered 0 hooks from 1 plugins
+2026-05-27T14:00:27.255Z [DEBUG] Total plugin skills loaded: 0
+2026-05-27T14:00:27.255Z [DEBUG] Total plugin commands loaded: 0
+2026-05-27T14:00:27.255Z [DEBUG] Total plugin agents loaded: 0
+2026-05-27T14:00:27.255Z [DEBUG] getSkills returning: 0 skill dir commands, 0 plugin skills, 14 bundled skills, 0 builtin plugin skills
+2026-05-27T14:00:27.256Z [DEBUG] [STARTUP] Commands and agents loaded in 17ms
+2026-05-27T14:00:27.256Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-05-27T14:00:27.257Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-05-27T14:00:27.257Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-05-27T14:00:27.257Z [DEBUG] Starting background startup prefetches
+2026-05-27T14:00:27.257Z [DEBUG] [Bootstrap] Skipped: no usable OAuth or API key
+2026-05-27T14:00:27.258Z [DEBUG] [STARTUP] MCP configs resolved in 42ms (awaited at +42ms)
+2026-05-27T14:00:27.259Z [DEBUG] All plugins already exist, skipping migration
+2026-05-27T14:00:27.259Z [DEBUG] Cleared CA certificates cache
+2026-05-27T14:00:27.259Z [DEBUG] Cleared mTLS configuration cache
+2026-05-27T14:00:27.259Z [DEBUG] Cleared proxy agent cache
+2026-05-27T14:00:27.259Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-05-27T14:00:27.259Z [DEBUG] CA certs: Loaded 145 bundled root certificates
+2026-05-27T14:00:27.259Z [DEBUG] CA certs: system store returned empty
+2026-05-27T14:00:27.259Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-05-27T14:00:27.260Z [DEBUG] Initialized versioned plugins system with 1 plugins
+2026-05-27T14:00:27.261Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:00:27.261Z [DEBUG] [MCP] --mcp-config servers running fully async (nonblocking)
+2026-05-27T14:00:27.261Z [DEBUG] [MCP] claude.ai connectors running fully async (nonblocking)
+2026-05-27T14:00:27.261Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-05-27T14:00:27.261Z [DEBUG] [3P telemetry] isTelemetryEnabled=false (CLAUDE_CODE_ENABLE_TELEMETRY=undefined)
+2026-05-27T14:00:27.263Z [DEBUG] [auto-mode] verifyAutoModeGateAccess: enabledState=opt-in disabledBySettings=false model=mimo-v2-pro modelSupported=true disableFastModeBreakerFires=false carouselAvailable=true canEnterAuto=true
+2026-05-27T14:00:27.270Z [DEBUG] [ScheduledTasks] scheduler start() — enabled=false, hasTasks=false
+2026-05-27T14:00:27.273Z [DEBUG] Loaded 1 LSP server(s) from plugin: rust-analyzer-lsp
+2026-05-27T14:00:27.273Z [DEBUG] Total LSP servers loaded: 1
+2026-05-27T14:00:27.274Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 1 server(s)
+2026-05-27T14:00:27.274Z [DEBUG] Queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration (connection not ready)
+2026-05-27T14:00:27.274Z [DEBUG] LSP manager initialized with 1 servers
+2026-05-27T14:00:27.275Z [DEBUG] LSP server manager initialized successfully
+2026-05-27T14:00:27.275Z [DEBUG] Queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics (connection not ready)
+2026-05-27T14:00:27.275Z [DEBUG] Registered diagnostics handler for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-27T14:00:27.275Z [DEBUG] LSP notification handlers registered successfully for all 1 server(s)
+2026-05-27T14:00:27.276Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/output-styles: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/output-styles'
+2026-05-27T14:00:27.276Z [DEBUG] Failed to stat directory /Users/fwfx1234/.claude/output-styles: ENOENT: no such file or directory, stat '/Users/fwfx1234/.claude/output-styles'
+2026-05-27T14:00:27.276Z [DEBUG] Total plugin output styles loaded: 0
+2026-05-27T14:00:27.279Z [WARN] [3P telemetry] Event dropped (no event logger initialized): plugin_loaded
+2026-05-27T14:00:27.280Z [DEBUG] installPluginsForHeadless: starting
+2026-05-27T14:00:27.300Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/skills: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/skills'
+2026-05-27T14:00:27.300Z [DEBUG] Failed to stat directory /Users/fwfx1234/.claude/skills: ENOENT: no such file or directory, stat '/Users/fwfx1234/.claude/skills'
+2026-05-27T14:00:27.316Z [DEBUG] Watching for changes in setting files /Users/fwfx1234/.claude/settings.json, /Users/fwfx1234/develop/qingqi/.claude/settings.json, /Users/fwfx1234/develop/qingqi/.claude/settings.local.json...
+2026-05-27T14:00:27.319Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T14:00:27.319Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T14:00:27.319Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T14:00:27.319Z [DEBUG] Sending 12 skills via attachment (initial)
+2026-05-27T14:00:27.319Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T14:00:27.320Z [DEBUG] Git remote URL: null
+2026-05-27T14:00:27.320Z [DEBUG] No git remote URL found
+2026-05-27T14:00:27.324Z [DEBUG] Ripgrep first use test: PASSED (mode=embedded, path=/opt/homebrew/Caskroom/claude-code@latest/2.1.152/claude)
+2026-05-27T14:00:27.327Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:00:27.329Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T14:00:27.330Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T14:00:27.335Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T14:00:27.335Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:00:27.335Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:00:27.336Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T14:00:27.336Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T14:00:27.336Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T14:00:27.336Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:00:27.336Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:00:27.337Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:00:30.226Z [DEBUG] [mcp-registry] Loaded 197 official MCP URLs (legacy)
+2026-05-27T14:00:30.579Z [DEBUG] Stream started - received first chunk
+2026-05-27T14:00:30.580Z [DEBUG] [API:timing] first byte after 3244ms
+2026-05-27T14:00:31.539Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_30c5be9b93bc4b69bd1ff425 permissionDecisionMs=2
+2026-05-27T14:00:31.541Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_30c5be9b93bc4b69bd1ff425 outcome=ok durationMs=2
+2026-05-27T14:00:32.130Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_5529a50a81764349a01edfde permissionDecisionMs=1
+2026-05-27T14:00:32.131Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_5529a50a81764349a01edfde outcome=ok durationMs=1
+2026-05-27T14:00:32.626Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_4fbd5622378848f6b33b34c4 permissionDecisionMs=2
+2026-05-27T14:00:32.627Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T14:00:32.628Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T14:00:32.628Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T14:00:32.629Z [DEBUG] [API REQUEST] /anthropic/v1/messages/count_tokens source=count_tokens
+2026-05-27T14:00:32.735Z [ERROR] countTokens API call failed: 404 <html>
+<head><title>404 Not Found</title></head>
+<body>
+<center><h1>404 Not Found</h1></center>
+<hr><center>openresty</center>
+</body>
+</html>
+2026-05-27T14:00:32.736Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_4fbd5622378848f6b33b34c4 outcome=ok durationMs=110
+2026-05-27T14:00:32.745Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T14:00:32.746Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T14:00:32.746Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T14:00:32.746Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T14:00:32.754Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T14:00:32.755Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T14:00:32.757Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T14:00:32.757Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:00:32.757Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:00:32.758Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T14:00:32.758Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T14:00:32.759Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T14:00:32.759Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:00:32.759Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:00:32.761Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:00:40.888Z [DEBUG] Stream started - received first chunk
+2026-05-27T14:00:40.889Z [DEBUG] [API:timing] first byte after 8130ms
+2026-05-27T14:00:42.353Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_15ec9ed496f64303985911c1 permissionDecisionMs=2
+2026-05-27T14:00:42.356Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_15ec9ed496f64303985911c1 outcome=ok durationMs=3
+2026-05-27T14:00:42.948Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_a69d6981a9924e6c983d834c permissionDecisionMs=0
+2026-05-27T14:00:42.952Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_a69d6981a9924e6c983d834c outcome=ok durationMs=4
+2026-05-27T14:00:43.419Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_ad94e1bb31a44717be5e9612 permissionDecisionMs=2
+2026-05-27T14:00:43.422Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_ad94e1bb31a44717be5e9612 outcome=ok durationMs=3
+2026-05-27T14:00:44.032Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_759646dee3224022b98a42a9 permissionDecisionMs=1
+2026-05-27T14:00:44.034Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_759646dee3224022b98a42a9 outcome=ok durationMs=2
+2026-05-27T14:00:44.085Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T14:00:44.086Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T14:00:44.086Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T14:00:44.086Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T14:00:44.089Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T14:00:44.090Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T14:00:44.091Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T14:00:44.091Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:00:44.092Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:00:44.092Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T14:00:44.093Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T14:00:44.093Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T14:00:44.094Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:00:44.094Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:00:44.095Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:00:48.383Z [DEBUG] Stream started - received first chunk
+2026-05-27T14:00:48.383Z [DEBUG] [API:timing] first byte after 4289ms
+2026-05-27T14:00:54.374Z [INFO] [Stall] tool_dispatch_start tool=Agent toolUseId=call_2b6162ef028041e9af9cbfca permissionDecisionMs=0
+2026-05-27T14:00:54.382Z [DEBUG] Sending 12 skills via attachment (initial)
+2026-05-27T14:00:54.384Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T14:00:54.385Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T14:00:54.386Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.9a4; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T14:00:54.387Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:00:54.387Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:00:54.388Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T14:00:54.388Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T14:00:54.389Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T14:00:54.390Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:00:54.390Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:00:54.391Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=agent:builtin:Explore
+2026-05-27T14:00:57.287Z [DEBUG] Stream started - received first chunk
+2026-05-27T14:00:57.288Z [DEBUG] [API:timing] first byte after 2898ms
+2026-05-27T14:00:58.844Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=call_5fed2ed1a3ad48289957395e permissionDecisionMs=1
+2026-05-27T14:00:58.930Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=call_5fed2ed1a3ad48289957395e outcome=ok durationMs=86
+2026-05-27T14:00:59.547Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=call_4b4209c785fb4aa09a67180d permissionDecisionMs=0
+2026-05-27T14:00:59.610Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=call_4b4209c785fb4aa09a67180d outcome=ok durationMs=63
+2026-05-27T14:01:00.139Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=call_e39821a2282446fba8dffc22 permissionDecisionMs=0
+2026-05-27T14:01:00.190Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=call_e39821a2282446fba8dffc22 outcome=ok durationMs=51
+2026-05-27T14:01:00.830Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=call_a5778bbc4372404690a2b056 permissionDecisionMs=1
+2026-05-27T14:01:00.884Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=call_a5778bbc4372404690a2b056 outcome=ok durationMs=54
+2026-05-27T14:01:01.371Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=call_9a3955c447aa48e787508118 permissionDecisionMs=1
+2026-05-27T14:01:01.435Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=call_9a3955c447aa48e787508118 outcome=ok durationMs=64
+2026-05-27T14:01:01.853Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=call_d1d0e39e903047b4a860427c permissionDecisionMs=0
+2026-05-27T14:01:01.918Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=call_d1d0e39e903047b4a860427c outcome=ok durationMs=65
+2026-05-27T14:01:02.412Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=call_e2983f95ad3e4f9f9742bf22 permissionDecisionMs=0
+2026-05-27T14:01:02.473Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=call_e2983f95ad3e4f9f9742bf22 outcome=ok durationMs=61
+2026-05-27T14:01:02.962Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=call_12eb0adfe9c741bcb1f9b626 permissionDecisionMs=1
+2026-05-27T14:01:03.023Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=call_12eb0adfe9c741bcb1f9b626 outcome=ok durationMs=61
+2026-05-27T14:01:03.095Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T14:01:03.096Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T14:01:03.096Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.9a4; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T14:01:03.096Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:03.096Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:03.096Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T14:01:03.097Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T14:01:03.117Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T14:01:03.117Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:03.117Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:01:03.118Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=agent:builtin:Explore
+2026-05-27T14:01:09.127Z [DEBUG] Stream started - received first chunk
+2026-05-27T14:01:09.128Z [DEBUG] [API:timing] first byte after 6011ms
+2026-05-27T14:01:10.113Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_3c873744e32d47f390b28399 permissionDecisionMs=1
+2026-05-27T14:01:10.115Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_3c873744e32d47f390b28399 outcome=ok durationMs=2
+2026-05-27T14:01:10.678Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_59dde6ebd5d14d6782911dec permissionDecisionMs=1
+2026-05-27T14:01:10.679Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_59dde6ebd5d14d6782911dec outcome=ok durationMs=1
+2026-05-27T14:01:11.261Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_69245ba912b9432c9ec1451f permissionDecisionMs=1
+2026-05-27T14:01:11.262Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_69245ba912b9432c9ec1451f outcome=ok durationMs=1
+2026-05-27T14:01:11.924Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_4c201bb2d30348fc9e32114d permissionDecisionMs=1
+2026-05-27T14:01:11.927Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_4c201bb2d30348fc9e32114d outcome=ok durationMs=2
+2026-05-27T14:01:12.305Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_5db66ce661eb4de68eca5a80 permissionDecisionMs=1
+2026-05-27T14:01:12.307Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_5db66ce661eb4de68eca5a80 outcome=ok durationMs=2
+2026-05-27T14:01:12.852Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_62a22329a8dc4059af3d462b permissionDecisionMs=1
+2026-05-27T14:01:12.854Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_62a22329a8dc4059af3d462b outcome=ok durationMs=2
+2026-05-27T14:01:13.633Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_94ff7ea828204697ad631a61 permissionDecisionMs=1
+2026-05-27T14:01:13.635Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_94ff7ea828204697ad631a61 outcome=ok durationMs=2
+2026-05-27T14:01:14.285Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_ab3924af048041d09c8f12d8 permissionDecisionMs=1
+2026-05-27T14:01:14.289Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_ab3924af048041d09c8f12d8 outcome=ok durationMs=4
+2026-05-27T14:01:14.299Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T14:01:14.300Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T14:01:14.301Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.9a4; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T14:01:14.301Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:14.301Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:14.302Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T14:01:14.302Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T14:01:14.302Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T14:01:14.302Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:14.302Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:01:14.304Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=agent:builtin:Explore
+2026-05-27T14:01:16.132Z [DEBUG] Stream started - received first chunk
+2026-05-27T14:01:16.132Z [DEBUG] [API:timing] first byte after 1830ms
+2026-05-27T14:01:18.133Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=call_3220d207ef6a4edd80a53187 permissionDecisionMs=0
+2026-05-27T14:01:18.196Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=call_3220d207ef6a4edd80a53187 outcome=ok durationMs=62
+2026-05-27T14:01:18.723Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=call_d168d9bffc6b439e8d2035b9 permissionDecisionMs=0
+2026-05-27T14:01:18.773Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=call_d168d9bffc6b439e8d2035b9 outcome=ok durationMs=50
+2026-05-27T14:01:19.449Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=call_8554fce70dcf4a4c845536df permissionDecisionMs=0
+2026-05-27T14:01:19.513Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=call_8554fce70dcf4a4c845536df outcome=ok durationMs=64
+2026-05-27T14:01:19.514Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T14:01:19.515Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T14:01:19.515Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.9a4; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T14:01:19.516Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:19.516Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:19.516Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T14:01:19.516Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T14:01:19.516Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T14:01:19.516Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:19.516Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:01:19.516Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=agent:builtin:Explore
+2026-05-27T14:01:23.916Z [WARN] Official marketplace GCS fetch failed: timeout of 10000ms exceeded
+2026-05-27T14:01:23.917Z [WARN] Official marketplace GCS failed; falling back to git
+2026-05-27T14:01:25.892Z [DEBUG] Stream started - received first chunk
+2026-05-27T14:01:25.893Z [DEBUG] [API:timing] first byte after 6377ms
+2026-05-27T14:01:26.723Z [DEBUG] SSH config check: code=1 configured=true
+2026-05-27T14:01:26.735Z [DEBUG] git pull: cwd=/Users/fwfx1234/.claude/plugins/marketplaces/claude-plugins-official ref=default
+2026-05-27T14:01:28.026Z [DEBUG] Successfully refreshed marketplace: claude-plugins-official
+2026-05-27T14:01:28.026Z [DEBUG] Plugin autoupdate: checking installed plugins
+2026-05-27T14:01:28.027Z [DEBUG] Skipping refresh for marketplace 'claude-plugins-official' — refreshed 0s ago
+2026-05-27T14:01:28.032Z [DEBUG] Loading plugin rust-analyzer-lsp from source: "./plugins/rust-analyzer-lsp"
+2026-05-27T14:01:28.032Z [DEBUG] Using provided version for rust-analyzer-lsp@claude-plugins-official: 1.0.0
+2026-05-27T14:01:28.033Z [DEBUG] Plugin rust-analyzer-lsp@claude-plugins-official version 1.0.0 already cached at /Users/fwfx1234/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-05-27T14:01:28.033Z [DEBUG] Copied plugin rust-analyzer-lsp to versioned cache: /Users/fwfx1234/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-05-27T14:01:28.033Z [DEBUG] Plugin rust-analyzer-lsp has no entry.skills defined
+2026-05-27T14:01:28.033Z [DEBUG] Found 1 plugins (1 enabled, 0 disabled)
+2026-05-27T14:01:28.034Z [DEBUG] Using provided version for rust-analyzer-lsp@claude-plugins-official: 1.0.0
+2026-05-27T14:01:33.084Z [INFO] [Stall] tool_dispatch_end tool=Agent toolUseId=call_2b6162ef028041e9af9cbfca outcome=ok durationMs=38710
+2026-05-27T14:01:33.090Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T14:01:33.090Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T14:01:33.090Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T14:01:33.090Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T14:01:33.092Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T14:01:33.093Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T14:01:33.094Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T14:01:33.095Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:33.096Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:33.096Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T14:01:33.096Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T14:01:33.097Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T14:01:33.097Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:33.097Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:01:33.099Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:01:33.223Z [ERROR] API error (attempt 1/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:01:33.838Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:33.838Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:01:33.841Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:01:33.918Z [ERROR] API error (attempt 2/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:01:35.155Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:35.156Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:01:35.158Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:01:35.379Z [ERROR] API error (attempt 3/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:01:37.628Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:37.628Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:01:37.629Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:01:37.834Z [ERROR] API error (attempt 4/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:01:42.828Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:42.829Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:01:42.831Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:01:42.922Z [ERROR] API error (attempt 5/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:01:52.894Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:01:52.894Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:01:52.896Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:01:53.006Z [ERROR] API error (attempt 6/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:02:11.262Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:02:11.263Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:02:11.265Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:02:14.783Z [DEBUG] Stream started - received first chunk
+2026-05-27T14:02:14.784Z [DEBUG] [API:timing] first byte after 3522ms
+2026-05-27T14:02:16.030Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_73d36999bbc644b5af71c8f0 permissionDecisionMs=1
+2026-05-27T14:02:16.031Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_73d36999bbc644b5af71c8f0 outcome=ok durationMs=1
+2026-05-27T14:02:16.476Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_5fd0007ab2df4b52b3c33a22 permissionDecisionMs=1
+2026-05-27T14:02:16.478Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_5fd0007ab2df4b52b3c33a22 outcome=ok durationMs=2
+2026-05-27T14:02:16.919Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=call_31bd8c33bb464b9f82cd9592 permissionDecisionMs=1
+2026-05-27T14:02:16.990Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=call_31bd8c33bb464b9f82cd9592 outcome=ok durationMs=71
+2026-05-27T14:02:17.430Z [INFO] [Stall] tool_dispatch_start tool=Glob toolUseId=call_e243e78eb03545ec9d5b03d2 permissionDecisionMs=1
+2026-05-27T14:02:17.485Z [INFO] [Stall] tool_dispatch_end tool=Glob toolUseId=call_e243e78eb03545ec9d5b03d2 outcome=ok durationMs=55
+2026-05-27T14:02:17.517Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T14:02:17.517Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T14:02:17.517Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T14:02:17.517Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T14:02:17.519Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T14:02:17.519Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T14:02:17.519Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T14:02:17.520Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:02:17.520Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:02:17.520Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T14:02:17.520Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T14:02:17.536Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T14:02:17.537Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:02:17.537Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:02:17.538Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:02:34.233Z [DEBUG] Stream started - received first chunk
+2026-05-27T14:02:34.234Z [DEBUG] [API:timing] first byte after 16697ms
+2026-05-27T14:02:34.993Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_e070bdd749eb45a79cf73eda permissionDecisionMs=2
+2026-05-27T14:02:34.994Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_e070bdd749eb45a79cf73eda outcome=ok durationMs=1
+2026-05-27T14:02:35.273Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_b4f36c1e8ef34d32a2658ec2 permissionDecisionMs=1
+2026-05-27T14:02:35.274Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_b4f36c1e8ef34d32a2658ec2 outcome=ok durationMs=1
+2026-05-27T14:02:35.686Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_8ea3ed032021443c938ebf5d permissionDecisionMs=1
+2026-05-27T14:02:35.688Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_8ea3ed032021443c938ebf5d outcome=ok durationMs=2
+2026-05-27T14:02:35.696Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T14:02:35.696Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T14:02:35.696Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T14:02:35.696Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T14:02:35.699Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T14:02:35.700Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T14:02:35.701Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T14:02:35.701Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:02:35.701Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:02:35.701Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T14:02:35.702Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T14:02:35.702Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T14:02:35.702Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:02:35.702Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:02:35.703Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:02:35.898Z [ERROR] API error (attempt 1/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:02:36.495Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:02:36.495Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:02:36.497Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:02:36.599Z [ERROR] API error (attempt 2/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:02:37.649Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:02:37.650Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:02:37.651Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:02:37.900Z [ERROR] API error (attempt 3/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:02:39.960Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:02:39.960Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:02:39.962Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:02:40.033Z [ERROR] API error (attempt 4/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:02:44.299Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:02:44.300Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:02:44.303Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:02:44.411Z [ERROR] API error (attempt 5/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:02:53.197Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:02:53.198Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:02:53.199Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:02:53.290Z [ERROR] API error (attempt 6/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:03:11.971Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:03:11.972Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:03:11.974Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:03:13.597Z [DEBUG] Stream started - received first chunk
+2026-05-27T14:03:13.597Z [DEBUG] [API:timing] first byte after 1626ms
+2026-05-27T14:03:14.834Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_c95e6479def64d70a813a23f permissionDecisionMs=2
+2026-05-27T14:03:14.835Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_c95e6479def64d70a813a23f outcome=ok durationMs=1
+2026-05-27T14:03:15.795Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=call_8fc1e809c3c44f7d887f3516 permissionDecisionMs=1
+2026-05-27T14:03:15.811Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=call_8fc1e809c3c44f7d887f3516 outcome=ok durationMs=16
+2026-05-27T14:03:16.749Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=call_ef4274e3160d461cbb78fc10 permissionDecisionMs=0
+2026-05-27T14:03:16.761Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=call_ef4274e3160d461cbb78fc10 outcome=ok durationMs=12
+2026-05-27T14:03:16.764Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T14:03:16.764Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T14:03:16.764Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T14:03:16.764Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T14:03:16.766Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T14:03:16.766Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T14:03:16.767Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T14:03:16.768Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:03:16.768Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:03:16.768Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T14:03:16.768Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T14:03:16.794Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T14:03:16.794Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:03:16.794Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:03:16.796Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:03:16.995Z [ERROR] API error (attempt 1/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:03:17.576Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:03:17.578Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:03:17.580Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:03:17.667Z [ERROR] API error (attempt 2/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:03:18.760Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:03:18.760Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:03:18.762Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:03:18.849Z [ERROR] API error (attempt 3/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:03:20.998Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:03:20.999Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:03:21.000Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:03:21.083Z [ERROR] API error (attempt 4/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:03:25.543Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:03:25.544Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:03:25.546Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:03:25.671Z [ERROR] API error (attempt 5/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:03:35.333Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:03:35.334Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:03:35.336Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:03:35.419Z [ERROR] API error (attempt 6/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:03:51.479Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:03:51.480Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:03:51.483Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:03:51.598Z [ERROR] API error (attempt 7/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:04:23.862Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:04:23.863Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:04:23.865Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:04:26.003Z [DEBUG] Stream started - received first chunk
+2026-05-27T14:04:26.003Z [DEBUG] [API:timing] first byte after 2141ms
+2026-05-27T14:04:26.763Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_26b67fa64c06440193a41a70 permissionDecisionMs=3
+2026-05-27T14:04:26.764Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_26b67fa64c06440193a41a70 outcome=ok durationMs=1
+2026-05-27T14:04:27.191Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_77fd1494cd4644f0b6ba89b1 permissionDecisionMs=1
+2026-05-27T14:04:27.196Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T14:04:27.196Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T14:04:27.225Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T14:04:27.226Z [DEBUG] [API REQUEST] /anthropic/v1/messages/count_tokens source=count_tokens
+2026-05-27T14:04:27.253Z [ERROR] countTokens API call failed: 404 <html>
+<head><title>404 Not Found</title></head>
+<body>
+<center><h1>404 Not Found</h1></center>
+<hr><center>openresty</center>
+</body>
+</html>
+2026-05-27T14:04:27.254Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_77fd1494cd4644f0b6ba89b1 outcome=ok durationMs=63
+2026-05-27T14:04:27.256Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T14:04:27.257Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T14:04:27.257Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T14:04:27.257Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T14:04:27.259Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T14:04:27.260Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T14:04:27.260Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T14:04:27.261Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:04:27.261Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:04:27.261Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T14:04:27.261Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T14:04:27.261Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T14:04:27.261Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:04:27.261Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:04:27.262Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:04:27.339Z [ERROR] API error (attempt 1/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:04:27.954Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:04:27.955Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:04:27.956Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:04:28.063Z [ERROR] API error (attempt 2/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:04:29.263Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:04:29.264Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:04:29.265Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:04:29.375Z [ERROR] API error (attempt 3/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:04:31.487Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:04:31.488Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:04:31.491Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:04:31.596Z [ERROR] API error (attempt 4/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:04:36.596Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:04:36.597Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:04:36.599Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:04:36.681Z [ERROR] API error (attempt 5/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:04:45.017Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:04:45.018Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:04:45.019Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:04:45.111Z [ERROR] API error (attempt 6/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:05:02.055Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T14:05:02.056Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T14:05:02.061Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T14:05:02.172Z [ERROR] API error (attempt 7/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T14:05:27.264Z [ERROR] Failed to check metrics opt-out status: Auth error: No API key available
+2026-05-27T14:05:27.268Z [DEBUG] Metrics export disabled by organization setting
+2026-05-27T14:05:35.286Z [DEBUG] LSP server manager shut down successfully
+2026-05-27T14:05:35.286Z [DEBUG] BigQuery metrics exporter flush complete
+2026-05-27T14:05:35.287Z [DEBUG] BigQuery metrics exporter flush complete
+2026-05-27T14:05:35.287Z [DEBUG] BigQuery metrics exporter shutdown complete

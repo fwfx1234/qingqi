@@ -1,0 +1,1828 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Qingqi 插件功能整理稿</title>
+<style>
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  color-scheme: light;
+  --page: #edf2f8;
+  --page-2: #f7f9fc;
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-strong: rgba(255, 255, 255, 0.88);
+  --surface: rgba(255, 255, 255, 0.78);
+  --surface-solid: #ffffff;
+  --surface-soft: #f5f7fb;
+  --line: rgba(24, 35, 52, 0.10);
+  --line-soft: rgba(24, 35, 52, 0.065);
+  --text: #101827;
+  --muted: #66758b;
+  --faint: #96a4b8;
+  --primary: #2563eb;
+  --primary-2: #1d4ed8;
+  --primary-soft: rgba(37, 99, 235, 0.11);
+  --green: #16a34a;
+  --green-soft: rgba(22, 163, 74, 0.12);
+  --orange: #ea8a10;
+  --orange-soft: rgba(234, 138, 16, 0.14);
+  --red: #dc2626;
+  --red-soft: rgba(220, 38, 38, 0.11);
+  --violet: #7c3aed;
+  --violet-soft: rgba(124, 58, 237, 0.11);
+  --cyan: #0891b2;
+  --cyan-soft: rgba(8, 145, 178, 0.12);
+  --shadow: 0 18px 70px rgba(35, 48, 73, 0.16);
+  --shadow-soft: 0 10px 28px rgba(35, 48, 73, 0.08);
+  --radius: 18px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", sans-serif;
+  --mono: "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
+}
+
+body {
+  min-height: 100vh;
+  padding: 22px;
+  background:
+    radial-gradient(circle at 14% 18%, rgba(37, 99, 235, 0.12), transparent 28%),
+    radial-gradient(circle at 86% 12%, rgba(8, 145, 178, 0.10), transparent 26%),
+    linear-gradient(145deg, var(--page), var(--page-2));
+  color: var(--text);
+  font-family: var(--font);
+  letter-spacing: 0;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.showcase {
+  max-width: 1460px;
+  min-height: calc(100vh - 44px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.64);
+  border-radius: var(--radius);
+  background: var(--glass);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(26px) saturate(1.35);
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--line-soft);
+  background: rgba(245, 248, 252, 0.62);
+}
+
+.brand {
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.traffic {
+  display: flex;
+  gap: 7px;
+  margin-bottom: 18px;
+}
+
+.traffic span {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+.traffic span:nth-child(1) { background: #ff605c; }
+.traffic span:nth-child(2) { background: #ffbd44; }
+.traffic span:nth-child(3) { background: #00ca4e; }
+
+.brand-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: linear-gradient(145deg, #2563eb, #0891b2);
+  color: #fff;
+  font-weight: 800;
+  font-size: 17px;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24);
+}
+
+.brand h1 {
+  font-size: 17px;
+  line-height: 1.1;
+  font-weight: 750;
+}
+
+.brand p {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.nav-search {
+  margin: 14px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.nav-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  background: transparent;
+  font-size: 12px;
+}
+
+.nav-search span {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.nav-group {
+  margin: 10px 0 6px;
+  padding: 0 8px;
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.nav-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  margin: 2px 0;
+  padding: 8px 9px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.nav-item.active {
+  background: var(--surface-solid);
+  border-color: rgba(37, 99, 235, 0.18);
+  box-shadow: var(--shadow-soft);
+}
+
+.nav-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.nav-meta strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-meta small {
+  display: block;
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-state {
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: #eef2f7;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.stage {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.topbar-title {
+  min-width: 0;
+  flex: 1;
+}
+
+.topbar-title h2 {
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.topbar-title p {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chip,
+.btn,
+.icon-btn,
+.seg button,
+.pill {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.chip {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.chip b {
+  color: var(--text);
+}
+
+.btn {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.btn.primary {
+  color: #fff;
+  border-color: transparent;
+  background: var(--primary);
+}
+
+.btn.green {
+  color: var(--green);
+  background: var(--green-soft);
+  border-color: rgba(22, 163, 74, 0.20);
+}
+
+.btn.red {
+  color: var(--red);
+  background: var(--red-soft);
+  border-color: rgba(220, 38, 38, 0.20);
+}
+
+.btn.ghost {
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+}
+
+.page {
+  display: none;
+  min-height: 100%;
+}
+
+.page.active {
+  display: block;
+}
+
+.window {
+  min-height: calc(100vh - 138px);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.64);
+  box-shadow: var(--shadow-soft);
+}
+
+.window.compact {
+  max-width: 1040px;
+  min-height: 640px;
+  margin: 0 auto;
+}
+
+.window-header,
+.section-header,
+.toolbar,
+.statusbar {
+  display: flex;
+  align-items: center;
+}
+
+.window-header {
+  min-height: 56px;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.title-stack h3 {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.title-stack p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.toolbar {
+  min-height: 44px;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  background: rgba(248, 250, 253, 0.76);
+}
+
+.statusbar {
+  min-height: 32px;
+  justify-content: space-between;
+  padding: 0 12px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--muted);
+  background: rgba(248, 250, 253, 0.68);
+  font-size: 11px;
+}
+
+.field,
+.textarea,
+.select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  outline: 0;
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--text);
+}
+
+.field,
+.select {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.textarea {
+  min-height: 160px;
+  padding: 12px;
+  resize: none;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+.seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(241, 245, 249, 0.72);
+}
+
+.seg button {
+  height: 26px;
+  padding: 0 10px;
+  border-color: transparent;
+  color: var(--muted);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  min-width: max-content;
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
+.seg button.on {
+  color: var(--primary);
+  border-color: rgba(37, 99, 235, 0.14);
+  background: var(--surface-solid);
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.08);
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  min-height: 0;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.pane {
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--line-soft);
+}
+
+.pane:last-child {
+  border-right: 0;
+}
+
+.section {
+  padding: 14px;
+}
+
+.card {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.soft-card {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: rgba(248, 250, 253, 0.72);
+}
+
+.section-header {
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.section-header h4 {
+  font-size: 13px;
+}
+
+.section-header small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.list {
+  overflow: auto;
+}
+
+.row {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.row:hover {
+  background: rgba(255, 255, 255, 0.44);
+}
+
+.row.selected {
+  background: var(--primary-soft);
+}
+
+.row-title {
+  min-width: 0;
+}
+
+.row-title strong {
+  display: block;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-title span {
+  display: block;
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: #eef2f7;
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.badge.blue {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.badge.green {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.badge.orange {
+  color: var(--orange);
+  background: var(--orange-soft);
+}
+
+.badge.red {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.badge.violet {
+  color: var(--violet);
+  background: var(--violet-soft);
+}
+
+.badge.cyan {
+  color: var(--cyan);
+  background: var(--cyan-soft);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 34px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.kv b {
+  color: var(--text);
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric {
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.60);
+}
+
+.metric span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.metric b {
+  display: block;
+  margin-top: 5px;
+  font-size: 18px;
+}
+
+.progress {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5eaf2;
+}
+
+.progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--primary), var(--cyan));
+}
+
+.codebox {
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: #f8fafc;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: #263145;
+  white-space: pre;
+}
+
+.qr-grid {
+  width: min(320px, 100%);
+  aspect-ratio: 1;
+  display: grid;
+  grid-template-columns: repeat(21, 1fr);
+  gap: 2px;
+  padding: 18px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+
+.qr-grid i {
+  border-radius: 2px;
+  background: #111827;
+}
+
+.qr-grid i.off {
+  background: transparent;
+}
+
+.dropzone {
+  min-height: 150px;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  border: 1.5px dashed rgba(37, 99, 235, 0.34);
+  border-radius: var(--radius-md);
+  background: rgba(37, 99, 235, 0.055);
+  text-align: center;
+}
+
+.dropzone b {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+.dropzone span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.terminal {
+  min-height: 250px;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  background: #101827;
+  color: #d9e4f5;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.terminal .ok { color: #86efac; }
+.terminal .warn { color: #fde68a; }
+.terminal .prompt { color: #93c5fd; }
+
+.launcher-wrap {
+  max-width: 760px;
+  margin: 42px auto;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: var(--shadow);
+}
+
+.launcher-search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 64px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.launcher-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 650;
+}
+
+.launcher-results {
+  padding: 8px;
+}
+
+.launcher-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 62px;
+  padding: 10px 12px;
+  border-radius: 14px;
+}
+
+.launcher-row.selected {
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb, #0891b2);
+}
+
+.launcher-row.selected span,
+.launcher-row.selected small {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.app-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--primary);
+  background: #eef4ff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.launcher-row.selected .app-icon {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table th,
+.table td {
+  height: 38px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table th {
+  color: var(--muted);
+  background: rgba(248, 250, 253, 0.78);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.form-line label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.switch {
+  width: 42px;
+  height: 24px;
+  position: relative;
+  flex: none;
+  border-radius: 999px;
+  background: var(--primary);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
+}
+
+.switch.off {
+  background: #d8e0ea;
+}
+
+.switch.off::after {
+  right: auto;
+  left: 3px;
+}
+
+.setting-row {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.setting-row:last-child {
+  border-bottom: 0;
+}
+
+.setting-row strong {
+  display: block;
+  font-size: 12px;
+}
+
+.setting-row span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.placeholder-art {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(8, 145, 178, 0.08)),
+    rgba(255, 255, 255, 0.52);
+}
+
+.about-logo {
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 16px;
+  border-radius: 24px;
+  color: #fff;
+  background: linear-gradient(145deg, #2563eb, #0891b2);
+  font-size: 38px;
+  font-weight: 900;
+  box-shadow: 0 20px 40px rgba(37, 99, 235, 0.22);
+}
+
+/* Existing visual tokens are kept; this document now focuses on feature placement. */
+:root {
+  --page: #e8e4f4;
+  --page-2: #f4eaf0;
+  --glass: rgba(255, 255, 255, 0.56);
+  --glass-strong: rgba(255, 255, 255, 0.72);
+  --surface: rgba(255, 255, 255, 0.46);
+  --surface-solid: rgba(255, 255, 255, 0.82);
+  --surface-soft: rgba(255, 255, 255, 0.30);
+  --line: rgba(50, 30, 120, 0.08);
+  --line-soft: rgba(50, 30, 120, 0.052);
+  --text: #343448;
+  --muted: #77779b;
+  --faint: #aaaacc;
+  --primary: #7b5fff;
+  --primary-2: #5555cc;
+  --primary-soft: rgba(120, 80, 255, 0.072);
+  --cyan: #4a8fe7;
+  --cyan-soft: rgba(74, 143, 231, 0.08);
+  --shadow: 0 24px 110px rgba(50, 30, 120, 0.105);
+  --shadow-soft: 0 12px 70px rgba(50, 30, 120, 0.07);
+}
+
+body {
+  padding: 28px 22px;
+  background:
+    radial-gradient(circle at 8% 8%, rgba(123, 95, 255, 0.14), transparent 30%),
+    radial-gradient(circle at 84% 12%, rgba(255, 122, 190, 0.11), transparent 28%),
+    radial-gradient(circle at 76% 92%, rgba(74, 143, 231, 0.10), transparent 34%),
+    linear-gradient(135deg, var(--page) 0%, #f0ecfa 52%, var(--page-2) 100%);
+}
+
+.showcase,
+.window,
+.launcher-wrap,
+.card,
+.soft-card,
+.metric,
+.modal-card,
+.float-sheet,
+.mini-window,
+.frost-panel {
+  background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(48px) saturate(1.75);
+  -webkit-backdrop-filter: blur(48px) saturate(1.75);
+}
+
+.showcase {
+  max-width: 1500px;
+  border-radius: 20px;
+}
+
+.sidebar {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.brand,
+.topbar,
+.window-header,
+.toolbar,
+.statusbar,
+.section-header,
+.table th {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.brand-mark,
+.about-logo {
+  background: linear-gradient(135deg, #7b5fff, #5555cc);
+  box-shadow: 0 18px 42px rgba(120, 80, 255, 0.22);
+}
+
+.nav-item.active {
+  background: rgba(255, 255, 255, 0.62);
+  border-color: rgba(120, 80, 255, 0.16);
+  box-shadow: 0 12px 42px rgba(50, 30, 120, 0.08);
+}
+
+.nav-icon,
+.app-icon,
+.nav-state,
+.badge,
+.chip,
+.field,
+.textarea,
+.select,
+.btn,
+.icon-btn,
+.seg,
+.seg button.on,
+.codebox,
+.terminal,
+.qr-grid {
+  background-color: rgba(255, 255, 255, 0.36);
+  border-color: rgba(50, 30, 120, 0.07);
+}
+
+.btn.primary {
+  background: rgba(120, 80, 255, 0.12);
+  color: #6b4fcf;
+}
+
+.btn.green {
+  background: rgba(0, 160, 80, 0.08);
+}
+
+.btn.red {
+  background: rgba(200, 40, 40, 0.08);
+}
+
+.content {
+  padding: 20px;
+}
+
+.window {
+  min-height: calc(100vh - 150px);
+  border-radius: 18px;
+  position: relative;
+}
+
+.window::before,
+.launcher-wrap::before,
+.mini-window::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 45%;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent);
+}
+
+.window > *,
+.launcher-wrap > *,
+.mini-window > * {
+  position: relative;
+  z-index: 1;
+}
+
+.glass-workspace {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 330px;
+  min-height: 650px;
+}
+
+.work-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line-soft);
+}
+
+.work-side {
+  min-width: 0;
+  padding: 12px;
+  overflow: auto;
+}
+
+.dense-row {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 11px;
+}
+
+.dense-row.selected {
+  background: rgba(120, 80, 255, 0.06);
+}
+
+.node-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 31px;
+  padding: 4px 12px;
+  border-left: 2px solid transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.node-row.selected {
+  color: #6b4fcf;
+  background: rgba(120, 80, 255, 0.055);
+  border-left-color: #7b5fff;
+}
+
+.node-row strong {
+  overflow: hidden;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabs-strip,
+.editor-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 12px;
+  min-height: 38px;
+  border-bottom: 1px solid var(--line-soft);
+  overflow-x: auto;
+}
+
+.tab-pill,
+.editor-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.tab-pill.on,
+.editor-tab.on {
+  color: #6b4fcf;
+  background: rgba(120, 80, 255, 0.07);
+}
+
+.kv-table {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+}
+
+.kv-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 8px;
+}
+
+.kv-row input {
+  height: 28px;
+  min-width: 0;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.28);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.check-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  background: rgba(120, 80, 255, 0.11);
+  box-shadow: inset 0 0 0 1px rgba(120, 80, 255, 0.16);
+}
+
+.small-muted {
+  color: var(--faint);
+  font-size: 10px;
+}
+
+.modal-card,
+.float-sheet,
+.menu-pop {
+  position: absolute;
+  z-index: 8;
+  border-radius: 14px;
+}
+
+.modal-card {
+  right: 22px;
+  bottom: 22px;
+  width: 360px;
+  overflow: hidden;
+}
+
+.float-sheet {
+  right: 28px;
+  top: 86px;
+  width: 430px;
+  overflow: hidden;
+}
+
+.menu-pop {
+  left: 292px;
+  top: 222px;
+  width: 188px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  box-shadow: 0 18px 70px rgba(50, 30, 120, 0.14);
+}
+
+.menu-pop div {
+  min-height: 30px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.menu-pop div:hover,
+.menu-pop div.on {
+  color: #6b4fcf;
+  background: rgba(120, 80, 255, 0.065);
+}
+
+.sheet-body {
+  padding: 14px;
+  display: grid;
+  gap: 11px;
+}
+
+.mini-window {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.command-preview {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  gap: 14px;
+  padding: 14px;
+}
+
+.stat-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 30px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.timeline {
+  display: grid;
+  gap: 8px;
+}
+
+.timeline-row {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 32px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.capture-table .dense-row,
+.download-table .dense-row {
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.thumb {
+  min-height: 76px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(120, 80, 255, 0.08), rgba(74, 143, 231, 0.08)),
+    rgba(255, 255, 255, 0.32);
+  color: #6b4fcf;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.advanced-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(120, 80, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(120, 80, 255, 0.05);
+}
+
+@media (max-width: 1060px) {
+  body { padding: 10px; }
+  .showcase { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .grid-3,
+  .grid-2,
+  .split {
+    grid-template-columns: 1fr;
+  }
+  .pane {
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .top-actions {
+    display: none;
+  }
+  .window {
+    min-height: auto;
+  }
+}
+
+@media (min-width: 1061px) and (max-width: 1320px) {
+  body {
+    padding: 22px;
+  }
+
+  .showcase {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+
+  .brand {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .nav-item {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .content {
+    padding: 16px;
+  }
+
+  #quick-launch .glass-workspace {
+    grid-template-columns: 280px minmax(385px, 1fr) 260px !important;
+  }
+
+  #api-debugger .glass-workspace {
+    grid-template-columns: 238px minmax(350px, 1fr) 292px !important;
+  }
+
+  #http-capture .glass-workspace {
+    grid-template-columns: 230px minmax(350px, 1fr) 300px !important;
+  }
+
+  #download-manager .glass-workspace {
+    grid-template-columns: 220px minmax(340px, 1fr) 300px !important;
+  }
+
+  #image-compress .glass-workspace {
+    grid-template-columns: 290px minmax(330px, 1fr) 280px !important;
+  }
+
+  #ftp-client .glass-workspace {
+    grid-template-columns: 220px minmax(360px, 1fr) 320px !important;
+  }
+
+  .toolbar {
+    gap: 6px;
+  }
+
+  .btn {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+}
+</style>
+</head>
+<body>
+<main class="showcase">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="traffic"><span></span><span></span><span></span></div>
+      <div class="brand-title">
+        <div class="brand-mark">Q</div>
+        <div>
+          <h1>Qingqi</h1>
+          <p>QML 功能整理稿</p>
+        </div>
+      </div>
+      <div class="nav-search"><span>Search</span><input value="功能分层"></div>
+    </div>
+    <nav class="nav" id="nav">
+      <div class="nav-group">Core</div>
+      <button class="nav-item active" data-page="launcher"><span class="nav-icon">CMD</span><span class="nav-meta"><strong>启动器</strong><small>搜索、选择、打开</small></span><span class="nav-state">Core</span></button>
+      <button class="nav-item" data-page="app-launcher"><span class="nav-icon">APP</span><span class="nav-meta"><strong>软件快速启动</strong><small>应用搜索与打开</small></span><span class="nav-state">v1</span></button>
+      <button class="nav-item" data-page="system-settings"><span class="nav-icon">SET</span><span class="nav-meta"><strong>系统设置</strong><small>主题、插件、权限</small></span><span class="nav-state">v1</span></button>
+      <div class="nav-group">Tools</div>
+      <button class="nav-item" data-page="json-parser"><span class="nav-icon">JSON</span><span class="nav-meta"><strong>JSON 解析</strong><small>格式化、压缩、查询</small></span><span class="nav-state">v1</span></button>
+      <button class="nav-item" data-page="qr-code"><span class="nav-icon">QR</span><span class="nav-meta"><strong>二维码</strong><small>生成、扫描、历史</small></span><span class="nav-state">v1</span></button>
+      <button class="nav-item" data-page="quick-launch"><span class="nav-icon">RUN</span><span class="nav-meta"><strong>快速启动</strong><small>动作、参数、结果</small></span><span class="nav-state">v1</span></button>
+      <button class="nav-item" data-page="clipboard"><span class="nav-icon">CLIP</span><span class="nav-meta"><strong>剪贴板历史</strong><small>历史、过滤、设置</small></span><span class="nav-state">v1</span></button>
+      <button class="nav-item" data-page="image-compress"><span class="nav-icon">IMG</span><span class="nav-meta"><strong>图片压缩</strong><small>导入、压缩、保存</small></span><span class="nav-state">Plan</span></button>
+      <button class="nav-item" data-page="download-manager"><span class="nav-icon">DL</span><span class="nav-meta"><strong>下载管理器</strong><small>下载、队列、配置</small></span><span class="nav-state">Plan</span></button>
+      <div class="nav-group">Network</div>
+      <button class="nav-item" data-page="api-debugger"><span class="nav-icon">API</span><span class="nav-meta"><strong>API 调试器</strong><small>请求、环境、响应</small></span><span class="nav-state">Plan</span></button>
+      <button class="nav-item" data-page="http-capture"><span class="nav-icon">CAP</span><span class="nav-meta"><strong>HTTP 抓包</strong><small>代理、流量、详情</small></span><span class="nav-state">Plan</span></button>
+      <button class="nav-item" data-page="ftp-client"><span class="nav-icon">SSH</span><span class="nav-meta"><strong>FTP/SFTP/SSH</strong><small>连接、文件、终端</small></span><span class="nav-state">Plan</span></button>
+      <div class="nav-group">Meta</div>
+      <button class="nav-item" data-page="gpui-demo"><span class="nav-icon">GPUI</span><span class="nav-meta"><strong>GPUI 学习演示</strong><small>原生控件与状态流</small></span><span class="nav-state">Demo</span></button>
+      <button class="nav-item" data-page="about"><span class="nav-icon">INFO</span><span class="nav-meta"><strong>关于</strong><small>版本、路径、状态</small></span><span class="nav-state">v1</span></button>
+    </nav>
+  </aside>
+
+  <section class="stage">
+    <header class="topbar">
+      <div class="topbar-title">
+        <h2 id="pageTitle">启动器</h2>
+        <p id="pageDesc">搜索、选择、打开</p>
+      </div>
+      <div class="top-actions">
+        <span class="chip">目标 <b>QML 功能完整</b></span>
+        <span class="chip">原则 <b>常用外露，高级进配置</b></span>
+      </div>
+    </header>
+
+    <div class="content">
+      <section class="page active" id="launcher" data-title="启动器" data-desc="搜索、选择、打开">
+        <div class="window compact">
+          <div class="window-header"><div class="title-stack"><h3>启动器</h3><p>主界面只负责输入、搜索、选择、打开。</p></div></div>
+          <div class="section" style="display:grid;gap:14px">
+            <div class="card">
+              <div class="section-header"><h4>主界面常用功能</h4><small>打开时可见</small></div>
+              <table class="table"><tbody>
+                <tr><td>搜索输入</td><td>输入插件名、命令前缀、应用名、Quick Launch 动作名</td></tr>
+                <tr><td>结果列表</td><td>显示图标、标题、副标题、类型标记</td></tr>
+                <tr><td>键盘操作</td><td>上/下选择，Enter 打开，Esc 关闭</td></tr>
+                <tr><td>鼠标操作</td><td>点击结果打开；设置入口只作为系统设置快捷入口</td></tr>
+              </tbody></table>
+            </div>
+            <div class="card">
+              <div class="section-header"><h4>结果类型</h4><small>来自 PluginRuntime commands</small></div>
+              <table class="table"><tbody>
+                <tr><td>插件打开</td><td>JSON、二维码、剪贴板、系统设置等固定插件入口</td></tr>
+                <tr><td>动态动作</td><td>Quick Launch 动作、App Launcher 应用索引等动态命令</td></tr>
+                <tr><td>前缀匹配</td><td>api / clip / json / qr / run / app 等，仅影响排序和匹配</td></tr>
+              </tbody></table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="app-launcher" data-title="软件快速启动" data-desc="应用搜索与打开；索引配置放设置">
+        <div class="window compact">
+          <div class="window-header"><div class="title-stack"><h3>软件快速启动</h3><p>常用只展示应用搜索、列表和打开；索引路径、图标缓存、刷新策略放配置。</p></div></div>
+          <div class="grid-2">
+            <div class="section">
+              <div class="card"><div class="section-header"><h4>主界面常用功能</h4><small>打开插件时可见</small></div><table class="table"><tbody>
+                <tr><td>搜索</td><td>按应用名、bundle id、别名过滤</td></tr>
+                <tr><td>应用列表</td><td>图标、名称、路径/Bundle ID、打开按钮</td></tr>
+                <tr><td>分页/虚拟列表</td><td>大列表不一次性渲染全部结果</td></tr>
+                <tr><td>打开应用</td><td>双击行或点击“打开”</td></tr>
+              </tbody></table></div>
+            </div>
+            <div class="section">
+              <div class="card"><div class="section-header"><h4>配置中的功能</h4><small>低频设置</small></div><table class="table"><tbody>
+                <tr><td>刷新索引</td><td>手动重扫 /Applications 与用户 Applications</td></tr>
+                <tr><td>索引路径</td><td>配置扫描目录和忽略目录</td></tr>
+                <tr><td>图标缓存</td><td>缓存、重建、失败回退策略</td></tr>
+                <tr><td>启动器注册</td><td>控制是否注册 app: 动态命令</td></tr>
+              </tbody></table></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="system-settings" data-title="系统设置" data-desc="配置集中入口">
+        <div class="window compact">
+          <div class="window-header"><div class="title-stack"><h3>系统设置</h3><p>所有插件低频功能统一收进设置页或插件自己的配置弹层。</p></div></div>
+          <div class="section" style="display:grid;gap:12px">
+            <div class="card"><div class="section-header"><h4>常用设置</h4><small>直接展示</small></div><table class="table"><tbody>
+              <tr><td>主题模式</td><td>浅色、深色、跟随系统；持久化 ThemeStore</td></tr>
+              <tr><td>插件窗口保留</td><td>设置 inline session 保留数量</td></tr>
+              <tr><td>插件导入</td><td>选择目录、选择 ZIP，校验 manifest 后导入</td></tr>
+              <tr><td>macOS 权限</td><td>辅助功能、剪贴板、文件访问等状态检查和跳转</td></tr>
+            </tbody></table></div>
+            <div class="card"><div class="section-header"><h4>高级维护</h4><small>配置/诊断区</small></div><table class="table"><tbody>
+              <tr><td>应用索引维护</td><td>手动重扫、清理图标缓存</td></tr>
+              <tr><td>数据路径</td><td>展示 AppPaths、数据库路径、插件状态</td></tr>
+              <tr><td>日志诊断</td><td>展示后台服务状态、最近错误、warning 收敛目标</td></tr>
+            </tbody></table></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="json-parser" data-title="JSON 解析" data-desc="格式化、压缩、校验和查询">
+        <div class="window compact">
+          <div class="window-header"><div class="title-stack"><h3>JSON 解析</h3><p>主界面只保留输入、输出和最常用按钮。</p></div></div>
+          <div class="grid-2">
+            <div class="section"><div class="card"><div class="section-header"><h4>主界面常用功能</h4><small>QML 对应</small></div><table class="table"><tbody>
+              <tr><td>JSON 输入</td><td>多行可编辑 TextEditor</td></tr>
+              <tr><td>格式化</td><td>格式化输入 JSON 并写入输出区</td></tr>
+              <tr><td>压缩</td><td>去空白压缩 JSON</td></tr>
+              <tr><td>JSONPath 查询</td><td>输入查询表达式并执行</td></tr>
+              <tr><td>从剪贴板填充</td><td>读取剪贴板文本到输入区</td></tr>
+              <tr><td>复制结果</td><td>复制输出区文本</td></tr>
+            </tbody></table></div></div>
+            <div class="section"><div class="card"><div class="section-header"><h4>状态与错误</h4><small>不单独做高级面板</small></div><table class="table"><tbody>
+              <tr><td>校验成功</td><td>显示对象/数组数量、耗时、光标位置</td></tr>
+              <tr><td>校验失败</td><td>展示错误行列和错误消息</td></tr>
+              <tr><td>只读输出</td><td>输出区可选择、可复制，不可编辑</td></tr>
+            </tbody></table></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="qr-code" data-title="二维码" data-desc="生成、扫描、历史">
+        <div class="window compact">
+          <div class="window-header"><div class="title-stack"><h3>二维码</h3><p>主界面放生成与常用操作；扫描和历史用弹层。</p></div></div>
+          <div class="grid-2">
+            <div class="section"><div class="card"><div class="section-header"><h4>主界面常用功能</h4><small>打开时可见</small></div><table class="table"><tbody>
+              <tr><td>文本输入</td><td>输入二维码内容，内容变更后更新二维码</td></tr>
+              <tr><td>生成二维码</td><td>生成矩阵并展示</td></tr>
+              <tr><td>从剪贴板填充</td><td>读取剪贴板文本作为内容</td></tr>
+              <tr><td>保存图片</td><td>保存生成的二维码图片</td></tr>
+              <tr><td>复制文本</td><td>复制当前内容</td></tr>
+              <tr><td>清空</td><td>清空输入和二维码</td></tr>
+            </tbody></table></div></div>
+            <div class="section"><div class="card"><div class="section-header"><h4>弹层功能</h4><small>按需打开</small></div><table class="table"><tbody>
+              <tr><td>扫描 Popup</td><td>选择图片文件、显示扫描结果、复制结果、用结果生成二维码</td></tr>
+              <tr><td>历史 Popup</td><td>搜索历史、选择历史项、复制历史内容、删除历史</td></tr>
+              <tr><td>文件选择</td><td>扫描图片使用 FileDialog</td></tr>
+            </tbody></table></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="quick-launch" data-title="快速启动" data-desc="常用运行外露，管理功能进菜单/弹层">
+        <div class="window compact">
+          <div class="window-header"><div class="title-stack"><h3>快速启动</h3><p>主界面只展示动作搜索、动作列表、运行/停止、新建/编辑入口；低频管理放更多菜单和配置弹层。</p></div></div>
+          <div class="grid-2">
+            <div class="section"><div class="card"><div class="section-header"><h4>主界面常用功能</h4><small>打开插件时可见</small></div><table class="table"><tbody>
+              <tr><td>搜索动作</td><td>按名称、描述、关键词、前缀过滤动作</td></tr>
+              <tr><td>动作列表</td><td>图标、名称、类型、运行状态、参数提示、简短描述</td></tr>
+              <tr><td>运行 / 停止</td><td>动作行展示最主要的执行按钮</td></tr>
+              <tr><td>新建动作</td><td>右上角入口打开动作配置弹层</td></tr>
+              <tr><td>编辑动作</td><td>常用编辑入口保留，打开同一个动作配置弹层</td></tr>
+            </tbody></table></div></div>
+            <div class="section"><div class="card"><div class="section-header"><h4>菜单和弹层</h4><small>低频/高级按需打开</small></div><table class="table"><tbody>
+              <tr><td>更多菜单</td><td>启用/停用、复制、查看运行历史、删除</td></tr>
+              <tr><td>参数 Sheet</td><td>动作包含 ${name} 参数时，运行前收集参数</td></tr>
+              <tr><td>结果 Sheet</td><td>反馈方式为弹窗或执行失败时展示 stdout/stderr、exit code、耗时</td></tr>
+              <tr><td>历史 Sheet</td><td>查看最近运行记录，点记录进入结果详情</td></tr>
+              <tr><td>删除确认</td><td>删除动作前二次确认</td></tr>
+            </tbody></table></div></div>
+          </div>
+          <div class="section"><div class="card"><div class="section-header"><h4>动作配置弹层</h4><small>高级字段不放主界面</small></div><table class="table"><tbody>
+            <tr><td>基础</td><td>名称、描述、启用状态、图标字符</td></tr>
+            <tr><td>类型</td><td>脚本 / 打开路径 / 打开链接</td></tr>
+            <tr><td>脚本配置</td><td>Shell/Node/Python/其他，文件/内联，解释器，脚本内容/路径，运行参数，工作目录</td></tr>
+            <tr><td>运行配置</td><td>环境变量、超时、反馈方式</td></tr>
+            <tr><td>启动器注册</td><td>关键词、前缀</td></tr>
+          </tbody></table></div></div>
+        </div>
+      </section>
+
+      <section class="page" id="clipboard" data-title="剪贴板历史" data-desc="历史常用，采集规则进设置">
+        <div class="window compact">
+          <div class="window-header"><div class="title-stack"><h3>剪贴板历史</h3><p>主界面保持历史列表；设置页承载采集、过滤、快捷键和高级维护。</p></div></div>
+          <div class="grid-2">
+            <div class="section"><div class="card"><div class="section-header"><h4>历史主界面</h4><small>打开时可见</small></div><table class="table"><tbody>
+              <tr><td>类型过滤</td><td>全部、置顶、文本、链接、代码、图片、文件</td></tr>
+              <tr><td>搜索</td><td>搜索历史、链接、文件名</td></tr>
+              <tr><td>历史列表</td><td>展示内容摘要、类型、时间、置顶状态</td></tr>
+              <tr><td>详情区</td><td>查看选中项完整内容</td></tr>
+              <tr><td>常用操作</td><td>复制/粘贴、置顶/取消置顶、删除、清空历史</td></tr>
+            </tbody></table></div></div>
+            <div class="section"><div class="card"><div class="section-header"><h4>设置与高级设置</h4><small>低频配置</small></div><table class="table"><tbody>
+              <tr><td>记录类型</td><td>文本、图片、文件采集开关</td></tr>
+              <tr><td>过滤与限制</td><td>忽略规则、文本长度上限、保存过滤、清空过滤</td></tr>
+              <tr><td>快捷键</td><td>配置打开剪贴板窗口的热键</td></tr>
+              <tr><td>高级维护</td><td>保留天数/条数、忽略应用、敏感规则、数据库压缩/备份/导出/导入</td></tr>
+            </tbody></table></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="image-compress" data-title="图片压缩" data-desc="批量导入、压缩、保存">
+        <div class="window compact">
+          <div class="window-header"><div class="title-stack"><h3>图片压缩</h3><p>常用流程是导入图片、开始压缩、处理结果；压缩参数收进配置区。</p></div></div>
+          <div class="grid-2">
+            <div class="section"><div class="card"><div class="section-header"><h4>主界面常用功能</h4><small>QML 对应</small></div><table class="table"><tbody>
+              <tr><td>导入图片</td><td>拖拽、选择文件、粘贴剪贴板</td></tr>
+              <tr><td>任务列表</td><td>待压缩、压缩中、成功、失败同列表展示</td></tr>
+              <tr><td>开始压缩</td><td>批量执行普通压缩</td></tr>
+              <tr><td>结果操作</td><td>复制结果到剪贴板、覆盖源文件、另存为</td></tr>
+              <tr><td>清理</td><td>移除单项、清空已完成或失败项</td></tr>
+            </tbody></table></div></div>
+            <div class="section"><div class="card"><div class="section-header"><h4>配置中的功能</h4><small>低频调整</small></div><table class="table"><tbody>
+              <tr><td>压缩模式</td><td>普通压缩；后续扩展质量/尺寸/格式时放这里</td></tr>
+              <tr><td>保存策略</td><td>覆盖原图确认、默认另存目录</td></tr>
+              <tr><td>失败处理</td><td>展示错误原因并支持重试</td></tr>
+            </tbody></table></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="download-manager" data-title="下载管理器" data-desc="下载队列和高级网络配置">
+        <div class="window compact">
+          <div class="window-header"><div class="title-stack"><h3>下载管理器</h3><p>主界面保留下载队列和常用控制；网络参数全部放高级下载设置 Popup。</p></div></div>
+          <div class="grid-2">
+            <div class="section"><div class="card"><div class="section-header"><h4>主界面常用功能</h4><small>打开时可见</small></div><table class="table"><tbody>
+              <tr><td>URL 输入</td><td>手动输入或从剪贴板填充</td></tr>
+              <tr><td>新建下载</td><td>加入下载队列</td></tr>
+              <tr><td>分类过滤</td><td>全部、下载中、完成、失败、压缩包、媒体等</td></tr>
+              <tr><td>任务列表</td><td>文件名、来源、大小、进度、速度、剩余、状态</td></tr>
+              <tr><td>任务操作</td><td>暂停/恢复、重试、打开文件、在 Finder 显示、取消、删除</td></tr>
+              <tr><td>全局操作</td><td>暂停全部、恢复全部、清理完成项、设置下载目录</td></tr>
+            </tbody></table></div></div>
+            <div class="section"><div class="card"><div class="section-header"><h4>高级下载设置 Popup</h4><small>配置入口</small></div><table class="table"><tbody>
+              <tr><td>保存目录</td><td>默认下载根目录</td></tr>
+              <tr><td>并发与限速</td><td>最大并发、速度限制</td></tr>
+              <tr><td>网络</td><td>超时、重试次数、代理</td></tr>
+              <tr><td>请求头</td><td>User-Agent、Referer、Cookie、额外 Header 多行输入</td></tr>
+              <tr><td>说明</td><td>新建任务使用当前配置，已排队任务保留创建时配置</td></tr>
+            </tbody></table></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="api-debugger" data-title="API 调试器" data-desc="请求主流程外露，环境和导入放弹层">
+        <div class="window compact">
+          <div class="window-header"><div class="title-stack"><h3>API 调试器</h3><p>常用工作区是集合树、请求编辑、响应区；环境管理、导入、菜单等使用弹层。</p></div></div>
+          <div class="grid-2">
+            <div class="section"><div class="card"><div class="section-header"><h4>主界面常用功能</h4><small>打开时可见</small></div><table class="table"><tbody>
+              <tr><td>集合侧栏</td><td>目录、接口、用例树；选择节点打开请求 Tab</td></tr>
+              <tr><td>请求 Tab</td><td>多请求标签、关闭、切换</td></tr>
+              <tr><td>请求栏</td><td>方法选择、URL 输入、发送、更多操作</td></tr>
+              <tr><td>编辑区</td><td>Params、Headers、Body、Auth、Tests、Settings</td></tr>
+              <tr><td>响应区</td><td>状态、耗时、大小、Body、Headers、Cookies、测试结果</td></tr>
+              <tr><td>WebSocket</td><td>连接、发送消息、关闭、消息历史</td></tr>
+            </tbody></table></div></div>
+            <div class="section"><div class="card"><div class="section-header"><h4>弹层 / 配置功能</h4><small>按需打开</small></div><table class="table"><tbody>
+              <tr><td>环境弹层</td><td>切换环境、查看 baseUrl、进入环境管理</td></tr>
+              <tr><td>环境管理 Dialog</td><td>新增/删除环境，变量、全局 Header、Cookie、脚本等配置</td></tr>
+              <tr><td>导入 OpenAPI</td><td>FileDialog 选择 json/yaml/yml</td></tr>
+              <tr><td>KV 导入 Dialog</td><td>批量导入参数、Header、表单项</td></tr>
+              <tr><td>魔法参数</td><td>插入环境变量、动态参数</td></tr>
+              <tr><td>集合菜单</td><td>新增接口/目录/用例、移动、复制、重命名、删除、展开/收起</td></tr>
+              <tr><td>文件上传</td><td>Body 表单选择上传文件</td></tr>
+            </tbody></table></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="http-capture" data-title="HTTP 抓包" data-desc="抓包主流程外露，代理证书配置进引导">
+        <div class="window compact">
+          <div class="window-header"><div class="title-stack"><h3>HTTP 抓包</h3><p>主界面放开始/暂停、过滤、流量列表、详情；代理/证书/导出用配置或弹层。</p></div></div>
+          <div class="grid-2">
+            <div class="section"><div class="card"><div class="section-header"><h4>主界面常用功能</h4><small>打开时可见</small></div><table class="table"><tbody>
+              <tr><td>捕获控制</td><td>开始/停止、暂停/恢复、清空</td></tr>
+              <tr><td>过滤</td><td>关键词、域名、方法、状态码、大小、错误过滤</td></tr>
+              <tr><td>统计</td><td>请求数、HTTPS、错误、平均耗时、传输大小</td></tr>
+              <tr><td>流量列表</td><td>状态、方法、URL、域名、耗时、大小、时间</td></tr>
+              <tr><td>请求详情</td><td>Headers、Body、Response、Timing、Cookies</td></tr>
+              <tr><td>常用操作</td><td>复制、重放、发送到 API 调试器</td></tr>
+            </tbody></table></div></div>
+            <div class="section"><div class="card"><div class="section-header"><h4>弹层 / 配置功能</h4><small>按需打开</small></div><table class="table"><tbody>
+              <tr><td>设置引导 Popup</td><td>启动代理、安装证书、信任证书、移动端代理设置</td></tr>
+              <tr><td>导出</td><td>导出可见请求、导出选中请求、HAR/JSON 文件选择</td></tr>
+              <tr><td>保存 Body</td><td>将响应体保存为文件</td></tr>
+              <tr><td>代理恢复</td><td>停止后恢复系统代理</td></tr>
+              <tr><td>证书状态</td><td>显示安装/信任状态，不常驻主操作区</td></tr>
+            </tbody></table></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="ftp-client" data-title="FTP/SFTP/SSH 客户端" data-desc="连接文件终端常用，配置进 Dialog">
+        <div class="window compact">
+          <div class="window-header"><div class="title-stack"><h3>FTP/SFTP/SSH 客户端</h3><p>主界面保留连接列表、远程文件、传输队列和终端；连接参数和高级选项放 Dialog。</p></div></div>
+          <div class="grid-2">
+            <div class="section"><div class="card"><div class="section-header"><h4>主界面常用功能</h4><small>打开时可见</small></div><table class="table"><tbody>
+              <tr><td>连接列表</td><td>选择 Profile，连接/断开，新建连接入口</td></tr>
+              <tr><td>远程文件</td><td>路径栏、刷新、进入目录、返回上级</td></tr>
+              <tr><td>文件操作</td><td>上传、下载、打开目录、删除、重命名、新建目录</td></tr>
+              <tr><td>传输队列</td><td>上传/下载进度、速度、状态、取消</td></tr>
+              <tr><td>SSH 终端</td><td>输入命令、查看输出、保持连接状态</td></tr>
+            </tbody></table></div></div>
+            <div class="section"><div class="card"><div class="section-header"><h4>Dialog / 菜单功能</h4><small>配置入口</small></div><table class="table"><tbody>
+              <tr><td>连接 Profile Dialog</td><td>协议、名称、主机、端口、用户名、密码/密钥</td></tr>
+              <tr><td>高级选项</td><td>编码、超时、KeepAlive、初始目录等折叠到高级</td></tr>
+              <tr><td>文件选择</td><td>选择密钥文件、上传文件、下载目录</td></tr>
+              <tr><td>远程文件菜单</td><td>下载、重命名、删除、新建目录</td></tr>
+              <tr><td>确认对话框</td><td>删除确认、重命名、新建目录</td></tr>
+            </tbody></table></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="gpui-demo" data-title="GPUI 学习演示" data-desc="原生控件与状态流">
+        <div class="window compact">
+          <div class="window-header"><div class="title-stack"><h3>GPUI 学习演示</h3><p>用于 GPUI/Rust 控件和状态流验证。</p></div></div>
+          <div class="section"><div class="card"><div class="section-header"><h4>功能范围</h4><small>不是用户工具插件</small></div><table class="table"><tbody>
+            <tr><td>组件演示</td><td>Button、IconButton、TextInput、TextEditor、List、Tabs、Dialog/Menu、SplitPane</td></tr>
+            <tr><td>状态流演示</td><td>Action -> Service -> Vm -> Render</td></tr>
+            <tr><td>后台任务演示</td><td>spawn、结果回主线程、状态刷新</td></tr>
+            <tr><td>主题演示</td><td>ThemeStore token 读取和窗口刷新</td></tr>
+          </tbody></table></div></div>
+        </div>
+      </section>
+
+      <section class="page" id="about" data-title="关于" data-desc="版本、路径、状态">
+        <div class="window compact">
+          <div class="section" style="display:grid;gap:12px">
+            <div class="card"><div class="section-header"><h4>关于页常用信息</h4><small>打开时可见</small></div><table class="table"><tbody>
+              <tr><td>应用信息</td><td>Qingqi 名称、版本、构建信息</td></tr>
+              <tr><td>技术栈</td><td>Rust + GPUI，插件宿主架构</td></tr>
+              <tr><td>路径</td><td>配置目录、数据目录、插件目录</td></tr>
+              <tr><td>迁移状态</td><td>已迁移插件、功能完成度、下一步</td></tr>
+            </tbody></table></div>
+            <pre class="codebox">repo: /Users/fwfx1234/develop/qingqi
+reference: /Users/fwfx1234/develop/suishou
+design draft: docs/plugin-redesign-showcase.html
+rule: 常用功能外露，高级功能进入配置 / 弹层 / 菜单</pre>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+</main>
+
+<script>
+const nav = document.getElementById("nav");
+const title = document.getElementById("pageTitle");
+const desc = document.getElementById("pageDesc");
+nav.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-page]");
+  if (!button) return;
+  document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item === button));
+  const id = button.dataset.page;
+  document.querySelectorAll(".page").forEach((page) => {
+    const active = page.id === id;
+    page.classList.toggle("active", active);
+    if (active) {
+      title.textContent = page.dataset.title || button.querySelector("strong").textContent;
+      desc.textContent = page.dataset.desc || "";
+    }
+  });
+});
+
+const grid = document.getElementById("qrGrid");
+if (grid) {
+  const dark = new Set([0,1,2,3,4,5,6,14,15,16,17,18,19,20,21,27,35,41,42,48,50,54,56,62,63,69,71,75,77,83,84,90,98,104,105,106,107,108,109,110,118,120,122,124,126,128,130,132,134,136,138,146,148,149,150,154,156,158,162,164,166,168,170,172,174,176,178,186,188,192,194,196,198,202,204,206,208,210,212,214,216,218,224,225,226,227,228,229,230,238,244,252,258,259,265,267,271,273,279,280,286,288,292,294,300,301,307,315,321,322,323,324,325,326,327,336,338,340,342,344,346,348,350,352,354,356,358,360,362,364,366,374,376,380,382,386,388,390,392,394,396,400,402,404,408,410,412,414,416,420,422,430,432,434,436,438,440]);
+  for (let i = 0; i < 441; i += 1) {
+    const cell = document.createElement("i");
+    if (!dark.has(i)) cell.className = "off";
+    grid.appendChild(cell);
+  }
+}
+</script>
+</body>
+</html>

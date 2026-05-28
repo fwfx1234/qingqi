@@ -1,0 +1,42 @@
+---
+
+## 变更摘要
+
+### 修改的文件
+
+| 文件 | 变更 |
+|---|---|
+| `src/features/http_capture/view.rs` | 修复 12 个编译错误，添加 `SharedString` 导入，移除未使用的 `App`/`Focusable`/`FluentBuilder`/`handle`，修复 `Hsla`/`Rgba` 类型不匹配（3 处），`border_t()` → `border_t_1()`，为 8 个可点击元素添加 `.id()` 以启用 `on_click` |
+| `src/features/registry.rs` | 取消注释 `http_capture::plugin::HttpCaptureRuntime`（import + register） |
+| `docs/migration-guide.md` | 更新矩阵状态 `Stub` → `Functional v1`，重写 `http-capture` 执行卡（Current Qingqi、Execution Batches、Current Notes），更新 Known Gaps |
+
+### 现在是真实功能的部分
+
+- **SQLite 持久化** — `CaptureStore` 完整实现：schema v1、insert/query/count/get_by_id/clear、分页、多条件过滤（method/host/status/search/https/error）
+- **实时搜索/过滤** — 关键词搜索和 Host 过滤通过 `cx.observe(entity)` 实时查询 SQLite；方法 chips（GET/POST/PUT/DELETE）、错误 toggle、HTTPS toggle 均真实切换
+- **分页列表** — 50 条/页，上/下翻页，时间/方法/Host/URL/状态/大小/耗时列，状态着色
+- **详情面板** — 点击行后通过 `store.get_by_id()` 加载并展示 key-value 字段
+- **清空记录** — `store.clear()` 真实删除 SQLite 数据
+- **空状态/无匹配** — "暂无抓包记录 — 请先接入代理捕获引擎" 和 "当前过滤条件无匹配记录" 两种独立空状态
+- **引擎状态提示** — header 和 status bar 明确标注 "捕获引擎未接入 — 仅可浏览已存储的抓包记录"，不做虚假的"代理运行中"状态
+
+### 仍然缺失的部分
+
+- **真实代理引擎** — 无 mitmproxy/mitm 集成，无 live traffic capture，所有数据来自 SQLite 已有记录
+- **独立 `service.rs`** — 当前过滤/查询/清空逻辑直接在 view 层调用 store，未抽取 service 层（不符合 architecture spec 推荐的 service snapshot/DTO 模式）
+- **HTTPS 证书管理** — `CertificateStatus` enum 已定义但未接入（证书生成、安装、信任引导）
+- **系统代理接管** — `ProxyState` enum 已定义但未接入（启动/停止代理、设置系统代理）
+- **Tab 式详情 inspector** — 当前是 key-value 列表，缺少概览/请求头/请求体/响应头/响应体/计时 tabs
+- **重放/导出** — 未实现
+- **手机抓包引导** — 未实现
+- **`CaptureStats` 完整计算** — struct 已定义但 view 层只展示基础计数
+
+### 执行的命令
+
+```bash
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo fmt
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo check
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo test --bin qingqi -- features::http_capture
+```
+
+结果：`cargo check` 零错误，`cargo test` 28/28 通过（manifest 6 + model 15 + store 7），`cargo fmt` 无变更。

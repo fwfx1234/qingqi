@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SFTP 客户端 · 毛玻璃设计</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg-gradient: linear-gradient(135deg, #f0f4ff 0%, #e8ecf4 50%, #eef0f8 100%);
+  --glass: rgba(255,255,255,0.62);
+  --glass-border: rgba(255,255,255,0.35);
+  --glass-strong: rgba(255,255,255,0.82);
+  --glass-sidebar: rgba(255,255,255,0.50);
+  --border: rgba(0,0,0,0.07);
+  --text: #1D1D1F;
+  --text-secondary: #86868B;
+  --text-faint: #B0B0B6;
+  --accent: #007AFF;
+  --accent-hover: #0066D6;
+  --accent-soft: rgba(0,122,255,0.10);
+  --success: #34C759;
+  --danger: #FF3B30;
+  --warning: #FF9F0A;
+  --shadow: 0 4px 24px rgba(0,0,0,0.06);
+  --shadow-hover: 0 8px 32px rgba(0,0,0,0.08);
+  --radius: 14px;
+  --radius-sm: 10px;
+  --radius-xs: 6px;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
+  --mono: "SF Mono", "Menlo", "Cascadia Code", "JetBrains Mono", monospace;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg-gradient);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* Main Window */
+.window {
+  width: 1280px;
+  max-width: 100%;
+  background: var(--glass);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 95vh;
+}
+
+/* ====== Title Bar ====== */
+.titlebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.30);
+}
+.titlebar .traffic-lights {
+  display: flex;
+  gap: 7px;
+}
+.titlebar .dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+}
+.titlebar .dot.red { background: #FF5F57; }
+.titlebar .dot.yellow { background: #FDBD2E; }
+.titlebar .dot.green { background: #28C840; }
+.titlebar .title-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-left: 6px;
+  opacity: 0.85;
+}
+.titlebar .spacer { flex: 1; }
+
+/* Connection Tabs */
+.conn-tabs {
+  display: flex;
+  gap: 2px;
+  margin-left: 20px;
+  flex: 1;
+  overflow-x: auto;
+}
+.conn-tabs::-webkit-scrollbar { height: 0; }
+.conn-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  background: transparent;
+  border: none;
+  font-family: var(--font);
+  transition: all 0.15s;
+}
+.conn-tab:hover { background: rgba(0,0,0,0.04); color: var(--text); }
+.conn-tab.active {
+  background: var(--glass-strong);
+  color: var(--text);
+  font-weight: 500;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+.conn-tab .status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+.conn-tab .close-btn {
+  width: 16px; height: 16px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  font-size: 10px;
+  color: var(--text-faint);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 2px;
+}
+.conn-tab .close-btn:hover { background: rgba(0,0,0,0.08); color: var(--text); }
+.conn-new-btn {
+  width: 22px; height: 22px;
+  border-radius: var(--radius-xs);
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.conn-new-btn:hover { background: rgba(0,0,0,0.05); color: var(--accent); }
+
+/* ====== Toolbar ====== */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.20);
+  flex-wrap: wrap;
+}
+.toolbar .tb-group {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.toolbar .tb-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 4px;
+}
+.tb-btn {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-xs);
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.tb-btn:hover { background: rgba(0,0,0,0.05); color: var(--text); }
+.tb-btn .icon { font-size: 14px; }
+.tb-btn.primary { background: var(--accent); color: white; }
+.tb-btn.primary:hover { background: var(--accent-hover); }
+.tb-btn.accent { color: var(--accent); }
+.tb-btn.accent:hover { background: var(--accent-soft); }
+.tb-path {
+  flex: 1;
+  height: 28px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.50);
+  padding: 0 10px;
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text);
+  outline: none;
+  min-width: 100px;
+}
+.tb-path::placeholder { color: var(--text-faint); }
+.tb-path:focus { border-color: var(--accent); }
+
+/* ====== Explorer Panels ====== */
+.explorer {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.explorer-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  min-width: 0;
+}
+.explorer-divider {
+  width: 6px;
+  background: transparent;
+  cursor: col-resize;
+  position: relative;
+  flex-shrink: 0;
+}
+.explorer-divider:hover {
+  background: rgba(0,122,255,0.08);
+}
+.explorer-divider::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  width: 2px;
+  height: 40px;
+  background: rgba(0,0,0,0.08);
+  border-radius: 1px;
+  transform: translateY(-50%);
+}
+
+/* Panel Header */
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.panel-header .panel-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.panel-header .panel-sub {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: var(--mono);
+}
+.panel-header .spacer { flex: 1; }
+.panel-header .conn-status {
+  font-size: 11px;
+  color: var(--success);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.panel-header .conn-status .indicator {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+/* Table */
+.file-table-wrap {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.file-table-wrap::-webkit-scrollbar { width: 5px; }
+.file-table-wrap::-webkit-scrollbar-track { background: transparent; }
+.file-table-wrap::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.10); border-radius: 3px; }
+.file-table-wrap::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.18); }
+
+.file-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.file-table thead th {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-faint);
+  text-align: left;
+  padding: 5px 10px;
+  background: rgba(0,0,0,0.02);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.file-table thead th:first-child { padding-left: 14px; }
+.file-table thead th.n { width: 42px; text-align: right; }
+.file-table thead th.name { }
+.file-table thead th.size { width: 75px; text-align: right; }
+.file-table thead th.date { width: 150px; }
+.file-table thead th.perms { width: 80px; font-family: var(--mono); }
+.file-table thead th.owner { width: 72px; }
+
+.file-table tbody tr {
+  transition: background 0.1s;
+  cursor: default;
+}
+.file-table tbody tr:hover { background: rgba(0,0,0,0.025); }
+.file-table tbody tr.selected { background: rgba(0,122,255,0.08); }
+.file-table tbody td {
+  font-size: 12px;
+  padding: 6px 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid rgba(0,0,0,0.03);
+}
+.file-table tbody td:first-child { padding-left: 14px; }
+.file-table tbody td.n { text-align: right; font-family: var(--mono); color: var(--text-secondary); font-size: 11px; }
+.file-table tbody td.size { text-align: right; font-family: var(--mono); color: var(--text-secondary); font-size: 11px; }
+.file-table tbody td.date { font-size: 11px; color: var(--text-secondary); }
+.file-table tbody td.perms { font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+.file-table tbody td.owner { font-size: 11px; color: var(--text-faint); }
+
+.file-icon { margin-right: 6px; font-size: 13px; }
+.file-name { }
+.file-name.folder { font-weight: 500; }
+.file-name.up { color: var(--accent); font-weight: 500; }
+
+/* ====== Transfer Queue ====== */
+.transfer-bar {
+  border-top: 1px solid var(--border);
+  background: rgba(255,255,255,0.30);
+}
+.transfer-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+.transfer-header:hover { background: rgba(0,0,0,0.02); }
+.transfer-header .arrow {
+  font-size: 10px;
+  color: var(--text-faint);
+  transition: transform 0.2s;
+}
+.transfer-header .arrow.open { transform: rotate(90deg); }
+.transfer-header .queue-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+.transfer-header .queue-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.transfer-header .spacer { flex: 1; }
+.transfer-header .clear-btn {
+  font-size: 11px;
+  color: var(--text-faint);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font);
+}
+.transfer-header .clear-btn:hover { color: var(--accent); }
+
+.transfer-list {
+  max-height: 140px;
+  overflow-y: auto;
+}
+.transfer-list::-webkit-scrollbar { width: 4px; }
+.transfer-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.10); border-radius: 2px; }
+.transfer-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  border-top: 1px solid rgba(0,0,0,0.03);
+  font-size: 11px;
+}
+.transfer-item .tf-icon { font-size: 12px; color: var(--text-faint); }
+.transfer-item .tf-info { flex: 1; min-width: 0; }
+.transfer-item .tf-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+.transfer-item .tf-detail {
+  display: flex;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.transfer-item .tf-progress {
+  width: 80px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(0,0,0,0.06);
+  overflow: hidden;
+}
+.transfer-item .tf-progress .fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+.transfer-item .tf-progress .fill.done { background: var(--success); }
+.transfer-item .tf-progress .fill.fail { background: var(--danger); }
+.transfer-item .tf-status {
+  width: 50px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+.transfer-item .tf-action {
+  width: 40px;
+  text-align: right;
+}
+.transfer-item .tf-action button {
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  font-size: 10px;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-family: var(--font);
+}
+.transfer-item .tf-action button:hover { background: rgba(0,0,0,0.05); color: var(--text); }
+
+/* ====== Connection Manager (Dialog) ====== */
+.conn-dialog-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.25);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.conn-dialog {
+  width: 520px;
+  background: var(--glass-strong);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.12);
+  overflow: hidden;
+}
+.conn-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.conn-dialog-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.conn-dialog-header .close-x {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  color: var(--text-faint);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.conn-dialog-header .close-x:hover { background: rgba(0,0,0,0.05); }
+
+.conn-dialog-body {
+  padding: 20px;
+}
+.conn-form-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+  align-items: flex-start;
+}
+.conn-form-row label {
+  width: 80px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding-top: 6px;
+  flex-shrink: 0;
+}
+.conn-form-row .field-group {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+}
+.conn-form-row input, .conn-form-row select {
+  height: 32px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: white;
+  padding: 0 10px;
+  font-size: 12px;
+  font-family: var(--font);
+  color: var(--text);
+  outline: none;
+  flex: 1;
+}
+.conn-form-row input:focus, .conn-form-row select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0,122,255,0.12);
+}
+.conn-form-row input::placeholder { color: var(--text-faint); }
+.conn-form-row .port-input { max-width: 80px; }
+
+.conn-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+}
+.conn-dialog-footer button {
+  height: 32px;
+  padding: 0 18px;
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  font-family: var(--font);
+  cursor: pointer;
+  font-weight: 500;
+}
+.conn-dialog-footer .btn-cancel {
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--text-secondary);
+}
+.conn-dialog-footer .btn-cancel:hover { background: rgba(0,0,0,0.04); }
+.conn-dialog-footer .btn-connect {
+  border: none;
+  background: var(--accent);
+  color: white;
+}
+.conn-dialog-footer .btn-connect:hover { background: var(--accent-hover); }
+
+/* ====== Saved Sessions ====== */
+.saved-sessions {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.saved-sessions-title {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-bottom: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.session-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: white;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.session-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(0,122,255,0.08);
+}
+.session-card .sess-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  color: var(--accent);
+}
+.session-card .sess-info {
+  flex: 1;
+}
+.session-card .sess-name {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+.session-card .sess-addr {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: var(--mono);
+}
+.session-card .sess-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* Empty state */
+.empty-folder {
+  text-align: center;
+  padding: 50px 20px;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+.empty-folder .big-icon { font-size: 36px; margin-bottom: 10px; }
+
+/* Breadcrumb */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.015);
+}
+.breadcrumb .crumb-item {
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+.breadcrumb .crumb-item:hover { background: rgba(0,0,0,0.04); color: var(--text); }
+.breadcrumb .crumb-sep { color: var(--text-faint); }
+.breadcrumb .crumb-current { color: var(--text); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="window">
+
+  <!-- Title Bar -->
+  <div class="titlebar">
+    <div class="traffic-lights">
+      <div class="dot red"></div>
+      <div class="dot yellow"></div>
+      <div class="dot green"></div>
+    </div>
+    <span class="title-text">📂 SFTP 客户端</span>
+
+    <div class="conn-tabs">
+      <div class="conn-tab active">
+        <span class="status-dot"></span>
+        生产服务器 · 47.92.xx.xx
+        <button class="close-btn">✕</button>
+      </div>
+      <div class="conn-tab">
+        <span class="status-dot" style="background:var(--warning)"></span>
+        测试环境 · 10.0.1.100
+        <button class="close-btn">✕</button>
+      </div>
+      <div class="conn-tab">
+        <span class="status-dot" style="background:var(--text-faint)"></span>
+        开发机 · 192.168.1.88
+        <button class="close-btn">✕</button>
+      </div>
+      <button class="conn-new-btn">+</button>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="tb-group">
+      <button class="tb-btn" title="新建连接"><span class="icon">🔌</span></button>
+      <button class="tb-btn" title="断开"><span class="icon">⏏</span></button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" title="后退"><span class="icon">◀</span></button>
+      <button class="tb-btn" title="前进"><span class="icon">▶</span></button>
+      <button class="tb-btn" title="上一级"><span class="icon">⬆</span></button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" title="刷新"><span class="icon">⟳</span></button>
+      <button class="tb-btn" title="新建文件夹"><span class="icon">📁+</span></button>
+    </div>
+    <input class="tb-path" type="text" value="/var/www/projects/hermes-agent" placeholder="远程路径...">
+    <div class="tb-sep"></div>
+    <button class="tb-btn primary"><span class="icon">⬇</span> 下载</button>
+    <button class="tb-btn"><span class="icon">⬆</span> 上传</button>
+  </div>
+
+  <!-- Explorer -->
+  <div class="explorer">
+
+    <!-- Local Panel -->
+    <div class="explorer-panel">
+      <div class="panel-header">
+        <span class="panel-label">💻 本地</span>
+        <span class="panel-sub">~/Documents/projects</span>
+        <div class="spacer"></div>
+      </div>
+      <div class="breadcrumb">
+        <span class="crumb-item">~</span>
+        <span class="crumb-sep">/</span>
+        <span class="crumb-item">Documents</span>
+        <span class="crumb-sep">/</span>
+        <span class="crumb-item">projects</span>
+        <span class="crumb-sep">/</span>
+        <span class="crumb-current">hermes-agent</span>
+      </div>
+      <div class="file-table-wrap">
+        <table class="file-table">
+          <thead>
+            <tr>
+              <th class="n">#</th>
+              <th class="name">名称</th>
+              <th class="size">大小</th>
+              <th class="date">修改时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="n">1</td>
+              <td><span class="file-icon">..</span><span class="file-name up">..</span></td>
+              <td class="size">-</td>
+              <td class="date">-</td>
+            </tr>
+            <tr class="selected">
+              <td class="n">2</td>
+              <td><span class="file-icon">📁</span><span class="file-name folder">src</span></td>
+              <td class="size">4.2 KB</td>
+              <td class="date">2025-12-15 14:32</td>
+            </tr>
+            <tr>
+              <td class="n">3</td>
+              <td><span class="file-icon">📁</span><span class="file-name folder">tests</span></td>
+              <td class="size">1.8 KB</td>
+              <td class="date">2025-12-14 09:15</td>
+            </tr>
+            <tr>
+              <td class="n">4</td>
+              <td><span class="file-icon">📄</span><span class="file-name">run_agent.py</span></td>
+              <td class="size">348 KB</td>
+              <td class="date">2026-01-03 18:22</td>
+            </tr>
+            <tr>
+              <td class="n">5</td>
+              <td><span class="file-icon">📄</span><span class="file-name">cli.py</span></td>
+              <td class="size">287 KB</td>
+              <td class="date">2026-01-03 17:58</td>
+            </tr>
+            <tr>
+              <td class="n">6</td>
+              <td><span class="file-icon">📄</span><span class="file-name">config.yaml</span></td>
+              <td class="size">2.3 KB</td>
+              <td class="date">2025-12-30 11:40</td>
+            </tr>
+            <tr>
+              <td class="n">7</td>
+              <td><span class="file-icon">📦</span><span class="file-name">requirements.txt</span></td>
+              <td class="size">0.8 KB</td>
+              <td class="date">2025-12-28 16:05</td>
+            </tr>
+            <tr>
+              <td class="n">8</td>
+              <td><span class="file-icon">🖼</span><span class="file-name">logo.png</span></td>
+              <td class="size">24 KB</td>
+              <td class="date">2025-12-20 10:30</td>
+            </tr>
+            <tr>
+              <td class="n">9</td>
+              <td><span class="file-icon">📄</span><span class="file-name">README.md</span></td>
+              <td class="size">12 KB</td>
+              <td class="date">2025-12-19 21:14</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div class="explorer-divider"></div>
+
+    <!-- Remote Panel -->
+    <div class="explorer-panel">
+      <div class="panel-header">
+        <span class="panel-label">☁️ 远程 · 生产服务器</span>
+        <span class="panel-sub">47.92.xx.xx:22</span>
+        <div class="spacer"></div>
+        <div class="conn-status"><span class="indicator"></span>已连接</div>
+      </div>
+      <div class="breadcrumb">
+        <span class="crumb-item">/</span>
+        <span class="crumb-sep">/</span>
+        <span class="crumb-item">var</span>
+        <span class="crumb-sep">/</span>
+        <span class="crumb-item">www</span>
+        <span class="crumb-sep">/</span>
+        <span class="crumb-item">projects</span>
+        <span class="crumb-sep">/</span>
+        <span class="crumb-current">hermes-agent</span>
+      </div>
+      <div class="file-table-wrap">
+        <table class="file-table">
+          <thead>
+            <tr>
+              <th class="n">#</th>
+              <th class="name">名称</th>
+              <th class="size">大小</th>
+              <th class="date">修改时间</th>
+              <th class="perms">权限</th>
+              <th class="owner">拥有者</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="n">1</td>
+              <td><span class="file-icon">📁</span><span class="file-name folder">.git</span></td>
+              <td class="size">4.2 MB</td>
+              <td class="date">2026-01-03 19:00</td>
+              <td class="perms">drwxr-xr-x</td>
+              <td class="owner">root</td>
+            </tr>
+            <tr>
+              <td class="n">2</td>
+              <td><span class="file-icon">📁</span><span class="file-name folder">node_modules</span></td>
+              <td class="size">128 MB</td>
+              <td class="date">2025-12-28 14:22</td>
+              <td class="perms">drwxr-xr-x</td>
+              <td class="owner">www</td>
+            </tr>
+            <tr>
+              <td class="n">3</td>
+              <td><span class="file-icon">📁</span><span class="file-name folder">dist</span></td>
+              <td class="size">-</td>
+              <td class="date">2026-01-03 18:55</td>
+              <td class="perms">drwxr-xr-x</td>
+              <td class="owner">www</td>
+            </tr>
+            <tr class="selected">
+              <td class="n">4</td>
+              <td><span class="file-icon">📄</span><span class="file-name">package.json</span></td>
+              <td class="size">2.4 KB</td>
+              <td class="date">2026-01-03 18:50</td>
+              <td class="perms">-rw-r--r--</td>
+              <td class="owner">www</td>
+            </tr>
+            <tr>
+              <td class="n">5</td>
+              <td><span class="file-icon">📄</span><span class="file-name">next.config.js</span></td>
+              <td class="size">1.2 KB</td>
+              <td class="date">2026-01-02 16:30</td>
+              <td class="perms">-rw-r--r--</td>
+              <td class="owner">www</td>
+            </tr>
+            <tr>
+              <td class="n">6</td>
+              <td><span class="file-icon">📄</span><span class="file-name">tailwind.config.ts</span></td>
+              <td class="size">0.6 KB</td>
+              <td class="date">2025-12-29 11:10</td>
+              <td class="perms">-rw-r--r--</td>
+              <td class="owner">www</td>
+            </tr>
+            <tr>
+              <td class="n">7</td>
+              <td><span class="file-icon">📄</span><span class="file-name">.env.production</span></td>
+              <td class="size">0.3 KB</td>
+              <td class="date">2026-01-03 14:45</td>
+              <td class="perms">-rw-------</td>
+              <td class="owner">www</td>
+            </tr>
+            <tr>
+              <td class="n">8</td>
+              <td><span class="file-icon">📄</span><span class="file-name">tsconfig.json</span></td>
+              <td class="size">0.5 KB</td>
+              <td class="date">2025-12-28 10:00</td>
+              <td class="perms">-rw-r--r--</td>
+              <td class="owner">www</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Transfer Queue -->
+  <div class="transfer-bar">
+    <div class="transfer-header">
+      <span class="arrow open">▶</span>
+      <span class="queue-label">传输队列</span>
+      <span class="queue-count">(2 活跃 · 3 已完成)</span>
+      <div class="spacer"></div>
+      <button class="clear-btn">清空已完成</button>
+    </div>
+    <div class="transfer-list">
+      <div class="transfer-item">
+        <span class="tf-icon">⬆</span>
+        <div class="tf-info">
+          <div class="tf-name">dist/main.bundle.js → /var/www/hermes-agent/dist/</div>
+          <div class="tf-detail">
+            <span>1.2 MB / 2.4 MB</span>
+            <span>45s 剩余</span>
+            <span>3.2 MB/s</span>
+          </div>
+        </div>
+        <div class="tf-progress"><div class="fill" style="width:52%"></div></div>
+        <span class="tf-status">52%</span>
+        <div class="tf-action"><button>取消</button></div>
+      </div>
+      <div class="transfer-item">
+        <span class="tf-icon">⬇</span>
+        <div class="tf-info">
+          <div class="tf-name">logs/app-2026-01-03.log → ~/Downloads/logs/</div>
+          <div class="tf-detail">
+            <span>6.8 MB / 24 MB</span>
+            <span>2m 剩余</span>
+            <span>1.1 MB/s</span>
+          </div>
+        </div>
+        <div class="tf-progress"><div class="fill" style="width:28%"></div></div>
+        <span class="tf-status">28%</span>
+        <div class="tf-action"><button>取消</button></div>
+      </div>
+      <div class="transfer-item" style="opacity:0.6">
+        <span class="tf-icon" style="color:var(--success)">✓</span>
+        <div class="tf-info">
+          <div class="tf-name">.env.production → backup/.env.production.20260103</div>
+        </div>
+        <div class="tf-progress"><div class="fill done" style="width:100%"></div></div>
+        <span class="tf-status" style="color:var(--success)">完成</span>
+        <div class="tf-action"><button>清除</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Connection Dialog -->
+<div class="conn-dialog-bg">
+  <div class="conn-dialog">
+    <div class="conn-dialog-header">
+      <h3>🔌 新建连接</h3>
+      <button class="close-x">✕</button>
+    </div>
+    <div class="conn-dialog-body">
+      <div class="conn-form-row">
+        <label>协议</label>
+        <div class="field-group">
+          <select>
+            <option>SFTP (SSH)</option>
+            <option>FTP</option>
+            <option>FTPS</option>
+            <option>WebDAV</option>
+          </select>
+        </div>
+      </div>
+      <div class="conn-form-row">
+        <label>主机</label>
+        <div class="field-group">
+          <input type="text" value="47.92.xx.xx" placeholder="主机名或 IP">
+          <input class="port-input" type="text" value="22" placeholder="端口">
+        </div>
+      </div>
+      <div class="conn-form-row">
+        <label>用户名</label>
+        <div class="field-group">
+          <input type="text" value="root" placeholder="用户名">
+        </div>
+      </div>
+      <div class="conn-form-row">
+        <label>认证方式</label>
+        <div class="field-group">
+          <select style="max-width:140px">
+            <option>密码</option>
+            <option selected>密钥 (SSH Key)</option>
+          </select>
+          <input type="text" value="~/.ssh/id_rsa" placeholder="密钥路径" style="flex:2">
+          <button class="tb-btn" style="flex-shrink:0;">选择…</button>
+        </div>
+      </div>
+
+      <div class="saved-sessions">
+        <div class="saved-sessions-title">📋 已保存的会话</div>
+        <div class="session-card">
+          <div class="sess-icon">🐧</div>
+          <div class="sess-info">
+            <div class="sess-name">生产服务器</div>
+            <div class="sess-addr">root@47.92.xx.xx:22</div>
+          </div>
+          <span class="sess-badge">最近</span>
+        </div>
+        <div class="session-card">
+          <div class="sess-icon">🧪</div>
+          <div class="sess-info">
+            <div class="sess-name">测试环境</div>
+            <div class="sess-addr">deploy@10.0.1.100:2222</div>
+          </div>
+          <span class="sess-badge">今天</span>
+        </div>
+        <div class="session-card">
+          <div class="sess-icon">💻</div>
+          <div class="sess-info">
+            <div class="sess-name">开发笔记本</div>
+            <div class="sess-addr">dev@192.168.1.88:22</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="conn-dialog-footer">
+      <button class="btn-cancel">取消</button>
+      <button class="btn-connect">连接</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

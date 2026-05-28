@@ -1,0 +1,339 @@
+use serde::{Deserialize, Serialize};
+
+// ── Shared service/request types ──
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HttpMethod {
+    Get,
+    Post,
+    Put,
+    Patch,
+    Delete,
+}
+
+impl HttpMethod {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Get => "GET",
+            Self::Post => "POST",
+            Self::Put => "PUT",
+            Self::Patch => "PATCH",
+            Self::Delete => "DELETE",
+        }
+    }
+
+    pub fn color(&self) -> u32 {
+        match self {
+            Self::Get => 0x338855,
+            Self::Post => 0x336699,
+            Self::Put => 0x7b5fff,
+            Self::Patch => 0x997733,
+            Self::Delete => 0x994444,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ScenarioStatus {
+    Passed,
+    Pending,
+    Failed,
+}
+
+impl ScenarioStatus {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Passed => "已通过",
+            Self::Pending => "待执行",
+            Self::Failed => "失败",
+        }
+    }
+
+    pub fn symbol(&self) -> &'static str {
+        match self {
+            Self::Passed => "✓",
+            Self::Pending => "⏳",
+            Self::Failed => "✗",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct KeyValueRow {
+    pub enabled: bool,
+    pub key: String,
+    pub value: String,
+}
+
+impl KeyValueRow {
+    pub fn new(key: impl Into<String>, value: impl Into<String>) -> Self {
+        Self {
+            enabled: true,
+            key: key.into(),
+            value: value.into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ApiScenario {
+    pub name: String,
+    pub status: ScenarioStatus,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ApiRequest {
+    pub title: String,
+    pub method: HttpMethod,
+    pub path: String,
+    pub params: Vec<KeyValueRow>,
+    pub path_rows: Vec<KeyValueRow>,
+    pub body: String,
+    pub headers: Vec<KeyValueRow>,
+    pub cookies: Vec<KeyValueRow>,
+    pub auth: Vec<KeyValueRow>,
+    pub pre_ops: String,
+    pub post_ops: String,
+    pub scenarios: Vec<ApiScenario>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ApiGroup {
+    pub name: String,
+    pub requests: Vec<ApiRequest>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ApiEnvironment {
+    pub name: String,
+    pub badge: String,
+    pub color: u32,
+    pub base_url: String,
+    pub variables: Vec<KeyValueRow>,
+    pub headers: Vec<KeyValueRow>,
+}
+
+// ── Collection tree ──
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NodeKind {
+    Folder,
+    Endpoint,
+    Case,
+}
+
+impl NodeKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Folder => "folder",
+            Self::Endpoint => "endpoint",
+            Self::Case => "case",
+        }
+    }
+
+    pub fn from_db(s: &str) -> Self {
+        match s {
+            "endpoint" => Self::Endpoint,
+            "case" => Self::Case,
+            _ => Self::Folder,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CollectionNode {
+    pub id: String,
+    pub parent_id: Option<String>,
+    pub kind: NodeKind,
+    pub name: String,
+    pub method: String,
+    pub url: String,
+    pub request_json: String,
+    pub sort_order: i64,
+    pub expanded: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+// ── Environment ──
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Environment {
+    pub id: String,
+    pub name: String,
+    pub base_url: String,
+    pub sort_order: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EnvVariable {
+    pub id: i64,
+    pub environment_id: String,
+    pub enabled: bool,
+    pub var_key: String,
+    pub var_value: String,
+    pub sort_order: i64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EnvHeader {
+    pub id: i64,
+    pub environment_id: String,
+    pub enabled: bool,
+    pub header_key: String,
+    pub header_value: String,
+    pub sort_order: i64,
+}
+
+// ── Tabs ──
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HttpTab {
+    pub id: String,
+    pub name: String,
+    pub method: String,
+    pub url: String,
+    pub request_mode: String,
+    pub body_mode: String,
+    pub auth_type: String,
+    pub auth_value: String,
+    pub headers_text: String,
+    pub cookies_text: String,
+    pub body_text: String,
+    pub params_text: String,
+    pub path_params_text: String,
+    pub pre_ops_text: String,
+    pub post_ops_text: String,
+    pub node_id: String,
+    pub active_request_tab: i64,
+    pub updated_at: String,
+}
+
+// ── History ──
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HttpHistory {
+    pub id: i64,
+    pub tab_id: String,
+    pub method: String,
+    pub url: String,
+    pub status: i64,
+    pub title: String,
+    pub response: String,
+    pub created_at: String,
+}
+
+// ── Scoped variables ──
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VariableScope {
+    Global,
+    Environment,
+    Module,
+}
+
+impl VariableScope {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Global => "global",
+            Self::Environment => "environment",
+            Self::Module => "module",
+        }
+    }
+
+    pub fn from_db(s: &str) -> Self {
+        match s {
+            "environment" => Self::Environment,
+            "module" => Self::Module,
+            _ => Self::Global,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ApiVariable {
+    pub scope: VariableScope,
+    pub env_name: String,
+    pub var_key: String,
+    pub var_value: String,
+    pub updated_at: String,
+}
+
+// ── Full environment with children ──
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EnvironmentFull {
+    pub env: Environment,
+    pub variables: Vec<EnvVariable>,
+    pub headers: Vec<EnvHeader>,
+}
+
+// ── Request snapshot (for collection node request_json) ──
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct RequestSnapshot {
+    pub method: String,
+    pub url: String,
+    pub params_text: String,
+    pub path_params_text: String,
+    pub headers_text: String,
+    pub cookies_text: String,
+    pub body_text: String,
+    pub body_mode: String,
+    pub auth_type: String,
+    pub auth_value: String,
+    pub pre_ops_text: String,
+    pub post_ops_text: String,
+}
+
+impl RequestSnapshot {
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap_or_else(|_| String::from("{}"))
+    }
+
+    pub fn from_json(json: &str) -> Self {
+        serde_json::from_str(json).unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn node_kind_roundtrip() {
+        for kind in [NodeKind::Folder, NodeKind::Endpoint, NodeKind::Case] {
+            let s = kind.as_str();
+            assert_eq!(NodeKind::from_db(s), kind);
+        }
+    }
+
+    #[test]
+    fn variable_scope_roundtrip() {
+        for scope in [
+            VariableScope::Global,
+            VariableScope::Environment,
+            VariableScope::Module,
+        ] {
+            let s = scope.as_str();
+            assert_eq!(VariableScope::from_db(s), scope);
+        }
+    }
+
+    #[test]
+    fn request_snapshot_json_roundtrip() {
+        let snap = RequestSnapshot {
+            method: "POST".into(),
+            url: "/api/test".into(),
+            body_text: r#"{"key": "value"}"#.into(),
+            ..Default::default()
+        };
+        let json = snap.to_json();
+        let restored = RequestSnapshot::from_json(&json);
+        assert_eq!(restored.method, "POST");
+        assert_eq!(restored.url, "/api/test");
+        assert_eq!(restored.body_text, r#"{"key": "value"}"#);
+    }
+}

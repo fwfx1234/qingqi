@@ -1,0 +1,52 @@
+---
+
+## Final Summary
+
+### Exact files changed
+
+1. **`/Users/fwfx1234/develop/qingqi/src/core/storage.rs`** — added `AppPaths::imported_plugins_dir()` + test
+2. **`/Users/fwfx1234/develop/qingqi/src/platform/apps.rs`** — added `icon_cache_dir()`, `clear_icon_cache_dir()`, `clear_dir_files()` + 4 tests
+3. **`/Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs`** — added `SettingsPanel` fields/methods for plugin directory and icon cache cleanup
+4. **`/Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs`** — replaced 2 disabled badges with real interactive buttons; added `plugin_dir_button()` and `icon_cache_clear_button()` helpers
+
+### Which `system-settings` maintenance behaviors are now real
+
+- **Open imported plugin directory**: "导入插件" row now has a real "打开目录" button that calls `platform::shell::open_directory` on `AppPaths::imported_plugins_dir()` (a stable path at `<data_dir>/plugins/imported`). The directory is auto-created on first access. The description honestly states "目录/ZIP 导入尚未实现；可打开目标目录查看".
+- **Clear icon cache**: "清理图标缓存" row now has a real "清理缓存" button that calls `platform::apps::clear_icon_cache_dir()`, which removes all cached PNG files from the `app_icons` cache directory and reports the exact count deleted (or "目录为空，无需清理"). The description shows the real cache directory path.
+- **Theme switching** — preserved as-is (Light/Dark/System via ThemeStore)
+- **Plugin window retention** — preserved as-is (adjustable, persisted, restore default)
+- **App index rescan** — preserved as-is (shared AppIndexService)
+- **Accessibility permissions** — preserved as-is (AXIsProcessTrusted + open settings)
+- **Diagnostics directories** — preserved as-is (data/config/logs open buttons)
+
+### Which `system-settings` behaviors are still missing
+
+- **Plugin import (directory/ZIP)**: Requires plugin loading architecture; still honestly marked "尚未实现" in the "已安装插件管理" row
+- **Installed plugin management**: Enable/uninstall; still marked "尚未实现"
+- **Clipboard access / file access / screen recording permission detection**: macOS has no cheap public API; still marked "尚未实现"
+- **Log diagnostics**: Background service status, recent errors, warning stats; still marked "尚未实现"
+- **System appearance following**: macOS appearance change listener for ThemeMode::System
+
+### Suggested note for `docs/migration-guide.md` (not edited)
+
+```
+system-settings batch: plugin directory + icon cache cleanup
+- `AppPaths::imported_plugins_dir()` now provides a stable root at `<data>/plugins/imported`.
+- "打开目录" button wired to `platform::shell::open_directory` for the imported plugin root.
+- "清理图标缓存" button now calls `platform::apps::clear_icon_cache_dir()`, which removes cached
+  app icon PNG files from `<data>/cache/app_icons` and reports the count. Does not touch app index
+  state or other caches — conservative, real cleanup only.
+- Plugin import (directory/ZIP) remains unimplemented; UI honestly states this in the description.
+- Remaining gaps: log diagnostics, system appearance following, clipboard/file/screen-recording
+  permission detection.
+```
+
+### Exact commands run
+
+```bash
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo fmt
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo test --bin qingqi -- features::system_settings
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo check
+```
+
+**Note**: `cargo test` and `cargo check` both fail with 5 **pre-existing** compile errors in `src/features/image_compress/view.rs` (missing `smol` crate, missing `self_ref_has_running_items` function) and `src/features/api_debugger/view.rs` (borrow-of-moved-value on `new_tab`). These are in files I did not touch and are unrelated to this batch. The errors existed before these changes. `cargo fmt` ran successfully and reformatted 2 files.

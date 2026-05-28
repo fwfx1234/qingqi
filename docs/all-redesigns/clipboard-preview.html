@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>剪贴板 · Deep Frost · 图片预览</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&family=JetBrains+Mono:wght@400;500&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 30px 16px 60px;
+    background: linear-gradient(135deg, #0b0b1a 0%, #15152e 50%, #1a0a24 100%);
+  }
+  body.light {
+    background: linear-gradient(135deg, #e8e4f4 0%, #f0ecfa 50%, #f4eaf0 100%);
+  }
+
+  .page-header {
+    max-width: 960px; width: 100%; margin-bottom: 32px; padding: 0 16px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .page-header h1 {
+    font-size: 1.4rem; font-weight: 700;
+    background: linear-gradient(135deg, #c8b8ff, #8888ff);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .page-header .sub { color: #55557a; font-size: 0.8rem; }
+  .body.light .page-header .sub { color: #8888aa; }
+  .theme-toggle {
+    padding: 6px 16px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04); color: #8888aa; font-size: 12px;
+    cursor: pointer; font-family: inherit; transition: 0.2s;
+  }
+  .theme-toggle:hover { background: rgba(255,255,255,0.08); }
+  .body.light .theme-toggle { border-color: rgba(0,0,0,0.08); background: rgba(0,0,0,0.03); color: #7777aa; }
+  .body.light .theme-toggle:hover { background: rgba(0,0,0,0.06); }
+
+  /* ============== DARK THEME ============== */
+  .dk {
+    background: linear-gradient(135deg, #0b0b1a 0%, #15152e 50%, #1a0a24 100%),
+                repeating-linear-gradient(45deg, transparent, transparent 40px, rgba(120,80,255,0.02) 40px, rgba(120,80,255,0.02) 41px);
+  }
+  .lt {
+    background: linear-gradient(135deg, #e8e4f4 0%, #f0ecfa 50%, #f4eaf0 100%),
+                repeating-linear-gradient(45deg, transparent, transparent 40px, rgba(120,80,255,0.03) 40px, rgba(120,80,255,0.03) 41px);
+  }
+
+  .frame {
+    border-radius: 24px; padding: 48px 20px 32px;
+    display: flex; justify-content: center; min-height: 560px;
+  }
+
+  /* ---- Glass container ---- */
+  .glass {
+    width: 100%; max-width: 870px; border-radius: 20px; overflow: hidden;
+    position: relative; display: flex; flex-direction: row;
+  }
+  .glass::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 100%);
+    pointer-events: none; z-index: 2; border-radius: 20px 20px 0 0;
+  }
+
+  .dk .glass {
+    background: rgba(15, 15, 35, 0.3);
+    backdrop-filter: blur(50px) saturate(1.8);
+    -webkit-backdrop-filter: blur(50px) saturate(1.8);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 20px 100px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .lt .glass {
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(50px) saturate(1.8);
+    -webkit-backdrop-filter: blur(50px) saturate(1.8);
+    border: 1px solid rgba(255,255,255,0.5);
+    box-shadow: 0 12px 80px rgba(50, 30, 120, 0.06);
+  }
+
+  /* ---- Left: List ---- */
+  .left-panel {
+    flex: 1; min-width: 0; display: flex; flex-direction: column;
+  }
+
+  .hd {
+    display: flex; align-items: center; padding: 16px 16px;
+    border-bottom: 1px solid; gap: 10px; position: relative; z-index: 3;
+  }
+  .hd .tt { font-size: 13px; font-weight: 600; }
+  .hd .ct {
+    font-size: 10px; padding: 1px 8px; border-radius: 20px;
+  }
+  .hd .sr {
+    margin-left: auto; display: flex; align-items: center;
+    border-radius: 8px; padding: 0 10px; gap: 6px;
+  }
+  .hd .sr input {
+    background: none; border: none; outline: none;
+    font-size: 12px; font-family: inherit; padding: 5px 0; width: 100px;
+  }
+  .hd .sr input::placeholder { opacity: 0.55; }
+  .hd .sr .si { font-size: 12px; }
+
+  .dk .hd { border-bottom-color: rgba(255,255,255,0.04); }
+  .dk .hd .tt { color: #ddd8ec; }
+  .dk .hd .ct { background: rgba(120,80,255,0.08); color: #8888bb; }
+  .dk .hd .sr { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.04); }
+  .dk .hd .sr input { color: #ddd; }
+  .dk .hd .sr input::placeholder { color: #55557a; }
+  .dk .hd .sr .si { color: #55557a; }
+
+  .lt .hd { border-bottom-color: rgba(0,0,0,0.04); }
+  .lt .hd .tt { color: #333348; }
+  .lt .hd .ct { background: rgba(120,80,255,0.05); color: #8888aa; }
+  .lt .hd .sr { background: rgba(0,0,0,0.02); border: 1px solid rgba(0,0,0,0.04); }
+  .lt .hd .sr input { color: #333; }
+  .lt .hd .sr input::placeholder { color: #9999bb; }
+  .lt .hd .sr .si { color: #9999bb; }
+
+  .fl {
+    display: flex; gap: 4px; padding: 10px 16px;
+    border-bottom: 1px solid; position: relative; z-index: 3;
+  }
+  .dk .fl { border-bottom-color: rgba(255,255,255,0.03); }
+  .lt .fl { border-bottom-color: rgba(0,0,0,0.03); }
+  .fl .ch {
+    padding: 3px 12px; border-radius: 20px; border: none;
+    font-size: 11px; cursor: pointer; transition: 0.15s; font-family: inherit;
+    background: rgba(255,255,255,0.03); color: #7777aa;
+  }
+  .fl .ch.s { background: rgba(120,80,255,0.08); color: #b8a8ff; }
+  .fl .ch:hover:not(.s) { background: rgba(255,255,255,0.05); }
+  .lt .fl .ch { background: rgba(0,0,0,0.02); color: #9999bb; }
+  .lt .fl .ch.s { background: rgba(120,80,255,0.05); color: #7b5fff; }
+  .lt .fl .ch:hover:not(.s) { background: rgba(0,0,0,0.03); }
+
+  .lst {
+    flex: 1; padding: 4px 8px 10px; position: relative; z-index: 3;
+    overflow-y: auto; max-height: 400px;
+  }
+  .lst::-webkit-scrollbar { width: 3px; }
+  .lst::-webkit-scrollbar-thumb { border-radius: 3px; }
+  .dk .lst::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.04); }
+  .lt .lst::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.04); }
+
+  .it {
+    display: flex; align-items: flex-start; padding: 10px 10px; margin: 2px 0;
+    border-radius: 10px; cursor: pointer; transition: 0.15s; gap: 10px;
+    border: 1px solid transparent;
+  }
+  .it.s {
+    background: rgba(120, 80, 255, 0.08);
+    border: 1px solid rgba(120,80,255,0.12);
+  }
+  .lt .it.s {
+    background: rgba(120, 80, 255, 0.04);
+    border: 1px solid rgba(120,80,255,0.06);
+  }
+  .dk .it:hover:not(.s) { background: rgba(255,255,255,0.02); }
+  .lt .it:hover:not(.s) { background: rgba(0,0,0,0.01); }
+
+  .it .ico {
+    width: 30px; height: 30px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; flex-shrink: 0; margin-top: 1px;
+  }
+  .dk .it .ico { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.04); }
+  .lt .it .ico { background: rgba(0,0,0,0.02); border: 1px solid rgba(0,0,0,0.04); }
+  .dk .it.s .ico { background: rgba(120,80,255,0.1); border-color: rgba(120,80,255,0.12); }
+  .lt .it.s .ico { background: rgba(120,80,255,0.05); border-color: rgba(120,80,255,0.07); }
+
+  .it .tx { flex: 1; min-width: 0; }
+  .it .tx .t {
+    font-size: 12px; line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .dk .it .tx .t { color: #d8d0e8; }
+  .lt .it .tx .t { color: #333348; }
+  .it .tx .m { font-size: 10px; margin-top: 3px; }
+  .dk .it .tx .m { color: #55557a; }
+  .lt .it .tx .m { color: #9999bb; }
+  .it .pn { font-size: 12px; opacity: 0; transition: 0.15s; padding: 2px; cursor: pointer; }
+  .dk .it .pn { color: #55557a; }
+  .lt .it .pn { color: #9999bb; }
+  .it:hover .pn { opacity: 0.4; }
+  .it .pn:hover { opacity: 1 !important; color: #ffcc44 !important; }
+
+  /* ---- Right: Preview Panel ---- */
+  .preview {
+    width: 340px; flex-shrink: 0;
+    border-left: 1px solid; position: relative; z-index: 3;
+    padding: 16px; display: flex; flex-direction: column;
+  }
+  .dk .preview { border-left-color: rgba(255,255,255,0.04); }
+  .lt .preview { border-left-color: rgba(0,0,0,0.04); }
+
+  .prev-label {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 1.2px;
+    margin-bottom: 12px; font-weight: 600;
+  }
+  .dk .prev-label { color: #55557a; }
+  .lt .prev-label { color: #9999bb; }
+
+  /* Image preview box */
+  .prev-img {
+    width: 100%; aspect-ratio: 16/9;
+    border-radius: 12px; overflow: hidden; margin-bottom: 12px;
+    position: relative;
+  }
+  .prev-img img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  /* simulated gradient "images" */
+  .prev-img .sim {
+    width: 100%; height: 100%; display: block;
+  }
+
+  .prev-meta { font-size: 11px; line-height: 1.6; }
+  .dk .prev-meta { color: #7777aa; }
+  .lt .prev-meta { color: #8888aa; }
+  .prev-meta strong { font-weight: 500; }
+  .dk .prev-meta strong { color: #c8b8ff; }
+  .lt .prev-meta strong { color: #6b4fcf; }
+
+  .prev-text-box {
+    padding: 12px; border-radius: 10px; font-size: 11px; line-height: 1.5;
+    max-height: 200px; overflow-y: auto; font-family: 'JetBrains Mono', monospace;
+    flex: 1;
+  }
+  .dk .prev-text-box { background: rgba(0,0,0,0.15); color: #b8b0d0; }
+  .lt .prev-text-box { background: rgba(0,0,0,0.02); color: #444458; border: 1px solid rgba(0,0,0,0.04); }
+
+  .prev-text-box::-webkit-scrollbar { width: 2px; }
+  .prev-text-box::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 2px; }
+  .lt .prev-text-box::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.04); }
+
+  .badge {
+    position: absolute; top: 14px; left: 18px;
+    font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px;
+    font-weight: 600; opacity: 0.5; z-index: 10;
+  }
+
+  @media (max-width: 750px) {
+    .glass { flex-direction: column; }
+    .preview { width: 100%; border-left: none; border-top: 1px solid; }
+    .dk .preview { border-top-color: rgba(255,255,255,0.04); }
+    .lt .preview { border-top-color: rgba(0,0,0,0.04); }
+    .prev-text-box { max-height: 120px; }
+  }
+</style>
+</head>
+<body class="lt">
+<div class="page-header">
+  <div>
+    <h1>📋 剪贴板 · 带预览</h1>
+    <div class="sub">Deep Frost · 右侧预览面板，图片直接展示</div>
+  </div>
+  <button class="theme-toggle" onclick="document.body.classList.toggle('light')">🌙/☀ 切换</button>
+</div>
+
+<!-- ====== DARK ====== -->
+<div class="frame dk">
+  <div class="badge" style="color:#8888bb;">🌙 暗色</div>
+  <div class="glass">
+    <div class="left-panel">
+      <div class="hd">
+        <span class="tt">📋 剪贴板历史</span>
+        <span class="ct">24 条</span>
+        <div class="sr">
+          <span class="si">🔍</span>
+          <input type="text" placeholder="搜索内容...">
+        </div>
+      </div>
+      <div class="fl">
+        <button class="ch s">全部</button>
+        <button class="ch">文本</button>
+        <button class="ch">图片</button>
+        <button class="ch">链接</button>
+        <button class="ch">文件</button>
+      </div>
+      <div class="lst">
+        <!-- 图片 - 选中态 -->
+        <div class="it s">
+          <div class="ico" style="color:#ffcc44;">🖼</div>
+          <div class="tx">
+            <div class="t">design_mockup_dashboard.png (1.8 MB)</div>
+            <div class="m">刚刚 · 来自 Photoshop</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+        <!-- 代码 -->
+        <div class="it">
+          <div class="ico" style="color:#c8b8ff;">📝</div>
+          <div class="tx">
+            <div class="t">export function useToast() { const [toasts, setToasts] = useState([]); const add = useCallback((msg) => { ... }); }</div>
+            <div class="m">2 分钟前 · VS Code</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+        <!-- 图片 inline -->
+        <div class="it">
+          <div class="ico" style="color:#88ddff;">🖼</div>
+          <div class="tx">
+            <div class="t">screenshot_launcher_2026.png (856 KB)</div>
+            <div class="m">15 分钟前 · 截图工具</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+        <!-- 链接 -->
+        <div class="it">
+          <div class="ico" style="color:#88dd88;">🔗</div>
+          <div class="tx">
+            <div class="t">https://github.com/fwfx1234/suishou.git</div>
+            <div class="m">28 分钟前 · Chrome</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+        <!-- JSON -->
+        <div class="it">
+          <div class="ico" style="color:#aaaaff;">📝</div>
+          <div class="tx">
+            <div class="t">{"name": "py_desktop_tools", "version": "1.0.0"}</div>
+            <div class="m">1 小时前 · iTerm2</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+        <!-- 文件路径 -->
+        <div class="it">
+          <div class="ico" style="color:#ff8888;">📎</div>
+          <div class="tx">
+            <div class="t">/Users/projects/py_desktop_tools/src/app/launcher/</div>
+            <div class="m">3 小时前 · Finder</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Preview Panel: 展示选中的图片 -->
+    <div class="preview">
+      <div class="prev-label">预览</div>
+      <div class="prev-img">
+        <!-- 模拟图片渐变 -->
+        <svg class="sim" viewBox="0 0 400 225" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#1a1050"/>
+              <stop offset="30%" stop-color="#2d1b69"/>
+              <stop offset="60%" stop-color="#1a3a6b"/>
+              <stop offset="100%" stop-color="#0f2947"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="225" fill="url(#g1)"/>
+          <!-- 模拟图片中的 UI 元素 -->
+          <rect x="30" y="30" width="340" height="165" rx="12" fill="rgba(255,255,255,0.06)"/>
+          <rect x="50" y="50" width="300" height="14" rx="4" fill="rgba(255,255,255,0.08)"/>
+          <rect x="50" y="72" width="200" height="14" rx="4" fill="rgba(255,255,255,0.05)"/>
+          <rect x="50" y="100" width="240" height="40" rx="6" fill="rgba(120,80,255,0.12)"/>
+          <rect x="50" y="152" width="80" height="24" rx="6" fill="rgba(120,80,255,0.15)"/>
+          <rect x="142" y="152" width="80" height="24" rx="6" fill="rgba(255,255,255,0.05)"/>
+          <!-- 像素"图片"占位 -->
+          <circle cx="360" cy="50" r="12" fill="rgba(255,200,50,0.15)"/>
+          <circle cx="340" cy="80" r="8" fill="rgba(100,200,255,0.12)"/>
+        </svg>
+      </div>
+      <div class="prev-meta">
+        <strong>design_mockup_dashboard.png</strong><br>
+        1920 × 1080 · 1.8 MB<br>
+        刚刚 · 来自 Photoshop
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== LIGHT ====== -->
+<div class="frame lt">
+  <div class="badge" style="color:#8888aa;">☀ 亮色</div>
+  <div class="glass">
+    <div class="left-panel">
+      <div class="hd">
+        <span class="tt">📋 剪贴板历史</span>
+        <span class="ct">24 条</span>
+        <div class="sr">
+          <span class="si">🔍</span>
+          <input type="text" placeholder="搜索内容...">
+        </div>
+      </div>
+      <div class="fl">
+        <button class="ch s">全部</button>
+        <button class="ch">文本</button>
+        <button class="ch">图片</button>
+        <button class="ch">链接</button>
+        <button class="ch">文件</button>
+      </div>
+      <div class="lst">
+        <div class="it s">
+          <div class="ico" style="color:#ccaa33;">🖼</div>
+          <div class="tx">
+            <div class="t">design_mockup_dashboard.png (1.8 MB)</div>
+            <div class="m">刚刚 · 来自 Photoshop</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+        <div class="it">
+          <div class="ico" style="color:#6b4fcf;">📝</div>
+          <div class="tx">
+            <div class="t">export function useToast() { const [toasts, setToasts] = useState([]); const add = useCallback((msg) => { ... }); }</div>
+            <div class="m">2 分钟前 · VS Code</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+        <div class="it">
+          <div class="ico" style="color:#55aacc;">🖼</div>
+          <div class="tx">
+            <div class="t">screenshot_launcher_2026.png (856 KB)</div>
+            <div class="m">15 分钟前 · 截图工具</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+        <div class="it">
+          <div class="ico" style="color:#55aa55;">🔗</div>
+          <div class="tx">
+            <div class="t">https://github.com/fwfx1234/suishou.git</div>
+            <div class="m">28 分钟前 · Chrome</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+        <div class="it">
+          <div class="ico" style="color:#7777cc;">📝</div>
+          <div class="tx">
+            <div class="t">{"name": "py_desktop_tools", "version": "1.0.0"}</div>
+            <div class="m">1 小时前 · iTerm2</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview">
+      <div class="prev-label">预览</div>
+      <div class="prev-img">
+        <svg class="sim" viewBox="0 0 400 225" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#e8e0f8"/>
+              <stop offset="30%" stop-color="#d8d0f0"/>
+              <stop offset="60%" stop-color="#d0e4f0"/>
+              <stop offset="100%" stop-color="#e0eef8"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="225" fill="url(#g2)"/>
+          <rect x="30" y="30" width="340" height="165" rx="12" fill="rgba(255,255,255,0.5)"/>
+          <rect x="50" y="50" width="300" height="14" rx="4" fill="rgba(0,0,0,0.06)"/>
+          <rect x="50" y="72" width="200" height="14" rx="4" fill="rgba(0,0,0,0.04)"/>
+          <rect x="50" y="100" width="240" height="40" rx="6" fill="rgba(120,80,255,0.06)"/>
+          <rect x="50" y="152" width="80" height="24" rx="6" fill="rgba(120,80,255,0.1)"/>
+          <rect x="142" y="152" width="80" height="24" rx="6" fill="rgba(0,0,0,0.03)"/>
+          <circle cx="360" cy="50" r="12" fill="rgba(200,180,50,0.1)"/>
+          <circle cx="340" cy="80" r="8" fill="rgba(50,180,200,0.08)"/>
+        </svg>
+      </div>
+      <div class="prev-meta">
+        <strong>design_mockup_dashboard.png</strong><br>
+        1920 × 1080 · 1.8 MB<br>
+        刚刚 · 来自 Photoshop
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

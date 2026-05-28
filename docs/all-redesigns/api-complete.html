@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API 调试 · 完整元素展示</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&family=JetBrains+Mono:wght@400;500&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 30px 16px 60px;
+    background: linear-gradient(135deg, #e8e4f4 0%, #f0ecfa 50%, #f4eaf0 100%);
+  }
+
+  .page-hdr {
+    max-width: 1160px; width: 100%; margin-bottom: 24px; display: flex;
+    align-items: center; justify-content: space-between;
+  }
+  .page-hdr h1 {
+    font-size: 1.3rem; font-weight: 700;
+    background: linear-gradient(135deg, #7b5fff, #5555cc);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .page-hdr .sub { color: #8888aa; font-size: 0.8rem; }
+
+  .showcase {
+    max-width: 1160px; width: 100%;
+    display: flex; flex-direction: column; gap: 28px;
+  }
+
+  /* === Glass container === */
+  .glass {
+    border-radius: 18px; overflow: hidden; position: relative;
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(50px) saturate(1.8);
+    -webkit-backdrop-filter: blur(50px) saturate(1.8);
+    border: 1px solid rgba(255,255,255,0.6);
+    box-shadow: 0 12px 80px rgba(50, 30, 120, 0.08);
+  }
+  .glass::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 100%);
+    pointer-events: none; z-index: 2;
+  }
+
+  .main-glass {
+    display: flex; min-height: 680px;
+  }
+
+  /* ========== Sidebar ========== */
+  .sb {
+    width: 260px; flex-shrink: 0;
+    border-right: 1px solid rgba(0,0,0,0.04);
+    position: relative; z-index: 3; display: flex; flex-direction: column;
+  }
+
+  .sb-hd {
+    padding: 14px 14px; display: flex; align-items: center;
+    justify-content: space-between; border-bottom: 1px solid rgba(0,0,0,0.04);
+    font-size: 12px; font-weight: 600; color: #444458;
+  }
+  .sb-hd .add {
+    width: 22px; height: 22px; border-radius: 6px; border: none; cursor: pointer;
+    font-size: 14px; display: flex; align-items: center; justify-content: center;
+    background: rgba(120,80,255,0.06); color: #7b5fff; transition: 0.15s; font-family: inherit;
+  }
+  .sb-hd .add:hover { background: rgba(120,80,255,0.1); }
+
+  .sb-scroll {
+    flex: 1; overflow-y: auto; padding: 6px 0;
+  }
+  .sb-scroll::-webkit-scrollbar { width: 3px; }
+  .sb-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.04); border-radius: 3px; }
+
+  .sg { margin-bottom: 2px; }
+  .sg .gh {
+    display: flex; align-items: center; padding: 5px 12px 5px 8px; gap: 4px;
+    font-size: 11px; font-weight: 500; color: #9999bb; cursor: default;
+  }
+  .sg .gh .ar { font-size: 7px; transition: 0.15s; width: 14px; text-align: center; }
+  .sg .gh .ar.o { transform: rotate(90deg); }
+
+  .si {
+    display: flex; align-items: center; padding: 5px 12px 5px 20px; gap: 6px;
+    cursor: pointer; font-size: 12px; color: #555568; transition: 0.1s;
+    border-left: 2px solid transparent; position: relative;
+  }
+  .si:hover { background: rgba(0,0,0,0.015); }
+  .si.s { background: rgba(120,80,255,0.04); color: #6b4fcf; border-left-color: #7b5fff; }
+
+  .si .meth {
+    font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
+  }
+  .meth-g { background: rgba(0,160,80,0.06); color: #338855; }
+  .meth-p { background: rgba(60,140,220,0.06); color: #336699; }
+  .meth-d { background: rgba(200,40,40,0.06); color: #994444; }
+  .meth-pt { background: rgba(180,130,30,0.06); color: #997733; }
+
+  .si .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .si .sc { font-size: 8px; padding: 1px 6px; border-radius: 10px; background: rgba(120,80,255,0.04); color: #7b5fff; }
+
+  .sg-l2 { padding-left: 12px; }
+  .sg-l2 .si { padding-left: 20px; font-size: 11px; }
+  .sg-l2 .gh { padding-left: 16px; font-size: 10px; color: #aaaacc; }
+
+  /* ========== Right ========== */
+  .right { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; z-index: 3; }
+
+  .tabs {
+    display: flex; align-items: center; padding: 0 12px; gap: 2px;
+    border-bottom: 1px solid rgba(0,0,0,0.04); overflow-x: auto;
+  }
+  .tab {
+    padding: 10px 14px; font-size: 11px; cursor: pointer; white-space: nowrap;
+    border-bottom: 2px solid transparent; transition: 0.15s;
+    display: flex; align-items: center; gap: 6px; color: #9999bb;
+  }
+  .tab.s { border-bottom-color: #7b5fff; font-weight: 500; color: #6b4fcf; }
+  .tab:hover { opacity: 0.8; }
+  .tab .x { font-size: 10px; opacity: 0; margin-left: 2px; }
+  .tab:hover .x { opacity: 0.4; }
+  .tab .env-badge { font-size: 8px; padding: 1px 6px; border-radius: 10px; background: rgba(120,80,255,0.05); color: #8888aa; }
+
+  /* === Action Bar === */
+  .act {
+    display: flex; align-items: center; padding: 10px 12px; gap: 8px;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+  }
+  .act .meth-sel {
+    display: flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 8px;
+    border: 1px solid rgba(0,0,0,0.06); font-size: 12px; font-weight: 700;
+    font-family: 'JetBrains Mono', monospace; cursor: pointer;
+    background: rgba(0,0,0,0.02); color: #338855;
+  }
+  .act .meth-sel .dd { font-size: 8px; opacity: 0.5; }
+  .act .url-box {
+    flex: 1; display: flex; align-items: center; padding: 0 12px; border-radius: 8px;
+    border: 1px solid rgba(0,0,0,0.05); background: rgba(0,0,0,0.01); min-width: 0;
+  }
+  .act .url-box .base { font-size: 11px; color: #9999bb; flex-shrink: 0; }
+  .act .url-box input {
+    flex: 1; background: none; border: none; outline: none; font-size: 12px;
+    font-family: 'JetBrains Mono', monospace; padding: 7px 0; color: #444; min-width: 0;
+  }
+  .act .url-box input::placeholder { color: #9999bb; opacity: 0.45; }
+  .act .send-btn {
+    padding: 7px 20px; border-radius: 8px; border: none; font-size: 12px; font-weight: 600;
+    cursor: pointer; background: rgba(120,80,255,0.08); color: #7b5fff;
+    transition: 0.15s; font-family: inherit; white-space: nowrap;
+  }
+  .act .send-btn:hover { background: rgba(120,80,255,0.12); }
+  .act .more-btn {
+    width: 28px; height: 28px; border-radius: 8px; border: none; font-size: 14px;
+    cursor: pointer; background: rgba(0,0,0,0.02); color: #9999bb;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* === Editor Tabs === */
+  .ed-tabs {
+    display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid rgba(0,0,0,0.03);
+  }
+  .ed-tab {
+    padding: 8px 12px; font-size: 10px; cursor: pointer;
+    border-bottom: 2px solid transparent; color: #9999bb; transition: 0.1s;
+  }
+  .ed-tab.s { border-bottom-color: #7b5fff; font-weight: 500; color: #6b4fcf; }
+
+  .ed-area {
+    flex: 1; display: flex; flex-direction: column;
+    border-bottom: 1px solid rgba(0,0,0,0.04); min-height: 90px;
+  }
+  .ed-table { padding: 8px 12px; flex: 1; }
+  .ed-table .row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .ed-table .row input {
+    flex: 1; padding: 5px 10px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.04);
+    font-size: 11px; font-family: 'JetBrains Mono', monospace; background: transparent; outline: none; color: #444;
+  }
+  .ed-table .row input:focus { border-color: rgba(120,80,255,0.12); }
+  .ed-table .row input::placeholder { color: #bbb; }
+  .ed-table .row .ck { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.08); flex-shrink: 0; cursor: pointer; background: rgba(120,80,255,0.04); }
+  .ed-table .row .rm { font-size: 10px; color: #bbb; cursor: pointer; flex-shrink: 0; }
+
+  /* === Response === */
+  .resp-hd {
+    display: flex; align-items: center; padding: 8px 12px; gap: 12px;
+    background: rgba(0,0,0,0.01);
+  }
+  .resp-status {
+    font-size: 12px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+    padding: 2px 10px; border-radius: 6px;
+    background: rgba(0,160,80,0.06); color: #338855;
+  }
+  .resp-meta { font-size: 10px; display: flex; gap: 12px; color: #9999bb; }
+  .resp-detail-tabs {
+    display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid rgba(0,0,0,0.03);
+  }
+  .resp-detail-tab {
+    padding: 6px 12px; font-size: 10px; cursor: pointer;
+    border-bottom: 2px solid transparent; color: #9999bb; transition: 0.1s;
+  }
+  .resp-detail-tab.s { border-bottom-color: #7b5fff; font-weight: 500; color: #6b4fcf; }
+
+  .resp-body {
+    padding: 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    line-height: 1.6; max-height: 160px; overflow-y: auto;
+    background: rgba(0,0,0,0.02); color: #444458; min-height: 80px;
+  }
+  .resp-body .k { color: #336699; }
+  .resp-body .s { color: #338855; }
+  .resp-body .n { color: #997733; }
+  .resp-body .null { color: #994444; opacity: 0.6; }
+
+  /* ========== Popup Overlays ========== */
+  .popups-overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none; z-index: 20;
+  }
+
+  /* --- Env Popup --- */
+  .env-popup {
+    position: absolute; top: 42px; right: 52px; width: 320px;
+    background: rgba(255,255,255,0.82);
+    backdrop-filter: blur(40px) saturate(1.8);
+    -webkit-backdrop-filter: blur(40px) saturate(1.8);
+    border-radius: 14px; border: 1px solid rgba(0,0,0,0.07);
+    box-shadow: 0 12px 60px rgba(60, 40, 140, 0.08);
+    overflow: hidden; pointer-events: auto;
+  }
+  .env-popup .hd {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,0.04);
+    font-size: 12px; font-weight: 600; color: #444458;
+  }
+  .env-popup .hd .close { font-size: 14px; color: #bbb; cursor: pointer; }
+  .env-popup .search {
+    margin: 10px 14px; padding: 7px 10px; border-radius: 8px;
+    border: 1px solid rgba(0,0,0,0.04); background: rgba(0,0,0,0.01);
+    font-size: 11px; font-family: inherit; width: calc(100% - 28px); outline: none; color: #444;
+  }
+  .env-popup .search::placeholder { color: #bbb; }
+
+  .env-item {
+    display: flex; align-items: center; padding: 9px 14px; gap: 10px;
+    cursor: pointer; transition: 0.1s;
+  }
+  .env-item:hover { background: rgba(0,0,0,0.02); }
+  .env-item.s { background: rgba(120,80,255,0.04); }
+  .env-item .dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .env-item .info { flex: 1; min-width: 0; }
+  .env-item .info .name { font-size: 12px; color: #444458; font-weight: 500; }
+  .env-item .info .url { font-size: 10px; color: #9999bb; margin-top: 1px; }
+  .env-item .check { color: #7b5fff; font-size: 12px; }
+
+  /* --- Context Menu --- */
+  .ctx-menu {
+    position: absolute; top: 80px; left: 80px; width: 200px;
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(40px) saturate(1.8);
+    -webkit-backdrop-filter: blur(40px) saturate(1.8);
+    border-radius: 12px; border: 1px solid rgba(0,0,0,0.07);
+    box-shadow: 0 8px 40px rgba(60, 40, 140, 0.06);
+    overflow: hidden; pointer-events: auto;
+  }
+  .ctx-item {
+    padding: 10px 14px; font-size: 12px; color: #444458;
+    cursor: pointer; display: flex; align-items: center; gap: 10px;
+    transition: 0.1s;
+  }
+  .ctx-item:hover { background: rgba(120,80,255,0.04); color: #6b4fcf; }
+  .ctx-item .hotkey {
+    margin-left: auto; font-size: 10px; color: #bbb;
+  }
+  .ctx-divider { height: 1px; background: rgba(0,0,0,0.04); margin: 4px 0; }
+  .ctx-item.danger { color: #cc6666; }
+  .ctx-item.danger:hover { background: rgba(200,40,40,0.04); }
+
+  /* --- Scenario Panel --- */
+  .scenario-hd {
+    display: flex; align-items: center; padding: 10px 12px; gap: 10px;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+  }
+  .scenario-hd .tt { font-size: 11px; font-weight: 600; color: #444458; }
+  .scenario-hd .count { font-size: 10px; padding: 1px 8px; border-radius: 20px; background: rgba(120,80,255,0.05); color: #7b5fff; }
+  .scenario-hd .add-sc { margin-left: auto; font-size: 14px; color: #7b5fff; cursor: pointer; }
+
+  .sc-list { display: flex; gap: 6px; padding: 8px 12px; overflow-x: auto; }
+  .sc-list::-webkit-scrollbar { height: 2px; }
+  .sc-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.04); border-radius: 2px; }
+
+  .sc-card {
+    min-width: 160px; max-width: 180px; padding: 10px 12px;
+    border-radius: 10px; border: 1px solid rgba(0,0,0,0.04);
+    background: rgba(255,255,255,0.3);
+    cursor: pointer; transition: 0.15s;
+  }
+  .sc-card:hover { background: rgba(255,255,255,0.5); border-color: rgba(120,80,255,0.08); }
+  .sc-card.s { border-color: rgba(120,80,255,0.12); background: rgba(120,80,255,0.03); }
+  .sc-card .top { display: flex; align-items: center; gap: 6px; font-size: 10px; }
+  .sc-card .top .meth { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+  .sc-card .top .path { color: #9999bb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sc-card .nm { font-size: 12px; font-weight: 500; color: #444458; margin-top: 4px; }
+  .sc-card .ds { font-size: 10px; color: #9999bb; margin-top: 2px; }
+
+  /* ========== Section label ========== */
+  .section-label {
+    display: flex; align-items: center; gap: 12px;
+    font-size: 0.8rem; font-weight: 600; color: #8888aa;
+    margin-bottom: 12px;
+  }
+  .section-label .tag {
+    font-size: 9px; padding: 2px 8px; border-radius: 20px;
+    background: rgba(120,80,255,0.06); color: #7b5fff; font-weight: 500;
+  }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+
+  /* ========== Popup-only glass ========== */
+  .popup-preview {
+    position: relative; min-height: 400px; border-radius: 18px; overflow: hidden;
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(50px) saturate(1.8);
+    -webkit-backdrop-filter: blur(50px) saturate(1.8);
+    border: 1px solid rgba(255,255,255,0.6);
+    box-shadow: 0 12px 80px rgba(50, 30, 120, 0.08);
+  }
+
+  .popup-preview-inner { padding: 30px; display: flex; gap: 24px; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+
+  .env-popup-standalone {
+    width: 300px; position: relative !important; top: auto !important; right: auto !important;
+  }
+  .ctx-menu-standalone {
+    position: relative !important; top: auto !important; left: auto !important;
+  }
+
+  .section-title {
+    font-size: 12px; font-weight: 600; color: #66668a; margin-bottom: 12px;
+    padding-left: 4px;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-hdr">
+  <div>
+    <h1>🧪 API 调试 · 完整界面</h1>
+    <div class="sub">Deep Frost 亮色 · 环境管理 · 多级目录 · 弹窗 · 场景接口</div>
+  </div>
+</div>
+
+<div class="showcase">
+
+  <!-- ===== MAIN LAYOUT ===== -->
+  <div>
+    <div class="section-label">📐 主界面布局 <span class="tag">完整视图</span></div>
+    <div class="glass" style="position:relative;">
+      <div class="main-glass">
+        <!-- Sidebar -->
+        <div class="sb">
+          <div class="sb-hd">
+            <span>📂 集合</span>
+            <button class="add">+</button>
+          </div>
+          <div class="sb-scroll">
+            <!-- 多级目录树 -->
+            <div class="sg">
+              <div class="gh"><span class="ar o">▶</span> 用户模块 🏷 12</div>
+              <div class="si s"><span class="meth meth-g">GET</span><span class="nm">/user/info</span><span class="sc">3 用例</span></div>
+              <!-- 场景作为子节点 -->
+              <div class="sg sg-l2">
+                <div class="gh" style="padding-left:24px;font-size:10px;"><span class="ar o" style="width:12px;">▶</span>📋 场景</div>
+                <div class="si" style="padding-left:32px;font-size:11px;"><span style="color:#338855;font-size:9px;">✓</span><span class="nm">查询基本用户信息</span></div>
+                <div class="si s" style="padding-left:32px;font-size:11px;"><span style="color:#997733;font-size:9px;">⏳</span><span class="nm">更新用户邮箱和角色</span></div>
+                <div class="si" style="padding-left:32px;font-size:11px;"><span style="color:#994444;font-size:9px;">✗</span><span class="nm">不存在的用户 404</span></div>
+              </div>
+              <div class="si"><span class="meth meth-p">POST</span><span class="nm">/user/login</span><span class="sc">3 用例</span></div>
+
+              <div class="sg sg-l2">
+                <div class="gh"><span class="ar o">▶</span> 用户管理</div>
+                <div class="si"><span class="meth meth-p">POST</span><span class="nm">/user/create</span></div>
+                <div class="si"><span class="meth meth-pt">PATCH</span><span class="nm">/user/update</span></div>
+
+                <div class="sg sg-l2">
+                  <div class="gh"><span class="ar">▶</span> 权限</div>
+                  <div class="si"><span class="meth meth-g">GET</span><span class="nm">/user/role/list</span></div>
+                  <div class="si"><span class="meth meth-d">DEL</span><span class="nm">/user/role/remove</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="sg">
+              <div class="gh"><span class="ar o">▶</span> 数据模块 🏷 8</div>
+              <div class="si"><span class="meth meth-g">GET</span><span class="nm">/data/list</span><span class="sc">1 用例</span></div>
+              <div class="si"><span class="meth meth-pt">PATCH</span><span class="nm">/data/update</span></div>
+              <div class="si"><span class="meth meth-p">POST</span><span class="nm">/data/upload</span></div>
+            </div>
+
+            <div class="sg">
+              <div class="gh"><span class="ar">▶</span> 系统模块</div>
+              <div class="si"><span class="meth meth-g">GET</span><span class="nm">/system/health</span></div>
+              <div class="si"><span class="meth meth-g">GET</span><span class="nm">/system/config</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right -->
+        <div class="right">
+          <div class="tabs">
+            <div class="tab s">GET /user/info <span class="x">✕</span></div>
+            <div class="tab">POST /user/login <span class="x">✕</span></div>
+            <div class="tab">GET /data/list <span class="x">✕</span></div>
+            <div style="flex:1;min-width:20px;"></div>
+            <div class="tab" style="font-size:10px;display:flex;gap:4px;align-items:center;">
+              <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#338855;"></span>
+              开发环境
+            </div>
+          </div>
+
+          <div class="act">
+            <div class="meth-sel">GET <span class="dd">▾</span></div>
+            <div class="url-box">
+              <span class="base">http://localhost:8080</span>
+              <input value="/api/v1/user/info">
+            </div>
+            <button class="send-btn">📤 发送</button>
+            <button class="more-btn">⋯</button>
+          </div>
+
+          <!-- 场景接口 -->
+          <div class="scenario-hd">
+            <span class="tt">📋 场景接口</span>
+            <span class="count">5 个用例</span>
+            <span class="add-sc">+</span>
+          </div>
+          <div class="sc-list">
+            <div class="sc-card s">
+              <div class="top"><span class="meth meth-g" style="font-size:9px;">GET</span><span class="path">/user/info</span></div>
+              <div class="nm">查询用户基本信息</div>
+              <div class="ds">返回 id · name · email</div>
+            </div>
+            <div class="sc-card">
+              <div class="top"><span class="meth meth-p" style="font-size:9px;">POST</span><span class="path">/user/info</span></div>
+              <div class="nm">更新用户信息</div>
+              <div class="ds">修改 name · email · role</div>
+            </div>
+            <div class="sc-card">
+              <div class="top"><span class="meth meth-g" style="font-size:9px;">GET</span><span class="path">/user/info</span></div>
+              <div class="nm">查询不存在的用户</div>
+              <div class="ds">404 错误场景</div>
+            </div>
+          </div>
+
+          <!-- 编辑区 -->
+          <div class="ed-tabs">
+            <div class="ed-tab s">Params</div>
+            <div class="ed-tab">Headers</div>
+            <div class="ed-tab">Body</div>
+            <div class="ed-tab">Auth</div>
+            <div class="ed-tab">Settings</div>
+          </div>
+          <div class="ed-area">
+            <div class="ed-table">
+              <div class="row"><span class="ck"></span><input value="page" placeholder="key"><input value="1" placeholder="value"><span class="rm">✕</span></div>
+              <div class="row"><span class="ck"></span><input value="limit" placeholder="key"><input value="20" placeholder="value"><span class="rm">✕</span></div>
+              <div class="row"><span class="ck"></span><input placeholder="key"><input placeholder="value"><span class="rm">✕</span></div>
+            </div>
+          </div>
+
+          <div class="resp-hd">
+            <span class="resp-status">200 OK</span>
+            <div class="resp-meta"><span>342 ms</span><span>2.4 KB</span><span>4 个断言 ✓</span></div>
+          </div>
+          <div class="resp-detail-tabs">
+            <div class="resp-detail-tab s">Body</div>
+            <div class="resp-detail-tab">Headers</div>
+            <div class="resp-detail-tab">Request</div>
+            <div class="resp-detail-tab">cURL</div>
+            <div class="resp-detail-tab">日志</div>
+          </div>
+          <div class="resp-body">
+{<br>
+  &nbsp;&nbsp;<span class="k">"code"</span>: <span class="n">200</span>,<br>
+  &nbsp;&nbsp;<span class="k">"message"</span>: <span class="s">"success"</span>,<br>
+  &nbsp;&nbsp;<span class="k">"data"</span>: {<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;<span class="k">"id"</span>: <span class="n">1001</span>,<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;<span class="k">"name"</span>: <span class="s">"张三"</span>,<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;<span class="k">"email"</span>: <span class="s">"zhangsan@example.com"</span>,<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;<span class="k">"role"</span>: <span class="s">"admin"</span>,<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;<span class="k">"avatar"</span>: <span class="null">null</span><br>
+  &nbsp;&nbsp;}<br>
+}
+          </div>
+        </div>
+      </div>
+
+      <!-- 环境管理弹窗 -->
+      <div class="popups-overlay">
+        <div class="env-popup">
+          <div class="hd">
+            <span>🌐 环境管理</span>
+            <span class="close">✕</span>
+          </div>
+          <input class="search" placeholder="搜索环境...">
+          <div class="env-item s">
+            <span class="dot" style="background:#338855;"></span>
+            <div class="info"><div class="name">开发环境</div><div class="url">http://localhost:8080</div></div>
+            <span class="check">✓</span>
+          </div>
+          <div class="env-item">
+            <span class="dot" style="background:#336699;"></span>
+            <div class="info"><div class="name">测试环境</div><div class="url">http://test.api.company.com</div></div>
+          </div>
+          <div class="env-item">
+            <span class="dot" style="background:#994444;"></span>
+            <div class="info"><div class="name">正式环境</div><div class="url">https://api.company.com</div></div>
+          </div>
+          <div class="env-item">
+            <span class="dot" style="background:#997733;"></span>
+            <div class="info"><div class="name">本地 Mock</div><div class="url">http://127.0.0.1:3000</div></div>
+          </div>
+        </div>
+
+        <!-- 右键菜单 -->
+        <div class="ctx-menu">
+          <div class="ctx-item" style="font-weight:500;color:#6b4fcf;">📂 用户模块</div>
+          <div class="ctx-divider"></div>
+          <div class="ctx-item">📄 新建端点 <span class="hotkey">⌘N</span></div>
+          <div class="ctx-item">📁 新建分组 <span class="hotkey">⌘⇧N</span></div>
+          <div class="ctx-item">📋 导入集合... <span class="hotkey">⌘I</span></div>
+          <div class="ctx-divider"></div>
+          <div class="ctx-item">✏️ 重命名</div>
+          <div class="ctx-item">📌 固定到顶部</div>
+          <div class="ctx-item danger">🗑 删除模块</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 弹窗 & 菜单 独立展示 ===== -->
+  <div class="two-col">
+    <div>
+      <div class="section-label">🪟 环境管理弹窗 <span class="tag">Env Picker</span></div>
+      <div class="popup-preview">
+        <div class="popup-preview-inner">
+          <div class="env-popup env-popup-standalone">
+            <div class="hd"><span>🌐 环境管理</span><span class="close">✕</span></div>
+            <input class="search" placeholder="搜索环境...">
+            <div class="env-item s">
+              <span class="dot" style="background:#338855;"></span>
+              <div class="info"><div class="name">开发环境</div><div class="url">http://localhost:8080</div></div>
+              <span class="check">✓</span>
+            </div>
+            <div class="env-item">
+              <span class="dot" style="background:#336699;"></span>
+              <div class="info"><div class="name">测试环境</div><div class="url">http://test.api.company.com</div></div>
+            </div>
+            <div class="env-item">
+              <span class="dot" style="background:#994444;"></span>
+              <div class="info"><div class="name">正式环境</div><div class="url">https://api.company.com</div></div>
+            </div>
+            <div class="env-item">
+              <span class="dot" style="background:#997733;"></span>
+              <div class="info"><div class="name">本地 Mock</div><div class="url">http://127.0.0.1:3000</div></div>
+            </div>
+            <div style="padding:10px 14px;border-top:1px solid rgba(0,0,0,0.04);display:flex;gap:8px;">
+              <span style="font-size:11px;color:#7b5fff;cursor:pointer;">+ 新建环境</span>
+              <span style="font-size:11px;color:#9999bb;cursor:pointer;margin-left:auto;">⚙ 管理</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">📋 右键菜单 <span class="tag">Context Menu</span></div>
+      <div class="popup-preview">
+        <div class="popup-preview-inner">
+          <div class="ctx-menu ctx-menu-standalone">
+            <div class="ctx-item" style="font-weight:500;color:#6b4fcf;">📂 用户模块</div>
+            <div class="ctx-divider"></div>
+            <div class="ctx-item">📄 新建端点 <span class="hotkey">⌘N</span></div>
+            <div class="ctx-item">📁 新建分组 <span class="hotkey">⌘⇧N</span></div>
+            <div class="ctx-item">📋 导入集合... <span class="hotkey">⌘I</span></div>
+            <div class="ctx-item">📤 导出为 OpenAPI</div>
+            <div class="ctx-divider"></div>
+            <div class="ctx-item">✏️ 重命名</div>
+            <div class="ctx-item">📌 固定到顶部</div>
+            <div class="ctx-item">🔁 移动到...</div>
+            <div class="ctx-item">📋 复制路径</div>
+            <div class="ctx-divider"></div>
+            <div class="ctx-item danger">🗑 删除模块</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 多级目录树 + 场景接口 ===== -->
+  <div class="two-col">
+    <div>
+      <div class="section-label">🌳 多级目录树 <span class="tag">3 层嵌套</span></div>
+      <div class="popup-preview">
+        <div class="popup-preview-inner" style="padding:16px;">
+          <div style="width:100%;">
+            <div class="sg">
+              <div class="gh"><span class="ar o">▶</span> 用户模块 🏷 12</div>
+              <div class="si s"><span class="meth meth-g">GET</span><span class="nm">/user/info</span><span class="sc">3 用例</span></div>
+              <!-- 场景子节点 -->
+              <div class="sg sg-l2">
+                <div class="gh" style="padding-left:24px;font-size:10px;"><span class="ar o" style="width:12px;">▶</span>📋 场景</div>
+                <div class="si" style="padding-left:32px;font-size:11px;"><span style="color:#338855;font-size:9px;">✓</span><span class="nm">查询基本用户信息</span></div>
+                <div class="si" style="padding-left:32px;font-size:11px;"><span style="color:#997733;font-size:9px;">⏳</span><span class="nm">更新用户邮箱和角色</span></div>
+                <div class="si" style="padding-left:32px;font-size:11px;"><span style="color:#994444;font-size:9px;">✗</span><span class="nm">不存在的用户 404</span></div>
+              </div>
+              <div class="si"><span class="meth meth-p">POST</span><span class="nm">/user/login</span></div>
+
+              <div class="sg sg-l2">
+                <div class="gh"><span class="ar o">▶</span> 用户管理</div>
+                <div class="si"><span class="meth meth-p">POST</span><span class="nm">/user/create</span></div>
+                <div class="si"><span class="meth meth-pt">PATCH</span><span class="nm">/user/update</span></div>
+
+                <div class="sg sg-l2">
+                  <div class="gh"><span class="ar o">▶</span> 权限管理</div>
+                  <div class="si"><span class="meth meth-g">GET</span><span class="nm">/user/role/list</span></div>
+                  <div class="si"><span class="meth meth-p">POST</span><span class="nm">/user/role/create</span></div>
+                  <div class="si"><span class="meth meth-d">DEL</span><span class="nm">/user/role/remove</span></div>
+
+                  <div class="sg sg-l2">
+                    <div class="gh"><span class="ar">▶</span> 权限组</div>
+                    <div class="si"><span class="meth meth-g">GET</span><span class="nm">/user/group/list</span></div>
+                    <div class="si"><span class="meth meth-p">POST</span><span class="nm">/user/group/assign</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">📋 场景接口 <span class="tag">Test Cases</span></div>
+      <div class="popup-preview">
+        <div class="popup-preview-inner" style="padding:16px;flex-direction:column;gap:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+            <span style="font-size:11px;font-weight:600;color:#444458;">📋 场景接口 · 用户模块</span>
+            <span style="font-size:10px;color:#7b5fff;cursor:pointer;">+ 添加用例</span>
+          </div>
+
+          <div class="sc-card s" style="width:100%;max-width:none;">
+            <div class="top">
+              <span class="meth meth-g" style="font-size:9px;font-weight:700;">GET</span>
+              <span class="path">/user/info</span>
+              <span style="margin-left:auto;font-size:9px;color:#338855;">✓ 通过</span>
+            </div>
+            <div class="nm">查询用户基本信息 — 正常流程</div>
+            <div class="ds">返回 200 · 包含 id/name/email/role</div>
+            <div style="margin-top:6px;display:flex;gap:4px;">
+              <span style="font-size:8px;padding:1px 6px;border-radius:10px;background:rgba(0,160,80,0.06);color:#338855;">断言: status=200</span>
+              <span style="font-size:8px;padding:1px 6px;border-radius:10px;background:rgba(0,160,80,0.06);color:#338855;">data.id 存在</span>
+            </div>
+          </div>
+
+          <div class="sc-card" style="width:100%;max-width:none;">
+            <div class="top">
+              <span class="meth meth-p" style="font-size:9px;font-weight:700;">POST</span>
+              <span class="path">/user/info</span>
+              <span style="margin-left:auto;font-size:9px;color:#997733;">⏳ 待执行</span>
+            </div>
+            <div class="nm">更新用户信息 — 修改 email 和 role</div>
+            <div class="ds">Body: { "email": "...", "role": "editor" }</div>
+            <div style="margin-top:6px;display:flex;gap:4px;">
+              <span style="font-size:8px;padding:1px 6px;border-radius:10px;background:rgba(180,130,30,0.06);color:#997733;">预设: email=new@test.com</span>
+            </div>
+          </div>
+
+          <div class="sc-card" style="width:100%;max-width:none;">
+            <div class="top">
+              <span class="meth meth-g" style="font-size:9px;font-weight:700;">GET</span>
+              <span class="path">/user/info</span>
+              <span style="margin-left:auto;font-size:9px;color:#994444;">✗ 失败</span>
+            </div>
+            <div class="nm">查询不存在的用户 — 404 边界</div>
+            <div class="ds">Params: id=99999 · 预期返回 404</div>
+            <div style="margin-top:6px;display:flex;gap:4px;">
+              <span style="font-size:8px;padding:1px 6px;border-radius:10px;background:rgba(200,40,40,0.06);color:#994444;">断言: status=404</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

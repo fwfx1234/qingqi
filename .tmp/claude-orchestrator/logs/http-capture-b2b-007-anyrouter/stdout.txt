@@ -1,0 +1,37 @@
+All checks pass. Summary below.
+
+## Summary
+
+### Files changed
+- `/Users/fwfx1234/develop/qingqi/src/features/http_capture/model.rs`
+- `/Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs`
+
+### http-capture inspector/filter behaviors now real
+- **URL header in detail panel**: the right inspector now leads with a `METHOD url` line (or "未选择记录" placeholder), so the selected exchange is immediately identifiable above the metric strip.
+- **Truthful body empty/binary states**: the new `BodyDisplay` (`Empty | Hinted | Text`) drives `render_body_section`. When `request_body`/`response_body` is empty but `request_size`/`response_size > 0`, the tab now shows an explicit hint (e.g. "[响应正文未按文本捕获 — 可能是二进制、流式上传或未记录正文，共 4.0 KB]") instead of the generic "响应体无数据".
+- **Structured timing tab**: `Timing` switched from a multi-line string to a key/value rows layout (`协议 / 耗时 / 请求大小 / 响应大小 / 时间戳`) using the new `CapturedExchange::timing_rows`, matching the Overview row style.
+- **`hide_static` filter**: already exposed in the prior batch as the "隐藏静态" chip — confirmed wired through SQL+in-memory filtering and pagination. No new filter added (`status`/scheme/content-type/min-duration/status-range would require store-side changes that are out of scope).
+- **Selection / DetailTab switcher**: `DetailTab` enum-driven local switcher continues to render Overview / RequestHeaders / RequestBody / ResponseHeaders / ResponseBody / Timing using actual `CapturedExchange` fields.
+- **"Capture engine not wired" status**: preserved verbatim in the header status line and status bar.
+
+### Still missing
+- Real proxy/capture ingestion pipeline (no live exchange events).
+- HTTPS certificate generation/install/trust UI.
+- System proxy takeover and mobile capture guide.
+- Replay, copy-URL, copy-cURL, export HAR/JSON, save response body actions.
+- Richer statistics (`top host`, `avg duration`, status distribution bars, content-type).
+- Filters present in QML but not in the Rust model: content-type, scheme, status-range (min/max), min duration. Composer tab.
+- Body pretty-printing / syntax highlighting / mono-text scrollers / large body truncation handling.
+- "Path" column and replayed/error pills in the list.
+
+### Suggested migration-guide note (do not edit in this batch)
+Under `### http-capture` → `Current Notes:`, append:
+
+> - 详情 inspector 已支持本地 DetailTab 切换（概览 / 请求头 / 请求体 / 响应头 / 响应体 / 计时），并新增顶部 URL/方法 行；空内容与"有 size 无 body"会区分提示（疑似二进制或未记录正文）。计时 tab 改用结构化 key/value 行而不是拼接文本。
+> - `hide_static` 过滤器已在过滤区暴露为 "隐藏静态" chip，配合 SQL 查询与内存补滤工作，但 status 范围、scheme、Content-Type、min duration 等过滤仍未接入；这些需要先扩 `FilterState` 与 `store::build_filter`。
+> - 新增 `BodyDisplay`、`CapturedExchange::request_body_display`/`response_body_display`/`timing_rows` 等模型 helper，便于后续 service 层在接入真实代理事件后复用同一渲染路径。
+
+### Commands run
+- `cargo fmt`
+- `cargo test --bin qingqi -- features::http_capture` (38 passed; one transient pre-existing flake in `store::tests::clear_removes_all` due to nanosecond `temp_db` collisions in store.rs, passed on rerun)
+- `cargo check`

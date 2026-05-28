@@ -1,0 +1,1743 @@
+2026-05-27T22:32:25.649Z [DEBUG] MDM settings load completed in 0ms
+2026-05-27T22:32:25.671Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json
+2026-05-27T22:32:25.671Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/fwfx1234/develop/qingqi/.claude/settings.json
+2026-05-27T22:32:25.673Z [DEBUG] CA certs: Config fallback - globalEnv keys: , settingsEnv keys: none
+2026-05-27T22:32:25.673Z [DEBUG] [init] configureGlobalMTLS starting
+2026-05-27T22:32:25.673Z [DEBUG] [init] configureGlobalMTLS complete
+2026-05-27T22:32:25.673Z [DEBUG] [init] configureGlobalAgents starting
+2026-05-27T22:32:25.673Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-05-27T22:32:25.674Z [DEBUG] CA certs: Loaded 145 bundled root certificates
+2026-05-27T22:32:25.685Z [DEBUG] CA certs: system store returned empty
+2026-05-27T22:32:25.685Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-05-27T22:32:25.685Z [DEBUG] [init] configureGlobalAgents complete
+2026-05-27T22:32:25.686Z [DEBUG] Error log sink initialized
+2026-05-27T22:32:25.706Z [DEBUG] Applying permission update: Adding 30 allow rule(s) to destination 'localSettings': ["Bash(cargo check *)","Read(//Users/fwfx1234/.cargo/bin/**)","Read(//usr/local/bin/**)","Read(//opt/homebrew/bin/**)","Read(//Users/fwfx1234/.rustup/toolchains/**)","Read(//Users/fwfx1234/.rustup/**)","Bash(export PATH=\"$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH\")","Bash(cargo build *)","Bash(rustup show *)","Bash(export PATH=\"$HOME/.cargo/bin:$PATH\")","Bash(rustup which *)","Bash(~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo build *)","Bash(export PATH=\"$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$HOME/.cargo/bin:$PATH\")","Bash(cargo doc *)","Bash(cargo clean *)","Bash(cargo run *)","Bash(kill %1)","Bash(cargo test *)","Bash(echo \"exit: $?\")","Bash(grep -E \"/\\(main|lib|mod|launcher|runtime|ui|app_launcher|clipboard\\)\\\\.\\(rs\\)$\")","Bash(cargo fmt *)","Bash(grep -vE \"warning: \\\\`\")","Bash(grep -v \"is never used\\\\|warning: \\\\`qingqi\\\\`\")","Bash(echo \"EXIT:$?\")","Bash(git -C /Users/fwfx1234/develop/qingqi log --all --oneline -30)","Bash(git -C /Users/fwfx1234/develop/qingqi status)","Bash(python3 *)","Bash(wait)","Bash(xxd)","Read(//Users/fwfx1234/.cargo/registry/src/**)"]
+2026-05-27T22:32:25.707Z [DEBUG] [claudeai-mcp] Disabled: API-key auth precedence active
+2026-05-27T22:32:25.707Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-05-27T22:32:25.708Z [DEBUG] [STARTUP] Running setup()...
+2026-05-27T22:32:25.711Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json
+2026-05-27T22:32:25.711Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/fwfx1234/develop/qingqi/.claude/settings.json
+2026-05-27T22:32:25.712Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/fwfx1234/.claude/skills, project=[]
+2026-05-27T22:32:25.712Z [DEBUG] Error log sink initialized
+2026-05-27T22:32:25.727Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/commands: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/commands'
+2026-05-27T22:32:25.727Z [DEBUG] Loaded 0 unique skills (0 unconditional, 0 conditional, managed: 0, user: 0, project: 0, additional: 0, legacy commands: 0)
+2026-05-27T22:32:25.727Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/agents: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/agents'
+2026-05-27T22:32:25.729Z [DEBUG] [STARTUP] setup() completed in 21ms
+2026-05-27T22:32:25.729Z [DEBUG] Cleared CA certificates cache
+2026-05-27T22:32:25.729Z [DEBUG] Cleared mTLS configuration cache
+2026-05-27T22:32:25.729Z [DEBUG] Cleared proxy agent cache
+2026-05-27T22:32:25.729Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-05-27T22:32:25.729Z [DEBUG] CA certs: Loaded 145 bundled root certificates
+2026-05-27T22:32:25.729Z [DEBUG] CA certs: system store returned empty
+2026-05-27T22:32:25.729Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-05-27T22:32:25.729Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-05-27T22:32:25.729Z [DEBUG] [ToolSearch:optimistic] disabled: ANTHROPIC_BASE_URL=https://token-plan-cn.xiaomimimo.com/anthropic is not a first-party Anthropic host. Set ENABLE_TOOL_SEARCH=true (or auto / auto:N) if your proxy forwards tool_reference blocks.
+2026-05-27T22:32:25.740Z [DEBUG] Loaded 1 installed plugins from /Users/fwfx1234/.claude/plugins/installed_plugins.json
+2026-05-27T22:32:25.742Z [DEBUG] Plugin rust-analyzer-lsp has no entry.skills defined
+2026-05-27T22:32:25.743Z [DEBUG] Found 1 plugins (1 enabled, 0 disabled)
+2026-05-27T22:32:25.743Z [DEBUG] getPluginSkills: Processing 1 enabled plugins
+2026-05-27T22:32:25.743Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-05-27T22:32:25.743Z [DEBUG] Registered 0 hooks from 1 plugins
+2026-05-27T22:32:25.743Z [DEBUG] Total plugin skills loaded: 0
+2026-05-27T22:32:25.743Z [DEBUG] Total plugin commands loaded: 0
+2026-05-27T22:32:25.743Z [DEBUG] Total plugin agents loaded: 0
+2026-05-27T22:32:25.744Z [DEBUG] getSkills returning: 0 skill dir commands, 0 plugin skills, 14 bundled skills, 0 builtin plugin skills
+2026-05-27T22:32:25.744Z [DEBUG] [STARTUP] Commands and agents loaded in 15ms
+2026-05-27T22:32:25.745Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-05-27T22:32:25.745Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-05-27T22:32:25.745Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-05-27T22:32:25.745Z [DEBUG] Starting background startup prefetches
+2026-05-27T22:32:25.745Z [DEBUG] [Bootstrap] Skipped: no usable OAuth or API key
+2026-05-27T22:32:25.745Z [DEBUG] [STARTUP] MCP configs resolved in 38ms (awaited at +38ms)
+2026-05-27T22:32:25.746Z [DEBUG] All plugins already exist, skipping migration
+2026-05-27T22:32:25.746Z [DEBUG] Cleared CA certificates cache
+2026-05-27T22:32:25.746Z [DEBUG] Cleared mTLS configuration cache
+2026-05-27T22:32:25.746Z [DEBUG] Cleared proxy agent cache
+2026-05-27T22:32:25.746Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-05-27T22:32:25.746Z [DEBUG] CA certs: Loaded 145 bundled root certificates
+2026-05-27T22:32:25.746Z [DEBUG] CA certs: system store returned empty
+2026-05-27T22:32:25.746Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-05-27T22:32:25.746Z [DEBUG] Initialized versioned plugins system with 1 plugins
+2026-05-27T22:32:25.747Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:25.747Z [DEBUG] [MCP] --mcp-config servers running fully async (nonblocking)
+2026-05-27T22:32:25.747Z [DEBUG] [MCP] claude.ai connectors running fully async (nonblocking)
+2026-05-27T22:32:25.748Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-05-27T22:32:25.748Z [DEBUG] [3P telemetry] isTelemetryEnabled=false (CLAUDE_CODE_ENABLE_TELEMETRY=undefined)
+2026-05-27T22:32:25.749Z [DEBUG] [auto-mode] verifyAutoModeGateAccess: enabledState=opt-in disabledBySettings=false model=mimo-v2-pro modelSupported=true disableFastModeBreakerFires=false carouselAvailable=true canEnterAuto=true
+2026-05-27T22:32:25.756Z [DEBUG] [ScheduledTasks] scheduler start() — enabled=false, hasTasks=false
+2026-05-27T22:32:25.759Z [DEBUG] Loaded 1 LSP server(s) from plugin: rust-analyzer-lsp
+2026-05-27T22:32:25.759Z [DEBUG] Total LSP servers loaded: 1
+2026-05-27T22:32:25.759Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 1 server(s)
+2026-05-27T22:32:25.760Z [DEBUG] Queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration (connection not ready)
+2026-05-27T22:32:25.760Z [DEBUG] LSP manager initialized with 1 servers
+2026-05-27T22:32:25.760Z [DEBUG] LSP server manager initialized successfully
+2026-05-27T22:32:25.760Z [DEBUG] Queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics (connection not ready)
+2026-05-27T22:32:25.760Z [DEBUG] Registered diagnostics handler for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-27T22:32:25.760Z [DEBUG] LSP notification handlers registered successfully for all 1 server(s)
+2026-05-27T22:32:25.760Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/output-styles: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/output-styles'
+2026-05-27T22:32:25.760Z [DEBUG] Total plugin output styles loaded: 0
+2026-05-27T22:32:25.761Z [WARN] [3P telemetry] Event dropped (no event logger initialized): plugin_loaded
+2026-05-27T22:32:25.761Z [DEBUG] installPluginsForHeadless: starting
+2026-05-27T22:32:25.765Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/skills: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/skills'
+2026-05-27T22:32:25.768Z [DEBUG] Git remote URL: null
+2026-05-27T22:32:25.768Z [DEBUG] No git remote URL found
+2026-05-27T22:32:25.780Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:32:25.780Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:32:25.780Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:32:25.780Z [DEBUG] Sending 12 skills via attachment (initial)
+2026-05-27T22:32:25.780Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:32:25.781Z [DEBUG] Watching for changes in setting files /Users/fwfx1234/.claude/settings.json, /Users/fwfx1234/develop/qingqi/.claude/settings.json, /Users/fwfx1234/develop/qingqi/.claude/settings.local.json...
+2026-05-27T22:32:25.783Z [DEBUG] Ripgrep first use test: PASSED (mode=embedded, path=/opt/homebrew/Caskroom/claude-code@latest/2.1.152/claude)
+2026-05-27T22:32:25.787Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:25.787Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:32:25.788Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:32:25.789Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:32:25.789Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:25.789Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:25.789Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:32:25.789Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:32:25.790Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:32:25.790Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:25.790Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:32:25.791Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:32:27.708Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:32:27.708Z [DEBUG] [API:timing] first byte after 1918ms
+2026-05-27T22:32:27.851Z [DEBUG] [mcp-registry] Loaded 197 official MCP URLs (legacy)
+2026-05-27T22:32:28.722Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_4cf3c6c6299445a595ee015b permissionDecisionMs=3
+2026-05-27T22:32:28.725Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_4cf3c6c6299445a595ee015b outcome=ok durationMs=3
+2026-05-27T22:32:29.119Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_64b917f576b140b58d508a53 permissionDecisionMs=1
+2026-05-27T22:32:29.122Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_64b917f576b140b58d508a53 outcome=ok durationMs=3
+2026-05-27T22:32:29.481Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_618be2151a824eb9b6d2a99c permissionDecisionMs=0
+2026-05-27T22:32:29.482Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:32:29.483Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:32:29.483Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:32:29.485Z [DEBUG] [API REQUEST] /anthropic/v1/messages/count_tokens source=count_tokens
+2026-05-27T22:32:29.603Z [ERROR] countTokens API call failed: 404 <html>
+<head><title>404 Not Found</title></head>
+<body>
+<center><h1>404 Not Found</h1></center>
+<hr><center>openresty</center>
+</body>
+</html>
+2026-05-27T22:32:29.604Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_618be2151a824eb9b6d2a99c outcome=ok durationMs=123
+2026-05-27T22:32:29.608Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:32:29.609Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:32:29.609Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:32:29.609Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:32:29.611Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:32:29.612Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:32:29.613Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:32:29.614Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:29.614Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:29.614Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:32:29.614Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:32:29.615Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:32:29.615Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:29.615Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:32:29.617Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:32:32.020Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:32:32.021Z [DEBUG] [API:timing] first byte after 2406ms
+2026-05-27T22:32:33.175Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_c871f78f52d24527b1e12b3f permissionDecisionMs=2
+2026-05-27T22:32:33.176Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_c871f78f52d24527b1e12b3f outcome=ok durationMs=1
+2026-05-27T22:32:33.573Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_1be7ae0ab8904f6ea0431597 permissionDecisionMs=1
+2026-05-27T22:32:33.573Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_1be7ae0ab8904f6ea0431597 outcome=ok durationMs=1
+2026-05-27T22:32:34.096Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_05a3f1117d7c44c5919f56d3 permissionDecisionMs=1
+2026-05-27T22:32:34.097Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_05a3f1117d7c44c5919f56d3 outcome=ok durationMs=1
+2026-05-27T22:32:34.491Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_623a4219cc1b47579a6445d1 permissionDecisionMs=0
+2026-05-27T22:32:34.492Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_623a4219cc1b47579a6445d1 outcome=ok durationMs=1
+2026-05-27T22:32:34.866Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_b0172483c5c847b3a9c7a15c permissionDecisionMs=1
+2026-05-27T22:32:34.866Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_b0172483c5c847b3a9c7a15c outcome=ok durationMs=0
+2026-05-27T22:32:34.869Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:32:34.869Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:32:34.869Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:32:34.869Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:32:34.870Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:32:34.870Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:32:34.870Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:32:34.870Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:34.871Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:34.871Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:32:34.871Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:32:34.871Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:32:34.871Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:34.871Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:32:34.872Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:32:37.892Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:32:37.893Z [DEBUG] [API:timing] first byte after 3022ms
+2026-05-27T22:32:38.565Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_1dd3fc75b63c4e1d93d0deac permissionDecisionMs=1
+2026-05-27T22:32:38.566Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_1dd3fc75b63c4e1d93d0deac outcome=ok durationMs=1
+2026-05-27T22:32:38.909Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_0297ce4972a440e4b8e0bc96 permissionDecisionMs=1
+2026-05-27T22:32:38.910Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_0297ce4972a440e4b8e0bc96 outcome=ok durationMs=2
+2026-05-27T22:32:39.216Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_e5522063242645cf8308ed80 permissionDecisionMs=1
+2026-05-27T22:32:39.217Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:32:39.218Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:32:39.218Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:32:39.219Z [DEBUG] [API REQUEST] /anthropic/v1/messages/count_tokens source=count_tokens
+2026-05-27T22:32:39.255Z [ERROR] countTokens API call failed: 404 <html>
+<head><title>404 Not Found</title></head>
+<body>
+<center><h1>404 Not Found</h1></center>
+<hr><center>openresty</center>
+</body>
+</html>
+2026-05-27T22:32:39.256Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_e5522063242645cf8308ed80 outcome=ok durationMs=40
+2026-05-27T22:32:39.446Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_f3b122059e074578bf14ed45 permissionDecisionMs=1
+2026-05-27T22:32:39.447Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_f3b122059e074578bf14ed45 outcome=ok durationMs=1
+2026-05-27T22:32:39.831Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_eba4c5c2bf754879949abb72 permissionDecisionMs=1
+2026-05-27T22:32:39.834Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_eba4c5c2bf754879949abb72 outcome=ok durationMs=2
+2026-05-27T22:32:39.837Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:32:39.837Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:32:39.837Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:32:39.837Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:32:39.842Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:32:39.843Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:32:39.844Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:32:39.844Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:39.844Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:39.844Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:32:39.844Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:32:39.845Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:32:39.845Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:39.845Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:32:39.847Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:32:41.160Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:32:41.161Z [DEBUG] [API:timing] first byte after 1316ms
+2026-05-27T22:32:42.177Z [INFO] [Stall] tool_dispatch_start tool=Bash toolUseId=call_ba9f7286bfb242e3968deb64 permissionDecisionMs=6
+2026-05-27T22:32:42.181Z [DEBUG] Creating shell snapshot for zsh (/bin/zsh)
+2026-05-27T22:32:42.181Z [DEBUG] Looking for shell config file: /Users/fwfx1234/.zshrc
+2026-05-27T22:32:42.183Z [DEBUG] Snapshots directory: /Users/fwfx1234/.claude/shell-snapshots
+2026-05-27T22:32:42.184Z [DEBUG] Creating snapshot at: /Users/fwfx1234/.claude/shell-snapshots/snapshot-zsh-1779921162183-s9abgr.sh
+2026-05-27T22:32:42.184Z [DEBUG] Execution timeout: 10000ms
+2026-05-27T22:32:42.193Z [DEBUG] Spawn-env probe captured 72 keys
+2026-05-27T22:32:42.260Z [DEBUG] Shell snapshot created successfully (3069 bytes)
+2026-05-27T22:32:42.260Z [DEBUG] No session environment scripts found
+2026-05-27T22:32:42.261Z [DEBUG] Spawning shell without login (-l flag skipped)
+2026-05-27T22:32:42.268Z [INFO] [Stall] tool_dispatch_end tool=Bash toolUseId=call_ba9f7286bfb242e3968deb64 outcome=ok durationMs=91
+2026-05-27T22:32:42.704Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=call_ea5e9390be5344df9afbb55f permissionDecisionMs=1
+2026-05-27T22:32:42.718Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=call_ea5e9390be5344df9afbb55f outcome=ok durationMs=14
+2026-05-27T22:32:42.721Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:32:42.721Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:32:42.721Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:32:42.721Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:32:42.722Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:32:42.722Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:32:42.723Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:32:42.723Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:42.724Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:42.724Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:32:42.724Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:32:42.724Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:32:42.725Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:42.725Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:32:42.726Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:32:43.621Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:32:43.622Z [DEBUG] [API:timing] first byte after 897ms
+2026-05-27T22:32:44.498Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_181896bdd875417e9ba34122 permissionDecisionMs=1
+2026-05-27T22:32:44.500Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_181896bdd875417e9ba34122 outcome=ok durationMs=2
+2026-05-27T22:32:44.814Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_4a436c70301447d5b649261e permissionDecisionMs=1
+2026-05-27T22:32:44.818Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_4a436c70301447d5b649261e outcome=ok durationMs=4
+2026-05-27T22:32:44.821Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:32:44.821Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:32:44.821Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:32:44.821Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:32:44.824Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:32:44.824Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:32:44.825Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:32:44.825Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:44.825Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:44.826Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:32:44.826Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:32:44.826Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:32:44.826Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:32:44.826Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:32:44.828Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:32:45.663Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:32:45.663Z [DEBUG] [API:timing] first byte after 837ms
+2026-05-27T22:33:17.506Z [INFO] [Stall] tool_dispatch_start tool=TaskCreate toolUseId=call_0edd296934c14abd8effe253 permissionDecisionMs=1
+2026-05-27T22:33:17.517Z [INFO] [Stall] tool_dispatch_end tool=TaskCreate toolUseId=call_0edd296934c14abd8effe253 outcome=ok durationMs=11
+2026-05-27T22:33:17.521Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:33:17.521Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:33:17.522Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:33:17.522Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:33:17.523Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:33:17.523Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:33:17.525Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:33:17.525Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:17.526Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:17.526Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:33:17.526Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:33:17.551Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:33:17.551Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:17.552Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:33:17.553Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:33:18.359Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:33:18.359Z [DEBUG] [API:timing] first byte after 808ms
+2026-05-27T22:33:19.982Z [INFO] [Stall] tool_dispatch_start tool=TaskCreate toolUseId=call_bb6bf7cc66f9416c95eb3c37 permissionDecisionMs=0
+2026-05-27T22:33:19.984Z [INFO] [Stall] tool_dispatch_end tool=TaskCreate toolUseId=call_bb6bf7cc66f9416c95eb3c37 outcome=ok durationMs=2
+2026-05-27T22:33:19.988Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:33:19.988Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:33:19.988Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:33:19.989Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:33:19.989Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:33:19.990Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:33:19.991Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:33:19.991Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:19.991Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:19.991Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:33:19.992Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:33:19.992Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:33:19.992Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:19.992Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:33:19.995Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:33:20.768Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:33:20.769Z [DEBUG] [API:timing] first byte after 777ms
+2026-05-27T22:33:21.767Z [INFO] [Stall] tool_dispatch_start tool=TaskCreate toolUseId=call_1e4d991f79d3438dbf97836f permissionDecisionMs=0
+2026-05-27T22:33:21.771Z [INFO] [Stall] tool_dispatch_end tool=TaskCreate toolUseId=call_1e4d991f79d3438dbf97836f outcome=ok durationMs=4
+2026-05-27T22:33:21.772Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:33:21.773Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:33:21.773Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:33:21.773Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:33:21.773Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:33:21.774Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:33:21.775Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:33:21.775Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:21.775Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:21.775Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:33:21.775Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:33:21.776Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:33:21.776Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:21.776Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:33:21.778Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:33:22.523Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:33:22.523Z [DEBUG] [API:timing] first byte after 747ms
+2026-05-27T22:33:23.542Z [INFO] [Stall] tool_dispatch_start tool=TaskCreate toolUseId=call_ba8bacd82e8c456ebee29096 permissionDecisionMs=1
+2026-05-27T22:33:23.547Z [INFO] [Stall] tool_dispatch_end tool=TaskCreate toolUseId=call_ba8bacd82e8c456ebee29096 outcome=ok durationMs=5
+2026-05-27T22:33:23.550Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:33:23.550Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:33:23.551Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:33:23.551Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:33:23.552Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:33:23.553Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:33:23.553Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:33:23.554Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:23.554Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:23.554Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:33:23.554Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:33:23.555Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:33:23.555Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:23.555Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:33:23.557Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:33:24.490Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:33:24.490Z [DEBUG] [API:timing] first byte after 935ms
+2026-05-27T22:33:25.556Z [INFO] [Stall] tool_dispatch_start tool=TaskCreate toolUseId=call_a2aa08a7ecc141a8a1801250 permissionDecisionMs=0
+2026-05-27T22:33:25.561Z [INFO] [Stall] tool_dispatch_end tool=TaskCreate toolUseId=call_a2aa08a7ecc141a8a1801250 outcome=ok durationMs=5
+2026-05-27T22:33:25.563Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:33:25.563Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:33:25.563Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:33:25.563Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:33:25.564Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:33:25.565Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:33:25.566Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:33:25.566Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:25.566Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:25.566Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:33:25.566Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:33:25.567Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:33:25.567Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:25.567Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:33:25.569Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:33:26.290Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:33:26.290Z [DEBUG] [API:timing] first byte after 724ms
+2026-05-27T22:33:26.996Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_8b4ae8930a9c41a1beaa1f06 permissionDecisionMs=0
+2026-05-27T22:33:27.000Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_8b4ae8930a9c41a1beaa1f06 outcome=ok durationMs=4
+2026-05-27T22:33:27.031Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:33:27.031Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:33:27.031Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:33:27.032Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:33:27.032Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:33:27.033Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:33:27.034Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:33:27.034Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:27.034Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:27.034Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:33:27.035Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:33:27.035Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:33:27.036Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:27.036Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:33:27.038Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:33:27.809Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:33:27.809Z [DEBUG] [API:timing] first byte after 773ms
+2026-05-27T22:33:37.820Z [INFO] [Stall] tool_dispatch_start tool=Write toolUseId=call_d9a6326d54754ec88d617e27 permissionDecisionMs=1
+2026-05-27T22:33:37.822Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/platform/macos.rs.tmp.1830.b192885d6dba
+2026-05-27T22:33:37.823Z [DEBUG] Temp file written successfully, size: 4332 bytes
+2026-05-27T22:33:37.823Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/platform/macos.rs.tmp.1830.b192885d6dba to /Users/fwfx1234/develop/qingqi/src/platform/macos.rs
+2026-05-27T22:33:37.823Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/platform/macos.rs written atomically
+2026-05-27T22:33:37.824Z [DEBUG] Starting LSP server instance: plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-27T22:33:37.828Z [INFO] [Stall] tool_dispatch_end tool=Write toolUseId=call_d9a6326d54754ec88d617e27 outcome=ok durationMs=8
+2026-05-27T22:33:37.830Z [DEBUG] Applied queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics
+2026-05-27T22:33:37.830Z [DEBUG] Applied queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration
+2026-05-27T22:33:37.830Z [DEBUG] LSP client started for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-27T22:33:37.830Z [DEBUG] [LSP PROTOCOL plugin:rust-analyzer-lsp:rust-analyzer] Sending request 'initialize - (0)'.
+2026-05-27T22:33:37.845Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:33:37.845Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:33:37.845Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:33:37.845Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:33:37.846Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:33:37.846Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:33:37.847Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:33:37.847Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:37.847Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:37.847Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:33:37.847Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:33:37.847Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:33:37.848Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:37.848Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:33:37.849Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:33:37.857Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:37.871Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:37.883Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:37.895Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:37.906Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:37.916Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:37.926Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:37.935Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:37.945Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:37.954Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:37.964Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:37.974Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:37.984Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:37.994Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:38.005Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:38.014Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:38.022Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:38.032Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:38.042Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:38.051Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:38.061Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:38.069Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] error: infinite recursion detected
+2026-05-27T22:33:38.069Z [DEBUG] LSP server plugin:rust-analyzer-lsp:rust-analyzer connection closed
+2026-05-27T22:33:38.070Z [ERROR] LSP server plugin:rust-analyzer-lsp:rust-analyzer crashed with exit code 1
+2026-05-27T22:33:38.695Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:33:38.696Z [DEBUG] [API:timing] first byte after 848ms
+2026-05-27T22:33:39.905Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_c0e045e0c0f64509b4458c54 permissionDecisionMs=1
+2026-05-27T22:33:39.907Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:33:39.907Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/platform/mod.rs.tmp.1830.6ffd1f59199e
+2026-05-27T22:33:39.907Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:33:39.908Z [DEBUG] Temp file written successfully, size: 110 bytes
+2026-05-27T22:33:39.908Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/platform/mod.rs.tmp.1830.6ffd1f59199e to /Users/fwfx1234/develop/qingqi/src/platform/mod.rs
+2026-05-27T22:33:39.908Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/platform/mod.rs written atomically
+2026-05-27T22:33:39.908Z [DEBUG] Starting LSP server instance: plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-27T22:33:39.910Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_c0e045e0c0f64509b4458c54 outcome=ok durationMs=5
+2026-05-27T22:33:39.913Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:33:39.913Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:33:39.913Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:33:39.913Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:33:39.914Z [DEBUG] LSP client started for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-27T22:33:39.914Z [DEBUG] [LSP PROTOCOL plugin:rust-analyzer-lsp:rust-analyzer] Sending request 'initialize - (0)'.
+2026-05-27T22:33:39.914Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:33:39.915Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:33:39.916Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:33:39.916Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:39.916Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:39.916Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:33:39.916Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:33:39.916Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:33:39.916Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:39.917Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:33:39.918Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:33:39.928Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:39.942Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:39.954Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:39.966Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:39.978Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:39.988Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:39.999Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:40.010Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:40.020Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:40.031Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:40.040Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:40.050Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:40.060Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:40.069Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:40.079Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:40.088Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:40.097Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:40.106Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:40.116Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:40.125Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:40.135Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:40.143Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] error: infinite recursion detected
+2026-05-27T22:33:40.143Z [DEBUG] LSP server plugin:rust-analyzer-lsp:rust-analyzer connection closed
+2026-05-27T22:33:40.143Z [ERROR] LSP server plugin:rust-analyzer-lsp:rust-analyzer crashed with exit code 1
+2026-05-27T22:33:40.724Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:33:40.724Z [DEBUG] [API:timing] first byte after 808ms
+2026-05-27T22:33:44.345Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_71c54856fbc84a4c9991fad9 permissionDecisionMs=1
+2026-05-27T22:33:44.347Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:33:44.347Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/platform/shell.rs.tmp.1830.90fa76f2dfe2
+2026-05-27T22:33:44.347Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:33:44.348Z [DEBUG] Temp file written successfully, size: 2213 bytes
+2026-05-27T22:33:44.348Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/platform/shell.rs.tmp.1830.90fa76f2dfe2 to /Users/fwfx1234/develop/qingqi/src/platform/shell.rs
+2026-05-27T22:33:44.348Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/platform/shell.rs written atomically
+2026-05-27T22:33:44.349Z [DEBUG] Starting LSP server instance: plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-27T22:33:44.350Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_71c54856fbc84a4c9991fad9 outcome=ok durationMs=5
+2026-05-27T22:33:44.352Z [DEBUG] LSP client started for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-27T22:33:44.352Z [DEBUG] [LSP PROTOCOL plugin:rust-analyzer-lsp:rust-analyzer] Sending request 'initialize - (0)'.
+2026-05-27T22:33:44.369Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.373Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:33:44.373Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:33:44.373Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:33:44.374Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:33:44.375Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:33:44.375Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:33:44.377Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:33:44.377Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:44.378Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:44.378Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:33:44.378Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:33:44.378Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:33:44.379Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:44.379Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:33:44.380Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:33:44.386Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.398Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.410Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.421Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.432Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.444Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.455Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.468Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.479Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.489Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.501Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.511Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.521Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.531Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.540Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.549Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.558Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.568Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.578Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.587Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:44.595Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] error: infinite recursion detected
+2026-05-27T22:33:44.596Z [DEBUG] LSP server plugin:rust-analyzer-lsp:rust-analyzer connection closed
+2026-05-27T22:33:44.596Z [ERROR] LSP server plugin:rust-analyzer-lsp:rust-analyzer crashed with exit code 1
+2026-05-27T22:33:45.250Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:33:45.250Z [DEBUG] [API:timing] first byte after 871ms
+2026-05-27T22:33:45.914Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_ba7350f2b59848838489c367 permissionDecisionMs=0
+2026-05-27T22:33:45.915Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_ba7350f2b59848838489c367 outcome=ok durationMs=1
+2026-05-27T22:33:45.920Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:33:45.920Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:33:45.920Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:33:45.920Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:33:45.923Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:33:45.923Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:33:45.924Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:33:45.924Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:45.924Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:45.924Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:33:45.924Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:33:45.925Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:33:45.925Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:45.925Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:33:45.927Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:33:49.407Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:33:49.407Z [DEBUG] [API:timing] first byte after 3482ms
+2026-05-27T22:33:50.390Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_565da58282db429381d26174 permissionDecisionMs=2
+2026-05-27T22:33:50.392Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:33:50.392Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/platform/shell.rs.tmp.1830.a386b6cea662
+2026-05-27T22:33:50.392Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:33:50.393Z [DEBUG] Temp file written successfully, size: 2221 bytes
+2026-05-27T22:33:50.393Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/platform/shell.rs.tmp.1830.a386b6cea662 to /Users/fwfx1234/develop/qingqi/src/platform/shell.rs
+2026-05-27T22:33:50.393Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/platform/shell.rs written atomically
+2026-05-27T22:33:50.393Z [DEBUG] Starting LSP server instance: plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-27T22:33:50.395Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_565da58282db429381d26174 outcome=ok durationMs=5
+2026-05-27T22:33:50.398Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:33:50.398Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:33:50.398Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:33:50.399Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:33:50.399Z [DEBUG] LSP client started for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-27T22:33:50.400Z [DEBUG] [LSP PROTOCOL plugin:rust-analyzer-lsp:rust-analyzer] Sending request 'initialize - (0)'.
+2026-05-27T22:33:50.401Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:33:50.402Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:33:50.403Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:33:50.404Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:50.404Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:50.404Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:33:50.404Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:33:50.428Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:33:50.429Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:50.429Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:33:50.430Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:33:50.430Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.442Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.455Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.465Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.477Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.486Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.497Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.506Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.517Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.527Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.538Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.548Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.558Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.568Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.577Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.587Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.596Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.606Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.616Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.625Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-27T22:33:50.634Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] error: infinite recursion detected
+2026-05-27T22:33:50.634Z [DEBUG] LSP server plugin:rust-analyzer-lsp:rust-analyzer connection closed
+2026-05-27T22:33:50.634Z [ERROR] LSP server plugin:rust-analyzer-lsp:rust-analyzer crashed with exit code 1
+2026-05-27T22:33:51.283Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:33:51.284Z [DEBUG] [API:timing] first byte after 856ms
+2026-05-27T22:33:52.286Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_0a57f045e1314364986daf1a permissionDecisionMs=1
+2026-05-27T22:33:52.287Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_0a57f045e1314364986daf1a outcome=ok durationMs=1
+2026-05-27T22:33:52.319Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:33:52.319Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:33:52.319Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:33:52.319Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:33:52.321Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:33:52.322Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:33:52.323Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:33:52.323Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:52.323Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:52.323Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:33:52.324Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:33:52.324Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:33:52.324Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:52.324Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:33:52.326Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:33:53.032Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:33:53.032Z [DEBUG] [API:timing] first byte after 708ms
+2026-05-27T22:33:55.416Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_903a9fe527304afd8dc8b320 permissionDecisionMs=0
+2026-05-27T22:33:55.418Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_903a9fe527304afd8dc8b320 outcome=ok durationMs=2
+2026-05-27T22:33:55.419Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:33:55.420Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:33:55.420Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:33:55.420Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:33:55.420Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:33:55.421Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:33:55.422Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:33:55.422Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:55.422Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:55.422Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:33:55.422Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:33:55.423Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:33:55.423Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:55.423Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:33:55.424Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:33:56.143Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:33:56.144Z [DEBUG] [API:timing] first byte after 721ms
+2026-05-27T22:33:56.770Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_870596d4a3594d9081cc1eb7 permissionDecisionMs=0
+2026-05-27T22:33:56.773Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_870596d4a3594d9081cc1eb7 outcome=ok durationMs=3
+2026-05-27T22:33:56.775Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:33:56.775Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:33:56.775Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:33:56.775Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:33:56.776Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:33:56.776Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:33:56.777Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:33:56.778Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:56.778Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:56.778Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:33:56.779Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:33:56.779Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:33:56.780Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:56.780Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:33:56.782Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:33:57.476Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:33:57.476Z [DEBUG] [API:timing] first byte after 697ms
+2026-05-27T22:33:59.123Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_cc00ce7ecdbd4d538e020e9a permissionDecisionMs=0
+2026-05-27T22:33:59.126Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_cc00ce7ecdbd4d538e020e9a outcome=ok durationMs=3
+2026-05-27T22:33:59.128Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:33:59.128Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:33:59.128Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:33:59.128Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:33:59.129Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:33:59.130Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:33:59.131Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:33:59.131Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:59.132Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:59.132Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:33:59.132Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:33:59.132Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:33:59.132Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:33:59.132Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:33:59.134Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:33:59.855Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:33:59.856Z [DEBUG] [API:timing] first byte after 723ms
+2026-05-27T22:34:02.452Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_af1e52b43e39452e8b00ce00 permissionDecisionMs=2
+2026-05-27T22:34:02.453Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:34:02.453Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs.tmp.1830.a5b98cc13e83
+2026-05-27T22:34:02.454Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:34:02.454Z [DEBUG] Temp file written successfully, size: 8733 bytes
+2026-05-27T22:34:02.454Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs.tmp.1830.a5b98cc13e83 to /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs
+2026-05-27T22:34:02.454Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs written atomically
+2026-05-27T22:34:02.454Z [ERROR] LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:02.455Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:02.455Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_af1e52b43e39452e8b00ce00 outcome=ok durationMs=3
+2026-05-27T22:34:02.455Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:02.456Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:34:02.456Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:34:02.457Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:34:02.457Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:34:02.457Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:34:02.457Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:34:02.458Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:34:02.458Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:02.458Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:02.458Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:34:02.458Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:34:02.459Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:34:02.459Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:02.459Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:34:02.460Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:34:03.230Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:34:03.230Z [DEBUG] [API:timing] first byte after 771ms
+2026-05-27T22:34:05.455Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_dc6bcd3b978546d3aea260d9 permissionDecisionMs=0
+2026-05-27T22:34:05.457Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:34:05.457Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs.tmp.1830.7876b18a09bf
+2026-05-27T22:34:05.457Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:34:05.457Z [DEBUG] Temp file written successfully, size: 8777 bytes
+2026-05-27T22:34:05.457Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs.tmp.1830.7876b18a09bf to /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs
+2026-05-27T22:34:05.458Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs written atomically
+2026-05-27T22:34:05.458Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:05.458Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_dc6bcd3b978546d3aea260d9 outcome=ok durationMs=3
+2026-05-27T22:34:05.459Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:05.487Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:34:05.487Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:34:05.487Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:34:05.487Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:34:05.488Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:34:05.488Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:34:05.489Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:34:05.489Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:05.490Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:05.490Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:34:05.490Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:34:05.490Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:34:05.490Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:05.491Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:34:05.492Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:34:06.283Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:34:06.283Z [DEBUG] [API:timing] first byte after 793ms
+2026-05-27T22:34:09.525Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_57c3f24697ea461cb41fcafc permissionDecisionMs=1
+2026-05-27T22:34:09.528Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:34:09.528Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs.tmp.1830.d7057603bf55
+2026-05-27T22:34:09.529Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:34:09.529Z [DEBUG] Temp file written successfully, size: 8893 bytes
+2026-05-27T22:34:09.529Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs.tmp.1830.d7057603bf55 to /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs
+2026-05-27T22:34:09.529Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs written atomically
+2026-05-27T22:34:09.530Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:09.530Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_57c3f24697ea461cb41fcafc outcome=ok durationMs=5
+2026-05-27T22:34:09.530Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:09.532Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:34:09.532Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:34:09.532Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:34:09.532Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:34:09.532Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:34:09.532Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:34:09.533Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:34:09.534Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:09.534Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:09.534Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:34:09.534Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:34:09.534Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:34:09.535Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:09.535Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:34:09.536Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:34:18.157Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:34:18.158Z [DEBUG] [API:timing] first byte after 8623ms
+2026-05-27T22:34:21.158Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_86147ae5f60c4c7c9a0fef5a permissionDecisionMs=2
+2026-05-27T22:34:21.160Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:34:21.160Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs.tmp.1830.19c34f1d8e4d
+2026-05-27T22:34:21.161Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:34:21.161Z [DEBUG] Temp file written successfully, size: 9915 bytes
+2026-05-27T22:34:21.161Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs.tmp.1830.19c34f1d8e4d to /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs
+2026-05-27T22:34:21.162Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs written atomically
+2026-05-27T22:34:21.162Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:21.162Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_86147ae5f60c4c7c9a0fef5a outcome=ok durationMs=4
+2026-05-27T22:34:21.163Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:21.165Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:34:21.165Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:34:21.165Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:34:21.165Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:34:21.166Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:34:21.166Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:34:21.168Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:34:21.168Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:21.169Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:21.169Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:34:21.169Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:34:21.197Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:34:21.197Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:21.197Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:34:21.199Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:34:22.293Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:34:22.293Z [DEBUG] [API:timing] first byte after 1096ms
+2026-05-27T22:34:25.535Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_87501c07522c403b9e5423df permissionDecisionMs=1
+2026-05-27T22:34:25.536Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:34:25.537Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs.tmp.1830.7eb51e018f0a
+2026-05-27T22:34:25.537Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:34:25.538Z [DEBUG] Temp file written successfully, size: 10708 bytes
+2026-05-27T22:34:25.538Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs.tmp.1830.7eb51e018f0a to /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs
+2026-05-27T22:34:25.538Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs written atomically
+2026-05-27T22:34:25.539Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:25.539Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_87501c07522c403b9e5423df outcome=ok durationMs=4
+2026-05-27T22:34:25.539Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/system_settings/plugin.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:25.541Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:34:25.541Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:34:25.541Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:34:25.541Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:34:25.541Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:34:25.542Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:34:25.543Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:34:25.543Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:25.544Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:25.544Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:34:25.544Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:34:25.544Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:34:25.545Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:25.545Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:34:25.546Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:34:26.451Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:34:26.451Z [DEBUG] [API:timing] first byte after 907ms
+2026-05-27T22:34:29.303Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_4e81f9b4542d4afc89c5ace2 permissionDecisionMs=2
+2026-05-27T22:34:29.304Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:34:29.305Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.79f6ffaadf14
+2026-05-27T22:34:29.305Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:34:29.305Z [DEBUG] Temp file written successfully, size: 27484 bytes
+2026-05-27T22:34:29.305Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.79f6ffaadf14 to /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs
+2026-05-27T22:34:29.306Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs written atomically
+2026-05-27T22:34:29.306Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:29.306Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_4e81f9b4542d4afc89c5ace2 outcome=ok durationMs=3
+2026-05-27T22:34:29.307Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:29.308Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:34:29.308Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:34:29.308Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:34:29.308Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:34:29.309Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:34:29.310Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:34:29.313Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:34:29.313Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:29.313Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:29.314Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:34:29.314Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:34:29.314Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:34:29.314Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:29.315Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:34:29.316Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:34:30.078Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:34:30.078Z [DEBUG] [API:timing] first byte after 764ms
+2026-05-27T22:34:31.986Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_81ec80b3bb7e4f82a4b92290 permissionDecisionMs=0
+2026-05-27T22:34:31.988Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:34:31.988Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.cb5f01631953
+2026-05-27T22:34:31.989Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:34:31.989Z [DEBUG] Temp file written successfully, size: 27618 bytes
+2026-05-27T22:34:31.989Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.cb5f01631953 to /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs
+2026-05-27T22:34:31.989Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs written atomically
+2026-05-27T22:34:31.990Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:31.990Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_81ec80b3bb7e4f82a4b92290 outcome=ok durationMs=4
+2026-05-27T22:34:31.990Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:31.992Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:34:31.992Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:34:31.992Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:34:31.992Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:34:31.993Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:34:31.993Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:34:31.994Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:34:31.994Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:31.995Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:31.995Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:34:31.995Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:34:31.995Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:34:31.996Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:31.996Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:34:31.997Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:34:32.863Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:34:32.864Z [DEBUG] [API:timing] first byte after 868ms
+2026-05-27T22:34:36.914Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_60ad1a4476b04cd5839b60c6 permissionDecisionMs=2
+2026-05-27T22:34:36.916Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:34:36.916Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.2336c740f646
+2026-05-27T22:34:36.917Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:34:36.917Z [DEBUG] Temp file written successfully, size: 27722 bytes
+2026-05-27T22:34:36.917Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.2336c740f646 to /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs
+2026-05-27T22:34:36.917Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs written atomically
+2026-05-27T22:34:36.918Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:36.918Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_60ad1a4476b04cd5839b60c6 outcome=ok durationMs=4
+2026-05-27T22:34:36.919Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:36.921Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:34:36.921Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:34:36.921Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:34:36.922Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:34:36.923Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:34:36.924Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:34:36.925Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:34:36.925Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:36.926Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:36.926Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:34:36.926Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:34:36.927Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:34:36.927Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:36.927Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:34:36.929Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:34:37.719Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:34:37.720Z [DEBUG] [API:timing] first byte after 793ms
+2026-05-27T22:34:44.053Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_bc6155b3b87d4f3898ce5215 permissionDecisionMs=0
+2026-05-27T22:34:44.055Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:34:44.055Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.aba4502fbc4b
+2026-05-27T22:34:44.055Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:34:44.055Z [DEBUG] Temp file written successfully, size: 27951 bytes
+2026-05-27T22:34:44.055Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.aba4502fbc4b to /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs
+2026-05-27T22:34:44.056Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs written atomically
+2026-05-27T22:34:44.056Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:44.056Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_bc6155b3b87d4f3898ce5215 outcome=ok durationMs=3
+2026-05-27T22:34:44.056Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:44.059Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:34:44.059Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:34:44.059Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:34:44.059Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:34:44.061Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:34:44.062Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:34:44.063Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:34:44.063Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:44.063Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:44.064Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:34:44.064Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:34:44.064Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:34:44.064Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:44.064Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:34:44.066Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:34:44.953Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:34:44.953Z [DEBUG] [API:timing] first byte after 889ms
+2026-05-27T22:34:56.497Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_a6885e32f6c44739bfb612a6 permissionDecisionMs=2
+2026-05-27T22:34:56.503Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:34:56.503Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.c6b885a5a072
+2026-05-27T22:34:56.504Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:34:56.504Z [DEBUG] Temp file written successfully, size: 34014 bytes
+2026-05-27T22:34:56.504Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.c6b885a5a072 to /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs
+2026-05-27T22:34:56.504Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs written atomically
+2026-05-27T22:34:56.505Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:56.506Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_a6885e32f6c44739bfb612a6 outcome=ok durationMs=9
+2026-05-27T22:34:56.506Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:34:56.508Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:34:56.508Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:34:56.508Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:34:56.508Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:34:56.509Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:34:56.510Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:34:56.512Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:34:56.512Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:56.512Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:56.512Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:34:56.512Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:34:56.535Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:34:56.536Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:34:56.536Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:34:56.537Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:34:58.561Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:34:58.561Z [DEBUG] [API:timing] first byte after 2025ms
+2026-05-27T22:35:01.514Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_042c2470cbd1425b8f5eeed5 permissionDecisionMs=0
+2026-05-27T22:35:01.516Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:35:01.516Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.a0bbe7717410
+2026-05-27T22:35:01.517Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:35:01.517Z [DEBUG] Temp file written successfully, size: 34505 bytes
+2026-05-27T22:35:01.517Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.a0bbe7717410 to /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs
+2026-05-27T22:35:01.517Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs written atomically
+2026-05-27T22:35:01.517Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:35:01.518Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_042c2470cbd1425b8f5eeed5 outcome=ok durationMs=4
+2026-05-27T22:35:01.518Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:35:01.547Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:35:01.547Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:35:01.548Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:35:01.548Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:35:01.548Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:35:01.549Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:35:01.550Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:35:01.550Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:01.550Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:01.551Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:35:01.551Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:35:01.551Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:35:01.551Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:01.551Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:35:01.553Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:35:06.485Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:35:06.485Z [DEBUG] [API:timing] first byte after 4934ms
+2026-05-27T22:35:08.180Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=call_8bd9a1089ac4427090cb94d6 permissionDecisionMs=1
+2026-05-27T22:35:08.199Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=call_8bd9a1089ac4427090cb94d6 outcome=ok durationMs=19
+2026-05-27T22:35:08.208Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:35:08.208Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:35:08.208Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:35:08.208Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:35:08.209Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:35:08.209Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:35:08.210Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:35:08.210Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:08.210Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:08.210Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:35:08.211Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:35:08.211Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:35:08.211Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:08.211Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:35:08.213Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:35:10.084Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:35:10.085Z [DEBUG] [API:timing] first byte after 1874ms
+2026-05-27T22:35:11.270Z [INFO] [Stall] tool_dispatch_start tool=Grep toolUseId=call_0aaea86c57594ed2a11062f1 permissionDecisionMs=1
+2026-05-27T22:35:11.280Z [INFO] [Stall] tool_dispatch_end tool=Grep toolUseId=call_0aaea86c57594ed2a11062f1 outcome=ok durationMs=10
+2026-05-27T22:35:11.301Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:35:11.301Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:35:11.301Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:35:11.302Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:35:11.303Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:35:11.304Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:35:11.305Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:35:11.306Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:11.306Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:11.307Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:35:11.307Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:35:11.307Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:35:11.307Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:11.307Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:35:11.309Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:35:12.046Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:35:12.046Z [DEBUG] [API:timing] first byte after 739ms
+2026-05-27T22:35:12.766Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_a379282484974b0b9afb9043 permissionDecisionMs=0
+2026-05-27T22:35:12.766Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_a379282484974b0b9afb9043 outcome=ok durationMs=0
+2026-05-27T22:35:12.796Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:35:12.796Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:35:12.796Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:35:12.797Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:35:12.797Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:35:12.798Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:35:12.799Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:35:12.799Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:12.799Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:12.799Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:35:12.799Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:35:12.799Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:35:12.799Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:12.799Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:35:12.800Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:35:15.336Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:35:15.337Z [DEBUG] [API:timing] first byte after 2538ms
+2026-05-27T22:35:21.270Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_951177eef81c4678968451d4 permissionDecisionMs=1
+2026-05-27T22:35:21.271Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:35:21.271Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/platform/macos.rs.tmp.1830.d45820bba50e
+2026-05-27T22:35:21.272Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:35:21.272Z [DEBUG] Temp file written successfully, size: 3959 bytes
+2026-05-27T22:35:21.272Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/platform/macos.rs.tmp.1830.d45820bba50e to /Users/fwfx1234/develop/qingqi/src/platform/macos.rs
+2026-05-27T22:35:21.272Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/platform/macos.rs written atomically
+2026-05-27T22:35:21.273Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/platform/macos.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:35:21.273Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_951177eef81c4678968451d4 outcome=ok durationMs=4
+2026-05-27T22:35:21.274Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/platform/macos.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:35:21.299Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:35:21.299Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:35:21.300Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:35:21.300Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:35:21.301Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:35:21.302Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:35:21.304Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:35:21.304Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:21.305Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:21.305Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:35:21.305Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:35:21.306Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:35:21.306Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:21.306Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:35:21.308Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:35:22.094Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:35:22.095Z [DEBUG] [API:timing] first byte after 789ms
+2026-05-27T22:35:23.532Z [INFO] [Stall] tool_dispatch_start tool=Bash toolUseId=call_9cb58d1610b5476c8b588f65 permissionDecisionMs=5
+2026-05-27T22:35:23.533Z [DEBUG] Spawning shell without login (-l flag skipped)
+2026-05-27T22:35:26.422Z [INFO] [Stall] tool_dispatch_end tool=Bash toolUseId=call_9cb58d1610b5476c8b588f65 outcome=ok durationMs=2890
+2026-05-27T22:35:26.423Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:35:26.423Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:35:26.423Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:35:26.423Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:35:26.424Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:35:26.424Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:35:26.424Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:35:26.424Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:26.425Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:26.425Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:35:26.425Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:35:26.425Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:35:26.425Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:26.425Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:35:26.426Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:35:27.318Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:35:27.318Z [DEBUG] [API:timing] first byte after 894ms
+2026-05-27T22:35:29.953Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_8a0d6140667944a4962dcd54 permissionDecisionMs=1
+2026-05-27T22:35:29.955Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:35:29.955Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/platform/macos.rs.tmp.1830.845aafa0f785
+2026-05-27T22:35:29.956Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:35:29.956Z [DEBUG] Temp file written successfully, size: 3966 bytes
+2026-05-27T22:35:29.956Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/platform/macos.rs.tmp.1830.845aafa0f785 to /Users/fwfx1234/develop/qingqi/src/platform/macos.rs
+2026-05-27T22:35:29.956Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/platform/macos.rs written atomically
+2026-05-27T22:35:29.957Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/platform/macos.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:35:29.957Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_8a0d6140667944a4962dcd54 outcome=ok durationMs=4
+2026-05-27T22:35:29.957Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/platform/macos.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:35:29.959Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:35:29.959Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:35:29.959Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:35:29.959Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:35:29.960Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:35:29.960Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:35:29.962Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:35:29.962Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:29.963Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:29.963Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:35:29.963Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:35:29.988Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:35:29.988Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:29.989Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:35:29.990Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:35:30.798Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:35:30.798Z [DEBUG] [API:timing] first byte after 810ms
+2026-05-27T22:35:32.978Z [DEBUG] Edit tool validation error: String to replace not found in file.
+String:     div()
+        .id(format!("diag-open-{label}"))
+2026-05-27T22:35:32.983Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:35:32.984Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:35:32.984Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:35:32.984Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:35:32.985Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:35:32.985Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:35:32.987Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:35:32.987Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:32.987Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:32.987Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:35:32.987Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:35:32.987Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:35:32.988Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:32.988Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:35:32.989Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:35:34.080Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:35:34.080Z [DEBUG] [API:timing] first byte after 1093ms
+2026-05-27T22:35:34.832Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_1ad2c31d1b7b458789f76201 permissionDecisionMs=1
+2026-05-27T22:35:34.835Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_1ad2c31d1b7b458789f76201 outcome=ok durationMs=3
+2026-05-27T22:35:34.869Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:35:34.869Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:35:34.869Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:35:34.869Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:35:34.874Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:35:34.875Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:35:34.876Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:35:34.876Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:34.876Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:34.877Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:35:34.877Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:35:34.877Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:35:34.877Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:34.877Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:35:34.879Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:35:37.184Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:35:37.185Z [DEBUG] [API:timing] first byte after 2308ms
+2026-05-27T22:35:38.921Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_d8b7f2fef08142368786daa1 permissionDecisionMs=0
+2026-05-27T22:35:38.924Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_d8b7f2fef08142368786daa1 outcome=ok durationMs=3
+2026-05-27T22:35:38.928Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:35:38.928Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:35:38.928Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:35:38.928Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:35:38.930Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:35:38.931Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:35:38.933Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:35:38.934Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:38.934Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:38.935Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:35:38.935Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:35:38.935Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:35:38.936Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:38.936Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:35:38.938Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:35:44.166Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:35:44.167Z [DEBUG] [API:timing] first byte after 5231ms
+2026-05-27T22:35:46.322Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_8c6a9727544c4725a8710f6f permissionDecisionMs=1
+2026-05-27T22:35:46.323Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:35:46.324Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.2333bdc432cd
+2026-05-27T22:35:46.324Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:35:46.324Z [DEBUG] Temp file written successfully, size: 34708 bytes
+2026-05-27T22:35:46.324Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.2333bdc432cd to /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs
+2026-05-27T22:35:46.325Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs written atomically
+2026-05-27T22:35:46.326Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:35:46.326Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_8c6a9727544c4725a8710f6f outcome=ok durationMs=5
+2026-05-27T22:35:46.326Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:35:46.330Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:35:46.330Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:35:46.330Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:35:46.330Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:35:46.331Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:35:46.332Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:35:46.333Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:35:46.333Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:46.334Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:46.334Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:35:46.334Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:35:46.334Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:35:46.335Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:46.335Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:35:46.336Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:35:49.951Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:35:49.951Z [DEBUG] [API:timing] first byte after 3616ms
+2026-05-27T22:35:51.126Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_0b22bd6c6bc44b08931e7b31 permissionDecisionMs=0
+2026-05-27T22:35:51.128Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:35:51.128Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.ce116fe4b566
+2026-05-27T22:35:51.129Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:35:51.129Z [DEBUG] Temp file written successfully, size: 34686 bytes
+2026-05-27T22:35:51.129Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.ce116fe4b566 to /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs
+2026-05-27T22:35:51.129Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs written atomically
+2026-05-27T22:35:51.129Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:35:51.129Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_0b22bd6c6bc44b08931e7b31 outcome=ok durationMs=3
+2026-05-27T22:35:51.130Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:35:51.158Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:35:51.158Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:35:51.158Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:35:51.158Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:35:51.159Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:35:51.159Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:35:51.161Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:35:51.161Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:51.162Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:51.162Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:35:51.162Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:35:51.162Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:35:51.162Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:51.162Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:35:51.164Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:35:52.009Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:35:52.010Z [DEBUG] [API:timing] first byte after 847ms
+2026-05-27T22:35:52.782Z [INFO] [Stall] tool_dispatch_start tool=Bash toolUseId=call_c3b3c2ba28754b689f80ad35 permissionDecisionMs=4
+2026-05-27T22:35:52.785Z [DEBUG] Spawning shell without login (-l flag skipped)
+2026-05-27T22:35:54.456Z [INFO] [Stall] tool_dispatch_end tool=Bash toolUseId=call_c3b3c2ba28754b689f80ad35 outcome=ok durationMs=1674
+2026-05-27T22:35:54.457Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:35:54.457Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:35:54.457Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:35:54.457Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:35:54.457Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:35:54.457Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:35:54.458Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:35:54.458Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:54.458Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:54.458Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:35:54.458Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:35:54.458Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:35:54.458Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:54.458Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:35:54.459Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:35:56.889Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:35:56.889Z [DEBUG] [API:timing] first byte after 2431ms
+2026-05-27T22:35:58.831Z [INFO] [Stall] tool_dispatch_start tool=Bash toolUseId=call_f9ee1053e6244c1e9924cae2 permissionDecisionMs=2
+2026-05-27T22:35:58.832Z [DEBUG] Spawning shell without login (-l flag skipped)
+2026-05-27T22:35:59.155Z [INFO] [Stall] tool_dispatch_end tool=Bash toolUseId=call_f9ee1053e6244c1e9924cae2 outcome=ok durationMs=324
+2026-05-27T22:35:59.157Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:35:59.157Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:35:59.157Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:35:59.157Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:35:59.157Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:35:59.158Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:35:59.158Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:35:59.159Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:59.159Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:59.159Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:35:59.159Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:35:59.159Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:35:59.159Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:35:59.160Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:35:59.161Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:36:00.756Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:36:00.757Z [DEBUG] [API:timing] first byte after 1598ms
+2026-05-27T22:36:01.827Z [INFO] [Stall] tool_dispatch_start tool=Bash toolUseId=call_ddbc9827fdfc4a618e47b4c9 permissionDecisionMs=2
+2026-05-27T22:36:01.827Z [DEBUG] Spawning shell without login (-l flag skipped)
+2026-05-27T22:36:02.121Z [INFO] [Stall] tool_dispatch_end tool=Bash toolUseId=call_ddbc9827fdfc4a618e47b4c9 outcome=ok durationMs=294
+2026-05-27T22:36:02.122Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:36:02.122Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:36:02.122Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:36:02.122Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:36:02.122Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:36:02.123Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:36:02.123Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:36:02.123Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:02.123Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:02.123Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:36:02.123Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:36:02.138Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:36:02.138Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:02.138Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:36:02.139Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:36:04.933Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:36:04.933Z [DEBUG] [API:timing] first byte after 2796ms
+2026-05-27T22:36:06.164Z [INFO] [Stall] tool_dispatch_start tool=Bash toolUseId=call_e22a3a6479b54c71924820fe permissionDecisionMs=2
+2026-05-27T22:36:06.166Z [DEBUG] Spawning shell without login (-l flag skipped)
+2026-05-27T22:36:06.457Z [INFO] [Stall] tool_dispatch_end tool=Bash toolUseId=call_e22a3a6479b54c71924820fe outcome=ok durationMs=293
+2026-05-27T22:36:06.458Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:36:06.458Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:36:06.458Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:36:06.459Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:36:06.459Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:36:06.459Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:36:06.460Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:36:06.460Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:06.460Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:06.460Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:36:06.460Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:36:06.460Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:36:06.460Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:06.461Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:36:06.461Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:36:08.515Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:36:08.516Z [DEBUG] [API:timing] first byte after 2055ms
+2026-05-27T22:36:10.765Z [DEBUG] Edit tool validation error: Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identif
+2026-05-27T22:36:10.768Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:36:10.768Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:36:10.768Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:36:10.768Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:36:10.769Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:36:10.770Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:36:10.771Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:36:10.771Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:10.772Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:10.772Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:36:10.772Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:36:10.773Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:36:10.773Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:10.774Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:36:10.775Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:36:12.712Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:36:12.712Z [DEBUG] [API:timing] first byte after 1939ms
+2026-05-27T22:36:14.082Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_9b082606e8ab410b9fec8d00 permissionDecisionMs=1
+2026-05-27T22:36:14.086Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:36:14.086Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.cd720dd76d5e
+2026-05-27T22:36:14.087Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:36:14.087Z [DEBUG] Temp file written successfully, size: 34687 bytes
+2026-05-27T22:36:14.087Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs.tmp.1830.cd720dd76d5e to /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs
+2026-05-27T22:36:14.087Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs written atomically
+2026-05-27T22:36:14.088Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:36:14.089Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_9b082606e8ab410b9fec8d00 outcome=ok durationMs=7
+2026-05-27T22:36:14.089Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/system_settings/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-27T22:36:14.091Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:36:14.091Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:36:14.091Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:36:14.091Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:36:14.092Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:36:14.092Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:36:14.093Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:36:14.094Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:14.094Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:14.095Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:36:14.095Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:36:14.095Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:36:14.095Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:14.095Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:36:14.097Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:36:14.887Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:36:14.888Z [DEBUG] [API:timing] first byte after 792ms
+2026-05-27T22:36:16.755Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_521f72b7215f41c3af786499 permissionDecisionMs=0
+2026-05-27T22:36:16.757Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_521f72b7215f41c3af786499 outcome=ok durationMs=2
+2026-05-27T22:36:16.788Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:36:16.789Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:36:16.789Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:36:16.789Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:36:16.791Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:36:16.792Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:36:16.794Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:36:16.794Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:16.794Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:16.795Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:36:16.795Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:36:16.796Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:36:16.796Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:16.796Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:36:16.798Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:36:18.399Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:36:18.399Z [DEBUG] [API:timing] first byte after 1603ms
+2026-05-27T22:36:19.015Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_d5effba53224403fb3690083 permissionDecisionMs=0
+2026-05-27T22:36:19.016Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_d5effba53224403fb3690083 outcome=ok durationMs=1
+2026-05-27T22:36:19.049Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:36:19.049Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:36:19.049Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:36:19.049Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:36:19.050Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:36:19.050Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:36:19.051Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:36:19.052Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:19.052Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:19.052Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:36:19.052Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:36:19.053Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:36:19.053Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:19.053Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:36:19.055Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:36:19.910Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:36:19.911Z [DEBUG] [API:timing] first byte after 858ms
+2026-05-27T22:36:20.449Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_f617a28709e04b559d5f948f permissionDecisionMs=0
+2026-05-27T22:36:20.451Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_f617a28709e04b559d5f948f outcome=ok durationMs=2
+2026-05-27T22:36:20.457Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:36:20.457Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:36:20.457Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:36:20.457Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:36:20.458Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:36:20.458Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:36:20.460Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:36:20.460Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:20.460Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:20.460Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:36:20.460Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:36:20.460Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:36:20.461Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:20.461Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:36:20.462Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:36:21.592Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:36:21.592Z [DEBUG] [API:timing] first byte after 1131ms
+2026-05-27T22:36:24.719Z [INFO] [Stall] tool_dispatch_start tool=Bash toolUseId=call_95c0750f93134e77b915b755 permissionDecisionMs=2
+2026-05-27T22:36:24.720Z [DEBUG] Spawning shell without login (-l flag skipped)
+2026-05-27T22:36:31.304Z [INFO] [Stall] tool_dispatch_end tool=Bash toolUseId=call_95c0750f93134e77b915b755 outcome=ok durationMs=6585
+2026-05-27T22:36:31.307Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:36:31.308Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:36:31.308Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:36:31.308Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:36:31.309Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:36:31.310Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:36:31.311Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:36:31.312Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:31.312Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:31.313Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:36:31.313Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:36:31.313Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:36:31.313Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:31.314Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:36:31.315Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:36:32.135Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:36:32.135Z [DEBUG] [API:timing] first byte after 822ms
+2026-05-27T22:36:32.918Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_7412bd78f63b4d78bcdb7662 permissionDecisionMs=0
+2026-05-27T22:36:32.920Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_7412bd78f63b4d78bcdb7662 outcome=ok durationMs=2
+2026-05-27T22:36:32.948Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:36:32.948Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:36:32.948Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:36:32.949Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:36:32.949Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:36:32.949Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:36:32.950Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:36:32.950Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:32.951Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:32.951Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:36:32.951Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:36:32.978Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:36:32.979Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:32.979Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:36:32.980Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:36:33.892Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:36:33.893Z [DEBUG] [API:timing] first byte after 914ms
+2026-05-27T22:36:34.271Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_63a6148d05f54c20a7334425 permissionDecisionMs=0
+2026-05-27T22:36:34.275Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_63a6148d05f54c20a7334425 outcome=ok durationMs=4
+2026-05-27T22:36:34.277Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:36:34.278Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:36:34.278Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:36:34.278Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:36:34.278Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:36:34.279Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:36:34.280Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:36:34.280Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:34.281Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:34.281Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:36:34.281Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:36:34.281Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:36:34.281Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:34.281Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:36:34.283Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:36:35.860Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:36:35.861Z [DEBUG] [API:timing] first byte after 1580ms
+2026-05-27T22:36:38.137Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_1b8877733126420bb5136ee3 permissionDecisionMs=1
+2026-05-27T22:36:38.139Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:36:38.139Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/docs/migration-guide.md.tmp.1830.a450869f70c1
+2026-05-27T22:36:38.140Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:36:38.140Z [DEBUG] Temp file written successfully, size: 55663 bytes
+2026-05-27T22:36:38.140Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/docs/migration-guide.md.tmp.1830.a450869f70c1 to /Users/fwfx1234/develop/qingqi/docs/migration-guide.md
+2026-05-27T22:36:38.140Z [DEBUG] File /Users/fwfx1234/develop/qingqi/docs/migration-guide.md written atomically
+2026-05-27T22:36:38.141Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_1b8877733126420bb5136ee3 outcome=ok durationMs=4
+2026-05-27T22:36:38.163Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:36:38.163Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:36:38.163Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:36:38.163Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:36:38.164Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:36:38.164Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:36:38.165Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:36:38.165Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:38.166Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:38.166Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:36:38.166Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:36:38.166Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:36:38.166Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:38.166Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:36:38.168Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:36:39.409Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:36:39.409Z [DEBUG] [API:timing] first byte after 1243ms
+2026-05-27T22:36:49.182Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_bbc8a48b476540a8aabfcd8a permissionDecisionMs=0
+2026-05-27T22:36:49.187Z [DEBUG] Preserving file permissions: 100644
+2026-05-27T22:36:49.187Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/docs/migration-guide.md.tmp.1830.948947f00ba7
+2026-05-27T22:36:49.188Z [DEBUG] Applied original permissions to temp file
+2026-05-27T22:36:49.188Z [DEBUG] Temp file written successfully, size: 56162 bytes
+2026-05-27T22:36:49.188Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/docs/migration-guide.md.tmp.1830.948947f00ba7 to /Users/fwfx1234/develop/qingqi/docs/migration-guide.md
+2026-05-27T22:36:49.188Z [DEBUG] File /Users/fwfx1234/develop/qingqi/docs/migration-guide.md written atomically
+2026-05-27T22:36:49.188Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_bbc8a48b476540a8aabfcd8a outcome=ok durationMs=6
+2026-05-27T22:36:49.190Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:36:49.190Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:36:49.191Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:36:49.191Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:36:49.191Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:36:49.192Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:36:49.194Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:36:49.194Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:49.194Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:49.194Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:36:49.194Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:36:49.195Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:36:49.195Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:49.195Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:36:49.198Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:36:51.029Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:36:51.029Z [DEBUG] [API:timing] first byte after 1834ms
+2026-05-27T22:36:52.082Z [INFO] [Stall] tool_dispatch_start tool=Bash toolUseId=call_d18feb94eafe47d89c78fad4 permissionDecisionMs=2
+2026-05-27T22:36:52.084Z [DEBUG] Spawning shell without login (-l flag skipped)
+2026-05-27T22:36:52.393Z [INFO] [Stall] tool_dispatch_end tool=Bash toolUseId=call_d18feb94eafe47d89c78fad4 outcome=ok durationMs=311
+2026-05-27T22:36:52.396Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:36:52.396Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:36:52.396Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:36:52.396Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:36:52.397Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:36:52.397Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:36:52.398Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:36:52.398Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:52.398Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:52.398Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:36:52.398Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:36:52.398Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:36:52.398Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:52.398Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:36:52.399Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:36:53.526Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:36:53.526Z [DEBUG] [API:timing] first byte after 1128ms
+2026-05-27T22:36:54.928Z [INFO] [Stall] tool_dispatch_start tool=Bash toolUseId=call_7341b00ebd544533a61017da permissionDecisionMs=3
+2026-05-27T22:36:54.929Z [DEBUG] Spawning shell without login (-l flag skipped)
+2026-05-27T22:36:56.180Z [INFO] [Stall] tool_dispatch_end tool=Bash toolUseId=call_7341b00ebd544533a61017da outcome=ok durationMs=1253
+2026-05-27T22:36:56.182Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:36:56.182Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:36:56.182Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:36:56.182Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:36:56.182Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:36:56.183Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:36:56.183Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:36:56.183Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:56.183Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:56.183Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:36:56.183Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:36:56.183Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:36:56.184Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:56.184Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:36:56.184Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:36:58.049Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:36:58.050Z [DEBUG] [API:timing] first byte after 1866ms
+2026-05-27T22:36:59.224Z [INFO] [Stall] tool_dispatch_start tool=Bash toolUseId=call_2f2378e3607146288b94f131 permissionDecisionMs=2
+2026-05-27T22:36:59.230Z [DEBUG] Spawning shell without login (-l flag skipped)
+2026-05-27T22:36:59.536Z [INFO] [Stall] tool_dispatch_end tool=Bash toolUseId=call_2f2378e3607146288b94f131 outcome=ok durationMs=312
+2026-05-27T22:36:59.537Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:36:59.537Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:36:59.537Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:36:59.537Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:36:59.537Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:36:59.538Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:36:59.538Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:36:59.538Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:59.538Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:59.538Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:36:59.538Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:36:59.538Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:36:59.538Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:36:59.538Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:36:59.539Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:37:01.430Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:37:01.430Z [DEBUG] [API:timing] first byte after 1891ms
+2026-05-27T22:37:02.619Z [INFO] [Stall] tool_dispatch_start tool=Bash toolUseId=call_ca18e29ce655458f8ce6c54a permissionDecisionMs=3
+2026-05-27T22:37:02.623Z [DEBUG] Spawning shell without login (-l flag skipped)
+2026-05-27T22:37:02.905Z [INFO] [Stall] tool_dispatch_end tool=Bash toolUseId=call_ca18e29ce655458f8ce6c54a outcome=ok durationMs=286
+2026-05-27T22:37:02.906Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:37:02.906Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:37:02.906Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:37:02.906Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:37:02.907Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:37:02.907Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:37:02.908Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:37:02.908Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:37:02.908Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:37:02.908Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:37:02.908Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:37:02.908Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:37:02.908Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:37:02.908Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:37:02.909Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:37:03.763Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:37:03.763Z [DEBUG] [API:timing] first byte after 855ms
+2026-05-27T22:37:05.085Z [INFO] [Stall] tool_dispatch_start tool=Bash toolUseId=call_85c8aea9e79944e9bdec1070 permissionDecisionMs=2
+2026-05-27T22:37:05.087Z [DEBUG] Spawning shell without login (-l flag skipped)
+2026-05-27T22:37:05.379Z [INFO] [Stall] tool_dispatch_end tool=Bash toolUseId=call_85c8aea9e79944e9bdec1070 outcome=ok durationMs=294
+2026-05-27T22:37:05.380Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:37:05.380Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:37:05.380Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:37:05.381Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:37:05.381Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:37:05.381Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:37:05.381Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:37:05.381Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:37:05.382Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:37:05.382Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:37:05.382Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:37:05.395Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:37:05.395Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:37:05.395Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:37:05.396Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:37:06.623Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:37:06.624Z [DEBUG] [API:timing] first byte after 1229ms
+2026-05-27T22:37:09.069Z [INFO] [Stall] tool_dispatch_start tool=Bash toolUseId=call_d4a1c3bd5f1d4e46bd4b2938 permissionDecisionMs=1
+2026-05-27T22:37:09.071Z [DEBUG] Spawning shell without login (-l flag skipped)
+2026-05-27T22:37:12.311Z [INFO] [Stall] tool_dispatch_end tool=Bash toolUseId=call_d4a1c3bd5f1d4e46bd4b2938 outcome=ok durationMs=3242
+2026-05-27T22:37:12.313Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:37:12.313Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:37:12.313Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:37:12.313Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:37:12.315Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:37:12.315Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:37:12.316Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:37:12.316Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:37:12.317Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:37:12.317Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:37:12.317Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:37:12.317Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:37:12.317Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:37:12.317Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:37:12.319Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:37:15.610Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:37:15.610Z [DEBUG] [API:timing] first byte after 3293ms
+2026-05-27T22:37:16.184Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_7c8483596bf64fc7a1583c3d permissionDecisionMs=1
+2026-05-27T22:37:16.188Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_7c8483596bf64fc7a1583c3d outcome=ok durationMs=4
+2026-05-27T22:37:16.190Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T22:37:16.191Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T22:37:16.191Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T22:37:16.191Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T22:37:16.191Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T22:37:16.192Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T22:37:16.193Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T22:37:16.193Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:37:16.193Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:37:16.194Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T22:37:16.194Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T22:37:16.194Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T22:37:16.194Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:37:16.194Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T22:37:16.196Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T22:37:17.283Z [DEBUG] Stream started - received first chunk
+2026-05-27T22:37:17.283Z [DEBUG] [API:timing] first byte after 1089ms
+2026-05-27T22:37:25.228Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T22:37:25.229Z [ERROR] LSP server plugin:rust-analyzer-lsp:rust-analyzer stop failed: Connection is closed.
+2026-05-27T22:37:25.229Z [DEBUG] LSP client stopped for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-27T22:37:25.231Z [ERROR] LSP server plugin:rust-analyzer-lsp:rust-analyzer initialize failed: Pending response rejected since connection got disposed
+2026-05-27T22:37:25.231Z [ERROR] Failed to stop LSP server 'plugin:rust-analyzer-lsp:rust-analyzer': Connection is closed.
+2026-05-27T22:37:25.231Z [DEBUG] LSP client stopped for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-27T22:37:25.231Z [ERROR] Failed to start LSP server 'plugin:rust-analyzer-lsp:rust-analyzer': Pending response rejected since connection got disposed
+2026-05-27T22:37:25.231Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/platform/shell.rs: Pending response rejected since connection got disposed
+2026-05-27T22:37:25.231Z [ERROR] Failed to stop 1 LSP server(s): plugin:rust-analyzer-lsp:rust-analyzer: Connection is closed.
+2026-05-27T22:37:25.231Z [ERROR] Failed to shutdown LSP server manager: Failed to stop 1 LSP server(s): plugin:rust-analyzer-lsp:rust-analyzer: Connection is closed.
+2026-05-27T22:37:25.232Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/platform/shell.rs: Pending response rejected since connection got disposed
+2026-05-27T22:37:25.232Z [ERROR] Failed to check metrics opt-out status: Auth error: No API key available
+2026-05-27T22:37:25.232Z [DEBUG] Metrics export disabled by organization setting
+2026-05-27T22:37:25.232Z [DEBUG] BigQuery metrics exporter flush complete
+2026-05-27T22:37:25.232Z [DEBUG] BigQuery metrics exporter flush complete
+2026-05-27T22:37:25.232Z [DEBUG] BigQuery metrics exporter shutdown complete
+2026-05-27T22:37:25.233Z [DEBUG] Cleaned up session snapshot: /Users/fwfx1234/.claude/shell-snapshots/snapshot-zsh-1779921162183-s9abgr.sh

@@ -1,0 +1,39 @@
+---
+
+## Summary
+
+### Exact files changed
+
+1. **`src/app/theme_store.rs`** — Removed `#[cfg_attr(not(test), allow(dead_code))]` from `sync_system()`. Added `sync_system_changed()` method (returns `true` when effective dark mode actually changes). Added 5 focused tests: `effective_dark_respects_mode`, `set_mode_immediately_updates_effective_dark`, `sync_system_noop_for_explicit_modes`, `sync_system_changed_returns_false_when_no_change`.
+
+2. **`src/app/background.rs`** — Added `start_theme_poll()` to `BackgroundSupervisor`. Polls every 3 seconds, calls `ThemeStore::sync_system_changed()`, and triggers `cx.refresh_windows()` only when the effective mode actually transitions. Uses existing duplicate-start guard (`mark_started("theme-poll")`).
+
+3. **`src/app/runtime.rs`** — Wired `background.start_theme_poll(Arc::clone(&theme_store), cx)` into app bootstrap, right after `start_event_refresh`.
+
+### system-settings runtime-follow behaviors now real
+
+- **"Follow system" live update**: When `ThemeMode::System` is active, a background task polls macOS `AppleInterfaceStyle` every 3 seconds. If the system appearance changes, the global `DARK_MODE` AtomicBool updates and all windows refresh — no restart needed.
+- **Explicit modes unchanged**: Light/Dark modes continue to work exactly as before (instant, persisted). The poll still runs but `sync_system()` is a no-op when mode is not System.
+- **Theme persistence intact**: `set_mode()` → save JSON → reload on next startup path is unchanged.
+
+### system-settings behaviors still missing
+
+- Native OS notification integration (CFNotificationCenter / NSApplication.adaptedAppearance observer) — currently uses polling via `defaults read`, not a true OS callback.
+- Plugin import directory/ZIP import.
+- Installed plugin management.
+- Clipboard access / file access / screen recording permission detection.
+- Icon cache cleanup and log diagnostics actions.
+
+### Suggested note for `docs/migration-guide.md`
+
+> **system-settings**: `ThemeMode::System` now polls macOS appearance every 3 seconds via `BackgroundSupervisor::start_theme_poll`. When the system switches between light/dark while the app is running, the effective theme updates without restart. Implementation uses `defaults read -g AppleInterfaceStyle` polling, not native CFNotificationCenter — a future batch could replace the poll with an OS notification callback for instant response.
+
+### Exact commands run
+
+```
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo fmt
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo test --bin qingqi
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo check
+```
+
+Results: `cargo fmt` clean, **266/266 tests passed** (0 failures), `cargo check` passed with no new warnings (144 pre-existing warnings, none from our files).

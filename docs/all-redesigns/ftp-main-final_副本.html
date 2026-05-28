@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>远程文件管理器</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: linear-gradient(145deg, #edf2fb 0%, #e2e8f0 40%, #f1f5f9 100%);
+  --glass: rgba(255,255,255,0.65);
+  --glass-border: rgba(255,255,255,0.35);
+  --sidebar-glass: rgba(235,240,248,0.50);
+  --surface: rgba(255,255,255,0.75);
+  --surface-alt: #F5F7FA;
+  --toolbar: #F8FAFC;
+  --border: rgba(0,0,0,0.07);
+  --sep: rgba(0,0,0,0.06);
+  --hover: rgba(0,0,0,0.03);
+  --text: #0f172a;
+  --text-sec: #64748b;
+  --text-faint: #94a3b8;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: rgba(37,99,235,0.10);
+  --success: #22c55e;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --shadow: 0 4px 28px rgba(0,0,0,0.04);
+  --shadow-lg: 0 12px 48px rgba(0,0,0,0.08);
+  --radius: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro", "Inter", "Helvetica Neue", sans-serif;
+  --mono: "SF Mono", "JetBrains Mono", "Menlo", monospace;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* ====== Window ====== */
+.win {
+  width: 1320px; max-width: 100%;
+  background: var(--glass);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  max-height: 95vh;
+}
+
+/* ====== Title Bar ====== */
+.titlebar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.25);
+}
+.lights { display: flex; gap: 7px; }
+.lights span { width: 11px; height: 11px; border-radius: 50%; }
+.l1 { background: #ff5f57; } .l2 { background: #fdbd2e; } .l3 { background: #28c840; }
+.ttl { font-size: 12px; font-weight: 600; color: var(--text); opacity: 0.7; margin-left: 4px; }
+
+/* ====== Main Row ====== */
+.row { display: flex; flex: 1; min-height: 0; }
+
+/* ====== Sidebar ====== */
+.side {
+  width: 220px; flex-shrink: 0;
+  background: var(--sidebar-glass);
+  backdrop-filter: blur(10px);
+  display: flex; flex-direction: column;
+  padding: 10px; gap: 6px;
+}
+.side-hd {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.side-hd label { font-size: 12px; font-weight: 600; letter-spacing: -0.2px; }
+.side-hd .add {
+  width: 26px; height: 26px; border-radius: 7px;
+  border: none; background: var(--accent); color: white;
+  font-size: 15px; cursor: pointer; display: flex;
+  align-items: center; justify-content: center; transition: all 0.15s;
+}
+.side-hd .add:hover { transform: scale(1.05); opacity: 0.9; }
+
+.srch {
+  height: 28px; border-radius: 7px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.5);
+  padding: 0 10px; font-size: 11px; font-family: var(--font);
+  color: var(--text); outline: none; width: 100%;
+}
+.srch::placeholder { color: var(--text-faint); }
+
+.plist { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.plist::-webkit-scrollbar { width: 3px; }
+.plist::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.10); border-radius: 2px; }
+
+.pi {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 9px; border-radius: 7px; cursor: pointer;
+  transition: all 0.12s; min-height: 48px;
+}
+.pi:hover { background: var(--hover); }
+.pi.on { background: var(--accent); }
+.pi.on .pn, .pi.on .ps { color: white; }
+.pi.on .pt { background: rgba(255,255,255,0.24); color: white; }
+.pi.on .pi-icon { background: rgba(255,255,255,0.20); border-color: transparent; }
+
+.pd { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.pd.grn { background: var(--success); }
+.pd.ylw { background: var(--warning); }
+.pd.red { background: var(--danger); }
+.pd.off { background: transparent; }
+
+.pi-icon {
+  width: 26px; height: 26px; border-radius: 6px;
+  background: white; border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; flex-shrink: 0; color: var(--accent);
+}
+
+.pi-info { flex: 1; min-width: 0; }
+.pi-top { display: flex; align-items: center; gap: 5px; margin-bottom: 1px; }
+.pn { font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pt {
+  font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 3px;
+  background: #e2e8f0; color: #475569; white-space: nowrap;
+}
+.ps { font-size: 9px; color: var(--text-sec); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.side-ft { font-size: 10px; color: var(--text-faint); text-align: center; padding-top: 4px; }
+.side-sep { width: 1px; background: var(--sep); }
+
+/* ====== Content ====== */
+.ct { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+/* === Toolbar === */
+.tb {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px; height: 42px;
+  background: var(--toolbar);
+  border-bottom: 1px solid var(--sep);
+}
+.tb-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.tb-name { font-size: 12px; font-weight: 600; white-space: nowrap; }
+.tb-info { flex: 1; font-size: 10px; color: var(--text-sec); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-conn {
+  height: 26px; padding: 0 12px; border-radius: 6px;
+  border: none; cursor: pointer; font-size: 11px;
+  font-family: var(--font); font-weight: 500; white-space: nowrap;
+}
+.tb-conn.ac { background: var(--accent); color: white; }
+.tb-conn.ac:hover { background: var(--accent-hover); }
+.tb-conn.ok { background: transparent; color: var(--success); border: 1px solid var(--border); cursor: default; }
+
+.tb-btn {
+  width: 28px; height: 26px; border-radius: 6px;
+  border: none; background: transparent;
+  font-size: 15px; cursor: pointer; display: flex;
+  align-items: center; justify-content: center; color: var(--text-sec);
+  transition: all 0.12s;
+}
+.tb-btn:hover { background: var(--hover); }
+
+/* === Split === */
+.split { display: flex; flex: 1; min-height: 0; }
+
+/* === File Pane === */
+.fpane {
+  width: 380px; min-width: 260px;
+  background: var(--surface);
+  display: flex; flex-direction: column;
+  border-right: 1px solid var(--sep);
+}
+.fp-hd {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; height: 40px;
+  background: var(--toolbar);
+  border-bottom: 1px solid var(--border);
+}
+.fp-hd .fi { font-size: 13px; }
+.fp-hd .fl { font-size: 11px; font-weight: 600; flex: 1; }
+.fp-hd .sc {
+  width: 24px; height: 24px; border-radius: 6px; border: none;
+  background: transparent; font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; color: var(--text-sec);
+}
+.fp-hd .sc:hover { background: var(--hover); }
+.fp-hd .fc { font-size: 10px; color: var(--text-faint); }
+
+.pbar {
+  display: flex; align-items: center; gap: 5px;
+  padding: 6px 12px; height: 40px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.pbar .nb {
+  width: 28px; height: 26px; border-radius: 6px;
+  border: none; background: transparent; font-size: 14px;
+  cursor: pointer; display: flex; align-items: center;
+  justify-content: center; color: var(--text-sec); flex-shrink: 0;
+  transition: all 0.12s;
+}
+.pbar .nb:hover { background: var(--hover); }
+.pinp {
+  flex: 1; height: 26px; border-radius: 6px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.5);
+  padding: 0 8px; font-size: 11px; font-family: var(--mono);
+  color: var(--text); outline: none;
+}
+.pinp:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+
+.chead {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 12px; height: 24px;
+  background: var(--toolbar);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px; color: var(--text-sec);
+}
+.chead .cs { width: 18px; }
+.chead .cn { flex: 1; }
+.chead .cz { width: 80px; text-align: right; }
+
+.flist { flex: 1; overflow-y: auto; background: var(--surface); }
+.flist::-webkit-scrollbar { width: 4px; }
+.flist::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.07); border-radius: 2px; }
+
+.fr {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 12px; height: 28px;
+  cursor: pointer; font-size: 11px;
+  transition: background 0.08s;
+}
+.fr:nth-child(odd) { background: var(--surface); }
+.fr:nth-child(even) { background: var(--surface-alt); }
+.fr:hover { background: var(--hover); }
+.fr.sel { background: var(--accent-soft); }
+.fr .fi { font-size: 13px; width: 16px; text-align: center; flex-shrink: 0; }
+.fr .fi.d { color: var(--accent); }
+.fr .fi.f { color: var(--text-sec); }
+.fr .fn { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.fr .fz { width: 80px; text-align: right; font-family: var(--mono); font-size: 10px; color: var(--text-sec); }
+
+/* ====== FTP Log ====== */
+.flog {
+  flex: 1; display: flex; flex-direction: column;
+  background: #080b15;
+  min-width: 280px;
+}
+.flog-hd {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; height: 40px;
+  background: var(--toolbar);
+  border-bottom: 1px solid var(--border);
+}
+.flog-hd .fi { font-size: 13px; color: var(--success); }
+.flog-hd .fl { font-size: 11px; font-weight: 600; }
+.flog-hd .fc { font-size: 10px; color: var(--text-faint); }
+.flog-hd .spr { flex: 1; }
+.flog-hd .clr {
+  height: 26px; padding: 0 10px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface);
+  font-size: 11px; cursor: pointer; font-family: var(--font);
+  color: var(--text-sec); display: flex; align-items: center; gap: 4px;
+}
+.flog-hd .clr:hover { background: var(--hover); }
+
+.flog-bd {
+  flex: 1; overflow-y: auto; padding: 2px 0;
+  font-family: var(--mono); font-size: 11px;
+}
+.flog-bd::-webkit-scrollbar { width: 4px; }
+.flog-bd::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 2px; }
+
+.fl {
+  display: flex; align-items: center; gap: 8px;
+  padding: 2px 14px; min-height: 22px;
+  line-height: 1.6;
+  border-bottom: 1px solid rgba(255,255,255,0.02);
+}
+.fl .ts {
+  color: rgba(255,255,255,0.18);
+  font-size: 9px; width: 68px; flex-shrink: 0;
+}
+.fl .dr { color: rgba(255,255,255,0.20); font-size: 10px; width: 14px; text-align: center; }
+.fl .cmd { color: #7cb7ff; }
+.fl .rsp { color: #9fdf9f; }
+.fl .inf { color: #b0b8c8; }
+.fl .err { color: var(--danger); }
+.fl .sep-line { flex: 1; height: 1px; background: rgba(255,255,255,0.04); margin: 4px 0; }
+
+/* ====== Transfer Bar ====== */
+.tbar {
+  border-top: 1px solid var(--sep);
+  background: var(--surface);
+}
+.tbar-hd {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px; height: 34px;
+  background: var(--toolbar); cursor: pointer; user-select: none;
+}
+.tbar-hd .ar { font-size: 9px; color: var(--text-sec); }
+.tbar-hd .lb { font-size: 11px; font-weight: 600; }
+.tbar-hd .ct { font-size: 11px; color: var(--text-faint); }
+.tbar-hd .spr { flex: 1; }
+.tbar-hd .clr {
+  height: 26px; padding: 0 8px; border-radius: 6px;
+  border: none; background: transparent; font-size: 10px;
+  color: var(--text-sec); cursor: pointer; font-family: var(--font);
+  display: flex; align-items: center; gap: 4px;
+}
+.tbar-hd .clr:hover { background: var(--hover); }
+
+.tcol {
+  display: flex; align-items: center; gap: 8px;
+  padding: 1px 14px; height: 20px;
+  font-size: 9px; color: var(--text-faint);
+  border-bottom: 1px solid var(--sep);
+}
+.tcol .cs { width: 16px; }
+.tcol .c1 { width: 120px; }
+.tcol .c2 { flex: 1; }
+.tcol .c3 { flex: 1; }
+.tcol .c4 { width: 150px; }
+.tcol .c5 { width: 50px; }
+
+.tlist { max-height: 130px; overflow-y: auto; }
+.tlist::-webkit-scrollbar { width: 3px; }
+.tlist::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.07); border-radius: 2px; }
+
+.tr {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 14px; height: 30px; font-size: 10px;
+}
+.tr:nth-child(odd) { background: var(--surface); }
+.tr:nth-child(even) { background: var(--surface-alt); }
+.tr .di { font-size: 11px; width: 16px; text-align: center; }
+.tr .di.u { color: var(--success); }
+.tr .di.d { color: var(--accent); }
+.tr .di.v { color: var(--success); }
+.tr .fn {
+  width: 120px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; font-weight: 500;
+}
+.tr .lp { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-sec); }
+.tr .rp { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-sec); }
+.tr .px {
+  width: 150px; display: flex; align-items: center; gap: 5px;
+}
+.tr .px .bk { flex: 1; height: 5px; border-radius: 3px; background: rgba(0,0,0,0.05); overflow: hidden; }
+.tr .px .bk .fl { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.tr .px .bk .fl.a { background: var(--accent); }
+.tr .px .bk .fl.v { background: var(--success); }
+.tr .px .bk .fl.e { background: var(--danger); }
+.tr .px .pc { width: 30px; text-align: right; font-family: var(--mono); font-size: 9px; color: var(--text-sec); }
+.tr .st { width: 50px; text-align: right; font-size: 10px; }
+.tr .st.ok { color: var(--success); }
+.tr .st.err { color: var(--danger); }
+.tr .cx { width: 18px; display: flex; align-items: center; justify-content: center; }
+.tr .cx button {
+  width: 18px; height: 18px; border-radius: 3px;
+  border: none; background: transparent; font-size: 9px;
+  color: var(--text-faint); cursor: pointer;
+}
+.tr .cx button:hover { background: rgba(0,0,0,0.04); color: var(--text); }
+
+/* ====== Context Menu ====== */
+.ctx {
+  position: fixed; width: 190px;
+  background: white; border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: var(--shadow-lg);
+  padding: 4px; z-index: 50; display: none;
+}
+.ctx .mi {
+  padding: 6px 9px; font-size: 11px; border-radius: 5px;
+  cursor: pointer; color: var(--text); display: flex; align-items: center; gap: 6px;
+}
+.ctx .mi:hover { background: var(--hover); }
+.ctx .mi.dng { color: var(--danger); }
+.ctx .mi.dng:hover { background: rgba(239,68,68,0.08); }
+.ctx .mi.dis { opacity: 0.35; cursor: default; }
+.ctx .mi.dis:hover { background: transparent; }
+.ctx .sp { height: 1px; background: var(--sep); margin: 3px 0; }
+
+/* ====== Profile Dialog ====== */
+.dlg-bg {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.18);
+  backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.dlg {
+  width: 580px; max-height: 82vh;
+  background: white; border-radius: 14px;
+  box-shadow: var(--shadow-lg); overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.dlg-hd {
+  padding: 16px 24px 12px;
+}
+.dlg-hd h3 { font-size: 16px; font-weight: 600; }
+.dlg-hd p { font-size: 11px; color: var(--text-sec); margin-top: 2px; }
+
+.dlg-bd {
+  flex: 1; overflow-y: auto; padding: 0 20px 8px;
+}
+.dlg-bd::-webkit-scrollbar { width: 4px; }
+.dlg-bd::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.07); border-radius: 2px; }
+
+.fs { margin-bottom: 16px; }
+.fs-ttl { font-size: 10px; font-weight: 600; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 5px; padding-left: 2px; }
+.fs-card { background: white; border: 1px solid #e2e8f0; border-radius: 9px; overflow: hidden; }
+
+.frl {
+  display: flex; align-items: center; gap: 12px;
+  min-height: 36px;
+}
+.frl label {
+  width: 100px; font-size: 11px; color: var(--text);
+  text-align: right; flex-shrink: 0;
+  padding: 5px 0 5px 12px;
+}
+.frl input, .frl select {
+  flex: 1; height: 28px; border-radius: 6px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.5);
+  padding: 0 8px; font-size: 11px; font-family: var(--font);
+  color: var(--text); outline: none;
+}
+.frl input:focus, .frl select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.frl input::placeholder { color: var(--text-faint); }
+.frl .pw { max-width: 110px; }
+.frl .sel-w { max-width: 130px; }
+.frl .pk-b { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border); background: white; font-size: 11px; cursor: pointer; font-family: var(--font); white-space: nowrap; flex-shrink: 0; }
+.frl .pk-b:hover { background: var(--hover); }
+.fd { height: 1px; background: var(--sep); margin-left: 12px; }
+
+/* Toggle */
+.tog-row { display: flex; align-items: center; gap: 12px; min-height: 36px; }
+.tog-row label { width: 100px; font-size: 11px; color: var(--text); text-align: right; flex-shrink: 0; padding: 5px 0 5px 12px; }
+.tog {
+  width: 34px; height: 19px; border-radius: 10px;
+  background: rgba(0,0,0,0.10); cursor: pointer; position: relative; transition: background 0.2s;
+}
+.tog.on { background: var(--accent); }
+.tog .kb { position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.12); transition: left 0.2s; }
+.tog.on .kb { left: 17px; }
+
+/* Advanced toggle */
+.adv-tog {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 8px;
+  background: #f8fafc; border: 1px solid var(--sep);
+  cursor: pointer; margin-bottom: 16px;
+}
+.adv-tog .ar { font-size: 10px; color: var(--text-sec); }
+.adv-tog .lb { flex: 1; font-size: 11px; font-weight: 500; }
+.adv-tog .ht { font-size: 10px; color: var(--text-faint); }
+.adv-tog:hover { background: var(--hover); }
+
+.dlg-ft {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 24px;
+  background: #f8fafc;
+  border-top: 1px solid var(--sep);
+}
+.dlg-ft .nt { font-size: 10px; color: var(--text-faint); }
+.dlg-ft .as { display: flex; gap: 8px; }
+.dlg-ft .as button { height: 30px; padding: 0 16px; border-radius: 7px; font-size: 11px; font-family: var(--font); font-weight: 500; cursor: pointer; }
+.dlg-ft .cc { background: white; border: 1px solid var(--border); color: var(--text-sec); }
+.dlg-ft .cc:hover { background: var(--hover); }
+.dlg-ft .sv { background: var(--accent); border: none; color: white; }
+.dlg-ft .sv:hover { background: var(--accent-hover); }
+</style>
+</head>
+<body>
+
+<div class="win">
+
+  <!-- ====== Title Bar ====== -->
+  <div class="titlebar">
+    <div class="lights"><span class="l1"></span><span class="l2"></span><span class="l3"></span></div>
+    <div class="ttl">📂 远程文件管理器</div>
+  </div>
+
+  <!-- ====== Main Row ====== -->
+  <div class="row">
+
+    <!-- ====== Sidebar ====== -->
+    <div class="side">
+      <div class="side-hd">
+        <label>连接管理</label>
+        <button class="add">+</button>
+      </div>
+      <input class="srch" type="text" placeholder="搜索连接">
+
+      <div class="plist">
+        <div class="pi on">
+          <div class="pd grn"></div>
+          <div class="pi-icon">🗄</div>
+          <div class="pi-info">
+            <div class="pi-top">
+              <span class="pn">文件服务器 A</span>
+              <span class="pt">FTP</span>
+            </div>
+            <div class="ps">user@192.168.1.100:21</div>
+          </div>
+        </div>
+        <div class="pi">
+          <div class="pd grn"></div>
+          <div class="pi-icon">☁</div>
+          <div class="pi-info">
+            <div class="pi-top">
+              <span class="pn">生产服务器</span>
+              <span class="pt">SFTP</span>
+            </div>
+            <div class="ps">root@47.92.xx.xx:22</div>
+          </div>
+        </div>
+        <div class="pi">
+          <div class="pd ylw"></div>
+          <div class="pi-icon">🔒</div>
+          <div class="pi-info">
+            <div class="pi-top">
+              <span class="pn">安全网关</span>
+              <span class="pt">FTPS</span>
+            </div>
+            <div class="ps">admin@ftps.inc:990</div>
+          </div>
+        </div>
+        <div class="pi">
+          <div class="pd red"></div>
+          <div class="pi-icon">📦</div>
+          <div class="pi-info">
+            <div class="pi-top">
+              <span class="pn">旧备份服务器</span>
+              <span class="pt">FTP</span>
+            </div>
+            <div class="ps">backup@192.168.1.200:21</div>
+          </div>
+        </div>
+        <div class="pi">
+          <div class="pd off"></div>
+          <div class="pi-icon">🧪</div>
+          <div class="pi-info">
+            <div class="pi-top">
+              <span class="pn">测试环境</span>
+              <span class="pt">SFTP</span>
+            </div>
+            <div class="ps">deploy@10.0.1.100:2222</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="side-ft">5 个连接 · 右键菜单</div>
+    </div>
+
+    <div class="side-sep"></div>
+
+    <!-- ====== Content ====== -->
+    <div class="ct">
+
+      <!-- Toolbar -->
+      <div class="tb">
+        <div class="tb-dot" style="background:var(--success)"></div>
+        <span class="tb-name">文件服务器 A</span>
+        <span class="tb-info">user@192.168.1.100:21 · 已连接</span>
+        <button class="tb-conn ok" disabled>已连接</button>
+        <button class="tb-btn" title="刷新">↻</button>
+        <button class="tb-btn" title="断开" style="color:var(--danger)">⏻</button>
+      </div>
+
+      <!-- Split -->
+      <div class="split">
+
+        <!-- Remote File Pane -->
+        <div class="fpane">
+          <div class="fp-hd">
+            <span class="fi" style="color:var(--accent)">📁</span>
+            <span class="fl">远程目录</span>
+            <button class="sc" title="同步至终端">↺</button>
+            <span class="fc">8 项</span>
+          </div>
+
+          <div class="pbar">
+            <button class="nb" title="返回上级">↑</button>
+            <button class="nb" title="家目录">⌂</button>
+            <input class="pinp" type="text" value="/var/www/html">
+            <button class="nb" title="跳转">→</button>
+            <button class="nb" title="上传文件">↑</button>
+          </div>
+
+          <div class="chead">
+            <span class="cs"></span>
+            <span class="cn">名称</span>
+            <span class="cz">大小</span>
+          </div>
+
+          <div class="flist">
+            <div class="fr">
+              <span class="fi d">📁</span>
+              <span class="fn">assets</span>
+              <span class="fz">-</span>
+            </div>
+            <div class="fr">
+              <span class="fi d">📁</span>
+              <span class="fn">css</span>
+              <span class="fz">-</span>
+            </div>
+            <div class="fr">
+              <span class="fi d">📁</span>
+              <span class="fn">js</span>
+              <span class="fz">-</span>
+            </div>
+            <div class="fr sel">
+              <span class="fi f">📄</span>
+              <span class="fn">index.html</span>
+              <span class="fz">12.4 KB</span>
+            </div>
+            <div class="fr">
+              <span class="fi f">📄</span>
+              <span class="fn">robots.txt</span>
+              <span class="fz">0.2 KB</span>
+            </div>
+            <div class="fr">
+              <span class="fi f">📄</span>
+              <span class="fn">sitemap.xml</span>
+              <span class="fz">3.5 KB</span>
+            </div>
+            <div class="fr">
+              <span class="fi f">📄</span>
+              <span class="fn">.htaccess</span>
+              <span class="fz">1.1 KB</span>
+            </div>
+            <div class="fr">
+              <span class="fi f">📄</span>
+              <span class="fn">config.php</span>
+              <span class="fz">2.7 KB</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- FTP Log Pane -->
+        <div class="flog">
+          <div class="flog-hd">
+            <span class="fi">⌨</span>
+            <span class="fl">FTP 命令日志</span>
+            <span class="fc">(24 条)</span>
+            <div class="spr"></div>
+            <button class="clr">✕ 清空</button>
+          </div>
+
+          <div class="flog-bd">
+            <div class="fl"><span class="ts">14:22:35</span><span class="inf">▶ Connecting to 192.168.1.100:21</span></div>
+            <div class="fl"><span class="ts">14:22:35</span><span class="rsp">220 Welcome to FileZilla FTP</span></div>
+            <div class="fl"><span class="ts">14:22:35</span><span class="dr">›</span><span class="cmd">USER user</span></div>
+            <div class="fl"><span class="ts">14:22:35</span><span class="dr">‹</span><span class="rsp">331 Password required for user</span></div>
+            <div class="fl"><span class="ts">14:22:35</span><span class="dr">›</span><span class="cmd">PASS ******</span></div>
+            <div class="fl"><span class="ts">14:22:35</span><span class="dr">‹</span><span class="rsp" style="color:var(--success)">230 Login successful</span></div>
+            <div class="fl"><span class="ts">14:22:35</span><span class="dr">›</span><span class="cmd">TYPE I</span></div>
+            <div class="fl"><span class="ts">14:22:35</span><span class="dr">‹</span><span class="rsp">200 Type set to I</span></div>
+            <div class="fl"><div class="sep-line"></div></div>
+            <div class="fl"><span class="ts">14:22:36</span><span class="dr">›</span><span class="cmd">PWD</span></div>
+            <div class="fl"><span class="ts">14:22:36</span><span class="dr">‹</span><span class="rsp">257 "/" is current directory</span></div>
+            <div class="fl"><span class="ts">14:22:36</span><span class="dr">›</span><span class="cmd">PASV</span></div>
+            <div class="fl"><span class="ts">14:22:36</span><span class="dr">‹</span><span class="rsp">227 Entering Passive Mode (192,168,1,100,200,45)</span></div>
+            <div class="fl"><span class="ts">14:22:36</span><span class="dr">›</span><span class="cmd">LIST</span></div>
+            <div class="fl"><span class="ts">14:22:36</span><span class="dr">‹</span><span class="rsp">150 Opening data connection</span></div>
+            <div class="fl"><span class="ts">14:22:37</span><span class="dr">‹</span><span class="rsp">226 Directory send OK (8 items)</span></div>
+            <div class="fl"><div class="sep-line"></div></div>
+            <div class="fl"><span class="ts">14:23:10</span><span class="dr">›</span><span class="cmd">CWD /var/www/html</span></div>
+            <div class="fl"><span class="ts">14:23:10</span><span class="dr">‹</span><span class="rsp">250 CWD successful. "/var/www/html"</span></div>
+            <div class="fl"><div class="sep-line"></div></div>
+            <div class="fl"><span class="ts">14:23:15</span><span class="dr">›</span><span class="cmd">PASV</span></div>
+            <div class="fl"><span class="ts">14:23:15</span><span class="dr">‹</span><span class="rsp">227 Entering Passive Mode (...)</span></div>
+            <div class="fl"><span class="ts">14:23:15</span><span class="dr">›</span><span class="cmd">SIZE index.html</span></div>
+            <div class="fl"><span class="ts">14:23:15</span><span class="dr">‹</span><span class="rsp">213 12704</span></div>
+            <div class="fl"><span class="ts">14:23:15</span><span class="dr">›</span><span class="cmd">RETR index.html</span></div>
+            <div class="fl"><span class="ts">14:23:15</span><span class="dr">‹</span><span class="rsp">150 Opening data connection</span></div>
+            <div class="fl"><span class="ts">14:23:15</span><span class="dr">‹</span><span class="rsp" style="color:var(--success)">226 Transfer complete (12.4 KB/s)</span></div>
+            <div class="fl"><span class="ts">14:23:30</span><span class="dr">›</span><span class="cmd">DELE config.php</span></div>
+            <div class="fl"><span class="ts">14:23:30</span><span class="dr">‹</span><span class="err">550 Permission denied</span></div>
+            <div class="fl"><span class="ts"></span><span class="inf" style="color:rgba(255,255,255,0.15);font-size:9px">--- end 24 entries ---</span></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Transfer Queue -->
+      <div class="tbar">
+        <div class="tbar-hd">
+          <span class="ar">▼</span>
+          <span class="lb">传输队列</span>
+          <span class="ct">(3)</span>
+          <div class="spr"></div>
+          <button class="clr">✕ 清理已完成</button>
+        </div>
+        <div class="tcol">
+          <span class="cs"></span>
+          <span class="c1">文件</span>
+          <span class="c2">本地路径</span>
+          <span class="c3">远程路径</span>
+          <span class="c4">进度</span>
+          <span class="c5">状态</span>
+        </div>
+        <div class="tlist">
+          <div class="tr">
+            <span class="di d">↓</span>
+            <span class="fn">index.html</span>
+            <span class="lp">~/Downloads/server/</span>
+            <span class="rp">/var/www/html/</span>
+            <div class="px"><div class="bk"><div class="fl v" style="width:100%"></div></div><span class="pc">100%</span></div>
+            <span class="st ok">完成</span>
+            <div class="cx"></div>
+          </div>
+          <div class="tr">
+            <span class="di u">↑</span>
+            <span class="fn">logo.svg</span>
+            <span class="lp">~/Projects/website/assets/</span>
+            <span class="rp">/var/www/html/assets/</span>
+            <div class="px"><div class="bk"><div class="fl a" style="width:67%"></div></div><span class="pc">67%</span></div>
+            <span class="st">67%</span>
+            <div class="cx"><button>✕</button></div>
+          </div>
+          <div class="tr">
+            <span class="di v">✓</span>
+            <span class="fn">robots.txt</span>
+            <span class="lp">~/Downloads/server/</span>
+            <span class="rp">/var/www/html/</span>
+            <div class="px"><div class="bk"><div class="fl v" style="width:100%"></div></div><span class="pc">100%</span></div>
+            <span class="st ok">完成</span>
+            <div class="cx"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ====== Context Menus ====== -->
+<div class="ctx" id="profileMenu">
+  <div class="mi">🔌 连接</div>
+  <div class="mi dis">🔄 切换至此会话</div>
+  <div class="mi dng">⏏ 断开此连接</div>
+  <div class="sp"></div>
+  <div class="mi">✏ 编辑…</div>
+  <div class="mi">📋 复制连接</div>
+  <div class="sp"></div>
+  <div class="mi dng">🗑 删除</div>
+</div>
+
+<div class="ctx" id="fileMenu">
+  <div class="mi">📂 打开目录</div>
+  <div class="mi">⬇ 下载到默认目录</div>
+  <div class="mi">⬇ 下载到…</div>
+  <div class="sp"></div>
+  <div class="mi">📁 新建目录…</div>
+  <div class="mi">✏ 重命名…</div>
+  <div class="mi">↻ 刷新</div>
+  <div class="sp"></div>
+  <div class="mi dng">🗑 删除</div>
+</div>
+
+</body>
+</html>

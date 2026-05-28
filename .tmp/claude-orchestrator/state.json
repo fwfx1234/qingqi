@@ -1,0 +1,39 @@
+{
+  "createdAt": "2026-05-27T13:55:50+00:00",
+  "updatedAt": "2026-05-27T15:48:26+00:00",
+  "queueFile": "/Users/fwfx1234/develop/qingqi/docs/claude-task-queue.json",
+  "workdir": "/Users/fwfx1234/develop/qingqi",
+  "currentConcurrency": 1,
+  "successStreak": 1,
+  "rateLimitEvents": 4,
+  "tasks": {
+    "system-settings-b1": {
+      "title": "System settings parity batch 1",
+      "status": "done",
+      "attempts": 5,
+      "lastUpdatedAt": "2026-05-27T15:15:10+00:00",
+      "lastError": null,
+      "lastLogs": "/Users/fwfx1234/develop/qingqi/.tmp/claude-orchestrator/logs/system-settings-b1-005-xiaomi"
+    },
+    "ftp-sftp-ssh-register": {
+      "title": "Register FTP/SFTP/SSH runtime if current implementation is stable",
+      "status": "done",
+      "attempts": 1,
+      "lastUpdatedAt": "2026-05-27T15:24:24+00:00",
+      "lastError": null,
+      "lastLogs": "/Users/fwfx1234/develop/qingqi/.tmp/claude-orchestrator/logs/ftp-sftp-ssh-register-001-xiaomi"
+    },
+    "http-capture-foundation": {
+      "title": "Replace HTTP capture placeholder with store-backed functional v1 UI",
+      "status": "done",
+      "attempts": 2,
+      "lastUpdatedAt": "2026-05-27T15:48:25+00:00",
+      "lastError": null,
+      "lastLogs": "/Users/fwfx1234/develop/qingqi/.tmp/claude-orchestrator/logs/http-capture-foundation-002-deepseek"
+    }
+  },
+  "lastRateLimitAt": "2026-05-27T15:34:40+00:00",
+  "lastRateLimitReason": "task-429:xiaomi",
+  "lastRateLimitLogs": "/Users/fwfx1234/develop/qingqi/.tmp/claude-orchestrator/logs/http-capture-foundation-001-xiaomi",
+  "providerCursor": 1
+}

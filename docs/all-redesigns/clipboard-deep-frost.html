@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>剪贴板 · Deep Frost 设计</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&family=JetBrains+Mono:wght@400;500&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 30px 16px 60px;
+    background: linear-gradient(135deg, #0b0b1a 0%, #15152e 50%, #1a0a24 100%);
+  }
+  body.light {
+    background: linear-gradient(135deg, #e8e4f4 0%, #f0ecfa 50%, #f4eaf0 100%);
+  }
+
+  .page-header {
+    max-width: 900px; width: 100%; margin-bottom: 36px; padding: 0 16px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .page-header h1 {
+    font-size: 1.4rem; font-weight: 700;
+    background: linear-gradient(135deg, #c8b8ff, #8888ff);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .page-header .sub { color: #55557a; font-size: 0.8rem; }
+  .body.light .page-header .sub { color: #8888aa; }
+  .theme-toggle {
+    padding: 6px 16px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04); color: #8888aa; font-size: 12px;
+    cursor: pointer; font-family: inherit; transition: 0.2s;
+  }
+  .theme-toggle:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.12); }
+  .body.light .theme-toggle { border-color: rgba(0,0,0,0.08); background: rgba(0,0,0,0.03); color: #7777aa; }
+  .body.light .theme-toggle:hover { background: rgba(0,0,0,0.06); }
+
+  /* --- Showcase --- */
+  .showcase {
+    max-width: 900px; width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 28px;
+  }
+
+  /* ============== both themes ============== */
+  .frame {
+    position: relative; border-radius: 24px;
+    padding: 48px 20px 32px; display: flex; justify-content: center;
+    min-height: 560px; overflow: hidden;
+  }
+  .frame .badge {
+    position: absolute; top: 14px; left: 18px;
+    font-size: 9px; text-transform: uppercase;
+    letter-spacing: 1.5px; font-weight: 600; opacity: 0.5;
+  }
+
+  .clip {
+    width: 100%; max-width: 400px; border-radius: 20px; overflow: hidden;
+    position: relative;
+  }
+  .clip::after {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 100%);
+    pointer-events: none; border-radius: 20px 20px 0 0;
+    z-index: 2;
+  }
+
+  /* DARK */
+  .dk {
+    background: linear-gradient(135deg, #0b0b1a 0%, #15152e 50%, #1a0a24 100%),
+                repeating-linear-gradient(45deg, transparent, transparent 40px, rgba(120,80,255,0.02) 40px, rgba(120,80,255,0.02) 41px);
+  }
+  .dk .clip {
+    background: rgba(15, 15, 35, 0.3);
+    backdrop-filter: blur(50px) saturate(1.8);
+    -webkit-backdrop-filter: blur(50px) saturate(1.8);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 20px 100px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  .dk .head {
+    display: flex; align-items: center; padding: 16px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.04); gap: 10px;
+    position: relative; z-index: 3;
+  }
+  .dk .head .title { font-size: 13px; font-weight: 600; color: #ddd8ec; }
+  .dk .head .count {
+    font-size: 10px; padding: 1px 8px; border-radius: 20px;
+    background: rgba(120,80,255,0.08); color: #8888bb;
+  }
+  .dk .head .search {
+    margin-left: auto; display: flex; align-items: center;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 8px; padding: 0 10px; gap: 6px;
+  }
+  .dk .head .search input {
+    background: none; border: none; outline: none; color: #ddd;
+    font-size: 12px; font-family: inherit; padding: 5px 0; width: 110px;
+  }
+  .dk .head .search input::placeholder { color: #55557a; }
+  .dk .head .search .si { color: #55557a; font-size: 12px; }
+
+  .dk .filt {
+    display: flex; gap: 4px; padding: 10px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    position: relative; z-index: 3;
+  }
+  .dk .filt .ch {
+    padding: 3px 12px; border-radius: 20px; border: none;
+    background: rgba(255,255,255,0.03); color: #7777aa;
+    font-size: 11px; cursor: pointer; transition: 0.15s; font-family: inherit;
+  }
+  .dk .filt .ch.s { background: rgba(120,80,255,0.08); color: #b8a8ff; }
+  .dk .filt .ch:hover:not(.s) { background: rgba(255,255,255,0.05); }
+
+  .dk .lst { padding: 4px 8px 10px; position: relative; z-index: 3; max-height: 390px; overflow-y: auto; }
+  .dk .lst::-webkit-scrollbar { width: 3px; }
+  .dk .lst::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.04); border-radius: 3px; }
+
+  .dk .it {
+    display: flex; align-items: flex-start; padding: 10px 10px; margin: 2px 0;
+    border-radius: 10px; cursor: default; transition: 0.15s; gap: 10px;
+  }
+  .dk .it.s { background: rgba(120, 80, 255, 0.08); border: 1px solid rgba(120,80,255,0.12); }
+  .dk .it:hover:not(.s) { background: rgba(255,255,255,0.02); }
+  .dk .it .ico {
+    width: 30px; height: 30px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; flex-shrink: 0; margin-top: 1px;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.04);
+  }
+  .dk .it.s .ico { background: rgba(120,80,255,0.1); border-color: rgba(120,80,255,0.12); }
+  .dk .it .tx { flex: 1; min-width: 0; }
+  .dk .it .tx .t {
+    font-size: 12px; color: #d8d0e8; line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .dk .it .tx .m {
+    font-size: 10px; color: #55557a; margin-top: 3px;
+  }
+  .dk .it .pn { font-size: 12px; color: #55557a; opacity: 0; transition: 0.15s; padding: 2px; cursor: pointer; }
+  .dk .it:hover .pn { opacity: 0.4; }
+  .dk .it .pn:hover { opacity: 1; color: #ffcc44; }
+
+  /* LIGHT */
+  .lt {
+    background: linear-gradient(135deg, #e8e4f4 0%, #f0ecfa 50%, #f4eaf0 100%),
+                repeating-linear-gradient(45deg, transparent, transparent 40px, rgba(120,80,255,0.03) 40px, rgba(120,80,255,0.03) 41px);
+  }
+  .lt .clip {
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(50px) saturate(1.8);
+    -webkit-backdrop-filter: blur(50px) saturate(1.8);
+    border: 1px solid rgba(255,255,255,0.5);
+    box-shadow: 0 12px 80px rgba(50, 30, 120, 0.06);
+  }
+
+  .lt .head {
+    display: flex; align-items: center; padding: 16px 16px;
+    border-bottom: 1px solid rgba(0,0,0,0.04); gap: 10px;
+    position: relative; z-index: 3;
+  }
+  .lt .head .title { font-size: 13px; font-weight: 600; color: #333348; }
+  .lt .head .count {
+    font-size: 10px; padding: 1px 8px; border-radius: 20px;
+    background: rgba(120,80,255,0.05); color: #8888aa;
+  }
+  .lt .head .search {
+    margin-left: auto; display: flex; align-items: center;
+    background: rgba(0,0,0,0.02); border: 1px solid rgba(0,0,0,0.04);
+    border-radius: 8px; padding: 0 10px; gap: 6px;
+  }
+  .lt .head .search input {
+    background: none; border: none; outline: none; color: #333;
+    font-size: 12px; font-family: inherit; padding: 5px 0; width: 110px;
+  }
+  .lt .head .search input::placeholder { color: #9999bb; }
+  .lt .head .search .si { color: #9999bb; font-size: 12px; }
+
+  .lt .filt {
+    display: flex; gap: 4px; padding: 10px 16px;
+    border-bottom: 1px solid rgba(0,0,0,0.03);
+    position: relative; z-index: 3;
+  }
+  .lt .filt .ch {
+    padding: 3px 12px; border-radius: 20px; border: none;
+    background: rgba(0,0,0,0.02); color: #9999bb;
+    font-size: 11px; cursor: pointer; transition: 0.15s; font-family: inherit;
+  }
+  .lt .filt .ch.s { background: rgba(120,80,255,0.05); color: #7b5fff; }
+  .lt .filt .ch:hover:not(.s) { background: rgba(0,0,0,0.03); }
+
+  .lt .lst { padding: 4px 8px 10px; position: relative; z-index: 3; max-height: 390px; overflow-y: auto; }
+  .lt .lst::-webkit-scrollbar { width: 3px; }
+  .lt .lst::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.04); border-radius: 3px; }
+
+  .lt .it {
+    display: flex; align-items: flex-start; padding: 10px 10px; margin: 2px 0;
+    border-radius: 10px; cursor: default; transition: 0.15s; gap: 10px;
+  }
+  .lt .it.s { background: rgba(120, 80, 255, 0.04); border: 1px solid rgba(120,80,255,0.06); }
+  .lt .it:hover:not(.s) { background: rgba(0,0,0,0.01); }
+  .lt .it .ico {
+    width: 30px; height: 30px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; flex-shrink: 0; margin-top: 1px;
+    background: rgba(0,0,0,0.02); border: 1px solid rgba(0,0,0,0.04);
+  }
+  .lt .it.s .ico { background: rgba(120,80,255,0.05); border-color: rgba(120,80,255,0.07); }
+  .lt .it .tx { flex: 1; min-width: 0; }
+  .lt .it .tx .t {
+    font-size: 12px; color: #333348; line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .lt .it .tx .m {
+    font-size: 10px; color: #9999bb; margin-top: 3px;
+  }
+  .lt .it .pn { font-size: 12px; color: #9999bb; opacity: 0; transition: 0.15s; padding: 2px; cursor: pointer; }
+  .lt .it:hover .pn { opacity: 0.4; }
+  .lt .it .pn:hover { opacity: 1; color: #ccaa33; }
+
+  /* Divider line */
+  .dk .divider {
+    height: 1px; margin: 6px 16px;
+    background: linear-gradient(90deg, transparent, rgba(120,80,255,0.06), transparent);
+    position: relative; z-index: 3;
+  }
+  .lt .divider {
+    height: 1px; margin: 6px 16px;
+    background: linear-gradient(90deg, transparent, rgba(120,80,255,0.06), transparent);
+    position: relative; z-index: 3;
+  }
+
+  @media (max-width: 800px) {
+    .showcase { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body class="">
+<div class="page-header">
+  <div>
+    <h1>📋 剪贴板历史</h1>
+    <div class="sub">Deep Frost · 深层冰霜风格</div>
+  </div>
+  <button class="theme-toggle" onclick="document.body.classList.toggle('light')">🌙/☀ 切换主题</button>
+</div>
+
+<div class="showcase">
+  <!-- DARK -->
+  <div class="frame dk">
+    <div class="badge" style="color:#8888bb;">🌙 暗色</div>
+    <div class="clip">
+      <div class="head">
+        <span class="title">📋 剪贴板历史</span>
+        <span class="count">24 条</span>
+        <div class="search">
+          <span class="si">🔍</span>
+          <input type="text" placeholder="搜索内容...">
+        </div>
+      </div>
+
+      <div class="filt">
+        <button class="ch s">全部</button>
+        <button class="ch">文本</button>
+        <button class="ch">图片</button>
+        <button class="ch">链接</button>
+        <button class="ch">文件</button>
+      </div>
+
+      <div class="lst">
+        <!-- 选中状态 -->
+        <div class="it s">
+          <div class="ico" style="color:#c8b8ff;">📝</div>
+          <div class="tx">
+            <div class="t">export function useToast() { const [toasts, setToasts] = useState([]); const add = useCallback((msg) => { ... }, []); }</div>
+            <div class="m">2 分钟前 · VS Code</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+
+        <!-- 链接 -->
+        <div class="it">
+          <div class="ico" style="color:#88ddff;">🔗</div>
+          <div class="tx">
+            <div class="t">https://github.com/fwfx1234/suishou.git</div>
+            <div class="m">15 分钟前 · Chrome</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+
+        <!-- 图片 -->
+        <div class="it">
+          <div class="ico" style="color:#ffcc44;">🖼</div>
+          <div class="tx">
+            <div class="t">screenshot_design_2026-05.png (1.2 MB)</div>
+            <div class="m">32 分钟前 · Finder</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- 代码片段 -->
+        <div class="it">
+          <div class="ico" style="color:#88dd88;">📝</div>
+          <div class="tx">
+            <div class="t">{"name": "py_desktop_tools", "version": "1.0.0", "description": "QML + PySide6 desktop toolbox"}</div>
+            <div class="m">1 小时前 · iTerm2</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+
+        <!-- 长文本 -->
+        <div class="it">
+          <div class="ico" style="color:#aaaaff;">📝</div>
+          <div class="tx">
+            <div class="t">LauncherWindow.qml: 修改搜索栏默认焦点行为，当 launcher 弹出时自动聚焦输入框</div>
+            <div class="m">2 小时前 · VS Code</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+
+        <!-- URL -->
+        <div class="it">
+          <div class="ico" style="color:#ff8888;">📎</div>
+          <div class="tx">
+            <div class="t">/Users/projects/py_desktop_tools/src/app/launcher/</div>
+            <div class="m">3 小时前 · Finder</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIGHT -->
+  <div class="frame lt">
+    <div class="badge" style="color:#8888aa;">☀ 亮色</div>
+    <div class="clip">
+      <div class="head">
+        <span class="title">📋 剪贴板历史</span>
+        <span class="count">24 条</span>
+        <div class="search">
+          <span class="si">🔍</span>
+          <input type="text" placeholder="搜索内容...">
+        </div>
+      </div>
+
+      <div class="filt">
+        <button class="ch s">全部</button>
+        <button class="ch">文本</button>
+        <button class="ch">图片</button>
+        <button class="ch">链接</button>
+        <button class="ch">文件</button>
+      </div>
+
+      <div class="lst">
+        <div class="it s">
+          <div class="ico" style="color:#6b4fcf;">📝</div>
+          <div class="tx">
+            <div class="t">export function useToast() { const [toasts, setToasts] = useState([]); const add = useCallback((msg) => { ... }, []); }</div>
+            <div class="m">2 分钟前 · VS Code</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+
+        <div class="it">
+          <div class="ico" style="color:#55aacc;">🔗</div>
+          <div class="tx">
+            <div class="t">https://github.com/fwfx1234/suishou.git</div>
+            <div class="m">15 分钟前 · Chrome</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+
+        <div class="it">
+          <div class="ico" style="color:#ccaa33;">🖼</div>
+          <div class="tx">
+            <div class="t">screenshot_design_2026-05.png (1.2 MB)</div>
+            <div class="m">32 分钟前 · Finder</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="it">
+          <div class="ico" style="color:#55aa55;">📝</div>
+          <div class="tx">
+            <div class="t">{"name": "py_desktop_tools", "version": "1.0.0", "description": "QML + PySide6 desktop toolbox"}</div>
+            <div class="m">1 小时前 · iTerm2</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+
+        <div class="it">
+          <div class="ico" style="color:#7777cc;">📝</div>
+          <div class="tx">
+            <div class="t">LauncherWindow.qml: 修改搜索栏默认焦点行为，当 launcher 弹出时自动聚焦输入框</div>
+            <div class="m">2 小时前 · VS Code</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+
+        <div class="it">
+          <div class="ico" style="color:#cc6666;">📎</div>
+          <div class="tx">
+            <div class="t">/Users/projects/py_desktop_tools/src/app/launcher/</div>
+            <div class="m">3 小时前 · Finder</div>
+          </div>
+          <span class="pn">📌</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,15 @@
+pub mod about;
+pub mod api_debugger;
+pub mod app_launcher;
+pub mod clipboard;
+pub mod download_manager;
+pub mod ftp_sftp_ssh_client;
+pub mod gpui_demo;
+pub mod http_capture;
+pub mod image_compress;
+pub mod json_parser;
+pub mod qr_code;
+pub mod quick_launch;
+pub mod registry;
+pub mod stub_plugin;
+pub mod system_settings;

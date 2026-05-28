@@ -1,0 +1,33 @@
+Here's the summary.
+
+---
+
+## Changed files
+
+1. **`src/core/storage.rs`** — Added `pub fn data_dir(&self) -> &Path` method to `AppPaths`
+2. **`src/features/system_settings/plugin.rs`** — Fixed `data_dir_path()`, `config_dir_path()`, `log_dir_path()` to use `AppPaths::data_dir()` directly instead of the broken `config(".").parent()` workaround
+3. **`docs/migration-guide.md`** — Updated `system-settings` section: added `mod.rs` to file list, updated diagnostics description to reflect direct `data_dir()` usage
+
+## Real functionality added
+
+- **`AppPaths::data_dir()`** — New public accessor exposing the data directory path directly, avoiding the previous hack of `config(".").parent()` which actually returned the config directory (not the data directory)
+- **Truthful diagnostics paths** — `data_dir_path()` now returns the actual data directory, `config_dir_path()` returns `<data_dir>/config`, `log_dir_path()` returns `<data_dir>/logs` — all derived from `AppPaths::data_dir()` without path manipulation tricks
+
+## What remains intentionally incomplete
+
+All previously documented items remain:
+- Plugin import (directory / ZIP) flows
+- Installed plugin management
+- macOS permission real detection & system settings jump
+- Icon cache clearing and log diagnostic actions
+- More granular diagnostics (separate database/cache paths)
+- `set_retention_draft()` is unused (pre-existing warning, not new)
+
+## Commands run
+
+```bash
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo fmt
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo check
+```
+
+Result: **0 compile errors**, no new warnings introduced.

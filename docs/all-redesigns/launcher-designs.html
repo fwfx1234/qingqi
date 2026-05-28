@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>启动器设计 · 毛玻璃多风格</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0d0d1a;
+    color: #fff;
+    min-height: 100vh;
+    padding: 40px 20px 80px;
+    transition: background 0.4s;
+  }
+  body.bg-light {
+    background: #f0eef8;
+  }
+
+  /* Page header */
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1100px;
+    margin: 0 auto 40px;
+    padding: 0 20px;
+  }
+  .page-header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #c8b8ff, #8888ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .page-header .sub {
+    color: #66668a;
+    font-size: 0.85rem;
+  }
+
+  /* ===================== Showcase Card ===================== */
+  .design-block {
+    max-width: 1100px;
+    margin: 0 auto 60px;
+    padding: 0 20px;
+  }
+  .design-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .design-header .title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #ccc;
+  }
+  .design-header .title span {
+    font-size: 0.7rem;
+    color: #55557a;
+    font-weight: 400;
+    margin-left: 10px;
+  }
+
+  .body.bg-light .design-header .title { color: #444; }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  /* ---------- Preview Wrappers ---------- */
+  .preview-frame {
+    position: relative;
+    border-radius: 24px;
+    padding: 40px 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 420px;
+    overflow: hidden;
+    transition: background 0.4s;
+  }
+  .preview-frame .mode-label {
+    position: absolute;
+    top: 14px;
+    left: 18px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-weight: 600;
+    opacity: 0.5;
+  }
+  .preview-frame .toggle-link {
+    position: absolute;
+    bottom: 14px;
+    right: 18px;
+    font-size: 11px;
+    color: #8888aa;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: 0.2s;
+    background: none;
+    border: none;
+    font-family: inherit;
+  }
+  .preview-frame .toggle-link:hover { opacity: 1; color: #b8a8ff; }
+
+  /* ===================== DESIGN 1: Frost Glass ===================== */
+  .d1-dark {
+    background:
+      radial-gradient(ellipse at 20% 30%, rgba(120, 80, 255, 0.2) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 70%, rgba(0, 180, 255, 0.1) 0%, transparent 50%),
+      linear-gradient(135deg, #0a0a1a 0%, #141428 100%);
+  }
+  .d1-light {
+    background:
+      radial-gradient(ellipse at 20% 30%, rgba(120, 80, 255, 0.08) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 70%, rgba(0, 180, 255, 0.05) 0%, transparent 50%),
+      linear-gradient(135deg, #f8f6ff 0%, #eeecf8 100%);
+  }
+
+  .launcher {
+    width: 580px;
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 12px 80px rgba(0,0,0,0.4);
+    transition: all 0.3s;
+  }
+
+  .launcher .srch {
+    display: flex;
+    align-items: center;
+    padding: 14px 18px;
+    gap: 10px;
+  }
+  .launcher .srch .ic {
+    width: 24px; height: 24px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .launcher .srch input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    font-family: inherit;
+    font-weight: 500;
+  }
+  .launcher .srch input::placeholder { opacity: 0.5; }
+  .launcher .srch .hint {
+    font-size: 10px;
+    padding: 2px 10px;
+    border-radius: 6px;
+    flex-shrink: 0;
+    letter-spacing: 0.3px;
+  }
+
+  .launcher .list { padding: 4px 8px 8px; }
+  .launcher .item {
+    display: flex;
+    align-items: center;
+    padding: 9px 12px;
+    margin: 2px 0;
+    border-radius: 10px;
+    cursor: default;
+    transition: all 0.15s;
+    gap: 10px;
+  }
+  .launcher .item .icon {
+    width: 32px; height: 32px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    border: 1px solid;
+  }
+  .launcher .item .inf { flex: 1; min-width: 0; }
+  .launcher .item .inf .nm {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .launcher .item .inf .ds {
+    font-size: 11px;
+    margin-top: 1px;
+  }
+  .launcher .item .tg {
+    font-size: 10px;
+    padding: 2px 10px;
+    border-radius: 20px;
+    flex-shrink: 0;
+  }
+
+  /* D1 - Frost Glass (dark) */
+  .d1-dark .launcher {
+    background: rgba(18, 18, 36, 0.6);
+    backdrop-filter: blur(28px) saturate(1.5);
+    -webkit-backdrop-filter: blur(28px) saturate(1.5);
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+  .d1-dark .launcher .srch { border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .d1-dark .launcher .srch .ic { background: rgba(255,255,255,0.05); color: #8888cc; }
+  .d1-dark .launcher .srch input { color: #eee; }
+  .d1-dark .launcher .srch input::placeholder { color: #55557a; }
+  .d1-dark .launcher .srch .hint { background: rgba(255,255,255,0.04); color: #55557a; border: 1px solid rgba(255,255,255,0.04); }
+  .d1-dark .launcher .item .nm { color: #e0e0ee; }
+  .d1-dark .launcher .item .ds { color: #66668a; }
+  .d1-dark .launcher .item .tg { background: rgba(255,255,255,0.05); color: #7777aa; }
+  .d1-dark .launcher .item .icon { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.04); }
+  .d1-dark .launcher .item.active { background: rgba(120, 80, 255, 0.12); border: 1px solid rgba(120,80,255,0.15); }
+  .d1-dark .launcher .item.active .nm { color: #d0c0ff; }
+  .d1-dark .launcher .item:not(.active):hover { background: rgba(255,255,255,0.04); }
+
+  /* D1 - Frost Glass (light) */
+  .d1-light .launcher {
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(28px) saturate(1.5);
+    -webkit-backdrop-filter: blur(28px) saturate(1.5);
+    border: 1px solid rgba(255,255,255,0.6);
+    box-shadow: 0 8px 60px rgba(80, 60, 180, 0.08);
+  }
+  .d1-light .launcher .srch { border-bottom: 1px solid rgba(0,0,0,0.04); }
+  .d1-light .launcher .srch .ic { background: rgba(0,0,0,0.03); color: #7777aa; }
+  .d1-light .launcher .srch input { color: #333; }
+  .d1-light .launcher .srch input::placeholder { color: #9999bb; }
+  .d1-light .launcher .srch .hint { background: rgba(0,0,0,0.03); color: #9999bb; border: 1px solid rgba(0,0,0,0.04); }
+  .d1-light .launcher .item .nm { color: #333348; }
+  .d1-light .launcher .item .ds { color: #9999bb; }
+  .d1-light .launcher .item .tg { background: rgba(0,0,0,0.03); color: #9999bb; }
+  .d1-light .launcher .item .icon { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.04); }
+  .d1-light .launcher .item.active { background: rgba(120, 80, 255, 0.08); border: 1px solid rgba(120,80,255,0.12); }
+  .d1-light .launcher .item.active .nm { color: #6b4fcf; }
+  .d1-light .launcher .item:not(.active):hover { background: rgba(0,0,0,0.03); }
+
+  /* ===================== DESIGN 2: Acrylic Edge ===================== */
+  .d2-dark {
+    background:
+      radial-gradient(ellipse at 70% 20%, rgba(255, 80, 120, 0.12) 0%, transparent 50%),
+      radial-gradient(ellipse at 30% 80%, rgba(60, 120, 255, 0.15) 0%, transparent 50%),
+      linear-gradient(135deg, #0d0d1a 0%, #1a1a30 100%);
+  }
+  .d2-light {
+    background:
+      radial-gradient(ellipse at 70% 20%, rgba(255, 80, 120, 0.05) 0%, transparent 50%),
+      radial-gradient(ellipse at 30% 80%, rgba(60, 120, 255, 0.06) 0%, transparent 50%),
+      linear-gradient(135deg, #f5f0ff 0%, #f0eef8 100%);
+  }
+
+  .l2 {
+    width: 580px;
+    border-radius: 18px;
+    overflow: hidden;
+    transition: all 0.3s;
+  }
+
+  /* D2 dark */
+  .d2-dark .l2 {
+    background: rgba(10, 10, 24, 0.6);
+    backdrop-filter: blur(24px) saturate(1.3);
+    -webkit-backdrop-filter: blur(24px) saturate(1.3);
+    border: 1px solid rgba(255,255,255,0.06);
+    box-shadow: 0 12px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .d2-dark .l2 .srch { padding: 14px 18px; display: flex; align-items: center; gap: 10px; }
+  .d2-dark .l2 .srch .ic { width: 24px; height: 24px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; background: linear-gradient(135deg, rgba(120,80,255,0.2), rgba(60,120,255,0.15)); color: #b8a8ff; }
+  .d2-dark .l2 .srch input { flex:1; background:none; border:none; outline:none; font-size:14px; font-family:inherit; font-weight:500; color:#e8e8f0; }
+  .d2-dark .l2 .srch input::placeholder { color:#55558a; }
+  .d2-dark .l2 .srch .hint { font-size:10px; padding:2px 10px; border-radius:6px; background:rgba(120,80,255,0.1); color:#8888cc; border:1px solid rgba(120,80,255,0.12); }
+  .d2-dark .l2 .list { padding:4px 10px 8px; }
+  .d2-dark .l2 .item { display:flex; align-items:center; padding:9px 12px; margin:2px 0; border-radius:10px; cursor:default; transition:0.15s; gap:10px; }
+  .d2-dark .l2 .item .icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; background:rgba(255,255,255,0.03); }
+  .d2-dark .l2 .item .inf { flex:1; min-width:0; }
+  .d2-dark .l2 .item .inf .nm { font-size:13px; font-weight:500; color:#d8d8ee; }
+  .d2-dark .l2 .item .inf .ds { font-size:11px; color:#66668a; margin-top:1px; }
+  .d2-dark .l2 .item .tg { font-size:10px; padding:2px 10px; border-radius:20px; background:rgba(255,255,255,0.03); color:#7777aa; flex-shrink:0; }
+  .d2-dark .l2 .item.active { background: linear-gradient(135deg, rgba(120,80,255,0.12), rgba(60,120,255,0.08)); border:1px solid rgba(120,80,255,0.15); }
+  .d2-dark .l2 .item.active .icon { background: linear-gradient(135deg, rgba(120,80,255,0.3), rgba(60,120,255,0.2)); }
+  .d2-dark .l2 .item.active .nm { color:#c8b8ff; }
+  .d2-dark .l2 .item:not(.active):hover { background:rgba(255,255,255,0.03); }
+
+  /* D2 light */
+  .d2-light .l2 {
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(24px) saturate(1.3);
+    -webkit-backdrop-filter: blur(24px) saturate(1.3);
+    border: 1px solid rgba(255,255,255,0.5);
+    box-shadow: 0 8px 60px rgba(80, 60, 180, 0.06);
+  }
+  .d2-light .l2 .srch { padding: 14px 18px; display: flex; align-items: center; gap: 10px; }
+  .d2-light .l2 .srch .ic { width: 24px; height: 24px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; background: linear-gradient(135deg, rgba(120,80,255,0.08), rgba(60,120,255,0.06)); color: #7b5fff; }
+  .d2-light .l2 .srch input { flex:1; background:none; border:none; outline:none; font-size:14px; font-family:inherit; font-weight:500; color:#333; }
+  .d2-light .l2 .srch input::placeholder { color:#9999bb; }
+  .d2-light .l2 .srch .hint { font-size:10px; padding:2px 10px; border-radius:6px; background:rgba(120,80,255,0.06); color:#8888cc; border:1px solid rgba(120,80,255,0.08); }
+  .d2-light .l2 .list { padding:4px 10px 8px; }
+  .d2-light .l2 .item { display:flex; align-items:center; padding:9px 12px; margin:2px 0; border-radius:10px; cursor:default; transition:0.15s; gap:10px; }
+  .d2-light .l2 .item .icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; background:rgba(0,0,0,0.02); color:#555; }
+  .d2-light .l2 .item .inf { flex:1; min-width:0; }
+  .d2-light .l2 .item .inf .nm { font-size:13px; font-weight:500; color:#333348; }
+  .d2-light .l2 .item .inf .ds { font-size:11px; color:#9999bb; margin-top:1px; }
+  .d2-light .l2 .item .tg { font-size:10px; padding:2px 10px; border-radius:20px; background:rgba(0,0,0,0.02); color:#9999bb; flex-shrink:0; }
+  .d2-light .l2 .item.active { background: linear-gradient(135deg, rgba(120,80,255,0.06), rgba(60,120,255,0.04)); border:1px solid rgba(120,80,255,0.1); }
+  .d2-light .l2 .item.active .icon { background: linear-gradient(135deg, rgba(120,80,255,0.15), rgba(60,120,255,0.1)); }
+  .d2-light .l2 .item.active .nm { color:#6b4fcf; }
+  .d2-light .l2 .item:not(.active):hover { background:rgba(0,0,0,0.02); }
+
+  /* ===================== DESIGN 3: Compact Pro ===================== */
+  .d3-dark {
+    background:
+      radial-gradient(ellipse at 50% 40%, rgba(255, 180, 60, 0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 70%, rgba(60, 200, 255, 0.08) 0%, transparent 50%),
+      linear-gradient(135deg, #0c0c18 0%, #14142a 100%);
+  }
+  .d3-light {
+    background:
+      radial-gradient(ellipse at 50% 40%, rgba(255, 180, 60, 0.03) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 70%, rgba(60, 200, 255, 0.04) 0%, transparent 50%),
+      linear-gradient(135deg, #f5f5ff 0%, #edecf8 100%);
+  }
+
+  .l3 {
+    width: 500px;
+    border-radius: 16px;
+    overflow: hidden;
+    transition: all 0.3s;
+  }
+
+  .d3-dark .l3 {
+    background: rgba(12, 12, 28, 0.7);
+    backdrop-filter: blur(36px) saturate(1.6);
+    -webkit-backdrop-filter: blur(36px) saturate(1.6);
+    border: 1px solid rgba(255,255,255,0.05);
+    box-shadow: 0 12px 80px rgba(0,0,0,0.5);
+  }
+  .d3-dark .l3 .srch { padding: 12px 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .d3-dark .l3 .srch .ic { font-size: 14px; color: #66668a; flex-shrink: 0; }
+  .d3-dark .l3 .srch input { flex:1; background:none; border:none; outline:none; font-size:13px; font-family:inherit; color:#ddd; }
+  .d3-dark .l3 .srch input::placeholder { color:#55557a; }
+  .d3-dark .l3 .list { padding:4px 6px; }
+  .d3-dark .l3 .item { display:flex; align-items:center; padding:7px 10px; margin:1px 0; border-radius:8px; cursor:default; transition:0.12s; gap:8px; }
+  .d3-dark .l3 .item .icon { width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; }
+  .d3-dark .l3 .item .inf { flex:1; min-width:0; }
+  .d3-dark .l3 .item .inf .nm { font-size:12px; font-weight:500; color:#d8d8ee; }
+  .d3-dark .l3 .item .inf .ds { font-size:10px; color:#55557a; margin-top:0; }
+  .d3-dark .l3 .item .tg { font-size:9px; padding:1px 8px; border-radius:4px; background:rgba(255,255,255,0.03); color:#55557a; }
+  .d3-dark .l3 .item.active { background: rgba(255,255,255,0.04); }
+  .d3-dark .l3 .item.active .icon { background: rgba(120,80,255,0.15); }
+  .d3-dark .l3 .item.active .nm { color: #c8b8ff; }
+  .d3-dark .l3 .item:not(.active):hover { background:rgba(255,255,255,0.02); }
+
+  .d3-light .l3 {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(36px) saturate(1.6);
+    -webkit-backdrop-filter: blur(36px) saturate(1.6);
+    border: 1px solid rgba(255,255,255,0.5);
+    box-shadow: 0 8px 50px rgba(60, 40, 140, 0.04);
+  }
+  .d3-light .l3 .srch { padding: 12px 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(0,0,0,0.04); }
+  .d3-light .l3 .srch .ic { font-size: 14px; color: #9999bb; flex-shrink: 0; }
+  .d3-light .l3 .srch input { flex:1; background:none; border:none; outline:none; font-size:13px; font-family:inherit; color:#333; }
+  .d3-light .l3 .srch input::placeholder { color:#9999bb; }
+  .d3-light .l3 .list { padding:4px 6px; }
+  .d3-light .l3 .item { display:flex; align-items:center; padding:7px 10px; margin:1px 0; border-radius:8px; cursor:default; transition:0.12s; gap:8px; }
+  .d3-light .l3 .item .icon { width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; }
+  .d3-light .l3 .item .inf { flex:1; min-width:0; }
+  .d3-light .l3 .item .inf .nm { font-size:12px; font-weight:500; color:#333348; }
+  .d3-light .l3 .item .inf .ds { font-size:10px; color:#9999bb; margin-top:0; }
+  .d3-light .l3 .item .tg { font-size:9px; padding:1px 8px; border-radius:4px; background:rgba(0,0,0,0.02); color:#9999bb; }
+  .d3-light .l3 .item.active { background: rgba(0,0,0,0.03); }
+  .d3-light .l3 .item.active .icon { background: rgba(120,80,255,0.08); }
+  .d3-light .l3 .item.active .nm { color: #6b4fcf; }
+  .d3-light .l3 .item:not(.active):hover { background:rgba(0,0,0,0.02); }
+
+  /* ===================== DESIGN 4: Vibrant Accent ===================== */
+  .d4-dark {
+    background:
+      radial-gradient(ellipse at 40% 30%, rgba(120, 60, 255, 0.2) 0%, transparent 55%),
+      radial-gradient(ellipse at 70% 70%, rgba(255, 100, 100, 0.08) 0%, transparent 45%),
+      linear-gradient(135deg, #0a0a1a 0%, #1a1028 100%);
+  }
+  .d4-light {
+    background:
+      radial-gradient(ellipse at 40% 30%, rgba(120, 60, 255, 0.07) 0%, transparent 55%),
+      radial-gradient(ellipse at 70% 70%, rgba(255, 100, 100, 0.03) 0%, transparent 45%),
+      linear-gradient(135deg, #f8f4ff 0%, #f0ecf8 100%);
+  }
+
+  .l4 {
+    width: 560px;
+    border-radius: 20px;
+    overflow: hidden;
+    transition: all 0.3s;
+  }
+
+  .d4-dark .l4 {
+    background: rgba(14, 12, 28, 0.55);
+    backdrop-filter: blur(30px) saturate(1.4);
+    -webkit-backdrop-filter: blur(30px) saturate(1.4);
+    border: 1px solid rgba(120, 80, 255, 0.2);
+    box-shadow: 0 0 40px rgba(120, 80, 255, 0.08), 0 12px 80px rgba(0,0,0,0.4);
+  }
+  .d4-dark .l4 .srch { padding: 16px 20px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(120,80,255,0.08); }
+  .d4-dark .l4 .srch .ic { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; background: rgba(120,80,255,0.15); color: #c8b8ff; }
+  .d4-dark .l4 .srch input { flex:1; background:none; border:none; outline:none; font-size:14px; font-family:inherit; font-weight:500; color:#e8e0f0; }
+  .d4-dark .l4 .srch input::placeholder { color:#55557a; }
+  .d4-dark .l4 .srch .hint { font-size:10px; padding:2px 10px; border-radius:6px; background:rgba(120,80,255,0.08); color:#8888cc; border:1px solid rgba(120,80,255,0.1); }
+  .d4-dark .l4 .list { padding:6px 12px 10px; }
+  .d4-dark .l4 .item { display:flex; align-items:center; padding:10px 14px; margin:2px 0; border-radius:12px; cursor:default; transition:0.15s; gap:10px; }
+  .d4-dark .l4 .item .icon { width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.04); }
+  .d4-dark .l4 .item .inf { flex:1; min-width:0; }
+  .d4-dark .l4 .item .inf .nm { font-size:13px; font-weight:500; color:#ddd8ee; }
+  .d4-dark .l4 .item .inf .ds { font-size:11px; color:#55557a; margin-top:1px; }
+  .d4-dark .l4 .item .tg { font-size:10px; padding:2px 10px; border-radius:20px; background:rgba(120,80,255,0.06); color:#8888bb; border:1px solid rgba(120,80,255,0.06); flex-shrink:0; }
+  .d4-dark .l4 .item.active { background: linear-gradient(135deg, rgba(120,80,255,0.12), rgba(80, 60, 200, 0.06)); border:1px solid rgba(120,80,255,0.2); box-shadow: 0 0 20px rgba(120,80,255,0.05); }
+  .d4-dark .l4 .item.active .icon { background: rgba(120,80,255,0.2); border-color: rgba(120,80,255,0.25); }
+  .d4-dark .l4 .item.active .nm { color: #d0c0ff; }
+  .d4-dark .l4 .item:not(.active):hover { background:rgba(255,255,255,0.03); }
+
+  .d4-light .l4 {
+    background: rgba(248, 244, 255, 0.6);
+    backdrop-filter: blur(30px) saturate(1.4);
+    -webkit-backdrop-filter: blur(30px) saturate(1.4);
+    border: 1px solid rgba(120, 80, 255, 0.15);
+    box-shadow: 0 8px 60px rgba(120, 80, 255, 0.04), 0 4px 30px rgba(0,0,0,0.02);
+  }
+  .d4-light .l4 .srch { padding: 16px 20px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(120,80,255,0.06); }
+  .d4-light .l4 .srch .ic { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; background: rgba(120,80,255,0.06); color: #7b5fff; }
+  .d4-light .l4 .srch input { flex:1; background:none; border:none; outline:none; font-size:14px; font-family:inherit; font-weight:500; color:#333; }
+  .d4-light .l4 .srch input::placeholder { color:#9999bb; }
+  .d4-light .l4 .srch .hint { font-size:10px; padding:2px 10px; border-radius:6px; background:rgba(120,80,255,0.05); color:#8888cc; border:1px solid rgba(120,80,255,0.06); }
+  .d4-light .l4 .list { padding:6px 12px 10px; }
+  .d4-light .l4 .item { display:flex; align-items:center; padding:10px 14px; margin:2px 0; border-radius:12px; cursor:default; transition:0.15s; gap:10px; }
+  .d4-light .l4 .item .icon { width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; background:rgba(0,0,0,0.02); border:1px solid rgba(0,0,0,0.04); }
+  .d4-light .l4 .item .inf { flex:1; min-width:0; }
+  .d4-light .l4 .item .inf .nm { font-size:13px; font-weight:500; color:#333348; }
+  .d4-light .l4 .item .inf .ds { font-size:11px; color:#9999bb; margin-top:1px; }
+  .d4-light .l4 .item .tg { font-size:10px; padding:2px 10px; border-radius:20px; background:rgba(120,80,255,0.04); color:#9999bb; border:1px solid rgba(120,80,255,0.04); flex-shrink:0; }
+  .d4-light .l4 .item.active { background: linear-gradient(135deg, rgba(120,80,255,0.06), rgba(80, 60, 200, 0.03)); border:1px solid rgba(120,80,255,0.12); }
+  .d4-light .l4 .item.active .icon { background: rgba(120,80,255,0.1); border-color: rgba(120,80,255,0.15); }
+  .d4-light .l4 .item.active .nm { color: #6b4fcf; }
+  .d4-light .l4 .item:not(.active):hover { background:rgba(0,0,0,0.02); }
+
+  /* .responsive */
+  @media (max-width: 850px) {
+    .side-by-side { grid-template-columns: 1fr; }
+    .launcher, .l2, .l3, .l4 { width: 100%; max-width: 500px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div>
+    <h1>⌨ 启动器 · 多风格设计</h1>
+    <div class="sub">4 种毛玻璃方案 × 深色/浅色双版本</div>
+  </div>
+</div>
+
+<!-- ============ Design 1: Frost Glass ============ -->
+<div class="design-block">
+  <div class="design-header">
+    <div class="title">风格一 · 冰霜毛玻璃 <span>Frost Glass · 柔和半透</span></div>
+  </div>
+  <div class="side-by-side">
+    <div class="preview-frame d1-dark" id="d1-dark">
+      <div class="mode-label">🌙 暗色</div>
+      <div class="launcher">
+        <div class="srch">
+          <div class="ic">⌘</div>
+          <input type="text" placeholder="搜索工具、命令、文件..." value="api">
+          <span class="hint">⌘K</span>
+        </div>
+        <div class="list">
+          <div class="item active">
+            <div class="icon" style="color:#78a8ff;">🧪</div>
+            <div class="inf"><div class="nm">API 调试</div><div class="ds">HTTP / WebSocket 请求测试</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#88dd88;">📋</div>
+            <div class="inf"><div class="nm">剪贴板历史</div><div class="ds">最近复制的内容与记录</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#ff8888;">📡</div>
+            <div class="inf"><div class="nm">网络抓包</div><div class="ds">HTTP 流量捕获与过滤器</div></div>
+            <span class="tg">开发</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#ffcc44;">🖼</div>
+            <div class="inf"><div class="nm">图片压缩</div><div class="ds">批量压缩与格式转换</div></div>
+            <span class="tg">工具</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="preview-frame d1-light" id="d1-light">
+      <div class="mode-label">☀ 亮色</div>
+      <div class="launcher">
+        <div class="srch">
+          <div class="ic">⌘</div>
+          <input type="text" placeholder="搜索工具、命令、文件..." value="api">
+          <span class="hint">⌘K</span>
+        </div>
+        <div class="list">
+          <div class="item active">
+            <div class="icon" style="color:#6b4fcf;">🧪</div>
+            <div class="inf"><div class="nm">API 调试</div><div class="ds">HTTP / WebSocket 请求测试</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#55aa55;">📋</div>
+            <div class="inf"><div class="nm">剪贴板历史</div><div class="ds">最近复制的内容与记录</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#cc6666;">📡</div>
+            <div class="inf"><div class="nm">网络抓包</div><div class="ds">HTTP 流量捕获与过滤器</div></div>
+            <span class="tg">开发</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#ccaa33;">🖼</div>
+            <div class="inf"><div class="nm">图片压缩</div><div class="ds">批量压缩与格式转换</div></div>
+            <span class="tg">工具</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Design 2: Acrylic Edge ============ -->
+<div class="design-block">
+  <div class="design-header">
+    <div class="title">风格二 · 磨砂渐变 <span>Acrylic · 渐变光晕 + 聚焦条</span></div>
+  </div>
+  <div class="side-by-side">
+    <div class="preview-frame d2-dark">
+      <div class="mode-label">🌙 暗色</div>
+      <div class="l2">
+        <div class="srch">
+          <div class="ic">🔍</div>
+          <input type="text" placeholder="搜索工具、命令..." value="api">
+          <span class="hint">⌘K</span>
+        </div>
+        <div class="list">
+          <div class="item active">
+            <div class="icon" style="color:#b8a8ff;">🧪</div>
+            <div class="inf"><div class="nm">API 调试</div><div class="ds">HTTP / WebSocket 请求测试</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#88dd88;">📋</div>
+            <div class="inf"><div class="nm">剪贴板历史</div><div class="ds">最近复制的内容与记录</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#ff8888;">📡</div>
+            <div class="inf"><div class="nm">网络抓包</div><div class="ds">HTTP 流量捕获与过滤器</div></div>
+            <span class="tg">开发</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#ffcc44;">🖼</div>
+            <div class="inf"><div class="nm">图片压缩</div><div class="ds">批量压缩与格式转换</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#aaccff;">⚙</div>
+            <div class="inf"><div class="nm">系统设置</div><div class="ds">主题、应用索引与偏好</div></div>
+            <span class="tg">系统</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="preview-frame d2-light">
+      <div class="mode-label">☀ 亮色</div>
+      <div class="l2">
+        <div class="srch">
+          <div class="ic">🔍</div>
+          <input type="text" placeholder="搜索工具、命令..." value="api">
+          <span class="hint">⌘K</span>
+        </div>
+        <div class="list">
+          <div class="item active">
+            <div class="icon" style="color:#6b4fcf;">🧪</div>
+            <div class="inf"><div class="nm">API 调试</div><div class="ds">HTTP / WebSocket 请求测试</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#55aa55;">📋</div>
+            <div class="inf"><div class="nm">剪贴板历史</div><div class="ds">最近复制的内容与记录</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#cc6666;">📡</div>
+            <div class="inf"><div class="nm">网络抓包</div><div class="ds">HTTP 流量捕获与过滤器</div></div>
+            <span class="tg">开发</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#ccaa33;">🖼</div>
+            <div class="inf"><div class="nm">图片压缩</div><div class="ds">批量压缩与格式转换</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#6688cc;">⚙</div>
+            <div class="inf"><div class="nm">系统设置</div><div class="ds">主题、应用索引与偏好</div></div>
+            <span class="tg">系统</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Design 3: Compact Pro ============ -->
+<div class="design-block">
+  <div class="design-header">
+    <div class="title">风格三 · 紧凑专业 <span>Compact Pro · 极简高效 · 更大模糊</span></div>
+  </div>
+  <div class="side-by-side">
+    <div class="preview-frame d3-dark">
+      <div class="mode-label">🌙 暗色</div>
+      <div class="l3">
+        <div class="srch">
+          <span class="ic">⌕</span>
+          <input type="text" placeholder="搜索..." value="api">
+        </div>
+        <div class="list">
+          <div class="item active">
+            <div class="icon" style="background:rgba(120,80,255,0.15);color:#c8b8ff;">🧪</div>
+            <div class="inf"><div class="nm">API 调试</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#88dd88;">📋</div>
+            <div class="inf"><div class="nm">剪贴板历史</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#ff8888;">📡</div>
+            <div class="inf"><div class="nm">网络抓包</div></div>
+            <span class="tg">开发</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#aaccff;">⚙</div>
+            <div class="inf"><div class="nm">系统设置</div></div>
+            <span class="tg">系统</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#88ddff;">🔗</div>
+            <div class="inf"><div class="nm">远程文件</div></div>
+            <span class="tg">开发</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="preview-frame d3-light">
+      <div class="mode-label">☀ 亮色</div>
+      <div class="l3">
+        <div class="srch">
+          <span class="ic">⌕</span>
+          <input type="text" placeholder="搜索..." value="api">
+        </div>
+        <div class="list">
+          <div class="item active">
+            <div class="icon" style="background:rgba(120,80,255,0.08); color:#7b5fff;">🧪</div>
+            <div class="inf"><div class="nm">API 调试</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#55aa55;">📋</div>
+            <div class="inf"><div class="nm">剪贴板历史</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#cc6666;">📡</div>
+            <div class="inf"><div class="nm">网络抓包</div></div>
+            <span class="tg">开发</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#6688cc;">⚙</div>
+            <div class="inf"><div class="nm">系统设置</div></div>
+            <span class="tg">系统</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#5599cc;">🔗</div>
+            <div class="inf"><div class="nm">远程文件</div></div>
+            <span class="tg">开发</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Design 4: Vibrant Accent ============ -->
+<div class="design-block">
+  <div class="design-header">
+    <div class="title">风格四 · 活力紫调 <span>Vibrant Accent · 紫色发光边框</span></div>
+  </div>
+  <div class="side-by-side">
+    <div class="preview-frame d4-dark">
+      <div class="mode-label">🌙 暗色</div>
+      <div class="l4">
+        <div class="srch">
+          <div class="ic">#</div>
+          <input type="text" placeholder="输入命令..." value="api">
+          <span class="hint">⌘K</span>
+        </div>
+        <div class="list">
+          <div class="item active">
+            <div class="icon" style="color:#d0b8ff;">🧪</div>
+            <div class="inf"><div class="nm">API 调试</div><div class="ds">HTTP / WebSocket 请求测试</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#88dd88;">📋</div>
+            <div class="inf"><div class="nm">剪贴板历史</div><div class="ds">最近复制的内容与记录</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#ff8888;">📡</div>
+            <div class="inf"><div class="nm">网络抓包</div><div class="ds">HTTP 流量捕获与过滤器</div></div>
+            <span class="tg">开发</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#ffcc44;">🖼</div>
+            <div class="inf"><div class="nm">图片压缩</div><div class="ds">批量压缩与格式转换</div></div>
+            <span class="tg">工具</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="preview-frame d4-light">
+      <div class="mode-label">☀ 亮色</div>
+      <div class="l4">
+        <div class="srch">
+          <div class="ic">#</div>
+          <input type="text" placeholder="输入命令..." value="api">
+          <span class="hint">⌘K</span>
+        </div>
+        <div class="list">
+          <div class="item active">
+            <div class="icon" style="color:#6b4fcf;">🧪</div>
+            <div class="inf"><div class="nm">API 调试</div><div class="ds">HTTP / WebSocket 请求测试</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#55aa55;">📋</div>
+            <div class="inf"><div class="nm">剪贴板历史</div><div class="ds">最近复制的内容与记录</div></div>
+            <span class="tg">工具</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#cc6666;">📡</div>
+            <div class="inf"><div class="nm">网络抓包</div><div class="ds">HTTP 流量捕获与过滤器</div></div>
+            <span class="tg">开发</span>
+          </div>
+          <div class="item">
+            <div class="icon" style="color:#ccaa33;">🖼</div>
+            <div class="inf"><div class="nm">图片压缩</div><div class="ds">批量压缩与格式转换</div></div>
+            <span class="tg">工具</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

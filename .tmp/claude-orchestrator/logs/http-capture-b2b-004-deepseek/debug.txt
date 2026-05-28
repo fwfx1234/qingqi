@@ -1,0 +1,736 @@
+2026-05-28T00:20:22.142Z [DEBUG] MDM settings load completed in 0ms
+2026-05-28T00:20:22.187Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json
+2026-05-28T00:20:22.187Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/fwfx1234/develop/qingqi/.claude/settings.json
+2026-05-28T00:20:22.188Z [DEBUG] CA certs: Config fallback - globalEnv keys: , settingsEnv keys: none
+2026-05-28T00:20:22.189Z [DEBUG] [init] configureGlobalMTLS starting
+2026-05-28T00:20:22.189Z [DEBUG] [init] configureGlobalMTLS complete
+2026-05-28T00:20:22.189Z [DEBUG] [init] configureGlobalAgents starting
+2026-05-28T00:20:22.189Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-05-28T00:20:22.189Z [DEBUG] CA certs: Loaded 145 bundled root certificates
+2026-05-28T00:20:22.204Z [DEBUG] CA certs: system store returned empty
+2026-05-28T00:20:22.204Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-05-28T00:20:22.204Z [DEBUG] [init] configureGlobalAgents complete
+2026-05-28T00:20:22.205Z [DEBUG] Error log sink initialized
+2026-05-28T00:20:22.219Z [DEBUG] Applying permission update: Adding 30 allow rule(s) to destination 'localSettings': ["Bash(cargo check *)","Read(//Users/fwfx1234/.cargo/bin/**)","Read(//usr/local/bin/**)","Read(//opt/homebrew/bin/**)","Read(//Users/fwfx1234/.rustup/toolchains/**)","Read(//Users/fwfx1234/.rustup/**)","Bash(export PATH=\"$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH\")","Bash(cargo build *)","Bash(rustup show *)","Bash(export PATH=\"$HOME/.cargo/bin:$PATH\")","Bash(rustup which *)","Bash(~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo build *)","Bash(export PATH=\"$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$HOME/.cargo/bin:$PATH\")","Bash(cargo doc *)","Bash(cargo clean *)","Bash(cargo run *)","Bash(kill %1)","Bash(cargo test *)","Bash(echo \"exit: $?\")","Bash(grep -E \"/\\(main|lib|mod|launcher|runtime|ui|app_launcher|clipboard\\)\\\\.\\(rs\\)$\")","Bash(cargo fmt *)","Bash(grep -vE \"warning: \\\\`\")","Bash(grep -v \"is never used\\\\|warning: \\\\`qingqi\\\\`\")","Bash(echo \"EXIT:$?\")","Bash(git -C /Users/fwfx1234/develop/qingqi log --all --oneline -30)","Bash(git -C /Users/fwfx1234/develop/qingqi status)","Bash(python3 *)","Bash(wait)","Bash(xxd)","Read(//Users/fwfx1234/.cargo/registry/src/**)"]
+2026-05-28T00:20:22.220Z [DEBUG] [claudeai-mcp] Disabled: API-key auth precedence active
+2026-05-28T00:20:22.220Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-05-28T00:20:22.221Z [DEBUG] [STARTUP] Running setup()...
+2026-05-28T00:20:22.224Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json
+2026-05-28T00:20:22.224Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/fwfx1234/develop/qingqi/.claude/settings.json
+2026-05-28T00:20:22.225Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/fwfx1234/.claude/skills, project=[]
+2026-05-28T00:20:22.225Z [DEBUG] Error log sink initialized
+2026-05-28T00:20:22.238Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/commands: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/commands'
+2026-05-28T00:20:22.238Z [DEBUG] Loaded 0 unique skills (0 unconditional, 0 conditional, managed: 0, user: 0, project: 0, additional: 0, legacy commands: 0)
+2026-05-28T00:20:22.238Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/agents: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/agents'
+2026-05-28T00:20:22.240Z [DEBUG] [STARTUP] setup() completed in 19ms
+2026-05-28T00:20:22.240Z [DEBUG] Cleared CA certificates cache
+2026-05-28T00:20:22.240Z [DEBUG] Cleared mTLS configuration cache
+2026-05-28T00:20:22.240Z [DEBUG] Cleared proxy agent cache
+2026-05-28T00:20:22.240Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-05-28T00:20:22.240Z [DEBUG] CA certs: Loaded 145 bundled root certificates
+2026-05-28T00:20:22.240Z [DEBUG] CA certs: system store returned empty
+2026-05-28T00:20:22.240Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-05-28T00:20:22.241Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-05-28T00:20:22.241Z [DEBUG] [ToolSearch:optimistic] disabled: ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic is not a first-party Anthropic host. Set ENABLE_TOOL_SEARCH=true (or auto / auto:N) if your proxy forwards tool_reference blocks.
+2026-05-28T00:20:22.259Z [DEBUG] Loaded 1 installed plugins from /Users/fwfx1234/.claude/plugins/installed_plugins.json
+2026-05-28T00:20:22.264Z [DEBUG] Plugin rust-analyzer-lsp has no entry.skills defined
+2026-05-28T00:20:22.265Z [DEBUG] Found 1 plugins (1 enabled, 0 disabled)
+2026-05-28T00:20:22.266Z [DEBUG] getPluginSkills: Processing 1 enabled plugins
+2026-05-28T00:20:22.266Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-05-28T00:20:22.266Z [DEBUG] Registered 0 hooks from 1 plugins
+2026-05-28T00:20:22.266Z [DEBUG] Total plugin skills loaded: 0
+2026-05-28T00:20:22.266Z [DEBUG] Total plugin commands loaded: 0
+2026-05-28T00:20:22.266Z [DEBUG] Total plugin agents loaded: 0
+2026-05-28T00:20:22.267Z [DEBUG] getSkills returning: 0 skill dir commands, 0 plugin skills, 14 bundled skills, 0 builtin plugin skills
+2026-05-28T00:20:22.269Z [DEBUG] [STARTUP] Commands and agents loaded in 28ms
+2026-05-28T00:20:22.270Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-05-28T00:20:22.270Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-05-28T00:20:22.270Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-05-28T00:20:22.270Z [DEBUG] Starting background startup prefetches
+2026-05-28T00:20:22.270Z [DEBUG] [Bootstrap] Skipped: no usable OAuth or API key
+2026-05-28T00:20:22.271Z [DEBUG] [STARTUP] MCP configs resolved in 51ms (awaited at +51ms)
+2026-05-28T00:20:22.271Z [DEBUG] All plugins already exist, skipping migration
+2026-05-28T00:20:22.271Z [DEBUG] Cleared CA certificates cache
+2026-05-28T00:20:22.271Z [DEBUG] Cleared mTLS configuration cache
+2026-05-28T00:20:22.271Z [DEBUG] Cleared proxy agent cache
+2026-05-28T00:20:22.271Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-05-28T00:20:22.272Z [DEBUG] CA certs: Loaded 145 bundled root certificates
+2026-05-28T00:20:22.272Z [DEBUG] CA certs: system store returned empty
+2026-05-28T00:20:22.272Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-05-28T00:20:22.272Z [DEBUG] Initialized versioned plugins system with 1 plugins
+2026-05-28T00:20:22.273Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:20:22.273Z [DEBUG] [MCP] --mcp-config servers running fully async (nonblocking)
+2026-05-28T00:20:22.273Z [DEBUG] [MCP] claude.ai connectors running fully async (nonblocking)
+2026-05-28T00:20:22.274Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-05-28T00:20:22.274Z [DEBUG] [3P telemetry] isTelemetryEnabled=false (CLAUDE_CODE_ENABLE_TELEMETRY=undefined)
+2026-05-28T00:20:22.276Z [DEBUG] [auto-mode] verifyAutoModeGateAccess: enabledState=opt-in disabledBySettings=false model=deepseek-v4-pro modelSupported=true disableFastModeBreakerFires=false carouselAvailable=true canEnterAuto=true
+2026-05-28T00:20:22.289Z [DEBUG] [ScheduledTasks] scheduler start() — enabled=false, hasTasks=false
+2026-05-28T00:20:22.296Z [DEBUG] Loaded 1 LSP server(s) from plugin: rust-analyzer-lsp
+2026-05-28T00:20:22.296Z [DEBUG] Total LSP servers loaded: 1
+2026-05-28T00:20:22.296Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 1 server(s)
+2026-05-28T00:20:22.297Z [DEBUG] Queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration (connection not ready)
+2026-05-28T00:20:22.297Z [DEBUG] LSP manager initialized with 1 servers
+2026-05-28T00:20:22.297Z [DEBUG] LSP server manager initialized successfully
+2026-05-28T00:20:22.297Z [DEBUG] Queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics (connection not ready)
+2026-05-28T00:20:22.297Z [DEBUG] Registered diagnostics handler for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-28T00:20:22.297Z [DEBUG] LSP notification handlers registered successfully for all 1 server(s)
+2026-05-28T00:20:22.297Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/output-styles: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/output-styles'
+2026-05-28T00:20:22.297Z [DEBUG] Total plugin output styles loaded: 0
+2026-05-28T00:20:22.301Z [DEBUG] Git remote URL: null
+2026-05-28T00:20:22.301Z [DEBUG] No git remote URL found
+2026-05-28T00:20:22.304Z [DEBUG] installPluginsForHeadless: starting
+2026-05-28T00:20:22.304Z [WARN] [3P telemetry] Event dropped (no event logger initialized): plugin_loaded
+2026-05-28T00:20:22.317Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/skills: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/skills'
+2026-05-28T00:20:22.330Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:20:22.330Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:20:22.330Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:20:22.330Z [DEBUG] Sending 12 skills via attachment (initial)
+2026-05-28T00:20:22.331Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:20:22.337Z [DEBUG] Ripgrep first use test: PASSED (mode=embedded, path=/opt/homebrew/Caskroom/claude-code@latest/2.1.152/claude)
+2026-05-28T00:20:22.341Z [DEBUG] Watching for changes in setting files /Users/fwfx1234/.claude/settings.json, /Users/fwfx1234/develop/qingqi/.claude/settings.json, /Users/fwfx1234/develop/qingqi/.claude/settings.local.json...
+2026-05-28T00:20:22.345Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:20:22.347Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:20:22.358Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:20:22.359Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:20:22.360Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:20:22.360Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:20:22.361Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:20:22.361Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:20:22.362Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:20:22.362Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:20:22.363Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:20:22.364Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:20:22.684Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:20:22.685Z [DEBUG] [API:timing] first byte after 322ms
+2026-05-28T00:20:24.239Z [DEBUG] [mcp-registry] Loaded 197 official MCP URLs (legacy)
+2026-05-28T00:20:25.802Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_00_n7ZaWHYZCkevpij6TycJ0630 permissionDecisionMs=2
+2026-05-28T00:20:25.804Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_00_n7ZaWHYZCkevpij6TycJ0630 outcome=ok durationMs=2
+2026-05-28T00:20:26.341Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_01_bqMN1QowtzSDPeFEXpOm3117 permissionDecisionMs=1
+2026-05-28T00:20:26.342Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_01_bqMN1QowtzSDPeFEXpOm3117 outcome=ok durationMs=1
+2026-05-28T00:20:26.777Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_02_WehqveQPLhRMHF0JCFhM2090 permissionDecisionMs=1
+2026-05-28T00:20:26.780Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:20:26.780Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:20:26.783Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:20:26.784Z [DEBUG] [API REQUEST] /anthropic/v1/messages/count_tokens source=count_tokens
+2026-05-28T00:20:26.917Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_02_WehqveQPLhRMHF0JCFhM2090 outcome=ok durationMs=140
+2026-05-28T00:20:26.921Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:20:26.922Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:20:26.922Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:20:26.922Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:20:26.924Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:20:26.924Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:20:26.926Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:20:26.926Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:20:26.926Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:20:26.926Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:20:26.926Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:20:26.926Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:20:26.927Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:20:26.927Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:20:26.927Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:20:27.243Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:20:27.243Z [DEBUG] [API:timing] first byte after 316ms
+2026-05-28T00:20:33.537Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_00_0qQBgv0ShcA1jDwa6NVC7998 permissionDecisionMs=2
+2026-05-28T00:20:33.538Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_00_0qQBgv0ShcA1jDwa6NVC7998 outcome=ok durationMs=1
+2026-05-28T00:20:33.983Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_01_0G7rm5YkslrATC8NgtMZ0615 permissionDecisionMs=1
+2026-05-28T00:20:33.985Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_01_0G7rm5YkslrATC8NgtMZ0615 outcome=ok durationMs=2
+2026-05-28T00:20:34.497Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_02_XRFNBzyE0F2Ad1AEFOZl1818 permissionDecisionMs=0
+2026-05-28T00:20:34.498Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:20:34.499Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:20:34.499Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:20:34.499Z [DEBUG] [API REQUEST] /anthropic/v1/messages/count_tokens source=count_tokens
+2026-05-28T00:20:34.637Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_02_XRFNBzyE0F2Ad1AEFOZl1818 outcome=ok durationMs=141
+2026-05-28T00:20:34.641Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:20:34.641Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:20:34.642Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:20:34.642Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:20:34.648Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:20:34.649Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:20:34.650Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:20:34.650Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:20:34.650Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:20:34.650Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:20:34.650Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:20:34.651Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:20:34.651Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:20:34.651Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:20:34.653Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:20:35.007Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:20:35.008Z [DEBUG] [API:timing] first byte after 357ms
+2026-05-28T00:20:39.191Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_00_wGphyqlU5GZWM4OT5iBH4372 permissionDecisionMs=3
+2026-05-28T00:20:39.195Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:20:39.195Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:20:39.197Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:20:39.198Z [DEBUG] [API REQUEST] /anthropic/v1/messages/count_tokens source=count_tokens
+2026-05-28T00:20:39.351Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_00_wGphyqlU5GZWM4OT5iBH4372 outcome=ok durationMs=159
+2026-05-28T00:20:39.535Z [INFO] [Stall] tool_dispatch_start tool=Read toolUseId=call_01_o5xCTB5AYQxWFF8Dpfgt5048 permissionDecisionMs=3
+2026-05-28T00:20:39.541Z [INFO] [Stall] tool_dispatch_end tool=Read toolUseId=call_01_o5xCTB5AYQxWFF8Dpfgt5048 outcome=ok durationMs=6
+2026-05-28T00:20:39.544Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:20:39.544Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:20:39.544Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:20:39.544Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:20:39.545Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:20:39.546Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:20:39.547Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:20:39.547Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:20:39.547Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:20:39.548Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:20:39.548Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:20:39.548Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:20:39.548Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:20:39.548Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:20:39.550Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:20:39.963Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:20:39.963Z [DEBUG] [API:timing] first byte after 415ms
+2026-05-28T00:21:03.970Z [WARN] Official marketplace GCS fetch failed: timeout of 10000ms exceeded
+2026-05-28T00:21:03.971Z [WARN] Official marketplace GCS failed; falling back to git
+2026-05-28T00:21:06.978Z [DEBUG] SSH config check: code=1 configured=false
+2026-05-28T00:21:06.991Z [DEBUG] git pull: cwd=/Users/fwfx1234/.claude/plugins/marketplaces/claude-plugins-official ref=default
+2026-05-28T00:21:08.241Z [DEBUG] Successfully refreshed marketplace: claude-plugins-official
+2026-05-28T00:21:08.242Z [DEBUG] Plugin autoupdate: checking installed plugins
+2026-05-28T00:21:08.244Z [DEBUG] Skipping refresh for marketplace 'claude-plugins-official' — refreshed 0s ago
+2026-05-28T00:21:08.249Z [DEBUG] Loading plugin rust-analyzer-lsp from source: "./plugins/rust-analyzer-lsp"
+2026-05-28T00:21:08.249Z [DEBUG] Using provided version for rust-analyzer-lsp@claude-plugins-official: 1.0.0
+2026-05-28T00:21:08.249Z [DEBUG] Plugin rust-analyzer-lsp@claude-plugins-official version 1.0.0 already cached at /Users/fwfx1234/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-05-28T00:21:08.249Z [DEBUG] Copied plugin rust-analyzer-lsp to versioned cache: /Users/fwfx1234/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-05-28T00:21:08.250Z [DEBUG] Plugin rust-analyzer-lsp has no entry.skills defined
+2026-05-28T00:21:08.250Z [DEBUG] Found 1 plugins (1 enabled, 0 disabled)
+2026-05-28T00:21:08.250Z [DEBUG] Using provided version for rust-analyzer-lsp@claude-plugins-official: 1.0.0
+2026-05-28T00:21:14.135Z [ERROR] 1P event logging: 7 events failed to export (code=ECONNRESET, The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch())
+2026-05-28T00:21:14.136Z [ERROR] [3P telemetry] OTEL diag error: {"message":"Failed to export 7 events (code=ECONNRESET, The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch())","originalLine":"440","originalColumn":"1756","line":"440","column":"1756","sourceURL":"/$bunfs/root/src/entrypoints/cli.js","stack":"Error: Failed to export 7 events (code=ECONNRESET, The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch())\n    at doExport (/$bunfs/root/src/entrypoints/cli.js:440:1756)\n    at processTicksAndRejections (native:7:39)","name":"Error"}
+2026-05-28T00:22:35.339Z [INFO] [Stall] tool_dispatch_start tool=TaskCreate toolUseId=call_00_GpIWkFOMbDqcqY70pbFu6240 permissionDecisionMs=1
+2026-05-28T00:22:35.344Z [INFO] [Stall] tool_dispatch_end tool=TaskCreate toolUseId=call_00_GpIWkFOMbDqcqY70pbFu6240 outcome=ok durationMs=5
+2026-05-28T00:22:36.527Z [INFO] [Stall] tool_dispatch_start tool=TaskCreate toolUseId=call_01_uoCFb6rsBWISVOcWAfRT3176 permissionDecisionMs=0
+2026-05-28T00:22:36.530Z [INFO] [Stall] tool_dispatch_end tool=TaskCreate toolUseId=call_01_uoCFb6rsBWISVOcWAfRT3176 outcome=ok durationMs=3
+2026-05-28T00:22:37.832Z [INFO] [Stall] tool_dispatch_start tool=TaskCreate toolUseId=call_02_VS46rNZyICPkGnJwvHQZ7983 permissionDecisionMs=0
+2026-05-28T00:22:37.834Z [INFO] [Stall] tool_dispatch_end tool=TaskCreate toolUseId=call_02_VS46rNZyICPkGnJwvHQZ7983 outcome=ok durationMs=2
+2026-05-28T00:22:38.796Z [INFO] [Stall] tool_dispatch_start tool=TaskCreate toolUseId=call_03_uR4Tlj80h7kYdKAF5XBd7312 permissionDecisionMs=0
+2026-05-28T00:22:38.802Z [INFO] [Stall] tool_dispatch_end tool=TaskCreate toolUseId=call_03_uR4Tlj80h7kYdKAF5XBd7312 outcome=ok durationMs=6
+2026-05-28T00:22:38.804Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:22:38.804Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:22:38.805Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:22:38.805Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:22:38.806Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:22:38.806Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:22:38.807Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:22:38.807Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:22:38.808Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:22:38.808Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:22:38.808Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:22:38.835Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:22:38.836Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:22:38.836Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:22:38.837Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:22:39.246Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:22:39.247Z [DEBUG] [API:timing] first byte after 411ms
+2026-05-28T00:22:41.009Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_00_tVgGHl55OnHtbOVcJsRx8235 permissionDecisionMs=1
+2026-05-28T00:22:41.012Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_00_tVgGHl55OnHtbOVcJsRx8235 outcome=ok durationMs=3
+2026-05-28T00:22:41.015Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:22:41.016Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:22:41.016Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:22:41.016Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:22:41.016Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:22:41.017Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:22:41.018Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:22:41.018Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:22:41.019Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:22:41.019Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:22:41.019Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:22:41.019Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:22:41.020Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:22:41.020Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:22:41.022Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:22:41.498Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:22:41.498Z [DEBUG] [API:timing] first byte after 478ms
+2026-05-28T00:22:46.674Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_00_6MYgwwfeFAzRsF590AKZ7955 permissionDecisionMs=1
+2026-05-28T00:22:46.679Z [DEBUG] Preserving file permissions: 100644
+2026-05-28T00:22:46.679Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/http_capture/model.rs.tmp.68431.f929d66adfb4
+2026-05-28T00:22:46.680Z [DEBUG] Applied original permissions to temp file
+2026-05-28T00:22:46.680Z [DEBUG] Temp file written successfully, size: 16271 bytes
+2026-05-28T00:22:46.680Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/http_capture/model.rs.tmp.68431.f929d66adfb4 to /Users/fwfx1234/develop/qingqi/src/features/http_capture/model.rs
+2026-05-28T00:22:46.681Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/http_capture/model.rs written atomically
+2026-05-28T00:22:46.681Z [DEBUG] Starting LSP server instance: plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-28T00:22:46.683Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_00_6MYgwwfeFAzRsF590AKZ7955 outcome=ok durationMs=9
+2026-05-28T00:22:46.687Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:22:46.687Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:22:46.687Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:22:46.687Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:22:46.688Z [DEBUG] Applied queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics
+2026-05-28T00:22:46.688Z [DEBUG] Applied queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration
+2026-05-28T00:22:46.688Z [DEBUG] LSP client started for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-28T00:22:46.688Z [DEBUG] [LSP PROTOCOL plugin:rust-analyzer-lsp:rust-analyzer] Sending request 'initialize - (0)'.
+2026-05-28T00:22:46.689Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:22:46.689Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:22:46.690Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:22:46.690Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:22:46.690Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:22:46.690Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:22:46.690Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:22:46.690Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:22:46.691Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:22:46.691Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:22:46.692Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:22:46.695Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.709Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.715Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.724Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.732Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.741Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.748Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.757Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.763Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.771Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.778Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.786Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.793Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.801Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+2026-05-28T00:22:46.801Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.808Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.815Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.822Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.829Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.836Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.843Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.850Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:46.857Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] error: infinite recursion detected
+2026-05-28T00:22:46.857Z [DEBUG] LSP server plugin:rust-analyzer-lsp:rust-analyzer connection closed
+2026-05-28T00:22:46.857Z [ERROR] LSP server plugin:rust-analyzer-lsp:rust-analyzer crashed with exit code 1
+2026-05-28T00:22:47.171Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:22:47.172Z [DEBUG] [API:timing] first byte after 481ms
+2026-05-28T00:22:51.260Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_00_QJqyWyLEvcjjdBzdCk6Y9619 permissionDecisionMs=1
+2026-05-28T00:22:51.262Z [DEBUG] Preserving file permissions: 100644
+2026-05-28T00:22:51.262Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/http_capture/model.rs.tmp.68431.194ee191f912
+2026-05-28T00:22:51.262Z [DEBUG] Applied original permissions to temp file
+2026-05-28T00:22:51.263Z [DEBUG] Temp file written successfully, size: 16551 bytes
+2026-05-28T00:22:51.263Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/http_capture/model.rs.tmp.68431.194ee191f912 to /Users/fwfx1234/develop/qingqi/src/features/http_capture/model.rs
+2026-05-28T00:22:51.263Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/http_capture/model.rs written atomically
+2026-05-28T00:22:51.263Z [DEBUG] Starting LSP server instance: plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-28T00:22:51.265Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_00_QJqyWyLEvcjjdBzdCk6Y9619 outcome=ok durationMs=5
+2026-05-28T00:22:51.268Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:22:51.268Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:22:51.269Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:22:51.269Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:22:51.269Z [DEBUG] LSP client started for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-28T00:22:51.269Z [DEBUG] [LSP PROTOCOL plugin:rust-analyzer-lsp:rust-analyzer] Sending request 'initialize - (0)'.
+2026-05-28T00:22:51.270Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:22:51.271Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:22:51.271Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:22:51.272Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:22:51.272Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:22:51.272Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:22:51.272Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:22:51.273Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:22:51.273Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:22:51.274Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:22:51.275Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:22:51.288Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.298Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.309Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.318Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.326Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.333Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.341Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.348Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.355Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.362Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.369Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.376Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.383Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.390Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.397Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.405Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.412Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.419Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.428Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.435Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.442Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:22:51.449Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] error: infinite recursion detected
+2026-05-28T00:22:51.449Z [DEBUG] LSP server plugin:rust-analyzer-lsp:rust-analyzer connection closed
+2026-05-28T00:22:51.449Z [ERROR] LSP server plugin:rust-analyzer-lsp:rust-analyzer crashed with exit code 1
+2026-05-28T00:22:51.696Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:22:51.697Z [DEBUG] [API:timing] first byte after 424ms
+2026-05-28T00:22:56.262Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_00_MuhsqGsznua39e2Urg0T5801 permissionDecisionMs=1
+2026-05-28T00:22:56.265Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_00_MuhsqGsznua39e2Urg0T5801 outcome=ok durationMs=3
+2026-05-28T00:22:56.669Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_01_S1BghHfhTU0ytk3B8xM24355 permissionDecisionMs=0
+2026-05-28T00:22:56.673Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_01_S1BghHfhTU0ytk3B8xM24355 outcome=ok durationMs=4
+2026-05-28T00:22:56.675Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:22:56.675Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:22:56.675Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:22:56.675Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:22:56.676Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:22:56.677Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:22:56.678Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:22:56.678Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:22:56.678Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:22:56.679Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:22:56.679Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:22:56.679Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:22:56.679Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:22:56.680Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:22:56.682Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:22:57.116Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:22:57.116Z [DEBUG] [API:timing] first byte after 437ms
+2026-05-28T00:23:09.611Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_00_GkxbRWQ94VE4Whb8gbiI3326 permissionDecisionMs=0
+2026-05-28T00:23:09.612Z [DEBUG] Preserving file permissions: 100644
+2026-05-28T00:23:09.612Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs.tmp.68431.9a1b8764edaf
+2026-05-28T00:23:09.613Z [DEBUG] Applied original permissions to temp file
+2026-05-28T00:23:09.613Z [DEBUG] Temp file written successfully, size: 54208 bytes
+2026-05-28T00:23:09.613Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs.tmp.68431.9a1b8764edaf to /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs
+2026-05-28T00:23:09.613Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs written atomically
+2026-05-28T00:23:09.613Z [DEBUG] Starting LSP server instance: plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-28T00:23:09.614Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_00_GkxbRWQ94VE4Whb8gbiI3326 outcome=ok durationMs=3
+2026-05-28T00:23:09.615Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:23:09.615Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:23:09.615Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:23:09.615Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:23:09.616Z [DEBUG] LSP client started for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-28T00:23:09.616Z [DEBUG] [LSP PROTOCOL plugin:rust-analyzer-lsp:rust-analyzer] Sending request 'initialize - (0)'.
+2026-05-28T00:23:09.616Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:23:09.617Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:23:09.617Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:23:09.618Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:09.618Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:09.618Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:23:09.618Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:23:09.634Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:23:09.634Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:09.635Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:23:09.636Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:23:09.636Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.645Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.654Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.662Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.670Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.678Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.686Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.693Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.701Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.709Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.716Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.723Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.732Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.740Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.747Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.755Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.762Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.768Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.775Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.782Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:09.788Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] error: infinite recursion detected
+2026-05-28T00:23:09.789Z [DEBUG] LSP server plugin:rust-analyzer-lsp:rust-analyzer connection closed
+2026-05-28T00:23:09.789Z [ERROR] LSP server plugin:rust-analyzer-lsp:rust-analyzer crashed with exit code 1
+2026-05-28T00:23:10.136Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:23:10.137Z [DEBUG] [API:timing] first byte after 502ms
+2026-05-28T00:23:14.044Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_00_1BlO8jizWBe70aFRA1Kj6871 permissionDecisionMs=1
+2026-05-28T00:23:14.046Z [DEBUG] Preserving file permissions: 100644
+2026-05-28T00:23:14.046Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs.tmp.68431.77e23beb933d
+2026-05-28T00:23:14.047Z [DEBUG] Applied original permissions to temp file
+2026-05-28T00:23:14.047Z [DEBUG] Temp file written successfully, size: 54278 bytes
+2026-05-28T00:23:14.047Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs.tmp.68431.77e23beb933d to /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs
+2026-05-28T00:23:14.047Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs written atomically
+2026-05-28T00:23:14.048Z [DEBUG] Starting LSP server instance: plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-28T00:23:14.049Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_00_1BlO8jizWBe70aFRA1Kj6871 outcome=ok durationMs=5
+2026-05-28T00:23:14.052Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:23:14.052Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:23:14.052Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:23:14.052Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:23:14.053Z [DEBUG] LSP client started for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-28T00:23:14.053Z [DEBUG] [LSP PROTOCOL plugin:rust-analyzer-lsp:rust-analyzer] Sending request 'initialize - (0)'.
+2026-05-28T00:23:14.054Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:23:14.055Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:23:14.056Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:23:14.056Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:14.056Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:14.057Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:23:14.057Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:23:14.057Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:23:14.058Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:14.058Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:23:14.059Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:23:14.066Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.079Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.090Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.099Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.108Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.116Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.125Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.132Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.144Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.154Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.162Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.170Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.178Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.186Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.193Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.200Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.208Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.215Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.224Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.233Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.241Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] info: `rust-analyzer` is unavailable for the active toolchain
+info: falling back to "/opt/homebrew/opt/rustup/bin/rust-analyzer"
+2026-05-28T00:23:14.249Z [DEBUG] [LSP SERVER plugin:rust-analyzer-lsp:rust-analyzer] error: infinite recursion detected
+2026-05-28T00:23:14.250Z [DEBUG] LSP server plugin:rust-analyzer-lsp:rust-analyzer connection closed
+2026-05-28T00:23:14.250Z [ERROR] LSP server plugin:rust-analyzer-lsp:rust-analyzer crashed with exit code 1
+2026-05-28T00:23:14.608Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:23:14.608Z [DEBUG] [API:timing] first byte after 551ms
+2026-05-28T00:23:22.768Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_00_ADrkIsMwy4RxOfHWLTsS4546 permissionDecisionMs=1
+2026-05-28T00:23:22.774Z [DEBUG] Preserving file permissions: 100644
+2026-05-28T00:23:22.775Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs.tmp.68431.7bb8960857de
+2026-05-28T00:23:22.775Z [DEBUG] Applied original permissions to temp file
+2026-05-28T00:23:22.775Z [DEBUG] Temp file written successfully, size: 56045 bytes
+2026-05-28T00:23:22.775Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs.tmp.68431.7bb8960857de to /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs
+2026-05-28T00:23:22.776Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs written atomically
+2026-05-28T00:23:22.776Z [ERROR] LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-28T00:23:22.776Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-28T00:23:22.776Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_00_ADrkIsMwy4RxOfHWLTsS4546 outcome=ok durationMs=8
+2026-05-28T00:23:22.777Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-28T00:23:22.778Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:23:22.778Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:23:22.778Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:23:22.779Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:23:22.779Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:23:22.780Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:23:22.781Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:23:22.781Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:22.781Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:22.781Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:23:22.782Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:23:22.782Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:23:22.782Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:22.782Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:23:22.784Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:23:23.236Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:23:23.236Z [DEBUG] [API:timing] first byte after 454ms
+2026-05-28T00:23:27.006Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_00_c4jg34fPny5RazgZvO3H9915 permissionDecisionMs=0
+2026-05-28T00:23:27.007Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_00_c4jg34fPny5RazgZvO3H9915 outcome=ok durationMs=1
+2026-05-28T00:23:27.411Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_01_XtY3d56hSPRbtSpcRXEq4401 permissionDecisionMs=0
+2026-05-28T00:23:27.416Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_01_XtY3d56hSPRbtSpcRXEq4401 outcome=ok durationMs=5
+2026-05-28T00:23:27.419Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:23:27.419Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:23:27.419Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:23:27.419Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:23:27.420Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:23:27.421Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:23:27.422Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:23:27.423Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:27.423Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:27.423Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:23:27.423Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:23:27.424Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:23:27.424Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:27.424Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:23:27.426Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:23:27.801Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:23:27.802Z [DEBUG] [API:timing] first byte after 378ms
+2026-05-28T00:23:32.897Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_00_9JIYBV5ePuaewreS5PVB3185 permissionDecisionMs=0
+2026-05-28T00:23:32.900Z [DEBUG] Preserving file permissions: 100644
+2026-05-28T00:23:32.900Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs.tmp.68431.11b12d2ec9f2
+2026-05-28T00:23:32.900Z [DEBUG] Applied original permissions to temp file
+2026-05-28T00:23:32.901Z [DEBUG] Temp file written successfully, size: 56357 bytes
+2026-05-28T00:23:32.901Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs.tmp.68431.11b12d2ec9f2 to /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs
+2026-05-28T00:23:32.901Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs written atomically
+2026-05-28T00:23:32.902Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-28T00:23:32.903Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_00_9JIYBV5ePuaewreS5PVB3185 outcome=ok durationMs=6
+2026-05-28T00:23:32.903Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-28T00:23:32.906Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:23:32.906Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:23:32.907Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:23:32.907Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:23:32.907Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:23:32.908Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:23:32.909Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:23:32.909Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:32.910Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:32.910Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:23:32.910Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:23:32.910Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:23:32.911Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:32.911Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:23:32.912Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:23:33.386Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:23:33.387Z [DEBUG] [API:timing] first byte after 476ms
+2026-05-28T00:23:38.497Z [INFO] [Stall] tool_dispatch_start tool=Edit toolUseId=call_00_K8AczItwiZEktR6d2P2C9595 permissionDecisionMs=1
+2026-05-28T00:23:38.498Z [DEBUG] Preserving file permissions: 100644
+2026-05-28T00:23:38.499Z [DEBUG] Writing to temp file: /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs.tmp.68431.8209a9663c63
+2026-05-28T00:23:38.499Z [DEBUG] Applied original permissions to temp file
+2026-05-28T00:23:38.499Z [DEBUG] Temp file written successfully, size: 56623 bytes
+2026-05-28T00:23:38.499Z [DEBUG] Renaming /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs.tmp.68431.8209a9663c63 to /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs
+2026-05-28T00:23:38.500Z [DEBUG] File /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs written atomically
+2026-05-28T00:23:38.500Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-28T00:23:38.500Z [INFO] [Stall] tool_dispatch_end tool=Edit toolUseId=call_00_K8AczItwiZEktR6d2P2C9595 outcome=ok durationMs=3
+2026-05-28T00:23:38.501Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs: LSP server 'plugin:rust-analyzer-lsp:rust-analyzer' exceeded max crash recovery attempts (3)
+2026-05-28T00:23:38.504Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:23:38.504Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:23:38.504Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:23:38.505Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:23:38.506Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:23:38.507Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:23:38.509Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:23:38.509Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:38.510Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:38.510Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:23:38.510Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:23:38.511Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:23:38.511Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:38.511Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:23:38.514Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:23:39.119Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:23:39.119Z [DEBUG] [API:timing] first byte after 608ms
+2026-05-28T00:23:43.743Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_00_lXefrafXhkumJzsoqiJw1403 permissionDecisionMs=1
+2026-05-28T00:23:43.746Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_00_lXefrafXhkumJzsoqiJw1403 outcome=ok durationMs=3
+2026-05-28T00:23:44.219Z [INFO] [Stall] tool_dispatch_start tool=TaskUpdate toolUseId=call_01_HVIiJ64llMD7aCvdI6yw0547 permissionDecisionMs=0
+2026-05-28T00:23:44.223Z [INFO] [Stall] tool_dispatch_end tool=TaskUpdate toolUseId=call_01_HVIiJ64llMD7aCvdI6yw0547 outcome=ok durationMs=4
+2026-05-28T00:23:44.225Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:23:44.225Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:23:44.225Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:23:44.225Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:23:44.225Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:23:44.226Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:23:44.227Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:23:44.227Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:44.227Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:44.227Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:23:44.227Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:23:44.256Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:23:44.256Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:44.256Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:23:44.258Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:23:44.712Z [DEBUG] Stream started - received first chunk
+2026-05-28T00:23:44.713Z [DEBUG] [API:timing] first byte after 457ms
+2026-05-28T00:23:46.819Z [INFO] [Stall] tool_dispatch_start tool=Bash toolUseId=call_00_FUrZRMtaumEutu73aEBT0357 permissionDecisionMs=4
+2026-05-28T00:23:46.820Z [DEBUG] Creating shell snapshot for zsh (/bin/zsh)
+2026-05-28T00:23:46.820Z [DEBUG] Looking for shell config file: /Users/fwfx1234/.zshrc
+2026-05-28T00:23:46.823Z [DEBUG] Snapshots directory: /Users/fwfx1234/.claude/shell-snapshots
+2026-05-28T00:23:46.823Z [DEBUG] Creating snapshot at: /Users/fwfx1234/.claude/shell-snapshots/snapshot-zsh-1779927826823-vncex5.sh
+2026-05-28T00:23:46.823Z [DEBUG] Execution timeout: 10000ms
+2026-05-28T00:23:46.829Z [DEBUG] Spawn-env probe captured 73 keys
+2026-05-28T00:23:46.890Z [DEBUG] Shell snapshot created successfully (3122 bytes)
+2026-05-28T00:23:46.891Z [DEBUG] No session environment scripts found
+2026-05-28T00:23:46.891Z [DEBUG] Spawning shell without login (-l flag skipped)
+2026-05-28T00:23:47.186Z [INFO] [Stall] tool_dispatch_end tool=Bash toolUseId=call_00_FUrZRMtaumEutu73aEBT0357 outcome=ok durationMs=367
+2026-05-28T00:23:47.187Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-28T00:23:47.187Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-28T00:23:47.187Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-28T00:23:47.187Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-28T00:23:47.187Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:23:47.187Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:23:47.187Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:23:47.188Z [DEBUG] [API REQUEST] /anthropic/v1/messages/count_tokens source=count_tokens
+2026-05-28T00:23:47.292Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-28T00:23:47.293Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-28T00:23:47.293Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-28T00:23:47.293Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:47.293Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:47.294Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-28T00:23:47.294Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-28T00:23:47.294Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-28T00:23:47.294Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:47.294Z [DEBUG] [API:timing] dispatching to firstParty model=deepseek-v4-pro
+2026-05-28T00:23:47.295Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:23:47.881Z [ERROR] API error (attempt 1/11): 402 402 {"error":{"message":"Insufficient Balance","type":"unknown_error","param":null,"code":"invalid_request_error"}}
+2026-05-28T00:23:47.886Z [ERROR] Error in API request: 402 {"error":{"message":"Insufficient Balance","type":"unknown_error","param":null,"code":"invalid_request_error"}}
+2026-05-28T00:23:47.886Z [ERROR] Error: Error: 402 {"error":{"message":"Insufficient Balance","type":"unknown_error","param":null,"code":"invalid_request_error"}}
+    at generate (/$bunfs/root/src/entrypoints/cli.js:11:64258)
+    at makeRequest (/$bunfs/root/src/entrypoints/cli.js:51:7694)
+    at processTicksAndRejections (native:7:39)
+2026-05-28T00:23:47.888Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:23:47.890Z [ERROR] LSP server plugin:rust-analyzer-lsp:rust-analyzer stop failed: Connection is closed.
+2026-05-28T00:23:47.891Z [DEBUG] LSP client stopped for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-28T00:23:47.893Z [ERROR] LSP server plugin:rust-analyzer-lsp:rust-analyzer initialize failed: Pending response rejected since connection got disposed
+2026-05-28T00:23:47.893Z [ERROR] Failed to stop LSP server 'plugin:rust-analyzer-lsp:rust-analyzer': Connection is closed.
+2026-05-28T00:23:47.893Z [DEBUG] LSP client stopped for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-28T00:23:47.893Z [ERROR] Failed to start LSP server 'plugin:rust-analyzer-lsp:rust-analyzer': Pending response rejected since connection got disposed
+2026-05-28T00:23:47.893Z [ERROR] Failed to start LSP server for file /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs: Pending response rejected since connection got disposed
+2026-05-28T00:23:47.893Z [ERROR] Failed to stop 1 LSP server(s): plugin:rust-analyzer-lsp:rust-analyzer: Connection is closed.
+2026-05-28T00:23:47.894Z [ERROR] Failed to shutdown LSP server manager: Failed to stop 1 LSP server(s): plugin:rust-analyzer-lsp:rust-analyzer: Connection is closed.
+2026-05-28T00:23:47.894Z [ERROR] LSP: Failed to notify server of file change for /Users/fwfx1234/develop/qingqi/src/features/http_capture/view.rs: Pending response rejected since connection got disposed
+2026-05-28T00:23:47.895Z [ERROR] Failed to check metrics opt-out status: Auth error: No API key available
+2026-05-28T00:23:47.895Z [DEBUG] Metrics export disabled by organization setting
+2026-05-28T00:23:47.895Z [DEBUG] BigQuery metrics exporter flush complete
+2026-05-28T00:23:47.895Z [DEBUG] BigQuery metrics exporter flush complete
+2026-05-28T00:23:47.895Z [DEBUG] BigQuery metrics exporter shutdown complete
+2026-05-28T00:23:47.896Z [DEBUG] Cleaned up session snapshot: /Users/fwfx1234/.claude/shell-snapshots/snapshot-zsh-1779927826823-vncex5.sh

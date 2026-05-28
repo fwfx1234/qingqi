@@ -1,0 +1,45 @@
+All checks pass. Here's the final summary.
+
+## Files changed (exact)
+
+- `src/features/clipboard/history_store.rs` — added `FilePathState` struct and `file_path_states()` helper with `can_reveal()` / `has_actionable_target()` methods; removed obsolete `count_existing_paths()` (its behavior is now folded into the new helper); +3 new tests, -1 obsolete test.
+- `src/features/clipboard/view/history.rs` — replaced static `file_preview_box` rows with interactive `file_preview_row` items; added `file_detail_action_row` that renders two file-specific buttons; generalized `file_action_button` to take `label` / `button_id` / `enabled`; passed `handle` through `file_detail_preview` / `detail_preview_card`.
+- `src/features/clipboard/view/mod.rs` — renamed private `reveal_file_path` to `reveal_path_in_finder` to match the row-click handler call site.
+- `src/platform/shell.rs` — **not edited**. Its existing `open_path`, `open_directory`, and `reveal_in_finder` were already sufficient.
+
+## Clipboard file-detail / path behaviors that are now real
+
+- Each file row in the detail pane is an independent clickable card. Clicking an existing file/directory calls `platform::shell::reveal_in_finder` (`open -R`), highlighting it in Finder.
+- Per-row visual badge (`文件` / `目录` / `已不存在`) is computed from a single `file_path_states(...)` scan and reflects actual filesystem state at render time.
+- Rows whose path no longer exists are muted, badged "已不存在", and have no click handler — they don't pretend the action would work.
+- Below the preview the detail pane now shows **two** file-specific buttons in an action row:
+  - "在访达中显示" wired to `reveal_first_existing_in_finder` (enabled iff any path exists)
+  - "打开目录" wired to `open_selected_parent_dir` (enabled iff any path or parent dir exists)
+- Each button honestly renders as disabled (muted color, no hover, no click) when there is no actionable target — replacing the previous single "打开目录" strip.
+- Generic copy / pin / delete strip is preserved unchanged for all kinds.
+
+## Clipboard behaviors still missing
+
+- No per-row "open parent dir" — only whole-record reveal/open. Acceptable for a conservative batch; would need extra UI plumbing.
+- No bulk reveal/open (e.g. reveal all paths). `open -R` accepts multiple args but the current button only handles first-match.
+- No drag-source on file rows (suishou QML reference doesn't have this either).
+- File rows don't differentiate icons by extension — all rows just say `文件` or `目录`.
+- `history_store.rs` is still not renamed to `store.rs` as the migration guide eventually wants — kept out of scope here.
+- File capture from text fallback (when osascript file-URL detection fails) is unchanged.
+
+## Suggested note for `docs/migration-guide.md` (do not edit)
+
+Append to the `clipboard` "Current Notes" section:
+
+> 这轮把文件记录的详情区从一个静态路径列表升级成 per-path 可交互卡片：每行根据 `history_store::file_path_states` 真实状态显示「文件 / 目录 / 已不存在」徽章，仍存在的行点击会调 `platform::shell::reveal_in_finder` 在访达中高亮该文件，不存在的行则诚实降级为非交互的灰色卡片，不再假装动作生效。面板底部为文件记录提供「在访达中显示」+「打开目录」两个 typed action 按钮，分别根据 `find_first_existing_path` / `has_actionable_target` 决定启用还是诚实禁用，替换掉早期的单一「打开目录」按钮。新增 `history_store::FilePathState` 收口 per-row `Path::new(...).exists()` 调用，view 层不再各自访问文件系统；早先临时的 `count_existing_paths` 已被这套 helper 覆盖，连同对应单测移除。
+
+## Exact commands run
+
+```
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo fmt
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo check --bin qingqi
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo test --bin qingqi -- features::clipboard
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo check
+```
+
+**Results:** `cargo check` clean (138 warnings, down from baseline 144; zero new clipboard warnings). `cargo test --bin qingqi -- features::clipboard` 26 passed / 0 failed (3 new `file_path_states_*` tests added; 1 obsolete `count_existing_paths_counts_correctly` test removed).

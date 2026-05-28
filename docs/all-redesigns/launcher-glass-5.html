@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>启动器设计 · 毛玻璃加强版 · 5 种新风格</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0d0d1a;
+    color: #fff;
+    min-height: 100vh;
+    padding: 30px 16px 60px;
+  }
+
+  .page-header {
+    max-width: 1200px; margin: 0 auto 36px; padding: 0 16px;
+  }
+  .page-header h1 {
+    font-size: 1.4rem; font-weight: 700;
+    background: linear-gradient(135deg, #c8b8ff, #8888ff);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .page-header .sub { color: #55557a; font-size: 0.8rem; margin-top: 4px; }
+
+  .design-block {
+    max-width: 1200px; margin: 0 auto 52px; padding: 0 16px;
+  }
+  .design-label {
+    display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px;
+  }
+  .design-label h2 {
+    font-size: 1rem; font-weight: 600; color: #ccc;
+  }
+  .design-label span {
+    font-size: 0.7rem; color: #55557a; font-weight: 400;
+  }
+  .side-by-side {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 28px;
+  }
+
+  .frame {
+    position: relative;
+    border-radius: 24px;
+    padding: 48px 24px 36px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 460px;
+    overflow: hidden;
+    transition: background 0.3s;
+  }
+  .frame .badge {
+    position: absolute; top: 14px; left: 18px;
+    font-size: 9px; text-transform: uppercase;
+    letter-spacing: 1.5px; font-weight: 600; opacity: 0.5;
+  }
+
+  /* ---------- All launchers share structure ---------- */
+  .gl {
+    width: 540px; border-radius: 18px; overflow: hidden;
+    transition: all 0.3s; position: relative;
+    /* Glare reflection */
+  }
+  .gl::after {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 100%);
+    pointer-events: none; border-radius: 18px 18px 0 0;
+  }
+
+  .gl .bar {
+    display: flex; align-items: center; padding: 14px 18px; gap: 10px;
+    position: relative; z-index: 1;
+  }
+  .gl .bar .ic {
+    width: 24px; height: 24px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; flex-shrink: 0;
+  }
+  .gl .bar input {
+    flex: 1; background: none; border: none; outline: none;
+    font-size: 14px; font-family: inherit; font-weight: 500;
+  }
+  .gl .bar input::placeholder { opacity: 0.45; }
+  .gl .bar .hk {
+    font-size: 10px; padding: 2px 10px; border-radius: 6px; flex-shrink: 0;
+  }
+
+  .gl .lst { padding: 4px 10px 10px; position: relative; z-index: 1; }
+  .gl .it {
+    display: flex; align-items: center; padding: 9px 12px; margin: 2px 0;
+    border-radius: 10px; cursor: default; transition: all 0.15s; gap: 10px;
+  }
+  .gl .it .ico {
+    width: 32px; height: 32px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .gl .it .tx { flex: 1; min-width: 0; }
+  .gl .it .tx .nm { font-size: 13px; font-weight: 500; }
+  .gl .it .tx .ds { font-size: 11px; margin-top: 1px; }
+  .gl .it .tg {
+    font-size: 10px; padding: 2px 10px; border-radius: 20px; flex-shrink: 0;
+  }
+
+  /* ================================================================ */
+  /* DESIGN A: Deep Frost — 背景图穿透 + 厚重毛玻璃                   */
+  /* ================================================================ */
+  .a-dk {
+    background: linear-gradient(135deg, #0b0b1a 0%, #15152e 50%, #1a0a24 100%),
+                repeating-linear-gradient(45deg, transparent, transparent 40px, rgba(120,80,255,0.02) 40px, rgba(120,80,255,0.02) 41px);
+  }
+  .a-lt {
+    background: linear-gradient(135deg, #e8e4f4 0%, #f0ecfa 50%, #f4eaf0 100%),
+                repeating-linear-gradient(45deg, transparent, transparent 40px, rgba(120,80,255,0.03) 40px, rgba(120,80,255,0.03) 41px);
+  }
+
+  .a-g .gl { border-radius: 20px; }
+  .a-dk .gl {
+    background: rgba(15, 15, 35, 0.3);
+    backdrop-filter: blur(50px) saturate(1.8);
+    -webkit-backdrop-filter: blur(50px) saturate(1.8);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 20px 100px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .a-dk .gl .bar { border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .a-dk .gl .bar .ic { background: rgba(255,255,255,0.04); color: #8888bb; }
+  .a-dk .gl .bar input { color: #eee; }
+  .a-dk .gl .bar input::placeholder { color: #55557a; }
+  .a-dk .gl .bar .hk { background: rgba(255,255,255,0.03); color: #55557a; border: 1px solid rgba(255,255,255,0.04); }
+  .a-dk .gl .it .ico { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.04); }
+  .a-dk .gl .it .tx .nm { color: #ddd8ec; }
+  .a-dk .gl .it .tx .ds { color: #55557a; }
+  .a-dk .gl .it .tg { background: rgba(255,255,255,0.03); color: #7777aa; }
+  .a-dk .gl .it.sel {
+    background: rgba(120, 80, 255, 0.12);
+    border: 1px solid rgba(120,80,255,0.2);
+    box-shadow: 0 0 30px rgba(120,80,255,0.04);
+  }
+  .a-dk .gl .it.sel .ico { background: rgba(120,80,255,0.15); border-color: rgba(120,80,255,0.2); }
+  .a-dk .gl .it.sel .tx .nm { color: #c8b8ff; }
+  .a-dk .gl .it:not(.sel):hover { background: rgba(255,255,255,0.025); }
+
+  .a-lt .gl {
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(50px) saturate(1.8);
+    -webkit-backdrop-filter: blur(50px) saturate(1.8);
+    border: 1px solid rgba(255,255,255,0.5);
+    box-shadow: 0 12px 80px rgba(50, 30, 120, 0.06);
+  }
+  .a-lt .gl .bar { border-bottom: 1px solid rgba(0,0,0,0.04); }
+  .a-lt .gl .bar .ic { background: rgba(0,0,0,0.02); color: #8888aa; }
+  .a-lt .gl .bar input { color: #333; }
+  .a-lt .gl .bar input::placeholder { color: #9999bb; }
+  .a-lt .gl .bar .hk { background: rgba(0,0,0,0.02); color: #9999bb; border: 1px solid rgba(0,0,0,0.04); }
+  .a-lt .gl .it .ico { background: rgba(0,0,0,0.02); border: 1px solid rgba(0,0,0,0.04); }
+  .a-lt .gl .it .tx .nm { color: #333348; }
+  .a-lt .gl .it .tx .ds { color: #9999bb; }
+  .a-lt .gl .it .tg { background: rgba(0,0,0,0.02); color: #9999bb; }
+  .a-lt .gl .it.sel {
+    background: rgba(120, 80, 255, 0.06);
+    border: 1px solid rgba(120,80,255,0.1);
+  }
+  .a-lt .gl .it.sel .ico { background: rgba(120,80,255,0.08); border-color: rgba(120,80,255,0.12); }
+  .a-lt .gl .it.sel .tx .nm { color: #6b4fcf; }
+  .a-lt .gl .it:not(.sel):hover { background: rgba(0,0,0,0.015); }
+
+  /* ================================================================ */
+  /* DESIGN B: Crystal Clear — 透明晶体感                              */
+  /* ================================================================ */
+  .b-dk {
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(0, 200, 255, 0.15) 0%, transparent 55%),
+      radial-gradient(ellipse at 70% 80%, rgba(255, 0, 150, 0.08) 0%, transparent 50%),
+      linear-gradient(135deg, #0a0a1a 0%, #12122a 100%);
+  }
+  .b-lt {
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(0, 200, 255, 0.06) 0%, transparent 55%),
+      radial-gradient(ellipse at 70% 80%, rgba(255, 0, 150, 0.03) 0%, transparent 50%),
+      linear-gradient(135deg, #eef4ff 0%, #f0ecf8 100%);
+  }
+  .b-dk .gl {
+    background: rgba(12, 12, 30, 0.25);
+    backdrop-filter: blur(60px) saturate(1.6);
+    -webkit-backdrop-filter: blur(60px) saturate(1.6);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    box-shadow: 0 20px 120px rgba(0,0,0,0.5);
+  }
+  .b-dk .gl .bar { border-bottom: 1px solid rgba(255,255,255,0.04); padding: 12px 16px; }
+  .b-dk .gl .bar .ic { background: rgba(255,255,255,0.03); color: #8888cc; border-radius: 6px; width: 22px; height: 22px; font-size: 12px; }
+  .b-dk .gl .bar input { font-size: 13px; color: #ddd; }
+  .b-dk .gl .bar input::placeholder { color: #55557a; }
+  .b-dk .gl .bar .hk { background: rgba(255,255,255,0.02); color: #55557a; border: 1px solid rgba(255,255,255,0.03); }
+  .b-dk .gl .lst { padding: 2px 8px 8px; }
+  .b-dk .gl .it { padding: 7px 10px; margin: 1px 0; border-radius: 8px; }
+  .b-dk .gl .it .ico { width: 28px; height: 28px; border-radius: 7px; font-size: 12px; background: rgba(255,255,255,0.02); border: none; }
+  .b-dk .gl .it .tx .nm { font-size: 12px; color: #d8d8ee; }
+  .b-dk .gl .it .tx .ds { font-size: 10px; color: #55557a; }
+  .b-dk .gl .it .tg { font-size: 9px; padding: 1px 8px; background: rgba(255,255,255,0.02); color: #66668a; }
+  .b-dk .gl .it.sel { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); }
+  .b-dk .gl .it.sel .ico { background: rgba(120,80,255,0.1); }
+  .b-dk .gl .it.sel .tx .nm { color: #c0b0ff; }
+  .b-dk .gl .it:not(.sel):hover { background: rgba(255,255,255,0.02); }
+
+  .b-lt .gl {
+    background: rgba(248, 246, 255, 0.35);
+    backdrop-filter: blur(60px) saturate(1.6);
+    -webkit-backdrop-filter: blur(60px) saturate(1.6);
+    border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 16px;
+    box-shadow: 0 12px 80px rgba(30, 20, 100, 0.04);
+  }
+  .b-lt .gl .bar { border-bottom: 1px solid rgba(0,0,0,0.03); padding: 12px 16px; }
+  .b-lt .gl .bar .ic { background: rgba(0,0,0,0.02); color: #8888aa; border-radius: 6px; width: 22px; height: 22px; font-size: 12px; }
+  .b-lt .gl .bar input { font-size: 13px; color: #333; }
+  .b-lt .gl .bar input::placeholder { color: #9999bb; }
+  .b-lt .gl .bar .hk { background: rgba(0,0,0,0.02); color: #9999bb; border: 1px solid rgba(0,0,0,0.03); }
+  .b-lt .gl .lst { padding: 2px 8px 8px; }
+  .b-lt .gl .it { padding: 7px 10px; margin: 1px 0; border-radius: 8px; }
+  .b-lt .gl .it .ico { width: 28px; height: 28px; border-radius: 7px; font-size: 12px; background: rgba(0,0,0,0.01); border: none; }
+  .b-lt .gl .it .tx .nm { font-size: 12px; color: #333348; }
+  .b-lt .gl .it .tx .ds { font-size: 10px; color: #9999bb; }
+  .b-lt .gl .it .tg { font-size: 9px; padding: 1px 8px; background: rgba(0,0,0,0.01); color: #9999bb; }
+  .b-lt .gl .it.sel { background: rgba(0,0,0,0.02); border: 1px solid rgba(0,0,0,0.04); }
+  .b-lt .gl .it.sel .ico { background: rgba(120,80,255,0.05); }
+  .b-lt .gl .it.sel .tx .nm { color: #6b4fcf; }
+  .b-lt .gl .it:not(.sel):hover { background: rgba(0,0,0,0.01); }
+
+  /* ================================================================ */
+  /* DESIGN C: Dark Luxury — 深色奢华 玻璃泛光                         */
+  /* ================================================================ */
+  .c-dk {
+    background: linear-gradient(135deg, #050510 0%, #0f0a1f 40%, #1a0a28 100%);
+  }
+  .c-lt {
+    background: linear-gradient(135deg, #f8f4f0 0%, #f0ecf8 40%, #fcf0f4 100%);
+  }
+
+  .c-g .gl { border-radius: 24px; }
+  .c-dk .gl {
+    background: rgba(10, 8, 22, 0.28);
+    backdrop-filter: blur(45px) saturate(1.9);
+    -webkit-backdrop-filter: blur(45px) saturate(1.9);
+    border: 1px solid rgba(255,255,255,0.06);
+    box-shadow: 0 0 60px rgba(100, 60, 255, 0.06), 0 24px 140px rgba(0,0,0,0.6);
+  }
+  .c-dk .gl .bar { border-bottom: 1px solid rgba(255,255,255,0.04); padding: 16px 20px; }
+  .c-dk .gl .bar .ic { background: rgba(255,255,255,0.02); color: #7777aa; width: 22px; height: 22px; font-size: 11px; }
+  .c-dk .gl .bar input { color: #ddd; font-size: 15px; }
+  .c-dk .gl .bar input::placeholder { color: #44446a; }
+  .c-dk .gl .bar .hk { background: rgba(255,255,255,0.02); color: #44446a; border: 1px solid rgba(255,255,255,0.03); }
+  .c-dk .gl .lst { padding: 6px 12px 12px; }
+  .c-dk .gl .it { padding: 10px 14px; border-radius: 12px; }
+  .c-dk .gl .it .ico { width: 34px; height: 34px; border-radius: 10px; font-size: 14px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.03); }
+  .c-dk .gl .it .tx .nm { font-size: 13px; color: #d8d0e8; }
+  .c-dk .gl .it .tx .ds { font-size: 11px; color: #44446a; }
+  .c-dk .gl .it .tg { background: rgba(255,255,255,0.02); color: #55557a; }
+  .c-dk .gl .it.sel { background: rgba(150, 100, 255, 0.08); border: 1px solid rgba(150,100,255,0.15); box-shadow: 0 0 30px rgba(150,100,255,0.03); }
+  .c-dk .gl .it.sel .ico { background: rgba(150,100,255,0.1); border-color: rgba(150,100,255,0.15); }
+  .c-dk .gl .it.sel .tx .nm { color: #c8b8ff; }
+  .c-dk .gl .it:not(.sel):hover { background: rgba(255,255,255,0.02); }
+
+  .c-lt .gl {
+    background: rgba(255, 255, 255, 0.35);
+    backdrop-filter: blur(45px) saturate(1.9);
+    -webkit-backdrop-filter: blur(45px) saturate(1.9);
+    border: 1px solid rgba(255,255,255,0.4);
+    box-shadow: 0 12px 80px rgba(50, 30, 120, 0.04);
+  }
+  .c-lt .gl .bar { border-bottom: 1px solid rgba(0,0,0,0.03); padding: 16px 20px; }
+  .c-lt .gl .bar .ic { background: rgba(0,0,0,0.02); color: #7777aa; width: 22px; height: 22px; font-size: 11px; }
+  .c-lt .gl .bar input { color: #333; font-size: 15px; }
+  .c-lt .gl .bar input::placeholder { color: #8888aa; }
+  .c-lt .gl .bar .hk { background: rgba(0,0,0,0.02); color: #8888aa; border: 1px solid rgba(0,0,0,0.03); }
+  .c-lt .gl .lst { padding: 6px 12px 12px; }
+  .c-lt .gl .it { padding: 10px 14px; border-radius: 12px; }
+  .c-lt .gl .it .ico { width: 34px; height: 34px; border-radius: 10px; font-size: 14px; background: rgba(0,0,0,0.01); border: 1px solid rgba(0,0,0,0.03); }
+  .c-lt .gl .it .tx .nm { font-size: 13px; color: #333348; }
+  .c-lt .gl .it .tx .ds { font-size: 11px; color: #8888aa; }
+  .c-lt .gl .it .tg { background: rgba(0,0,0,0.02); color: #8888aa; }
+  .c-lt .gl .it.sel { background: rgba(120, 80, 255, 0.04); border: 1px solid rgba(120,80,255,0.08); }
+  .c-lt .gl .it.sel .ico { background: rgba(120,80,255,0.06); border-color: rgba(120,80,255,0.1); }
+  .c-lt .gl .it.sel .tx .nm { color: #6b4fcf; }
+  .c-lt .gl .it:not(.sel):hover { background: rgba(0,0,0,0.015); }
+
+  /* ================================================================ */
+  /* DESIGN D: Neon Edge — 霓虹发光                                   */
+  /* ================================================================ */
+  .d-dk {
+    background:
+      radial-gradient(ellipse at 25% 35%, rgba(0, 255, 200, 0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 75% 65%, rgba(255, 0, 200, 0.06) 0%, transparent 50%),
+      #08081a;
+  }
+  .d-lt {
+    background:
+      radial-gradient(ellipse at 25% 35%, rgba(0, 200, 150, 0.04) 0%, transparent 50%),
+      radial-gradient(ellipse at 75% 65%, rgba(200, 0, 150, 0.04) 0%, transparent 50%),
+      #f0eef6;
+  }
+
+  .d-g .gl { border-radius: 14px; }
+  .d-dk .gl {
+    background: rgba(8, 8, 26, 0.2);
+    backdrop-filter: blur(55px) saturate(1.7);
+    -webkit-backdrop-filter: blur(55px) saturate(1.7);
+    border: 1px solid rgba(255,255,255,0.05);
+    box-shadow: 0 0 80px rgba(0, 200, 255, 0.03), 0 20px 100px rgba(0,0,0,0.5);
+  }
+  .d-dk .gl .bar { border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .d-dk .gl .bar .ic { background: rgba(255,255,255,0.02); color: #8888bb; }
+  .d-dk .gl .bar input { color: #ddd; }
+  .d-dk .gl .bar input::placeholder { color: #44446a; }
+  .d-dk .gl .bar .hk { background: rgba(255,255,255,0.02); color: #44446a; border: 1px solid rgba(255,255,255,0.03); }
+  .d-dk .gl .it .ico { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.03); }
+  .d-dk .gl .it .tx .nm { color: #d8d0e8; }
+  .d-dk .gl .it .tx .ds { color: #44446a; }
+  .d-dk .gl .it .tg { background: rgba(0,200,255,0.04); color: #55aaaa; border: 1px solid rgba(0,200,255,0.04); }
+  .d-dk .gl .it.sel { background: rgba(0, 200, 255, 0.06); border: 1px solid rgba(0, 200, 255, 0.12); box-shadow: 0 0 30px rgba(0, 200, 255, 0.04), inset 0 0 20px rgba(0, 200, 255, 0.02); }
+  .d-dk .gl .it.sel .ico { background: rgba(0, 200, 255, 0.08); border-color: rgba(0, 200, 255, 0.12); }
+  .d-dk .gl .it.sel .tx .nm { color: #88e0ff; }
+  .d-dk .gl .it.sel .tg { background: rgba(0,200,255,0.08); color: #66dddd; border-color: rgba(0,200,255,0.08); }
+  .d-dk .gl .it:not(.sel):hover { background: rgba(255,255,255,0.015); }
+
+  .d-lt .gl {
+    background: rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(55px) saturate(1.7);
+    -webkit-backdrop-filter: blur(55px) saturate(1.7);
+    border: 1px solid rgba(255,255,255,0.4);
+    box-shadow: 0 12px 80px rgba(0, 100, 150, 0.03);
+  }
+  .d-lt .gl .bar { border-bottom: 1px solid rgba(0,0,0,0.03); }
+  .d-lt .gl .bar .ic { background: rgba(0,0,0,0.02); color: #8888aa; }
+  .d-lt .gl .bar input { color: #333; }
+  .d-lt .gl .bar input::placeholder { color: #8888aa; }
+  .d-lt .gl .bar .hk { background: rgba(0,0,0,0.02); color: #8888aa; border: 1px solid rgba(0,0,0,0.03); }
+  .d-lt .gl .it .ico { background: rgba(0,0,0,0.01); border: 1px solid rgba(0,0,0,0.03); }
+  .d-lt .gl .it .tx .nm { color: #333348; }
+  .d-lt .gl .it .tx .ds { color: #8888aa; }
+  .d-lt .gl .it .tg { background: rgba(0,180,200,0.04); color: #559999; border: 1px solid rgba(0,180,200,0.04); }
+  .d-lt .gl .it.sel { background: rgba(0, 180, 200, 0.04); border: 1px solid rgba(0, 180, 200, 0.08); }
+  .d-lt .gl .it.sel .ico { background: rgba(0, 180, 200, 0.06); border-color: rgba(0, 180, 200, 0.1); }
+  .d-lt .gl .it.sel .tx .nm { color: #2277aa; }
+  .d-lt .gl .it.sel .tg { background: rgba(0,180,200,0.06); color: #448888; border-color: rgba(0,180,200,0.06); }
+  .d-lt .gl .it:not(.sel):hover { background: rgba(0,0,0,0.01); }
+
+  /* ================================================================ */
+  /* DESIGN E: Floating Panel — 悬浮面板 大圆角                         */
+  /* ================================================================ */
+  .e-dk {
+    background:
+      radial-gradient(ellipse at 50% 30%, rgba(255, 150, 50, 0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 70%, rgba(50, 100, 255, 0.08) 0%, transparent 50%),
+      #0a0a1a;
+  }
+  .e-lt {
+    background:
+      radial-gradient(ellipse at 50% 30%, rgba(255, 150, 50, 0.03) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 70%, rgba(50, 100, 255, 0.03) 0%, transparent 50%),
+      #ececf4;
+  }
+
+  .e-g .gl { border-radius: 28px; width: 500px; }
+  .e-dk .gl {
+    background: rgba(12, 12, 28, 0.22);
+    backdrop-filter: blur(40px) saturate(1.5);
+    -webkit-backdrop-filter: blur(40px) saturate(1.5);
+    border: 1px solid rgba(255,255,255,0.05);
+    box-shadow: 0 30px 150px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.05);
+  }
+  .e-dk .gl .bar { border-bottom: 1px solid rgba(255,255,255,0.03); padding: 18px 22px; }
+  .e-dk .gl .bar .ic { background: rgba(255,255,255,0.02); color: #8888aa; width: 20px; height: 20px; font-size: 10px; border-radius: 6px; }
+  .e-dk .gl .bar input { font-size: 15px; color: #eee; }
+  .e-dk .gl .bar input::placeholder { color: #55557a; }
+  .e-dk .gl .bar .hk { background: rgba(255,255,255,0.02); color: #55557a; border: 1px solid rgba(255,255,255,0.02); }
+  .e-dk .gl .lst { padding: 4px 14px 16px; }
+  .e-dk .gl .it { padding: 12px 14px; border-radius: 14px; gap: 12px; }
+  .e-dk .gl .it .ico { width: 36px; height: 36px; border-radius: 12px; font-size: 15px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.03); }
+  .e-dk .gl .it .tx .nm { font-size: 14px; color: #ddd8ec; }
+  .e-dk .gl .it .tx .ds { font-size: 11px; color: #55557a; }
+  .e-dk .gl .it .tg { background: rgba(255,255,255,0.02); color: #66668a; }
+  .e-dk .gl .it.sel { background: rgba(100, 120, 255, 0.06); border: 1px solid rgba(100,120,255,0.1); }
+  .e-dk .gl .it.sel .ico { background: rgba(100,120,255,0.08); border-color: rgba(100,120,255,0.12); }
+  .e-dk .gl .it.sel .tx .nm { color: #b0b8ff; }
+  .e-dk .gl .it:not(.sel):hover { background: rgba(255,255,255,0.015); }
+
+  .e-lt .gl {
+    background: rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(40px) saturate(1.5);
+    -webkit-backdrop-filter: blur(40px) saturate(1.5);
+    border: 1px solid rgba(255,255,255,0.35);
+    box-shadow: 0 20px 100px rgba(30, 20, 100, 0.03);
+  }
+  .e-lt .gl .bar { border-bottom: 1px solid rgba(0,0,0,0.03); padding: 18px 22px; }
+  .e-lt .gl .bar .ic { background: rgba(0,0,0,0.02); color: #8888aa; width: 20px; height: 20px; font-size: 10px; border-radius: 6px; }
+  .e-lt .gl .bar input { font-size: 15px; color: #333; }
+  .e-lt .gl .bar input::placeholder { color: #8888aa; }
+  .e-lt .gl .bar .hk { background: rgba(0,0,0,0.02); color: #8888aa; border: 1px solid rgba(0,0,0,0.02); }
+  .e-lt .gl .lst { padding: 4px 14px 16px; }
+  .e-lt .gl .it { padding: 12px 14px; border-radius: 14px; gap: 12px; }
+  .e-lt .gl .it .ico { width: 36px; height: 36px; border-radius: 12px; font-size: 15px; background: rgba(0,0,0,0.01); border: 1px solid rgba(0,0,0,0.03); }
+  .e-lt .gl .it .tx .nm { font-size: 14px; color: #333348; }
+  .e-lt .gl .it .tx .ds { font-size: 11px; color: #8888aa; }
+  .e-lt .gl .it .tg { background: rgba(0,0,0,0.02); color: #8888aa; }
+  .e-lt .gl .it.sel { background: rgba(100, 120, 255, 0.04); border: 1px solid rgba(100,120,255,0.07); }
+  .e-lt .gl .it.sel .ico { background: rgba(100,120,255,0.05); border-color: rgba(100,120,255,0.08); }
+  .e-lt .gl .it.sel .tx .nm { color: #5566cc; }
+  .e-lt .gl .it:not(.sel):hover { background: rgba(0,0,0,0.01); }
+
+  @media (max-width: 900px) {
+    .side-by-side { grid-template-columns: 1fr; }
+    .gl { width: 100% !important; max-width: 480px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>⌨ 启动器 · 5 种毛玻璃新风格</h1>
+  <div class="sub">加强玻璃穿透感 · 更低不透明度 + 更大 blur</div>
+</div>
+
+<!-- A: Deep Frost -->
+<div class="design-block">
+  <div class="design-label"><h2>A · 深层冰霜</h2><span>Deep Frost · rgba 0.3 · blur 50px · 背景条纹穿透</span></div>
+  <div class="side-by-side">
+    <div class="frame a-dk">
+      <div class="badge" style="color:#8888bb;">🌙 暗色</div>
+      <div class="gl">
+        <div class="bar">
+          <div class="ic">⌘</div>
+          <input type="text" placeholder="搜索工具、命令、文件..." value="api">
+          <span class="hk">⌘K</span>
+        </div>
+        <div class="lst">
+          <div class="it sel"><div class="ico" style="color:#c8b8ff;">🧪</div><div class="tx"><div class="nm">API 调试</div><div class="ds">HTTP / WebSocket 请求测试</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#88dd88;">📋</div><div class="tx"><div class="nm">剪贴板历史</div><div class="ds">最近复制的内容与记录</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#ff8888;">📡</div><div class="tx"><div class="nm">网络抓包</div><div class="ds">HTTP 流量捕获与过滤器</div></div><span class="tg">开发</span></div>
+          <div class="it"><div class="ico" style="color:#ffcc44;">🖼</div><div class="tx"><div class="nm">图片压缩</div><div class="ds">批量压缩与格式转换</div></div><span class="tg">工具</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame a-lt">
+      <div class="badge" style="color:#8888aa;">☀ 亮色</div>
+      <div class="gl">
+        <div class="bar">
+          <div class="ic">⌘</div>
+          <input type="text" placeholder="搜索工具、命令、文件..." value="api">
+          <span class="hk">⌘K</span>
+        </div>
+        <div class="lst">
+          <div class="it sel"><div class="ico" style="color:#6b4fcf;">🧪</div><div class="tx"><div class="nm">API 调试</div><div class="ds">HTTP / WebSocket 请求测试</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#55aa55;">📋</div><div class="tx"><div class="nm">剪贴板历史</div><div class="ds">最近复制的内容与记录</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#cc6666;">📡</div><div class="tx"><div class="nm">网络抓包</div><div class="ds">HTTP 流量捕获与过滤器</div></div><span class="tg">开发</span></div>
+          <div class="it"><div class="ico" style="color:#ccaa33;">🖼</div><div class="tx"><div class="nm">图片压缩</div><div class="ds">批量压缩与格式转换</div></div><span class="tg">工具</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- B: Crystal Clear -->
+<div class="design-block">
+  <div class="design-label"><h2>B · 晶体透明</h2><span>Crystal Clear · rgba 0.25 · blur 60px · 极透玻璃 + 彩色背景晕</span></div>
+  <div class="side-by-side">
+    <div class="frame b-dk">
+      <div class="badge" style="color:#8888cc;">🌙 暗色</div>
+      <div class="gl">
+        <div class="bar">
+          <div class="ic">⌕</div>
+          <input type="text" placeholder="搜索工具、命令..." value="api">
+          <span class="hk">⌘K</span>
+        </div>
+        <div class="lst">
+          <div class="it sel"><div class="ico" style="color:#c0b0ff;">🧪</div><div class="tx"><div class="nm">API 调试</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#88dd88;">📋</div><div class="tx"><div class="nm">剪贴板历史</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#ff8888;">📡</div><div class="tx"><div class="nm">网络抓包</div></div><span class="tg">开发</span></div>
+          <div class="it"><div class="ico" style="color:#aaccff;">⚙</div><div class="tx"><div class="nm">系统设置</div></div><span class="tg">系统</span></div>
+          <div class="it"><div class="ico" style="color:#88ddff;">🔗</div><div class="tx"><div class="nm">远程文件</div></div><span class="tg">开发</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame b-lt">
+      <div class="badge" style="color:#8888aa;">☀ 亮色</div>
+      <div class="gl">
+        <div class="bar">
+          <div class="ic">⌕</div>
+          <input type="text" placeholder="搜索工具、命令..." value="api">
+          <span class="hk">⌘K</span>
+        </div>
+        <div class="lst">
+          <div class="it sel"><div class="ico" style="color:#6b4fcf;">🧪</div><div class="tx"><div class="nm">API 调试</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#55aa55;">📋</div><div class="tx"><div class="nm">剪贴板历史</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#cc6666;">📡</div><div class="tx"><div class="nm">网络抓包</div></div><span class="tg">开发</span></div>
+          <div class="it"><div class="ico" style="color:#6688cc;">⚙</div><div class="tx"><div class="nm">系统设置</div></div><span class="tg">系统</span></div>
+          <div class="it"><div class="ico" style="color:#5599cc;">🔗</div><div class="tx"><div class="nm">远程文件</div></div><span class="tg">开发</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- C: Dark Luxury -->
+<div class="design-block">
+  <div class="design-label"><h2>C · 深色奢华</h2><span>Dark Luxury · rgba 0.28 · blur 45px · 纯色深色背景 + 泛光边框</span></div>
+  <div class="side-by-side">
+    <div class="frame c-dk">
+      <div class="badge" style="color:#7777aa;">🌙 暗色</div>
+      <div class="gl">
+        <div class="bar">
+          <div class="ic">⌘</div>
+          <input type="text" placeholder="输入命令..." value="api">
+          <span class="hk">⌘K</span>
+        </div>
+        <div class="lst">
+          <div class="it sel"><div class="ico" style="color:#c8b8ff;">🧪</div><div class="tx"><div class="nm">API 调试</div><div class="ds">HTTP / WebSocket 请求测试</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#88dd88;">📋</div><div class="tx"><div class="nm">剪贴板历史</div><div class="ds">最近复制的内容与记录</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#ff8888;">📡</div><div class="tx"><div class="nm">网络抓包</div><div class="ds">HTTP 流量捕获与过滤器</div></div><span class="tg">开发</span></div>
+          <div class="it"><div class="ico" style="color:#ffcc44;">🖼</div><div class="tx"><div class="nm">图片压缩</div><div class="ds">批量压缩与格式转换</div></div><span class="tg">工具</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame c-lt">
+      <div class="badge" style="color:#7777aa;">☀ 亮色</div>
+      <div class="gl">
+        <div class="bar">
+          <div class="ic">⌘</div>
+          <input type="text" placeholder="输入命令..." value="api">
+          <span class="hk">⌘K</span>
+        </div>
+        <div class="lst">
+          <div class="it sel"><div class="ico" style="color:#6b4fcf;">🧪</div><div class="tx"><div class="nm">API 调试</div><div class="ds">HTTP / WebSocket 请求测试</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#55aa55;">📋</div><div class="tx"><div class="nm">剪贴板历史</div><div class="ds">最近复制的内容与记录</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#cc6666;">📡</div><div class="tx"><div class="nm">网络抓包</div><div class="ds">HTTP 流量捕获与过滤器</div></div><span class="tg">开发</span></div>
+          <div class="it"><div class="ico" style="color:#ccaa33;">🖼</div><div class="tx"><div class="nm">图片压缩</div><div class="ds">批量压缩与格式转换</div></div><span class="tg">工具</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- D: Neon Edge -->
+<div class="design-block">
+  <div class="design-label"><h2>D · 霓虹发光</h2><span>Neon Edge · rgba 0.2 · blur 55px · 青蓝发光选中项 + 彩晕背景</span></div>
+  <div class="side-by-side">
+    <div class="frame d-dk">
+      <div class="badge" style="color:#8888bb;">🌙 暗色</div>
+      <div class="gl">
+        <div class="bar">
+          <div class="ic">⌘</div>
+          <input type="text" placeholder="搜索..." value="api">
+          <span class="hk">⌘K</span>
+        </div>
+        <div class="lst">
+          <div class="it sel"><div class="ico" style="color:#88e0ff;">🧪</div><div class="tx"><div class="nm">API 调试</div><div class="ds">HTTP / WebSocket 请求测试</div></div><span class="tg" style="background:rgba(0,200,255,0.06);color:#66dddd;">工具</span></div>
+          <div class="it"><div class="ico" style="color:#88dd88;">📋</div><div class="tx"><div class="nm">剪贴板历史</div><div class="ds">最近复制的内容与记录</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#ff8888;">📡</div><div class="tx"><div class="nm">网络抓包</div><div class="ds">HTTP 流量捕获与过滤器</div></div><span class="tg">开发</span></div>
+          <div class="it"><div class="ico" style="color:#ffcc44;">🖼</div><div class="tx"><div class="nm">图片压缩</div><div class="ds">批量压缩与格式转换</div></div><span class="tg">工具</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame d-lt">
+      <div class="badge" style="color:#8888aa;">☀ 亮色</div>
+      <div class="gl">
+        <div class="bar">
+          <div class="ic">⌘</div>
+          <input type="text" placeholder="搜索..." value="api">
+          <span class="hk">⌘K</span>
+        </div>
+        <div class="lst">
+          <div class="it sel"><div class="ico" style="color:#2277aa;">🧪</div><div class="tx"><div class="nm">API 调试</div><div class="ds">HTTP / WebSocket 请求测试</div></div><span class="tg" style="background:rgba(0,180,200,0.04);color:#448888;">工具</span></div>
+          <div class="it"><div class="ico" style="color:#55aa55;">📋</div><div class="tx"><div class="nm">剪贴板历史</div><div class="ds">最近复制的内容与记录</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#cc6666;">📡</div><div class="tx"><div class="nm">网络抓包</div><div class="ds">HTTP 流量捕获与过滤器</div></div><span class="tg">开发</span></div>
+          <div class="it"><div class="ico" style="color:#ccaa33;">🖼</div><div class="tx"><div class="nm">图片压缩</div><div class="ds">批量压缩与格式转换</div></div><span class="tg">工具</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- E: Floating Panel -->
+<div class="design-block">
+  <div class="design-label"><h2>E · 悬浮面板</h2><span>Floating Panel · rgba 0.22 · blur 40px · 大圆角 28px · 超宽阴影</span></div>
+  <div class="side-by-side">
+    <div class="frame e-dk">
+      <div class="badge" style="color:#8888aa;">🌙 暗色</div>
+      <div class="gl">
+        <div class="bar">
+          <div class="ic">⌘</div>
+          <input type="text" placeholder="搜索工具、命令、文件..." value="api">
+          <span class="hk">⌘K</span>
+        </div>
+        <div class="lst">
+          <div class="it sel"><div class="ico" style="color:#b0b8ff;">🧪</div><div class="tx"><div class="nm">API 调试</div><div class="ds">HTTP / WebSocket 请求测试</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#88dd88;">📋</div><div class="tx"><div class="nm">剪贴板历史</div><div class="ds">最近复制的内容与记录</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#ff8888;">📡</div><div class="tx"><div class="nm">网络抓包</div><div class="ds">HTTP 流量捕获与过滤器</div></div><span class="tg">开发</span></div>
+          <div class="it"><div class="ico" style="color:#ffcc44;">🖼</div><div class="tx"><div class="nm">图片压缩</div><div class="ds">批量压缩与格式转换</div></div><span class="tg">工具</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame e-lt">
+      <div class="badge" style="color:#8888aa;">☀ 亮色</div>
+      <div class="gl">
+        <div class="bar">
+          <div class="ic">⌘</div>
+          <input type="text" placeholder="搜索工具、命令、文件..." value="api">
+          <span class="hk">⌘K</span>
+        </div>
+        <div class="lst">
+          <div class="it sel"><div class="ico" style="color:#5566cc;">🧪</div><div class="tx"><div class="nm">API 调试</div><div class="ds">HTTP / WebSocket 请求测试</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#55aa55;">📋</div><div class="tx"><div class="nm">剪贴板历史</div><div class="ds">最近复制的内容与记录</div></div><span class="tg">工具</span></div>
+          <div class="it"><div class="ico" style="color:#cc6666;">📡</div><div class="tx"><div class="nm">网络抓包</div><div class="ds">HTTP 流量捕获与过滤器</div></div><span class="tg">开发</span></div>
+          <div class="it"><div class="ico" style="color:#ccaa33;">🖼</div><div class="tx"><div class="nm">图片压缩</div><div class="ds">批量压缩与格式转换</div></div><span class="tg">工具</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

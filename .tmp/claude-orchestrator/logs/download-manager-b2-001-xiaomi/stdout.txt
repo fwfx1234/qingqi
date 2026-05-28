@@ -1,0 +1,57 @@
+All checks pass. Here's the final summary:
+
+---
+
+## Files changed
+
+- `src/features/download_manager/store.rs` — added `TaskCounts` struct, `task_counts()` method, 2 new tests
+- `src/features/download_manager/service.rs` — added `task_counts()` method
+- `src/features/download_manager/view.rs` — extended `FilterTab`, added settings overlay, wired all service-backed settings
+
+## download-manager settings/filter behaviors now real
+
+**Filters (12 tabs, all data-driven):**
+- Status filters: All, Active, Paused, Completed, Failed — each shows real count from `TaskCounts`
+- Category filters: Video, Audio, Document, Archive, Image, Software, Other — each shows real count, only displayed when count > 0 or active
+- Filter counts come from a single `GROUP BY status, category` query via `store.task_counts()`
+
+**Settings controls (all service-backed, persist to SQLite):**
+- Save root directory (text input)
+- Max concurrent (1–16, text input)
+- Speed limit KB/s (text input, 0 = unlimited)
+- Timeout seconds (1–3600)
+- Retry count (0–10)
+- Proxy URL (auto-prepends `http://` if no scheme)
+- User-Agent
+- Referer
+- Cookie
+- Custom request headers (multi-line, `Key: Value` per line)
+- Settings overlay opens from bottom bar "设置" button, Save/Cancel buttons
+
+**Other improvements:**
+- Bottom bar shows save dir, concurrency, speed limit summary
+- "全部恢复" (resume all) button wired through `service.resume_all()`
+- Filter chip shows count badge per tab
+
+## download-manager behaviors still missing
+
+- No native macOS folder picker for save root (uses text input; `FolderDialog`-style picker would need GPUI file dialog integration)
+- No virtualized/paginated task list (renders all tasks; should use `Page<T>` for large lists)
+- No keyboard shortcuts (space to pause/resume, delete to cancel)
+- Speed limit slider (currently numeric input; QML has a slider)
+- Drag-and-drop URL import
+- Resume on startup for in-progress tasks (currently resets to Pending)
+
+## Suggested note for `docs/migration-guide.md`
+
+> `download-manager`: settings UI overlay now exposes all service-backed settings (save root, concurrency, speed limit, timeout, retry, proxy, User-Agent, Referer, Cookie, custom headers). Filter tabs extended from 4 to 12 (status + category), driven by `TaskCounts` from store. Remaining: native folder picker, virtualized task list, keyboard shortcuts, speed limit slider.
+
+## Commands run
+
+```
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo fmt
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo check
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo test --bin qingqi -- features::download_manager
+```
+
+Results: `cargo fmt` clean, `cargo check` clean (0 errors, no new warnings), `cargo test --bin qingqi -- features::download_manager` 21/21 passed (including 2 new tests). The 2 pre-existing failures in `platform::apps::tests` are unrelated.

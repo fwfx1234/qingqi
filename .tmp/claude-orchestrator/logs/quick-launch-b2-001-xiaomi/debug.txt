@@ -1,0 +1,320 @@
+2026-05-27T23:56:22.558Z [DEBUG] MDM settings load completed in 0ms
+2026-05-27T23:56:22.582Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json
+2026-05-27T23:56:22.583Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/fwfx1234/develop/qingqi/.claude/settings.json
+2026-05-27T23:56:22.584Z [DEBUG] CA certs: Config fallback - globalEnv keys: , settingsEnv keys: none
+2026-05-27T23:56:22.584Z [DEBUG] [init] configureGlobalMTLS starting
+2026-05-27T23:56:22.584Z [DEBUG] [init] configureGlobalMTLS complete
+2026-05-27T23:56:22.584Z [DEBUG] [init] configureGlobalAgents starting
+2026-05-27T23:56:22.584Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-05-27T23:56:22.584Z [DEBUG] CA certs: Loaded 145 bundled root certificates
+2026-05-27T23:56:22.593Z [DEBUG] CA certs: system store returned empty
+2026-05-27T23:56:22.593Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-05-27T23:56:22.593Z [DEBUG] [init] configureGlobalAgents complete
+2026-05-27T23:56:22.594Z [DEBUG] Error log sink initialized
+2026-05-27T23:56:22.607Z [DEBUG] Applying permission update: Adding 30 allow rule(s) to destination 'localSettings': ["Bash(cargo check *)","Read(//Users/fwfx1234/.cargo/bin/**)","Read(//usr/local/bin/**)","Read(//opt/homebrew/bin/**)","Read(//Users/fwfx1234/.rustup/toolchains/**)","Read(//Users/fwfx1234/.rustup/**)","Bash(export PATH=\"$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH\")","Bash(cargo build *)","Bash(rustup show *)","Bash(export PATH=\"$HOME/.cargo/bin:$PATH\")","Bash(rustup which *)","Bash(~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo build *)","Bash(export PATH=\"$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$HOME/.cargo/bin:$PATH\")","Bash(cargo doc *)","Bash(cargo clean *)","Bash(cargo run *)","Bash(kill %1)","Bash(cargo test *)","Bash(echo \"exit: $?\")","Bash(grep -E \"/\\(main|lib|mod|launcher|runtime|ui|app_launcher|clipboard\\)\\\\.\\(rs\\)$\")","Bash(cargo fmt *)","Bash(grep -vE \"warning: \\\\`\")","Bash(grep -v \"is never used\\\\|warning: \\\\`qingqi\\\\`\")","Bash(echo \"EXIT:$?\")","Bash(git -C /Users/fwfx1234/develop/qingqi log --all --oneline -30)","Bash(git -C /Users/fwfx1234/develop/qingqi status)","Bash(python3 *)","Bash(wait)","Bash(xxd)","Read(//Users/fwfx1234/.cargo/registry/src/**)"]
+2026-05-27T23:56:22.608Z [DEBUG] [claudeai-mcp] Disabled: API-key auth precedence active
+2026-05-27T23:56:22.608Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-05-27T23:56:22.611Z [DEBUG] [STARTUP] Running setup()...
+2026-05-27T23:56:22.612Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json
+2026-05-27T23:56:22.612Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/fwfx1234/develop/qingqi/.claude/settings.json
+2026-05-27T23:56:22.613Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/fwfx1234/.claude/skills, project=[]
+2026-05-27T23:56:22.613Z [DEBUG] Error log sink initialized
+2026-05-27T23:56:22.624Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/commands: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/commands'
+2026-05-27T23:56:22.624Z [DEBUG] Loaded 0 unique skills (0 unconditional, 0 conditional, managed: 0, user: 0, project: 0, additional: 0, legacy commands: 0)
+2026-05-27T23:56:22.625Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/agents: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/agents'
+2026-05-27T23:56:22.627Z [DEBUG] [STARTUP] setup() completed in 16ms
+2026-05-27T23:56:22.627Z [DEBUG] Cleared CA certificates cache
+2026-05-27T23:56:22.627Z [DEBUG] Cleared mTLS configuration cache
+2026-05-27T23:56:22.627Z [DEBUG] Cleared proxy agent cache
+2026-05-27T23:56:22.627Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-05-27T23:56:22.627Z [DEBUG] CA certs: Loaded 145 bundled root certificates
+2026-05-27T23:56:22.627Z [DEBUG] CA certs: system store returned empty
+2026-05-27T23:56:22.628Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-05-27T23:56:22.628Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-05-27T23:56:22.628Z [DEBUG] [ToolSearch:optimistic] disabled: ANTHROPIC_BASE_URL=https://token-plan-cn.xiaomimimo.com/anthropic is not a first-party Anthropic host. Set ENABLE_TOOL_SEARCH=true (or auto / auto:N) if your proxy forwards tool_reference blocks.
+2026-05-27T23:56:22.656Z [DEBUG] Loaded 1 installed plugins from /Users/fwfx1234/.claude/plugins/installed_plugins.json
+2026-05-27T23:56:22.660Z [DEBUG] Plugin rust-analyzer-lsp has no entry.skills defined
+2026-05-27T23:56:22.661Z [DEBUG] Found 1 plugins (1 enabled, 0 disabled)
+2026-05-27T23:56:22.662Z [DEBUG] getPluginSkills: Processing 1 enabled plugins
+2026-05-27T23:56:22.662Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-05-27T23:56:22.663Z [DEBUG] Registered 0 hooks from 1 plugins
+2026-05-27T23:56:22.669Z [DEBUG] Total plugin skills loaded: 0
+2026-05-27T23:56:22.669Z [DEBUG] Total plugin commands loaded: 0
+2026-05-27T23:56:22.669Z [DEBUG] Total plugin agents loaded: 0
+2026-05-27T23:56:22.669Z [DEBUG] getSkills returning: 0 skill dir commands, 0 plugin skills, 14 bundled skills, 0 builtin plugin skills
+2026-05-27T23:56:22.670Z [DEBUG] [STARTUP] Commands and agents loaded in 42ms
+2026-05-27T23:56:22.670Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-05-27T23:56:22.670Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-05-27T23:56:22.670Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-05-27T23:56:22.670Z [DEBUG] Starting background startup prefetches
+2026-05-27T23:56:22.670Z [DEBUG] [Bootstrap] Skipped: no usable OAuth or API key
+2026-05-27T23:56:22.675Z [DEBUG] [STARTUP] MCP configs resolved in 67ms (awaited at +67ms)
+2026-05-27T23:56:22.676Z [DEBUG] All plugins already exist, skipping migration
+2026-05-27T23:56:22.676Z [DEBUG] Cleared CA certificates cache
+2026-05-27T23:56:22.676Z [DEBUG] Cleared mTLS configuration cache
+2026-05-27T23:56:22.676Z [DEBUG] Cleared proxy agent cache
+2026-05-27T23:56:22.680Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-05-27T23:56:22.683Z [DEBUG] CA certs: Loaded 145 bundled root certificates
+2026-05-27T23:56:22.683Z [DEBUG] CA certs: system store returned empty
+2026-05-27T23:56:22.683Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-05-27T23:56:22.684Z [DEBUG] Initialized versioned plugins system with 1 plugins
+2026-05-27T23:56:22.686Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:56:22.686Z [DEBUG] [MCP] --mcp-config servers running fully async (nonblocking)
+2026-05-27T23:56:22.686Z [DEBUG] [MCP] claude.ai connectors running fully async (nonblocking)
+2026-05-27T23:56:22.687Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-05-27T23:56:22.687Z [DEBUG] [3P telemetry] isTelemetryEnabled=false (CLAUDE_CODE_ENABLE_TELEMETRY=undefined)
+2026-05-27T23:56:22.690Z [DEBUG] [auto-mode] verifyAutoModeGateAccess: enabledState=opt-in disabledBySettings=false model=mimo-v2-pro modelSupported=true disableFastModeBreakerFires=false carouselAvailable=true canEnterAuto=true
+2026-05-27T23:56:22.705Z [DEBUG] [ScheduledTasks] scheduler start() — enabled=false, hasTasks=false
+2026-05-27T23:56:22.712Z [DEBUG] Loaded 1 LSP server(s) from plugin: rust-analyzer-lsp
+2026-05-27T23:56:22.713Z [DEBUG] Total LSP servers loaded: 1
+2026-05-27T23:56:22.713Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 1 server(s)
+2026-05-27T23:56:22.714Z [DEBUG] Queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration (connection not ready)
+2026-05-27T23:56:22.714Z [DEBUG] LSP manager initialized with 1 servers
+2026-05-27T23:56:22.714Z [DEBUG] LSP server manager initialized successfully
+2026-05-27T23:56:22.715Z [DEBUG] Queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics (connection not ready)
+2026-05-27T23:56:22.715Z [DEBUG] Registered diagnostics handler for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-27T23:56:22.715Z [DEBUG] LSP notification handlers registered successfully for all 1 server(s)
+2026-05-27T23:56:22.716Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/output-styles: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/output-styles'
+2026-05-27T23:56:22.716Z [DEBUG] Total plugin output styles loaded: 0
+2026-05-27T23:56:22.717Z [DEBUG] installPluginsForHeadless: starting
+2026-05-27T23:56:22.718Z [WARN] [3P telemetry] Event dropped (no event logger initialized): plugin_loaded
+2026-05-27T23:56:22.718Z [DEBUG] Git remote URL: null
+2026-05-27T23:56:22.718Z [DEBUG] No git remote URL found
+2026-05-27T23:56:22.738Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/skills: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/skills'
+2026-05-27T23:56:22.751Z [DEBUG] Ripgrep first use test: PASSED (mode=embedded, path=/opt/homebrew/Caskroom/claude-code@latest/2.1.152/claude)
+2026-05-27T23:56:22.762Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T23:56:22.762Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T23:56:22.762Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T23:56:22.762Z [DEBUG] Sending 12 skills via attachment (initial)
+2026-05-27T23:56:22.762Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T23:56:22.762Z [DEBUG] Watching for changes in setting files /Users/fwfx1234/.claude/settings.json, /Users/fwfx1234/develop/qingqi/.claude/settings.json, /Users/fwfx1234/develop/qingqi/.claude/settings.local.json...
+2026-05-27T23:56:22.766Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:56:22.766Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T23:56:22.767Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T23:56:22.768Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T23:56:22.768Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:56:22.768Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:56:22.768Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T23:56:22.768Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T23:56:22.769Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T23:56:22.769Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:56:22.769Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:56:22.770Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:56:23.061Z [ERROR] API error (attempt 1/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:56:23.637Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:56:23.637Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:56:23.640Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:56:23.750Z [ERROR] API error (attempt 2/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:56:24.846Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:56:24.846Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:56:24.847Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:56:24.907Z [DEBUG] [mcp-registry] Loaded 197 official MCP URLs (legacy)
+2026-05-27T23:56:24.927Z [ERROR] API error (attempt 3/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:56:26.944Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:56:26.945Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:56:26.947Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:56:27.004Z [ERROR] API error (attempt 4/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:56:31.781Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:56:31.784Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:56:31.786Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:56:31.968Z [ERROR] API error (attempt 5/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:56:41.107Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:56:41.108Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:56:41.109Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:56:41.159Z [ERROR] API error (attempt 6/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:56:47.885Z [WARN] Official marketplace GCS fetch failed: timeout of 10000ms exceeded
+2026-05-27T23:56:47.885Z [WARN] Official marketplace GCS failed; falling back to git
+2026-05-27T23:56:50.895Z [DEBUG] SSH config check: code=1 configured=false
+2026-05-27T23:56:50.907Z [DEBUG] git pull: cwd=/Users/fwfx1234/.claude/plugins/marketplaces/claude-plugins-official ref=default
+2026-05-27T23:56:52.028Z [DEBUG] Successfully refreshed marketplace: claude-plugins-official
+2026-05-27T23:56:52.028Z [DEBUG] Plugin autoupdate: checking installed plugins
+2026-05-27T23:56:52.029Z [DEBUG] Skipping refresh for marketplace 'claude-plugins-official' — refreshed 0s ago
+2026-05-27T23:56:52.033Z [DEBUG] Loading plugin rust-analyzer-lsp from source: "./plugins/rust-analyzer-lsp"
+2026-05-27T23:56:52.033Z [DEBUG] Using provided version for rust-analyzer-lsp@claude-plugins-official: 1.0.0
+2026-05-27T23:56:52.033Z [DEBUG] Plugin rust-analyzer-lsp@claude-plugins-official version 1.0.0 already cached at /Users/fwfx1234/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-05-27T23:56:52.034Z [DEBUG] Copied plugin rust-analyzer-lsp to versioned cache: /Users/fwfx1234/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-05-27T23:56:52.034Z [DEBUG] Plugin rust-analyzer-lsp has no entry.skills defined
+2026-05-27T23:56:52.034Z [DEBUG] Found 1 plugins (1 enabled, 0 disabled)
+2026-05-27T23:56:52.034Z [DEBUG] Using provided version for rust-analyzer-lsp@claude-plugins-official: 1.0.0
+2026-05-27T23:56:58.933Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:56:58.934Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:56:58.935Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:56:59.012Z [ERROR] API error (attempt 7/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:57:11.281Z [DEBUG] MDM settings load completed in 0ms
+2026-05-27T23:57:11.322Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json
+2026-05-27T23:57:11.323Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/fwfx1234/develop/qingqi/.claude/settings.json
+2026-05-27T23:57:11.324Z [DEBUG] CA certs: Config fallback - globalEnv keys: , settingsEnv keys: none
+2026-05-27T23:57:11.329Z [DEBUG] [init] configureGlobalMTLS starting
+2026-05-27T23:57:11.330Z [DEBUG] [init] configureGlobalMTLS complete
+2026-05-27T23:57:11.330Z [DEBUG] [init] configureGlobalAgents starting
+2026-05-27T23:57:11.330Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-05-27T23:57:11.330Z [DEBUG] CA certs: Loaded 145 bundled root certificates
+2026-05-27T23:57:11.341Z [DEBUG] CA certs: system store returned empty
+2026-05-27T23:57:11.341Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-05-27T23:57:11.341Z [DEBUG] [init] configureGlobalAgents complete
+2026-05-27T23:57:11.342Z [DEBUG] Error log sink initialized
+2026-05-27T23:57:11.358Z [DEBUG] Applying permission update: Adding 30 allow rule(s) to destination 'localSettings': ["Bash(cargo check *)","Read(//Users/fwfx1234/.cargo/bin/**)","Read(//usr/local/bin/**)","Read(//opt/homebrew/bin/**)","Read(//Users/fwfx1234/.rustup/toolchains/**)","Read(//Users/fwfx1234/.rustup/**)","Bash(export PATH=\"$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH\")","Bash(cargo build *)","Bash(rustup show *)","Bash(export PATH=\"$HOME/.cargo/bin:$PATH\")","Bash(rustup which *)","Bash(~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo build *)","Bash(export PATH=\"$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$HOME/.cargo/bin:$PATH\")","Bash(cargo doc *)","Bash(cargo clean *)","Bash(cargo run *)","Bash(kill %1)","Bash(cargo test *)","Bash(echo \"exit: $?\")","Bash(grep -E \"/\\(main|lib|mod|launcher|runtime|ui|app_launcher|clipboard\\)\\\\.\\(rs\\)$\")","Bash(cargo fmt *)","Bash(grep -vE \"warning: \\\\`\")","Bash(grep -v \"is never used\\\\|warning: \\\\`qingqi\\\\`\")","Bash(echo \"EXIT:$?\")","Bash(git -C /Users/fwfx1234/develop/qingqi log --all --oneline -30)","Bash(git -C /Users/fwfx1234/develop/qingqi status)","Bash(python3 *)","Bash(wait)","Bash(xxd)","Read(//Users/fwfx1234/.cargo/registry/src/**)"]
+2026-05-27T23:57:11.359Z [DEBUG] [claudeai-mcp] Disabled: API-key auth precedence active
+2026-05-27T23:57:11.359Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-05-27T23:57:11.362Z [DEBUG] [STARTUP] Running setup()...
+2026-05-27T23:57:11.363Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Library/Application Support/ClaudeCode/managed-settings.json
+2026-05-27T23:57:11.363Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /Users/fwfx1234/develop/qingqi/.claude/settings.json
+2026-05-27T23:57:11.364Z [DEBUG] Loading skills from: managed=/Library/Application Support/ClaudeCode/.claude/skills, user=/Users/fwfx1234/.claude/skills, project=[]
+2026-05-27T23:57:11.364Z [DEBUG] Error log sink initialized
+2026-05-27T23:57:11.378Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/commands: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/commands'
+2026-05-27T23:57:11.378Z [DEBUG] Loaded 0 unique skills (0 unconditional, 0 conditional, managed: 0, user: 0, project: 0, additional: 0, legacy commands: 0)
+2026-05-27T23:57:11.378Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/agents: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/agents'
+2026-05-27T23:57:11.379Z [DEBUG] [STARTUP] setup() completed in 17ms
+2026-05-27T23:57:11.380Z [DEBUG] Cleared CA certificates cache
+2026-05-27T23:57:11.380Z [DEBUG] Cleared mTLS configuration cache
+2026-05-27T23:57:11.380Z [DEBUG] Cleared proxy agent cache
+2026-05-27T23:57:11.380Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-05-27T23:57:11.380Z [DEBUG] CA certs: Loaded 145 bundled root certificates
+2026-05-27T23:57:11.380Z [DEBUG] CA certs: system store returned empty
+2026-05-27T23:57:11.380Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-05-27T23:57:11.380Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-05-27T23:57:11.380Z [DEBUG] [ToolSearch:optimistic] disabled: ANTHROPIC_BASE_URL=https://token-plan-cn.xiaomimimo.com/anthropic is not a first-party Anthropic host. Set ENABLE_TOOL_SEARCH=true (or auto / auto:N) if your proxy forwards tool_reference blocks.
+2026-05-27T23:57:11.402Z [DEBUG] Loaded 1 installed plugins from /Users/fwfx1234/.claude/plugins/installed_plugins.json
+2026-05-27T23:57:11.405Z [DEBUG] Plugin rust-analyzer-lsp has no entry.skills defined
+2026-05-27T23:57:11.406Z [DEBUG] Found 1 plugins (1 enabled, 0 disabled)
+2026-05-27T23:57:11.406Z [DEBUG] getPluginSkills: Processing 1 enabled plugins
+2026-05-27T23:57:11.407Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-05-27T23:57:11.407Z [DEBUG] Registered 0 hooks from 1 plugins
+2026-05-27T23:57:11.407Z [DEBUG] Total plugin skills loaded: 0
+2026-05-27T23:57:11.407Z [DEBUG] Total plugin commands loaded: 0
+2026-05-27T23:57:11.407Z [DEBUG] Total plugin agents loaded: 0
+2026-05-27T23:57:11.407Z [DEBUG] getSkills returning: 0 skill dir commands, 0 plugin skills, 14 bundled skills, 0 builtin plugin skills
+2026-05-27T23:57:11.408Z [DEBUG] [STARTUP] Commands and agents loaded in 28ms
+2026-05-27T23:57:11.409Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-05-27T23:57:11.409Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-05-27T23:57:11.410Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-05-27T23:57:11.410Z [DEBUG] Starting background startup prefetches
+2026-05-27T23:57:11.410Z [DEBUG] [Bootstrap] Skipped: no usable OAuth or API key
+2026-05-27T23:57:11.411Z [DEBUG] [STARTUP] MCP configs resolved in 52ms (awaited at +52ms)
+2026-05-27T23:57:11.411Z [DEBUG] All plugins already exist, skipping migration
+2026-05-27T23:57:11.412Z [DEBUG] Cleared CA certificates cache
+2026-05-27T23:57:11.412Z [DEBUG] Cleared mTLS configuration cache
+2026-05-27T23:57:11.412Z [DEBUG] Cleared proxy agent cache
+2026-05-27T23:57:11.412Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-05-27T23:57:11.412Z [DEBUG] CA certs: Loaded 145 bundled root certificates
+2026-05-27T23:57:11.412Z [DEBUG] CA certs: system store returned empty
+2026-05-27T23:57:11.412Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-05-27T23:57:11.412Z [DEBUG] Initialized versioned plugins system with 1 plugins
+2026-05-27T23:57:11.413Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:57:11.413Z [DEBUG] [MCP] --mcp-config servers running fully async (nonblocking)
+2026-05-27T23:57:11.413Z [DEBUG] [MCP] claude.ai connectors running fully async (nonblocking)
+2026-05-27T23:57:11.414Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-05-27T23:57:11.414Z [DEBUG] [3P telemetry] isTelemetryEnabled=false (CLAUDE_CODE_ENABLE_TELEMETRY=undefined)
+2026-05-27T23:57:11.415Z [DEBUG] [auto-mode] verifyAutoModeGateAccess: enabledState=opt-in disabledBySettings=false model=mimo-v2-pro modelSupported=true disableFastModeBreakerFires=false carouselAvailable=true canEnterAuto=true
+2026-05-27T23:57:11.425Z [DEBUG] [ScheduledTasks] scheduler start() — enabled=false, hasTasks=false
+2026-05-27T23:57:11.431Z [DEBUG] Loaded 1 LSP server(s) from plugin: rust-analyzer-lsp
+2026-05-27T23:57:11.431Z [DEBUG] Total LSP servers loaded: 1
+2026-05-27T23:57:11.432Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 1 server(s)
+2026-05-27T23:57:11.432Z [DEBUG] Queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration (connection not ready)
+2026-05-27T23:57:11.432Z [DEBUG] LSP manager initialized with 1 servers
+2026-05-27T23:57:11.432Z [DEBUG] LSP server manager initialized successfully
+2026-05-27T23:57:11.432Z [DEBUG] Queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics (connection not ready)
+2026-05-27T23:57:11.432Z [DEBUG] Registered diagnostics handler for plugin:rust-analyzer-lsp:rust-analyzer
+2026-05-27T23:57:11.433Z [DEBUG] LSP notification handlers registered successfully for all 1 server(s)
+2026-05-27T23:57:11.434Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/output-styles: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/output-styles'
+2026-05-27T23:57:11.435Z [DEBUG] Total plugin output styles loaded: 0
+2026-05-27T23:57:11.436Z [WARN] [3P telemetry] Event dropped (no event logger initialized): plugin_loaded
+2026-05-27T23:57:11.440Z [DEBUG] installPluginsForHeadless: starting
+2026-05-27T23:57:11.447Z [DEBUG] Git remote URL: null
+2026-05-27T23:57:11.447Z [DEBUG] No git remote URL found
+2026-05-27T23:57:11.451Z [DEBUG] Failed to stat directory /Library/Application Support/ClaudeCode/.claude/skills: ENOENT: no such file or directory, stat '/Library/Application Support/ClaudeCode/.claude/skills'
+2026-05-27T23:57:11.460Z [DEBUG] Ripgrep first use test: PASSED (mode=embedded, path=/opt/homebrew/Caskroom/claude-code@latest/2.1.152/claude)
+2026-05-27T23:57:11.469Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-05-27T23:57:11.469Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-05-27T23:57:11.469Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-05-27T23:57:11.469Z [DEBUG] Sending 12 skills via attachment (initial)
+2026-05-27T23:57:11.469Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-05-27T23:57:11.470Z [DEBUG] Watching for changes in setting files /Users/fwfx1234/.claude/settings.json, /Users/fwfx1234/develop/qingqi/.claude/settings.json, /Users/fwfx1234/develop/qingqi/.claude/settings.local.json...
+2026-05-27T23:57:11.475Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:57:11.477Z [DEBUG] autocompact: tokens=[REDACTED] level=ok effectiveWindow=180000
+2026-05-27T23:57:11.478Z [DEBUG] Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).
+2026-05-27T23:57:11.490Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.152.b7b; cc_entrypoint=sdk-cli; cch=00000;
+2026-05-27T23:57:11.491Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:57:11.491Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:57:11.491Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-05-27T23:57:11.491Z [DEBUG] [API:auth] OAuth token check starting
+2026-05-27T23:57:11.492Z [DEBUG] [API:auth] OAuth token check complete
+2026-05-27T23:57:11.492Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:57:11.492Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:57:11.493Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:57:11.675Z [ERROR] API error (attempt 1/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:57:12.224Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:57:12.225Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:57:12.226Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:57:12.295Z [ERROR] API error (attempt 2/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:57:13.438Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:57:13.438Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:57:13.439Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:57:13.494Z [ERROR] API error (attempt 3/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:57:13.504Z [DEBUG] [mcp-registry] Loaded 197 official MCP URLs (legacy)
+2026-05-27T23:57:15.669Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:57:15.669Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:57:15.670Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:57:15.718Z [ERROR] API error (attempt 4/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:57:20.377Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:57:20.378Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:57:20.380Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:57:20.485Z [ERROR] API error (attempt 5/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:57:28.898Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:57:28.899Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:57:28.901Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:57:29.071Z [ERROR] API error (attempt 6/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:57:35.872Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:57:35.875Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:57:35.877Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:57:35.955Z [ERROR] API error (attempt 8/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:57:47.988Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:57:47.988Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:57:47.989Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:57:48.182Z [ERROR] API error (attempt 7/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:58:09.399Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:58:09.401Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:58:09.404Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:58:09.584Z [ERROR] API error (attempt 9/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:58:23.789Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:58:23.791Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:58:23.794Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:58:23.853Z [ERROR] API error (attempt 8/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:58:46.045Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:58:46.046Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:58:46.048Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:58:46.099Z [ERROR] API error (attempt 10/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:59:02.476Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:59:02.476Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:59:02.477Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:59:02.555Z [ERROR] API error (attempt 9/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:59:20.463Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:59:20.467Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:59:20.469Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:59:20.528Z [ERROR] API error (attempt 11/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:59:20.534Z [ERROR] Error in API request: 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-27T23:59:20.535Z [ERROR] API rate_limit after retries: Too many requests
+2026-05-27T23:59:20.537Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:59:20.541Z [DEBUG] LSP server manager shut down successfully
+2026-05-27T23:59:20.542Z [ERROR] Failed to check metrics opt-out status: Auth error: No API key available
+2026-05-27T23:59:20.542Z [DEBUG] Metrics export disabled by organization setting
+2026-05-27T23:59:20.543Z [DEBUG] BigQuery metrics exporter flush complete
+2026-05-27T23:59:20.543Z [DEBUG] BigQuery metrics exporter flush complete
+2026-05-27T23:59:20.543Z [DEBUG] BigQuery metrics exporter shutdown complete
+2026-05-27T23:59:41.370Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-27T23:59:41.371Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-27T23:59:41.371Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-27T23:59:41.450Z [ERROR] API error (attempt 10/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-28T00:00:19.974Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:00:19.975Z [DEBUG] [API:timing] dispatching to firstParty model=mimo-v2-pro
+2026-05-28T00:00:19.978Z [DEBUG] [API REQUEST] /anthropic/v1/messages source=sdk
+2026-05-28T00:00:20.178Z [ERROR] API error (attempt 11/11): 429 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-28T00:00:20.184Z [ERROR] Error in API request: 429 {"error":{"code":"429","message":"Too many requests","type":"limitation"}}
+2026-05-28T00:00:20.185Z [ERROR] API rate_limit after retries: Too many requests
+2026-05-28T00:00:20.191Z [DEBUG] Fast mode unavailable: Fast mode is not available in the Agent SDK
+2026-05-28T00:00:20.197Z [DEBUG] LSP server manager shut down successfully
+2026-05-28T00:00:20.198Z [ERROR] Failed to check metrics opt-out status: Auth error: No API key available
+2026-05-28T00:00:20.199Z [DEBUG] Metrics export disabled by organization setting
+2026-05-28T00:00:20.199Z [DEBUG] BigQuery metrics exporter flush complete
+2026-05-28T00:00:20.199Z [DEBUG] BigQuery metrics exporter flush complete
+2026-05-28T00:00:20.199Z [DEBUG] BigQuery metrics exporter shutdown complete

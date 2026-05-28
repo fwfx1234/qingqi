@@ -1,0 +1,48 @@
+All done. Here's the complete summary:
+
+---
+
+## Files Changed
+
+| File | Changes |
+|---|---|
+| `src/features/api_debugger/service.rs` | +7 service methods (env CRUD + tab persistence), +1 helper (`parse_kv_lines`), +7 tests, +`uuid` import |
+| `src/features/api_debugger/view.rs` | Rewired `OpenTab` to UUID-based struct variants, added env action wiring (+/duplicate/delete), wired tab close to SQLite delete, added tab restore on startup, added `persist_current_tab_state()`, `close_open_tab()`, `active_index()`, `find_request_index_by_method_url()` |
+
+## Behaviors Now Real
+
+- **Environment create**: "+" button creates a new env with UUID, persisted to SQLite
+- **Environment duplicate**: "复制" button copies current env + variables + headers into a new UUID'd row
+- **Environment delete**: "删除" button deletes current env (blocked if last one)
+- **Environment edit/save**: name, base_url, variables, headers all persisted via `save_environment_fields()`
+- **Tab IDs**: real UUIDs (`tab-` + 12-char hex) instead of synthetic `tab-{index}`
+- **Tab persistence**: tabs saved to SQLite on switch/close, restored on startup by method+url matching
+- **Tab close**: ✕ button deletes tab from SQLite via service, removes from open_tabs list
+
+## Behaviors Still Missing
+
+- **Tab rename** (double-click or inline edit) — tab names are auto-generated from method+url
+- **Tab state body/headers/params persistence** — `persist_current_tab_state()` writes the tab row but body/headers/params fields are still stubs
+- **Environment import/export** — buttons exist as `meta_text` (non-clickable labels), matching suishou's reference state
+- **Collection tree interaction** — no tree click → open-tab flow yet
+- **WebSocket support** — not started
+- **Request scenarios UI** — scenario tabs exist in model/store but no editor UI
+
+## Suggested Migration-Guide Note
+
+```
+### 2026-05-28 — Functional v1: 环境 CRUD + Tab 持久化
+
+- 环境管理：新增/复制/删除/编辑已接通 SQLite 持久化
+- 请求 Tab：UUID 标识、切换时保存、启动时恢复、关闭时删除
+- 新增 7 个 service 层测试 (66 total)
+- 下一步：Tab 重命名、body/headers 实际持久化、集合树交互
+```
+
+## Exact Commands Run
+
+```
+cargo fmt
+cargo check
+cargo test --bin qingqi -- features::api_debugger
+```

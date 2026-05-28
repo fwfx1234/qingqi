@@ -1,0 +1,64 @@
+All checks pass. Here is the complete summary:
+
+---
+
+## Exact files changed
+
+1. **`/Users/fwfx1234/develop/qingqi/src/features/image_compress/service.rs`**
+   - Added `QueueStatus::Running` variant with label "压缩中…"
+   - Added `QueueStatus::is_terminal()` method
+   - Added `ImageCompressService::clone_for_background()` for thread-safe service cloning
+   - Added 3 new tests: `queue_status_running_properties`, `clone_for_background_preserves_output_dir`, `batch_compress_sequential`
+
+2. **`/Users/fwfx1234/develop/qingqi/src/features/image_compress/view.rs`**
+   - Added `BatchResultItem`, `SharedBatchState`, `SharedBatchResults` types for cross-thread batch state
+   - Added `running: bool` and `shared: SharedBatchResults` fields to `ImageCompressPanel`
+   - Rewrote `run_compression()` — now marks items as `Running`, spawns a background worker via `cx.foreground_executor().spawn()`, no UI locks held during compression
+   - Added `collect_results()` — drains per-file results from the shared state into panel items
+   - Added `running_count()` and `is_running()` helpers
+   - Added guards on `clear_items()` and `remove_item()` during running state
+   - Updated `status_tag()` to render Running status (blue pill)
+   - Updated `image_row()` to hide remove button while running
+   - Updated `footer_bar()` to show running count in summary and change button text to "⏳ 压缩中…"
+   - Updated render to call `collect_results()` before rendering
+   - Added 4 new tests: `queue_status_running_label`, `shared_batch_results_default_empty`, `shared_batch_results_drain_results`, `shared_batch_results_clone_shares_state`
+
+## image-compress batch behaviors now real
+
+- **Background execution**: Batch compression runs on a spawned task, not in the UI render/click path. The UI stays responsive while files are being compressed.
+- **Honest per-file status**: Items marked `Running` while being processed, `Success` only after the output file is actually written, `Failed` with real error messages on failure.
+- **Coarse-grained progress**: No fake percentages. Status bar shows "正在压缩…" during work, and the result summary shows running/pending/success counts.
+- **Result sync on render**: `collect_results()` drains completed results from shared state before each render, so the UI updates as results arrive.
+- **Running guards**: `clear_items()` and `remove_item()` refuse during running state. Remove button hidden for running items.
+
+## image-compress behaviors still missing
+
+- **Per-entry live progress**: Individual file progress (e.g., "compressing file 3/7") is not shown. Only coarse "running" state.
+- **Cancel/stop**: No way to abort a running batch. The worker runs to completion.
+- **Retry in background**: `retry_entry` remains synchronous (single-file, fast enough for v1).
+- **JobProvider integration**: Not implemented. The batch does not report to the shared job system.
+- **Auto-refresh during batch**: The UI only refreshes when `render` is called (on user interaction or window focus). No periodic timer to poll shared state while the user is idle.
+- **SaveAs dialog in background**: `rfd::FileDialog::save_file()` still runs on the main thread (as required by macOS).
+
+## Suggested note for `docs/migration-guide.md`
+
+```
+### image-compress: batch compression now runs in background
+
+`run_compression()` no longer blocks the UI. A `QueueStatus::Running` state was
+added; items transition Pending → Running → Success/Failed. Shared batch state
+uses `Arc<Mutex<SharedBatchState>>` written by a `cx.foreground_executor()`
+worker and drained by `collect_results()` on each render. 7 new tests cover
+the state types and drain logic. Remaining: per-file live progress, cancel
+support, JobProvider integration, periodic render refresh during batch.
+```
+
+## Exact commands run
+
+```bash
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo fmt
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo test --bin qingqi -- features::image_compress
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo check
+```
+
+Results: `cargo fmt` clean, `cargo check` 0 errors, `cargo test --bin qingqi -- features::image_compress` 22/22 passed. The 2 pre-existing failures in `platform::apps::tests` and the pre-existing warning count (142) are unchanged.

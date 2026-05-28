@@ -1,0 +1,31 @@
+---
+
+## Summary
+
+**Registered the plugin: YES**
+
+The `ftp-sftp-ssh-client` plugin is now registered as a builtin plugin and compiles successfully.
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `src/features/mod.rs` | Uncommented `pub mod ftp_sftp_ssh_client;` |
+| `src/features/registry.rs` | Uncommented import and registration of `FtpSftpSshRuntime` |
+| `src/features/ftp_sftp_ssh_client/backend.rs` | Fixed `suppaftp::types::FtpStream` → `suppaftp::FtpStream`; removed non-existent `set_pasv()` and dead `prot_p()` calls (suppaftp passive is default; FTPS bails earlier) |
+| `src/features/ftp_sftp_ssh_client/view.rs` | Fixed `Div`/`Stateful<Div>` type mismatch by moving `.id()` before conditional `.on_click()` |
+| `docs/migration-guide.md` | Updated "Current Qingqi" from "stub in runtime.rs" to full file listing; updated Execution Batches to reflect completed SFTP/FTP backends; updated matrix "Next milestone" |
+
+### Remaining blockers
+
+- **FTPS**: `anyhow::bail!("FTPS 连接暂未支持")` — needs a TLS-capable FTP backend (suppaftp's `secure` feature or `native-tls` integration).
+- **SSH terminal**: Not implemented — needs terminal backend trait + real PTY/SSH channel bridge.
+- **Pre-existing warnings**: ~166 total (up from ~73 because the full plugin module is now compiled). Mostly `dead_code` on defined-but-not-yet-called methods (`rename`, `delete_file`, `cancel_transfer`, etc.) — these are intentional integration points for future batches.
+
+### Commands run
+
+```
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo check
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo fmt
+PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo check
+```

@@ -1,0 +1,41 @@
+Everything is wired correctly. Final summary:
+
+## Exact files changed
+
+- `src/features/api_debugger/service.rs`
+- `src/features/api_debugger/view.rs`
+
+## API-debugger tab-draft persistence behaviors now real
+
+- **Conservative draft snapshot is centralised.** New `TabDraft` struct + `build_http_tab` / `restore_tab_draft` / `format_auth_for_input` / `editor_tab_index` / `index_to_editor_tab` in `service.rs` give a single, tested conversion between the editor's textual draft (url, params/path-params/headers/cookies/auth/body/pre-ops/post-ops text + active editor section) and the persisted `HttpTab` row.
+- **Persistence reads from inputs directly.** `persist_current_tab_state` now calls `collect_tab_draft(cx)` on the actual `TextInput` entities, so the saved snapshot is always the current typed state (no longer requires a prior `sync_models` to flush text into the request model).
+- **Editor section switches now persist immediately.** Clicking from e.g. Body → Headers runs `sync_models` + `persist_current_tab_state` before and after the section change, so the body text you just typed and the new `active_request_tab` are written to SQLite without waiting for a tab switch or send.
+- **Method cycling persists the tab draft.** `cycle_method` now also calls `persist_current_tab_state`, so the new method is reflected in the persisted draft, not only the workspace/collection node.
+- **Auth extraction is more robust.** Auth-type/value now go through `parse_kv_text` + `extract_auth_type/value`, which iterate all auth rows; the previous inline parser in `view.rs` only looked at the first non-empty line.
+- **Restore uses the same path.** Initial first-tab restore and `restore_inputs_from_tab` both go through `service::restore_tab_draft`, eliminating duplicated logic between view and service. Editor-section restore on tab switch already used `index_to_editor_tab`; that helper now lives in `service` and is shared.
+
+## API-debugger behaviors still missing
+
+- **Live typing is still not auto-persisted.** Draft saves happen on tab switch, editor-section switch, method cycle, send, and environment switch — but typing in an input alone never triggers a persist (would need debounced input observers).
+- **No per-tab environment / response-tab persistence.** `selected_environment`, `response_tab`, and `env_detail_tab` are session-only; they're not saved to `http_tabs`.
+- **`request_mode` is still hardcoded to `"rest"`** in `build_http_tab`. WebSocket/GraphQL modes from the Python side have no UI yet.
+- **Multiple persisted tabs only restore inputs for the first one** on app start. The rest are re-opened as tabs but their drafts aren't applied until the user switches to them (then `select_request` looks them up).
+- **`active_tab.node_id` may be lost when a new in-session tab is created** via `OpenTab::new_request` (it starts empty). It is only filled when restoring from a persisted tab or opening via a known endpoint — the latter path doesn't exist in the Rust view yet, so most tabs persist with empty `node_id`.
+- **Debug cases, WebSocket timeline, OpenAPI import, and environment dialog** remain UI-stubbed (matches the existing migration-guide notes).
+
+## Suggested note for `docs/migration-guide.md` (not applied — listed here)
+
+Append under `### api-debugger` → `Current Notes`:
+
+> - Tab draft persistence v2: `service::build_http_tab` / `restore_tab_draft` / `TabDraft` centralize the conversion between editor inputs and `http_tabs` rows (auth parsing, body-mode detection, active-editor-tab index). `persist_current_tab_state` reads directly from `TextInput` entities, so saved drafts no longer depend on `sync_models`. New persist hooks fire on editor-section clicks and method cycles in addition to tab switch / send / env switch — typing in Body then clicking Headers now writes Body text to SQLite.
+> - Still missing in tab persistence: live keystroke-level autosave, per-tab `selected_environment` / `response_tab`, `request_mode` beyond `rest`, restoring all tabs' input states at startup (only the first persisted tab populates inputs initially; the rest reload on switch), and propagating `node_id` to newly-created in-session tabs.
+> - 2026-05-28 (follow-up) 验证结果：`cargo test --bin qingqi -- features::api_debugger` 85/85 通过（+14 new tests: editor-tab roundtrip, build_http_tab auth/body-mode variants, restore_tab_draft formats, build→persist→restore service roundtrip），`cargo check` 通过，`cargo fmt` 通过，无新增 warning。
+
+## Exact commands run
+
+```
+cargo fmt
+cargo check --bin qingqi
+cargo test --bin qingqi -- features::api_debugger
+cargo check
+```
