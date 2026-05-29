@@ -1,4 +1,5 @@
 use crate::core::{
+    icon::IconRef,
     plugin::PluginManifest,
     plugin_spec::{
         PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
@@ -10,13 +11,17 @@ pub const PLUGIN_ID: &str = "http-capture";
 
 pub fn manifest() -> PluginManifest {
     PluginManifest {
-        id: PLUGIN_ID,
-        name: "HTTP 抓包",
-        description: "HTTP 请求捕获与分析",
-        keywords: &["抓包", "capture", "http", "https", "proxy", "代理", "请求"],
+        id: PLUGIN_ID.into(),
+        name: "HTTP 抓包".into(),
+        description: "HTTP 请求捕获与分析".into(),
+        keywords: ["抓包", "capture", "http", "https", "proxy", "代理", "请求"]
+            .into_iter()
+            .map(Into::into)
+            .collect(),
         background: true,
+        dynamic_commands: false,
         visual: PluginVisualSpec {
-            icon: "icons/capture.svg",
+            icon: IconRef::asset("icons/capture.svg"),
             accent: PluginAccent::Cyan,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
@@ -24,12 +29,15 @@ pub fn manifest() -> PluginManifest {
             window: WindowSpec::ratio(0.86, 0.82),
         },
         stats: PluginStats {
-            primary: "代理抓包",
-            secondary: "请求筛选",
-            tertiary: "HTTPS MITM",
+            primary: "代理抓包".into(),
+            secondary: "请求筛选".into(),
+            tertiary: "HTTPS MITM".into(),
         },
-        command_hint: "启动代理、观察流量、按方法/域名/状态过滤",
-        command_prefixes: &["cap", "capture", "httpcap"],
+        command_hint: "启动代理、观察流量、按方法/域名/状态过滤".into(),
+        command_prefixes: ["cap", "capture", "httpcap"]
+            .into_iter()
+            .map(Into::into)
+            .collect(),
     }
 }
 
@@ -45,13 +53,13 @@ mod tests {
     #[test]
     fn manifest_has_correct_id() {
         let manifest = manifest();
-        assert_eq!(manifest.id, "http-capture");
+        assert_eq!(manifest.id.as_ref(), "http-capture");
     }
 
     #[test]
     fn manifest_has_correct_name() {
         let manifest = manifest();
-        assert_eq!(manifest.name, "HTTP 抓包");
+        assert_eq!(manifest.name.as_ref(), "HTTP 抓包");
     }
 
     #[test]
@@ -69,8 +77,23 @@ mod tests {
     #[test]
     fn manifest_has_prefixes() {
         let manifest = manifest();
-        assert!(manifest.command_prefixes.contains(&"cap"));
-        assert!(manifest.command_prefixes.contains(&"capture"));
-        assert!(manifest.command_prefixes.contains(&"httpcap"));
+        assert!(
+            manifest
+                .command_prefixes
+                .iter()
+                .any(|p| p.as_ref() == "cap")
+        );
+        assert!(
+            manifest
+                .command_prefixes
+                .iter()
+                .any(|p| p.as_ref() == "capture")
+        );
+        assert!(
+            manifest
+                .command_prefixes
+                .iter()
+                .any(|p| p.as_ref() == "httpcap")
+        );
     }
 }

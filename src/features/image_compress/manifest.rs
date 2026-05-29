@@ -1,4 +1,5 @@
 use crate::core::{
+    icon::IconRef,
     plugin::PluginManifest,
     plugin_spec::{
         PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
@@ -10,15 +11,19 @@ pub const PLUGIN_ID: &str = "image-compress";
 
 pub fn manifest() -> PluginManifest {
     PluginManifest {
-        id: PLUGIN_ID,
-        name: "图片压缩",
-        description: "PNG/JPEG/WebP 批量压缩",
-        keywords: &[
+        id: PLUGIN_ID.into(),
+        name: "图片压缩".into(),
+        description: "PNG/JPEG/WebP 批量压缩".into(),
+        keywords: [
             "图片", "压缩", "image", "compress", "png", "jpg", "jpeg", "webp",
-        ],
+        ]
+        .into_iter()
+        .map(Into::into)
+        .collect(),
         background: false,
+        dynamic_commands: false,
         visual: PluginVisualSpec {
-            icon: "qta/mdi6.image-size-select-large.png",
+            icon: IconRef::asset("qta/mdi6.image-size-select-large.png"),
             accent: PluginAccent::Amber,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
@@ -26,11 +31,14 @@ pub fn manifest() -> PluginManifest {
             window: WindowSpec::ratio(0.82, 0.8),
         },
         stats: PluginStats {
-            primary: "批量压缩",
-            secondary: "目录导出",
-            tertiary: "image crate",
+            primary: "批量压缩".into(),
+            secondary: "目录导出".into(),
+            tertiary: "image crate".into(),
         },
-        command_hint: "拖入图片后批量压缩导出",
-        command_prefixes: &["img", "image", "compress"],
+        command_hint: "拖入图片后批量压缩导出".into(),
+        command_prefixes: ["img", "image", "compress"]
+            .into_iter()
+            .map(Into::into)
+            .collect(),
     }
 }

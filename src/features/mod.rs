@@ -1,7 +1,6 @@
 pub mod about;
 pub mod anti_peeping;
 pub mod api_debugger;
-pub mod app_launcher;
 pub mod clipboard;
 pub mod download_manager;
 pub mod ftp_sftp_ssh_client;

@@ -1,3 +1,6 @@
+pub mod app_catalog;
+pub mod app_index;
+pub mod app_index_store;
 pub mod assets;
 pub mod background;
 pub mod events;

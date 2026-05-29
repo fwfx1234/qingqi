@@ -491,6 +491,12 @@ mod tests {
         let database = Arc::new(DatabaseService::new(AppPaths::for_test(
             path.parent().unwrap().to_path_buf(),
         )));
+        database
+            .register_database(crate::core::database::DatabaseSpec::path(
+                "clipboard/history",
+                path.clone(),
+            ))
+            .unwrap();
         let service = ClipboardService::new(database, path.clone());
 
         let config = service

@@ -11,7 +11,7 @@ use gpui::{Action, App, Global, KeyBinding, SharedString};
 
 use crate::{
     app::window_controller::{WindowController, WindowControllerHandle},
-    core::{command::CommandTarget, plugin::PluginManager},
+    core::{command::Activation, plugin::PluginManager},
 };
 
 pub const CORE_PLUGIN_ID: &str = "core";
@@ -34,7 +34,7 @@ impl ShortcutScope {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ShortcutTarget {
-    Command(CommandTarget),
+    Command(Activation),
     CoreAction(CoreShortcutAction),
     SessionAction {
         plugin_id: String,

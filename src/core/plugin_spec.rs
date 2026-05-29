@@ -1,6 +1,11 @@
-use gpui::SharedString;
+use std::sync::Arc;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+use gpui::SharedString;
+use serde::{Deserialize, Serialize};
+
+use crate::core::icon::IconRef;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PluginCategory {
     Tool,
     System,
@@ -17,7 +22,7 @@ impl PluginCategory {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PluginStatus {
     Ready,
     Background,
@@ -34,7 +39,7 @@ impl PluginStatus {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PluginAccent {
     Blue,
     Cyan,
@@ -45,7 +50,7 @@ pub enum PluginAccent {
     Slate,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PluginWindowMode {
     Inline,
     Window,
@@ -62,13 +67,13 @@ impl PluginWindowMode {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum WindowSize {
     Fixed { width: f32, height: f32 },
     Ratio { width: f32, height: f32 },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WindowSpec {
     pub size: WindowSize,
     pub always_on_top: bool,
@@ -97,9 +102,9 @@ impl WindowSpec {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PluginVisualSpec {
-    pub icon: &'static str,
+    pub icon: IconRef,
     pub accent: PluginAccent,
     pub category: PluginCategory,
     pub status: PluginStatus,
@@ -107,11 +112,11 @@ pub struct PluginVisualSpec {
     pub window: WindowSpec,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PluginStats {
-    pub primary: &'static str,
-    pub secondary: &'static str,
-    pub tertiary: &'static str,
+    pub primary: Arc<str>,
+    pub secondary: Arc<str>,
+    pub tertiary: Arc<str>,
 }
 
 #[derive(Clone, Debug)]

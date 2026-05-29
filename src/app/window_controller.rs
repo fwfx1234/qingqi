@@ -13,10 +13,12 @@ use gpui::{
 };
 
 use crate::{
-    app::{events::AppEventBus, launcher::Launcher, text_input::TextInput},
+    app::{
+        app_catalog::AppCatalog, events::AppEventBus, launcher::Launcher, text_input::TextInput,
+    },
     core::{
-        command::{CommandInvocation, CommandTarget},
-        plugin::{PluginManager, PluginSession},
+        command::{Action, Activation, CommandInvocation},
+        plugin::{PluginManager, WindowView},
         plugin_spec::WindowSize,
     },
     features::clipboard::service::ClipboardService,
@@ -42,6 +44,7 @@ impl PluginOpenTrace {
 
 pub struct WindowController {
     plugin_manager: Rc<RefCell<PluginManager>>,
+    app_catalog: Arc<AppCatalog>,
     clipboard_service: Arc<Mutex<ClipboardService>>,
     events: AppEventBus,
     launcher_window: Option<AnyWindowHandle>,
@@ -51,11 +54,13 @@ pub struct WindowController {
 impl WindowController {
     pub fn new(
         plugin_manager: Rc<RefCell<PluginManager>>,
+        app_catalog: Arc<AppCatalog>,
         clipboard_service: Arc<Mutex<ClipboardService>>,
         events: AppEventBus,
     ) -> Self {
         Self {
             plugin_manager,
+            app_catalog,
             clipboard_service,
             events,
             launcher_window: None,
@@ -65,6 +70,10 @@ impl WindowController {
 
     pub fn plugin_manager(&self) -> Rc<RefCell<PluginManager>> {
         Rc::clone(&self.plugin_manager)
+    }
+
+    pub fn app_catalog(&self) -> Arc<AppCatalog> {
+        Arc::clone(&self.app_catalog)
     }
 
     pub fn toggle_launcher(controller: WindowControllerHandle, cx: &mut App) {
@@ -116,6 +125,7 @@ impl WindowController {
 
     fn open_launcher(controller: WindowControllerHandle, cx: &mut App) {
         let plugin_manager = controller.borrow().plugin_manager();
+        let app_catalog = controller.borrow().app_catalog();
         let clipboard_service = Arc::clone(&controller.borrow().clipboard_service);
         let events = controller.borrow().events.clone();
         let initial_results = plugin_manager
@@ -157,8 +167,14 @@ impl WindowController {
                 input
             });
             let clipboard_service = Arc::clone(&clipboard_service);
-            let launcher =
-                cx.new(|cx| Launcher::new(Rc::clone(&plugin_manager), clipboard_service, cx));
+            let launcher = cx.new(|cx| {
+                Launcher::new(
+                    Rc::clone(&plugin_manager),
+                    Arc::clone(&app_catalog),
+                    clipboard_service,
+                    cx,
+                )
+            });
             let handle = launcher.clone();
             launcher.update(cx, |launcher, launcher_cx| {
                 launcher.attach_handle(handle);
@@ -199,9 +215,9 @@ impl WindowController {
             .borrow()
             .manifests()
             .into_iter()
-            .find(|manifest| manifest.id == plugin_id);
+            .find(|manifest| manifest.id.as_ref() == plugin_id);
 
-        if plugin_reopens_in_active_space(manifest) {
+        if plugin_reopens_in_active_space(manifest.as_ref()) {
             let close_started = Instant::now();
             Self::close_existing_plugin_window(Rc::clone(&controller), &plugin_id, cx);
             log_plugin_window_step(
@@ -219,9 +235,9 @@ impl WindowController {
             return;
         }
 
-        let session_started = Instant::now();
-        let session = match plugin_manager.borrow_mut().open_session(&plugin_id, cx) {
-            Ok(session) => session,
+        let view_started = Instant::now();
+        let view = match plugin_manager.borrow_mut().open_window_view(&plugin_id, cx) {
+            Ok(view) => view,
             Err(error) => {
                 tracing::warn!(
                     plugin_id,
@@ -232,17 +248,17 @@ impl WindowController {
                 return;
             }
         };
-        log_plugin_window_step(&plugin_id, "open plugin session", session_started, trace);
+        log_plugin_window_step(&plugin_id, "open plugin view", view_started, trace);
 
-        let title = session.title();
-        let (display, bounds) = plugin_bounds(manifest, cx);
-        let options = plugin_window_options(title, manifest, display, bounds);
+        let title = view.title().to_string();
+        let (display, bounds) = plugin_bounds(manifest.as_ref(), cx);
+        let options = plugin_window_options(&title, manifest.as_ref(), display, bounds);
         let plugin_id_for_window = plugin_id.clone();
         let controller_for_window = Rc::clone(&controller);
         let window_started = Instant::now();
         match cx.open_window(options, move |window, cx| {
-            window.set_window_title(title);
-            cx.new(|_| PluginWindow::new(Rc::clone(&controller_for_window), session))
+            window.set_window_title(&title);
+            cx.new(|_| PluginWindow::new(Rc::clone(&controller_for_window), view))
         }) {
             Ok(handle) => {
                 log_plugin_window_step(&plugin_id, "open plugin window", window_started, trace);
@@ -387,28 +403,35 @@ impl WindowController {
 
     pub fn run_command(
         controller: WindowControllerHandle,
-        target: CommandTarget,
+        activation: Activation,
         cx: &mut App,
     ) -> Option<String> {
-        Self::run_command_with_trace(controller, target, cx, None)
+        Self::run_command_with_trace(controller, activation, cx, None)
     }
 
     pub fn run_command_with_trace(
         controller: WindowControllerHandle,
-        target: CommandTarget,
+        activation: Activation,
         cx: &mut App,
         trace: Option<PluginOpenTrace>,
     ) -> Option<String> {
-        match target {
-            CommandTarget::PluginOpen { plugin_id } => {
+        match activation {
+            Activation::Open { plugin_id } => {
                 Self::open_plugin_with_trace(controller, plugin_id, cx, trace);
                 None
             }
-            target @ CommandTarget::PluginAction { .. } => {
+            Activation::Run(Action::LaunchApp { path }) => {
+                let app_catalog = controller.borrow().app_catalog();
+                Some(match app_catalog.launch(&path) {
+                    Ok(()) => format!("已打开 {}", std::path::Path::new(&path).display()),
+                    Err(error) => error,
+                })
+            }
+            activation @ Activation::Run(Action::PluginAction { .. }) => {
                 let plugin_manager = controller.borrow().plugin_manager();
                 plugin_manager
                     .borrow_mut()
-                    .handle_command(CommandInvocation { target }, cx)
+                    .handle_command(CommandInvocation { activation }, cx)
                     .ok()
                     .and_then(|outcome| outcome.message)
             }
@@ -437,7 +460,7 @@ impl WindowController {
     }
 }
 
-fn plugin_reopens_in_active_space(manifest: Option<crate::core::plugin::PluginManifest>) -> bool {
+fn plugin_reopens_in_active_space(manifest: Option<&crate::core::plugin::PluginManifest>) -> bool {
     manifest.is_some_and(|manifest| manifest.visual.window.always_on_top)
 }
 
@@ -487,8 +510,8 @@ fn log_plugin_open_total(plugin_id: &str, trace: PluginOpenTrace) {
 }
 
 fn plugin_window_options(
-    title: &'static str,
-    manifest: Option<crate::core::plugin::PluginManifest>,
+    title: &str,
+    manifest: Option<&crate::core::plugin::PluginManifest>,
     display: Option<std::rc::Rc<dyn gpui::PlatformDisplay>>,
     bounds: Bounds<gpui::Pixels>,
 ) -> WindowOptions {
@@ -497,7 +520,7 @@ fn plugin_window_options(
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             display_id: display.map(|display| display.id()),
             titlebar: Some(TitlebarOptions {
-                title: Some(title.into()),
+                title: Some(title.to_string().into()),
                 ..Default::default()
             }),
             ..Default::default()
@@ -505,12 +528,12 @@ fn plugin_window_options(
     };
 
     let always_on_top = manifest.visual.window.always_on_top;
-    let client_drawn_window = manifest.id == "clipboard";
+    let client_drawn_window = manifest.id.as_ref() == "clipboard";
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         display_id: display.map(|display| display.id()),
         titlebar: Some(TitlebarOptions {
-            title: Some(title.into()),
+            title: Some(title.to_string().into()),
             appears_transparent: client_drawn_window,
             traffic_light_position: client_drawn_window.then_some(point(px(28.0), px(22.0))),
             ..Default::default()
@@ -530,7 +553,7 @@ fn plugin_window_options(
 }
 
 fn plugin_bounds(
-    manifest: Option<crate::core::plugin::PluginManifest>,
+    manifest: Option<&crate::core::plugin::PluginManifest>,
     cx: &App,
 ) -> (
     Option<std::rc::Rc<dyn gpui::PlatformDisplay>>,
@@ -559,23 +582,23 @@ fn plugin_bounds(
 
 struct PluginWindow {
     controller: WindowControllerHandle,
-    session: Option<Box<dyn PluginSession>>,
+    view: Option<Box<dyn WindowView>>,
     plugin_id: String,
 }
 
 impl PluginWindow {
-    fn new(controller: WindowControllerHandle, session: Box<dyn PluginSession>) -> Self {
-        let plugin_id = session.plugin_id().to_string();
+    fn new(controller: WindowControllerHandle, view: Box<dyn WindowView>) -> Self {
+        let plugin_id = view.plugin_id().to_string();
         Self {
             controller,
-            session: Some(session),
+            view: Some(view),
             plugin_id,
         }
     }
 
     fn reopen(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(session) = self.session.as_mut() {
-            session.on_reopen(window, cx);
+        if let Some(view) = self.view.as_mut() {
+            view.on_reopen(window, cx);
         }
     }
 }
@@ -583,9 +606,9 @@ impl PluginWindow {
 impl Render for PluginWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let content = self
-            .session
+            .view
             .as_mut()
-            .map(|session| session.render(window, cx))
+            .map(|view| view.render(window, cx))
             .unwrap_or_else(|| div().child("插件已关闭").into_any_element());
 
         div().size_full().child(content)
@@ -594,8 +617,8 @@ impl Render for PluginWindow {
 
 impl Drop for PluginWindow {
     fn drop(&mut self) {
-        if let Some(mut session) = self.session.take() {
-            session.on_close();
+        if let Some(mut view) = self.view.take() {
+            view.on_close();
         }
         self.controller
             .borrow_mut()

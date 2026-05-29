@@ -94,7 +94,9 @@ pub struct AppIndexStore {
 impl AppIndexStore {
     pub fn new(database: Arc<DatabaseService>, key: &str) -> Self {
         Self {
-            pool: database.pool(key).expect("app index database should be registered"),
+            pool: database
+                .pool(key)
+                .expect("app index database should be registered"),
         }
     }
 

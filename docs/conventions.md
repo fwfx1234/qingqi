@@ -239,15 +239,127 @@ cx.spawn(async move |view, acx| {
 
 ---
 
-## 7. 错误处理与日志
+## 7. UI 组件与 gpui-component
 
-### 7.1 错误
+项目依赖 `gpui-component`（高层控件库，`gpui_component::init(cx)` 已在 `app/runtime.rs` 初始化一次）。
+UI 由三层组成，**按"低层够用就不用高层"的顺序选**：
+
+```text
+1. 原生 GPUI div()          布局、容器、一次性简单元素
+2. 项目 ui:: 原语 (app/ui.rs) 应用专属、需视觉一致的控件（按钮/卡片/pill/空态/分隔…）
+3. gpui-component           复杂/有状态/大数据控件（table、虚拟 list、编辑器、tab、form、overlay）
+```
+
+### 7.1 选型铁规则
+- **大列表/表格必须虚拟化**：`gpui_component::table` 或虚拟 list（或 GPUI `uniform_list`）。行数可能
+  上百、或单行渲染昂贵 → 一律虚拟化（呼应 §4 铁律 3）。**禁止 `div().children(全量)`。**
+- **编辑器类输入**（脚本 / JSON / 日志 / 大文本）→ `gpui_component::input::InputState`（code 模式）。
+  普通单行/简单字段 → 项目 `app::text_input::TextInput`。**禁止给普通字段套 InputState。**
+- **tab/segmented、switch/checkbox/slider/progress、badge/tag、form 行** → 优先 gpui-component，别再手写。
+- **简单按钮**：邻近已是组件风格就用 `gpui_component::button::Button`，否则用 `ui::ui_button`。
+  **同一界面禁止混用多种按钮风格。**
+- 不为"用上库"把 `div` 能做的换成组件；也不为省事手写库已提供的复杂控件。
+
+### 7.2 Root 规则（错用会 panic）
+- overlay 类 API——`open_sheet` / `open_dialog` / 通知 / `InputState` 焦点管理——**要求窗口根是
+  `gpui_component::Root`**。当前窗口根仍是 `Launcher`/`PluginWindow`，**未 Root 化**。
+- **未 Root 化窗口禁止调用上述 overlay API**（`Root::read/update` 会 panic）。
+- 未 Root 化时可安全使用：`button`/`tab`/`badge`/`tag`/`checkbox`/`switch`/`slider`/`progress`/
+  布局助手 / 本地状态的虚拟 list·table。
+- Root 化**按窗口单独做**，会改变 `downcast::<Launcher>()`/`downcast::<PluginWindow>()` 的句柄语义
+  （见架构窗口生命周期约束）；**禁止在迁移别的插件时顺手 Root 化**。
+
+### 7.3 内存/状态
+- 编辑器/输入实体**构造时建一次**、复用，关闭时清大 buffer（呼应 §4 铁律 5、§5.4）。
+- editor 特性（行号/高亮/LSP/补全/markdown/大 undo）**默认全关**，插件确需才逐个开。
+- **禁止把 `InputState`/`Button`/`Tab` 等组件 UI 实体存进 service/store**（属 view 层）。
+
+### 7.4 样式归属
+gpui-component 必须服从项目主题 token（§8）。组件默认配色/圆角/间距与目标不符时**本地覆盖**或包
+adapter；**≥2 个插件复用同一改造组件后**才抽公共 wrapper，别提前抽象。
+
+> 操作细节（Root 迁移步骤、内存 RSS 测量、组件选型表）见 [gpui-component-guide.md](gpui-component-guide.md)。
+> 本节是规范（rules），该指南是操作手册（how-to）。
+
+---
+
+## 8. 主题与样式 token
+
+三层 token 体系，**只准从上往下用，不准跨层**：
+
+```text
+palette   (app/theme.rs)  原始色阶 slate_*/blue_*/violet_* + 间距 space_*。【内部层，feature 禁用】
+语义 token (app/ui.rs)     bg_canvas/bg_surface/text_primary/border_light/accent_color/status_color…
+组件原语   (app/ui.rs)     section_card/row_card/stat_card/ui_button/ui_card/ui_badge/ui_chip…
+```
+
+### 8.1 颜色
+- **禁止裸 `rgb(0x..)` / `rgba` / hex 字面量**出现在 feature/view。颜色一律走 `ui::` 语义 token；
+  缺 token 就去 `ui.rs` **加一个语义 token**，不在调用点硬编码。
+- **禁止 feature 直接调 `theme::slate_500()` 等 palette 函数**。palette 是 `ui.rs` 的私有实现细节，
+  语义 token 才是边界。
+- token 命名表语义不表数值：`text_secondary` 不叫 `gray_400`，`bg_surface` 不叫 `white`。
+- 组件原语暴露**语义入参**（如 status 枚举），不要暴露裸 `Rgba`（现状 `status_bar(_, Rgba)` 是反例）。
+
+### 8.2 间距 / 圆角 / 字号
+- 间距优先 `theme::space_*`（经 `ui::` 暴露），不要散落魔法数 `px(13.0)`。确需一次性微调可用 `px`，
+  **但重复出现就提为 token**。
+- 字号/圆角同理：重复值提 token，单点一次性可内联。
+
+### 8.3 字体
+- **禁止硬编码 `font_family("PingFang SC")`**（现状 58 处）。要么提供 `ui::font_ui()` 统一取，
+  要么**在窗口根容器设一次字体、子元素继承**，调用点不再写字体名。
+
+### 8.4 暗/亮主题
+- 明暗由**主题上下文决定**，语义 token 内部读当前主题。**新代码禁止到处穿 `dark: bool`**
+  （现状 `plugin_surface(dark)`/`ui_button(…dark…)` 是要收敛的反例）。
+
+### 8.5 原语只留一套
+当前 `ui::` 存在两代重叠原语（如 `badge` 与 `ui_badge`、`*_card` 与 `ui_card`）。**择一为准，另一标
+legacy，新代码只用选定那套，禁止再造第三套。** 迁移时顺手统一。
+
+---
+
+## 9. 图标与资源
+
+### 9.1 图标来源
+- `assets/icons/<name>.svg` —— 第一方手绘 **SVG**，矢量、可着色、任意 DPI 清晰。**首选**。
+- `assets/qta/*.png` —— 从 suishou 继承的 QtAwesome 预栅格 PNG（`mdi6.*`/`fa5s.*`）。**legacy**。
+
+### 9.2 规则
+- **新图标一律 `assets/icons/<kebab-name>.svg`**，矢量、命名表意（`download.svg` 不叫 `icon1.svg`）。
+- **禁止新增 `qta/*.png`**；现存的随重构替换为 SVG。
+- 引用集中常量化：各 feature 在 `manifest.rs` 顶部定 `const ICON: &str = "icons/json.svg"`，
+  **不要在多处裸写图标路径字符串**。目标演进为架构 §3 的 `IconRef` 类型。
+- SVG 取用走 `ui::icon_element` / `ui::icon_tile`；底层 `platform::svg_icon::rasterize_asset(path, size)`
+  **按目标像素（含 DPI 倍数）栅格化**，不要固定位图缩放——保证清晰。
+- 图标应为**单色 SVG + tint 着色**（颜色走语义 token），**禁止把颜色烧进资源**。
+- 资源定位统一走 `app::assets`（`resolve`/`resolve_string`/`ProjectAssets`），
+  **禁止 feature 自己拼绝对路径或判 dev/bundle 分支**。
+- App/Tray 图标源文件 `assets/app-icon.svg`/`tray-icon.svg`，PNG 由 `build.rs` 生成；
+  **禁止把生成的 `app_icon_*.png` 当源文件手改提交**。
+
+---
+
+## 10. 文案 / i18n（务实，不上重框架）
+
+- 用户可见文案语气一致：简洁、动作名用动词开头。
+- **禁止字符串拼接组装句子**（破坏将来 i18n、易错）。带变量用 `format!` 完整模板：✅ `format!("已打开 {name}")`。
+- 现阶段文案中文、内联可接受，但**面向用户的字符串集中**放各 feature 的常量/`manifest`，
+  不要散落在深层逻辑里——为将来 i18n 留口。
+- **开发者向**（日志/错误）与**用户向**（UI 文案）分开：日志可英文 + 结构化字段（§11），UI 文案中文。
+
+---
+
+## 11. 错误处理与日志
+
+### 11.1 错误
 - 跨边界/可恢复错误用 **`anyhow::Result`** + `?` 传播；需要分支判断的错误才定义具体 `enum`(`thiserror`)。
 - **禁止 `unwrap()`/`expect()`** 出现在非测试、非"已证明的不变量"代码里。锁、IO、解析、查找都要处理。
 - 错误要**带上下文**：`.with_context(|| format!("open db {path}"))`，不要吞成 `?` 后无信息。
 - 失败要么向上传，要么 log 后**优雅降级**（返回空/默认），禁止静默丢弃后续行为异常。
 
-### 7.2 日志（`tracing`）
+### 11.2 日志（`tracing`）
 - 级别语义固定：
   - `error`：功能失败、需要关注（含 catch 到的 panic）。
   - `warn`：可恢复异常、降级、过期/丢弃。
@@ -259,7 +371,7 @@ cx.spawn(async move |view, acx| {
 
 ---
 
-## 8. 测试约定
+## 12. 测试约定
 
 - **service/store/model 必须可不启动 GPUI 测试**（事实来源在这层，逻辑在这层）。
 - 必测：命令匹配/打分、命令缓存失效、解析/校验、存储迁移、service 快照、job 状态机、
@@ -269,7 +381,7 @@ cx.spawn(async move |view, acx| {
 
 ---
 
-## 9. 提交前检查门槛（必须全过）
+## 13. 提交前检查门槛（必须全过）
 
 ```bash
 cargo fmt
@@ -284,7 +396,7 @@ cargo test
 
 ---
 
-## 10. 速查清单（Do / Don't）
+## 14. 速查清单（Do / Don't）
 
 **写 view 时**
 - ✅ render 只读 `self.vm`；数据变了在回调/异步里重算一次 + `cx.notify()`
@@ -302,3 +414,11 @@ cargo test
 **起名/分层时**
 - ✅ `XxxPlugin/XxxView/XxxViewModel/XxxService/XxxStore/XxxSnapshot`；feature 不互相依赖
 - ❌ `Panel/Element/Session` 命名；core 依赖 feature；跨层传 `&'static str`
+
+**写 UI / 用 gpui-component 时**
+- ✅ 低层优先（div→`ui::`→component）；大列表 table/虚拟化；编辑器才用 `InputState`；overlay 仅 Root 化窗口
+- ❌ 普通字段套 `InputState`；未 Root 用 sheet/dialog；组件实体进 service/store；一界面混多种按钮风格
+
+**写样式/图标时**
+- ✅ 颜色走 `ui::` 语义 token；复用 `ui::`/component 原语；字体走 token 或根继承；新图标 `icons/*.svg` 矢量
+- ❌ 裸 `rgb(0x..)`/hex；直接调 `theme::` palette；硬编码 `font_family`；穿 `dark:bool`；新增 `qta/*.png`

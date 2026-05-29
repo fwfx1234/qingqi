@@ -3,120 +3,143 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 
 use crate::{
-    app::theme_store::ThemeStore,
+    app::{app_index::AppIndexService, events::AppEventBus, theme_store::ThemeStore},
     core::{
         database::{DatabaseService, DatabaseSpec},
-        plugin::{PluginManager, PluginRuntime},
+        plugin::PluginManager,
+        registry::{BuildCx, FeatureRegistry, PluginDescriptor},
         storage::AppPaths,
     },
     features::{
-        about::plugin as about_plugin,
-        anti_peeping::plugin::AntiPeepingRuntime,
-        api_debugger::plugin::ApiDebuggerRuntime,
-        app_launcher::{plugin::AppLauncherRuntime, service::AppIndexService},
-        download_manager::plugin::DownloadManagerRuntime,
-        ftp_sftp_ssh_client::plugin::FtpSftpSshRuntime,
+        about::{manifest as about_manifest, plugin as about_plugin},
+        anti_peeping::{manifest as anti_peeping_manifest, plugin::AntiPeepingRuntime},
+        api_debugger::{manifest as api_debugger_manifest, plugin::ApiDebuggerRuntime},
+        download_manager::{manifest as download_manager_manifest, plugin::DownloadManagerRuntime},
+        ftp_sftp_ssh_client::{manifest as ftp_sftp_ssh_manifest, plugin::FtpSftpSshRuntime},
         gpui_demo::plugin::GpuiDemoRuntime,
-        http_capture::plugin::HttpCaptureRuntime,
-        image_compress::plugin as image_compress_plugin,
-        json_parser::plugin as json_parser_plugin,
-        qr_code::plugin as qr_code_plugin,
-        quick_launch::plugin::QuickLaunchRuntime,
+        http_capture::{manifest as http_capture_manifest, plugin::HttpCaptureRuntime},
+        image_compress::{manifest as image_compress_manifest, plugin as image_compress_plugin},
+        json_parser::{manifest as json_parser_manifest, plugin as json_parser_plugin},
+        qr_code::{manifest as qr_code_manifest, plugin as qr_code_plugin},
+        quick_launch::{manifest as quick_launch_manifest, plugin::QuickLaunchRuntime},
         system_settings::{plugin::SystemSettingsRuntime, settings_store::SettingsStore},
     },
 };
-
-fn register_runtime(
-    plugins: &mut PluginManager,
-    database: &Arc<DatabaseService>,
-    runtime: Box<dyn PluginRuntime>,
-) -> Result<()> {
-    let specs = runtime.database_specs();
-    if !specs.is_empty() {
-        database.register_databases(specs)?;
-    }
-    plugins.register(runtime);
-    Ok(())
-}
 
 pub fn register_builtin_plugins(
     plugins: &mut PluginManager,
     paths: AppPaths,
     theme_store: Arc<Mutex<ThemeStore>>,
     database: Arc<DatabaseService>,
+    events: AppEventBus,
+    app_index_service: Arc<AppIndexService>,
 ) -> Result<()> {
-    database.register_database(DatabaseSpec::app("command-usage", "command_usage.db"))?;
-    database.register_database(DatabaseSpec::app("app-launcher/index", "app_index.db"))?;
-
-    let app_index_service = Arc::new(AppIndexService::new(Arc::clone(&database)));
     let settings_store = Arc::new(Mutex::new(SettingsStore::new(
         paths.config("system_settings.json"),
     )));
 
-    register_runtime(plugins, &database, Box::new(about_plugin::runtime()))?;
-    register_runtime(
-        plugins,
-        &database,
-        Box::new(AntiPeepingRuntime::new(paths.clone())),
-    )?;
-    register_runtime(
-        plugins,
-        &database,
-        Box::new(AppLauncherRuntime::with_service(Arc::clone(&app_index_service))),
-    )?;
-    register_runtime(
-        plugins,
-        &database,
-        Box::new(ApiDebuggerRuntime::new(Arc::clone(&database), paths.clone())),
-    )?;
-    register_runtime(
-        plugins,
-        &database,
-        Box::new(DownloadManagerRuntime::new(Arc::clone(&database), paths.clone())?),
-    )?;
-    register_runtime(
-        plugins,
-        &database,
-        Box::new(image_compress_plugin::runtime(paths.clone())),
-    )?;
-    register_runtime(plugins, &database, Box::new(json_parser_plugin::runtime()))?;
-    register_runtime(plugins, &database, Box::new(qr_code_plugin::runtime(paths.clone())))?;
-    database.register_databases(vec![DatabaseSpec::feature(
-        "quick-launch",
-        "actions",
-        "actions.db",
-    )])?;
-    register_runtime(
-        plugins,
-        &database,
-        Box::new(QuickLaunchRuntime::new(Arc::clone(&database), paths.clone())?),
-    )?;
-    register_runtime(
-        plugins,
-        &database,
-        Box::new(SystemSettingsRuntime::new(
-            Arc::clone(&theme_store),
-            paths.clone(),
-            settings_store,
-            Some(app_index_service),
-        )),
-    )?;
-    register_runtime(plugins, &database, Box::new(GpuiDemoRuntime::new()))?;
-    register_runtime(
-        plugins,
-        &database,
-        Box::new(FtpSftpSshRuntime::new(Arc::clone(&database), paths.clone())?),
-    )?;
-    database.register_databases(vec![DatabaseSpec::feature(
-        "http-capture",
-        "capture",
-        "capture.db",
-    )])?;
-    register_runtime(
-        plugins,
-        &database,
-        Box::new(HttpCaptureRuntime::new(Arc::clone(&database), paths)?),
-    )?;
+    let build_cx = BuildCx::new(
+        Arc::clone(&database),
+        paths.clone(),
+        Arc::clone(&theme_store),
+        events,
+    );
+    let mut registry = FeatureRegistry::new();
 
-    Ok(())
+    registry.register(
+        PluginDescriptor::builtin(about_manifest::manifest()),
+        |_| Ok(Box::new(about_plugin::runtime())),
+    );
+    registry.register(
+        PluginDescriptor::builtin(anti_peeping_manifest::manifest()),
+        |cx| Ok(Box::new(AntiPeepingRuntime::new(cx.paths.clone()))),
+    );
+    registry.register(
+        PluginDescriptor::builtin(api_debugger_manifest::manifest()).with_databases(vec![
+            DatabaseSpec::app("api_debugger/main", "api_debugger.db"),
+        ]),
+        |cx| {
+            Ok(Box::new(ApiDebuggerRuntime::new(
+                Arc::clone(&cx.database),
+                cx.paths.clone(),
+            )))
+        },
+    );
+    registry.register(
+        PluginDescriptor::builtin(download_manager_manifest::manifest()).with_databases(vec![
+            DatabaseSpec::feature("download-manager", "tasks", "tasks.db"),
+        ]),
+        |cx| {
+            Ok(Box::new(DownloadManagerRuntime::new(
+                Arc::clone(&cx.database),
+                cx.paths.clone(),
+            )?))
+        },
+    );
+    registry.register(
+        PluginDescriptor::builtin(image_compress_manifest::manifest()),
+        |cx| Ok(Box::new(image_compress_plugin::runtime(cx.paths.clone()))),
+    );
+    registry.register(
+        PluginDescriptor::builtin(json_parser_manifest::manifest()),
+        |_| Ok(Box::new(json_parser_plugin::runtime())),
+    );
+    registry.register(
+        PluginDescriptor::builtin(qr_code_manifest::manifest()),
+        |cx| Ok(Box::new(qr_code_plugin::runtime(cx.paths.clone()))),
+    );
+    registry.register(
+        PluginDescriptor::builtin(quick_launch_manifest::manifest()).with_databases(vec![
+            DatabaseSpec::feature("quick-launch", "actions", "actions.db"),
+        ]),
+        |cx| {
+            Ok(Box::new(QuickLaunchRuntime::new(
+                Arc::clone(&cx.database),
+                cx.paths.clone(),
+            )?))
+        },
+    );
+    registry.register(
+        PluginDescriptor::builtin(SystemSettingsRuntime::manifest_static()),
+        {
+            let settings_store = Arc::clone(&settings_store);
+            let app_index_service = Arc::clone(&app_index_service);
+            move |cx| {
+                Ok(Box::new(SystemSettingsRuntime::new(
+                    Arc::clone(&cx.theme_store),
+                    cx.paths.clone(),
+                    settings_store,
+                    Some(app_index_service),
+                )))
+            }
+        },
+    );
+    registry.register(
+        PluginDescriptor::builtin(GpuiDemoRuntime::manifest_static()),
+        |_| Ok(Box::new(GpuiDemoRuntime::new())),
+    );
+    registry.register(
+        PluginDescriptor::builtin(ftp_sftp_ssh_manifest::manifest()).with_databases(vec![
+            DatabaseSpec::feature("ftp-sftp-ssh-client", "profiles", "profiles.db"),
+        ]),
+        |cx| {
+            Ok(Box::new(FtpSftpSshRuntime::new(
+                Arc::clone(&cx.database),
+                cx.paths.clone(),
+            )?))
+        },
+    );
+    registry.register(
+        PluginDescriptor::builtin(http_capture_manifest::manifest()).with_databases(vec![
+            DatabaseSpec::feature("http-capture", "capture", "capture.db"),
+        ]),
+        |cx| {
+            Ok(Box::new(HttpCaptureRuntime::new(
+                Arc::clone(&cx.database),
+                cx.paths.clone(),
+            )?))
+        },
+    );
+
+    registry.build_all(&build_cx, plugins)
 }

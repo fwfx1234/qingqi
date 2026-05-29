@@ -14,7 +14,7 @@ pub enum AppEventKind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AppEvent {
     pub revision: u64,
-    pub source: &'static str,
+    pub source: Arc<str>,
     pub kind: AppEventKind,
 }
 
@@ -30,11 +30,11 @@ impl AppEventBus {
         Self::default()
     }
 
-    pub fn publish(&self, source: &'static str, kind: AppEventKind) -> u64 {
+    pub fn publish(&self, source: impl Into<Arc<str>>, kind: AppEventKind) -> u64 {
         let revision = self.revision.fetch_add(1, Ordering::SeqCst) + 1;
         let event = AppEvent {
             revision,
-            source,
+            source: source.into(),
             kind,
         };
         if let Ok(mut last_event) = self.last_event.lock() {

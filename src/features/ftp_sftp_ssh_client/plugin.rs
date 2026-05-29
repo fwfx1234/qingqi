@@ -6,7 +6,7 @@ use crate::{
     app::events::{AppEventBus, AppEventKind},
     core::{
         database::{DatabaseService, DatabaseSpec},
-        plugin::{PluginManifest, PluginRuntime, PluginSession},
+        plugin::{Plugin, PluginCx, PluginManifest, PluginView, WindowView},
         storage::AppPaths,
     },
     features::ftp_sftp_ssh_client::{manifest, service::FtpSftpSshService, view},
@@ -41,7 +41,12 @@ impl FtpSftpSshRuntime {
         Ok(service)
     }
 
-    fn ensure_watcher(&mut self, service: Arc<FtpSftpSshService>, events: AppEventBus, cx: &mut App) {
+    fn ensure_watcher(
+        &mut self,
+        service: Arc<FtpSftpSshService>,
+        events: AppEventBus,
+        cx: &mut App,
+    ) {
         if self.watch_started {
             return;
         }
@@ -69,7 +74,7 @@ impl FtpSftpSshRuntime {
     }
 }
 
-impl PluginRuntime for FtpSftpSshRuntime {
+impl Plugin for FtpSftpSshRuntime {
     fn manifest(&self) -> PluginManifest {
         manifest::manifest()
     }
@@ -82,16 +87,12 @@ impl PluginRuntime for FtpSftpSshRuntime {
         )]
     }
 
-    fn open_session(
-        &mut self,
-        events: AppEventBus,
-        cx: &mut App,
-    ) -> anyhow::Result<Box<dyn PluginSession>> {
+    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let service = self.service()?;
-        self.ensure_watcher(Arc::clone(&service), events, cx);
-        Ok(Box::new(FtpSftpSshSession {
+        self.ensure_watcher(Arc::clone(&service), cx.events.clone(), cx.app);
+        Ok(PluginView::Window(Box::new(FtpSftpSshView {
             panel: Rc::new(RefCell::new(view::FtpSftpSshPanel::new(service))),
-        }))
+        })))
     }
 
     fn close_idle(&mut self) {
@@ -107,16 +108,16 @@ impl PluginRuntime for FtpSftpSshRuntime {
     }
 }
 
-struct FtpSftpSshSession {
+struct FtpSftpSshView {
     panel: Rc<RefCell<view::FtpSftpSshPanel>>,
 }
 
-impl PluginSession for FtpSftpSshSession {
-    fn plugin_id(&self) -> &'static str {
+impl WindowView for FtpSftpSshView {
+    fn plugin_id(&self) -> &str {
         manifest::PLUGIN_ID
     }
 
-    fn title(&self) -> &'static str {
+    fn title(&self) -> &str {
         "FTP/SFTP/SSH 客户端"
     }
 

@@ -1,4 +1,5 @@
 use crate::core::{
+    icon::IconRef,
     plugin::PluginManifest,
     plugin_spec::{
         PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
@@ -10,13 +11,17 @@ pub const PLUGIN_ID: &str = "about";
 
 pub fn manifest() -> PluginManifest {
     PluginManifest {
-        id: PLUGIN_ID,
-        name: "关于",
-        description: "桌面工具箱版本信息",
-        keywords: &["关于", "about", "版本", "version"],
+        id: PLUGIN_ID.into(),
+        name: "关于".into(),
+        description: "桌面工具箱版本信息".into(),
+        keywords: ["关于", "about", "版本", "version"]
+            .into_iter()
+            .map(Into::into)
+            .collect(),
         background: false,
+        dynamic_commands: false,
         visual: PluginVisualSpec {
-            icon: "icons/about.svg",
+            icon: IconRef::asset("icons/about.svg"),
             accent: PluginAccent::Amber,
             category: PluginCategory::About,
             status: PluginStatus::Ready,
@@ -24,12 +29,12 @@ pub fn manifest() -> PluginManifest {
             window: WindowSpec::ratio(0.58, 0.5),
         },
         stats: PluginStats {
-            primary: "版本信息",
-            secondary: "项目概览",
-            tertiary: "Rust + GPUI",
+            primary: "版本信息".into(),
+            secondary: "项目概览".into(),
+            tertiary: "Rust + GPUI".into(),
         },
-        command_hint: "桌面工具箱版本、技术栈与模块概览",
-        command_prefixes: &["about"],
+        command_hint: "桌面工具箱版本、技术栈与模块概览".into(),
+        command_prefixes: ["about"].into_iter().map(Into::into).collect(),
     }
 }
 
@@ -45,13 +50,13 @@ mod tests {
     #[test]
     fn manifest_has_correct_id() {
         let m = manifest();
-        assert_eq!(m.id, "about");
+        assert_eq!(m.id.as_ref(), "about");
     }
 
     #[test]
     fn manifest_has_correct_name() {
         let m = manifest();
-        assert_eq!(m.name, "关于");
+        assert_eq!(m.name.as_ref(), "关于");
     }
 
     #[test]
@@ -70,7 +75,7 @@ mod tests {
     fn manifest_has_prefixes() {
         let m = manifest();
         assert!(!m.command_prefixes.is_empty());
-        assert!(m.command_prefixes.contains(&"about"));
+        assert!(m.command_prefixes.iter().any(|p| p.as_ref() == "about"));
     }
 
     #[test]

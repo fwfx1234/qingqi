@@ -1,4 +1,5 @@
 use crate::core::{
+    icon::IconRef,
     plugin::PluginManifest,
     plugin_spec::{
         PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
@@ -10,13 +11,17 @@ pub const PLUGIN_ID: &str = "qr-code";
 
 pub fn manifest() -> PluginManifest {
     PluginManifest {
-        id: PLUGIN_ID,
-        name: "二维码",
-        description: "二维码生成与扫描",
-        keywords: &["二维码", "qr", "qrcode", "barcode", "生成", "扫描"],
+        id: PLUGIN_ID.into(),
+        name: "二维码".into(),
+        description: "二维码生成与扫描".into(),
+        keywords: ["二维码", "qr", "qrcode", "barcode", "生成", "扫描"]
+            .into_iter()
+            .map(Into::into)
+            .collect(),
         background: false,
+        dynamic_commands: false,
         visual: PluginVisualSpec {
-            icon: "qta/mdi6.qrcode.png",
+            icon: IconRef::asset("qta/mdi6.qrcode.png"),
             accent: PluginAccent::Blue,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
@@ -24,11 +29,11 @@ pub fn manifest() -> PluginManifest {
             window: WindowSpec::ratio(0.76, 0.76),
         },
         stats: PluginStats {
-            primary: "生成",
-            secondary: "剪贴板导入",
-            tertiary: "qrcode crate",
+            primary: "生成".into(),
+            secondary: "剪贴板导入".into(),
+            tertiary: "qrcode crate".into(),
         },
-        command_hint: "输入文本生成二维码",
-        command_prefixes: &["qr", "qrcode"],
+        command_hint: "输入文本生成二维码".into(),
+        command_prefixes: ["qr", "qrcode"].into_iter().map(Into::into).collect(),
     }
 }

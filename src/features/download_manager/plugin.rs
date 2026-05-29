@@ -7,7 +7,7 @@ use crate::{
     core::{
         command::{CommandItem, ContextKind, ContextMatcher},
         database::{DatabaseService, DatabaseSpec},
-        plugin::{PluginManifest, PluginRuntime, PluginSession},
+        plugin::{Plugin, PluginCx, PluginManifest, PluginView, WindowView},
         storage::AppPaths,
     },
 };
@@ -45,7 +45,12 @@ impl DownloadManagerRuntime {
         Ok(service)
     }
 
-    fn ensure_watcher(&mut self, service: Rc<RefCell<DownloadService>>, events: AppEventBus, cx: &mut App) {
+    fn ensure_watcher(
+        &mut self,
+        service: Rc<RefCell<DownloadService>>,
+        events: AppEventBus,
+        cx: &mut App,
+    ) {
         if self.watch_started {
             return;
         }
@@ -70,25 +75,29 @@ impl DownloadManagerRuntime {
     }
 }
 
-impl PluginRuntime for DownloadManagerRuntime {
+impl Plugin for DownloadManagerRuntime {
     fn manifest(&self) -> PluginManifest {
         manifest::manifest()
     }
 
     fn database_specs(&self) -> Vec<DatabaseSpec> {
-        vec![DatabaseSpec::feature(manifest::PLUGIN_ID, "tasks", "tasks.db")]
+        vec![DatabaseSpec::feature(
+            manifest::PLUGIN_ID,
+            "tasks",
+            "tasks.db",
+        )]
     }
 
     fn commands(&self) -> Vec<CommandItem> {
         let manifest = self.manifest();
         vec![
             CommandItem::plugin_open(
-                manifest.id,
-                manifest.name,
-                manifest.description,
-                manifest.keywords.iter().copied(),
-                manifest.command_prefixes.iter().copied(),
-                manifest.visual.icon,
+                manifest.id.as_ref(),
+                manifest.name.as_ref(),
+                manifest.description.as_ref(),
+                manifest.keywords.iter().map(|s| s.as_ref()),
+                manifest.command_prefixes.iter().map(|s| s.as_ref()),
+                manifest.visual.icon.as_str(),
             )
             .with_recommend_matchers([
                 ContextMatcher::new(ContextKind::Url, 90),
@@ -97,16 +106,12 @@ impl PluginRuntime for DownloadManagerRuntime {
         ]
     }
 
-    fn open_session(
-        &mut self,
-        events: AppEventBus,
-        cx: &mut App,
-    ) -> anyhow::Result<Box<dyn PluginSession>> {
+    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let service = self.service()?;
-        self.ensure_watcher(Rc::clone(&service), events, cx);
+        self.ensure_watcher(Rc::clone(&service), cx.events.clone(), cx.app);
         let panel = Rc::new(RefCell::new(view::DownloadManagerPanel::new(service)));
-        panel.borrow_mut().init(cx);
-        Ok(Box::new(DownloadManagerSession { panel }))
+        panel.borrow_mut().init(cx.app);
+        Ok(PluginView::Window(Box::new(DownloadManagerView { panel })))
     }
 
     fn close_idle(&mut self) {
@@ -114,16 +119,16 @@ impl PluginRuntime for DownloadManagerRuntime {
     }
 }
 
-struct DownloadManagerSession {
+struct DownloadManagerView {
     panel: Rc<RefCell<view::DownloadManagerPanel>>,
 }
 
-impl PluginSession for DownloadManagerSession {
-    fn plugin_id(&self) -> &'static str {
+impl WindowView for DownloadManagerView {
+    fn plugin_id(&self) -> &str {
         manifest::PLUGIN_ID
     }
 
-    fn title(&self) -> &'static str {
+    fn title(&self) -> &str {
         "下载管理器"
     }
 

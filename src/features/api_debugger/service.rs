@@ -155,9 +155,8 @@ pub struct ApiService {
 impl ApiService {
     pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> Self {
         let _ = paths;
-        let data_source =
-            ApiDebuggerDataSource::open(database, "api_debugger/main")
-                .expect("无法打开 API 调试器数据库");
+        let data_source = ApiDebuggerDataSource::open(database, "api_debugger/main")
+            .expect("无法打开 API 调试器数据库");
         Self {
             revision: AtomicU64::new(0),
             state: Mutex::new(ApiServiceState {

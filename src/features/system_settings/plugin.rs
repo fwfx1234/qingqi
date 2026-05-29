@@ -9,12 +9,13 @@ use gpui::{AnyElement, App, AppContext, BorrowAppContext, Entity, IntoElement, W
 
 use crate::{
     app::{
-        events::AppEventBus,
+        app_index::{AppIndexService, AppIndexSnapshot},
         text_input::{TextInput, TextInputStyle},
         theme_store::{ThemeMode, ThemeStore},
     },
     core::{
-        plugin::{PluginManifest, PluginRuntime, PluginSession},
+        icon::IconRef,
+        plugin::{InlineView, Plugin, PluginCx, PluginManifest, PluginView},
         plugin_spec::{
             PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
             PluginWindowMode, WindowSpec,
@@ -31,7 +32,7 @@ use super::view::SettingsElement;
 pub struct SystemSettingsRuntime {
     theme_store: Arc<Mutex<ThemeStore>>,
     settings_store: Arc<Mutex<SettingsStore>>,
-    app_index_service: Option<Arc<crate::features::app_launcher::service::AppIndexService>>,
+    app_index_service: Option<Arc<AppIndexService>>,
     app_paths: AppPaths,
 }
 
@@ -40,7 +41,7 @@ impl SystemSettingsRuntime {
         theme_store: Arc<Mutex<ThemeStore>>,
         app_paths: AppPaths,
         settings_store: Arc<Mutex<SettingsStore>>,
-        app_index_service: Option<Arc<crate::features::app_launcher::service::AppIndexService>>,
+        app_index_service: Option<Arc<AppIndexService>>,
     ) -> Self {
         Self {
             theme_store,
@@ -49,18 +50,20 @@ impl SystemSettingsRuntime {
             app_paths,
         }
     }
-}
 
-impl PluginRuntime for SystemSettingsRuntime {
-    fn manifest(&self) -> PluginManifest {
+    pub fn manifest_static() -> PluginManifest {
         PluginManifest {
-            id: "system-settings",
-            name: "系统设置",
-            description: "主题切换与应用偏好设置",
-            keywords: &["设置", "settings", "主题", "theme", "偏好"],
+            id: "system-settings".into(),
+            name: "系统设置".into(),
+            description: "主题切换与应用偏好设置".into(),
+            keywords: ["设置", "settings", "主题", "theme", "偏好"]
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             background: false,
+            dynamic_commands: false,
             visual: PluginVisualSpec {
-                icon: "qta/mdi6.cog-outline.png",
+                icon: IconRef::asset("qta/mdi6.cog-outline.png"),
                 accent: PluginAccent::Slate,
                 category: PluginCategory::System,
                 status: PluginStatus::Ready,
@@ -68,44 +71,46 @@ impl PluginRuntime for SystemSettingsRuntime {
                 window: WindowSpec::ratio(0.72, 0.7),
             },
             stats: PluginStats {
-                primary: "主题设置",
-                secondary: "配置持久化",
-                tertiary: "偏好设置",
+                primary: "主题设置".into(),
+                secondary: "配置持久化".into(),
+                tertiary: "偏好设置".into(),
             },
-            command_hint: "主题、窗口保留、应用索引与诊断信息",
-            command_prefixes: &["set", "settings"],
+            command_hint: "主题、窗口保留、应用索引与诊断信息".into(),
+            command_prefixes: ["set", "settings"].into_iter().map(Into::into).collect(),
         }
     }
+}
 
-    fn open_session(
-        &mut self,
-        _: AppEventBus,
-        _: &mut App,
-    ) -> anyhow::Result<Box<dyn PluginSession>> {
+impl Plugin for SystemSettingsRuntime {
+    fn manifest(&self) -> PluginManifest {
+        Self::manifest_static()
+    }
+
+    fn open(&mut self, _: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let panel = SettingsPanel::new(
             Arc::clone(&self.theme_store),
             Arc::clone(&self.settings_store),
             self.app_index_service.clone(),
             self.app_paths.clone(),
         );
-        Ok(Box::new(SystemSettingsSession {
+        Ok(PluginView::Inline(Box::new(SystemSettingsView {
             panel: Rc::new(RefCell::new(panel)),
-        }))
+        })))
     }
 
     fn close_idle(&mut self) {}
 }
 
-pub struct SystemSettingsSession {
+pub struct SystemSettingsView {
     panel: Rc<RefCell<SettingsPanel>>,
 }
 
-impl PluginSession for SystemSettingsSession {
-    fn plugin_id(&self) -> &'static str {
+impl InlineView for SystemSettingsView {
+    fn plugin_id(&self) -> &str {
         "system-settings"
     }
 
-    fn title(&self) -> &'static str {
+    fn title(&self) -> &str {
         "系统设置"
     }
 
@@ -124,7 +129,7 @@ impl PluginSession for SystemSettingsSession {
 pub struct SettingsPanel {
     theme_store: Arc<Mutex<ThemeStore>>,
     settings_store: Arc<Mutex<SettingsStore>>,
-    app_index_service: Option<Arc<crate::features::app_launcher::service::AppIndexService>>,
+    app_index_service: Option<Arc<AppIndexService>>,
     app_paths: AppPaths,
     pub message: String,
     retention_draft: u64,
@@ -140,7 +145,7 @@ impl SettingsPanel {
     fn new(
         theme_store: Arc<Mutex<ThemeStore>>,
         settings_store: Arc<Mutex<SettingsStore>>,
-        app_index_service: Option<Arc<crate::features::app_launcher::service::AppIndexService>>,
+        app_index_service: Option<Arc<AppIndexService>>,
         app_paths: AppPaths,
     ) -> Self {
         let retention = settings_store
@@ -275,9 +280,7 @@ impl SettingsPanel {
         self.app_index_service.is_some()
     }
 
-    pub fn app_index_snapshot(
-        &self,
-    ) -> Option<crate::features::app_launcher::service::AppIndexSnapshot> {
+    pub fn app_index_snapshot(&self) -> Option<AppIndexSnapshot> {
         self.app_index_service.as_ref().map(|svc| svc.snapshot())
     }
 

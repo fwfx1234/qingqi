@@ -490,16 +490,22 @@ mod tests {
     use crate::core::{database::DatabaseService, storage::AppPaths};
     use std::{
         fs,
-        sync::Arc,
+        sync::{
+            Arc,
+            atomic::{AtomicU64, Ordering},
+        },
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    static TEST_DB_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     fn temp_db() -> std::path::PathBuf {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or_default();
-        let dir = std::env::temp_dir().join(format!("qingqi-download-store-{nanos}"));
+        let suffix = TEST_DB_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("qingqi-download-store-{nanos}-{suffix}"));
         let _ = fs::create_dir_all(&dir);
         dir.join("test.db")
     }

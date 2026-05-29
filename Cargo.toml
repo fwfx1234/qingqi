@@ -19,7 +19,7 @@ quircs = "0.10"
 r2d2 = "0.8"
 r2d2_sqlite = { version = "0.31.0", features = ["bundled"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 time = { version = "0.3", features = ["formatting", "local-offset", "macros"] }
 tracing = "0.1"

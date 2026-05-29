@@ -12,6 +12,8 @@ use gpui::{App, Menu, MenuItem};
 
 use crate::{
     app::{
+        app_catalog::AppCatalog,
+        app_index::AppIndexService,
         background::BackgroundSupervisor,
         events::AppEventBus,
         text_input::TextInput,
@@ -55,6 +57,15 @@ pub fn run() -> Result<()> {
         "history",
         "clipboard.db",
     ))?;
+    database.register_database(crate::core::database::DatabaseSpec::app(
+        "app-launcher/index",
+        "app_index.db",
+    ))?;
+    let app_index_service = Arc::new(AppIndexService::with_events(
+        Arc::clone(&database),
+        events.clone(),
+    ));
+    let app_catalog = Arc::new(AppCatalog::new(Arc::clone(&app_index_service)));
     let mut plugins = PluginManager::new(
         events.clone(),
         CommandUsageStore::new(Arc::clone(&database), "command-usage"),
@@ -76,11 +87,14 @@ pub fn run() -> Result<()> {
         paths.clone(),
         Arc::clone(&theme_store),
         Arc::clone(&database),
+        events.clone(),
+        Arc::clone(&app_index_service),
     )?;
 
     let plugins = Rc::new(RefCell::new(plugins));
     let window_controller = Rc::new(RefCell::new(WindowController::new(
         Rc::clone(&plugins),
+        Arc::clone(&app_catalog),
         Arc::clone(&clipboard_service),
         events.clone(),
     )));
@@ -111,6 +125,7 @@ pub fn run() -> Result<()> {
         cx.on_action(|_: &Quit, cx| cx.quit());
 
         set_menus(cx);
+        app_catalog.start_background();
         plugins.borrow_mut().start_background(cx);
         let mut background = BackgroundSupervisor::new();
         background.start_theme_poll(Arc::clone(&theme_store), cx);
@@ -226,19 +241,19 @@ impl Write for TeeWriter {
 
 pub fn run_command(
     window_controller: WindowControllerHandle,
-    target: crate::core::command::CommandTarget,
+    activation: crate::core::command::Activation,
     cx: &mut App,
 ) -> Option<String> {
-    WindowController::run_command(window_controller, target, cx)
+    WindowController::run_command(window_controller, activation, cx)
 }
 
 pub fn run_command_with_trace(
     window_controller: WindowControllerHandle,
-    target: crate::core::command::CommandTarget,
+    activation: crate::core::command::Activation,
     cx: &mut App,
     trace: Option<PluginOpenTrace>,
 ) -> Option<String> {
-    WindowController::run_command_with_trace(window_controller, target, cx, trace)
+    WindowController::run_command_with_trace(window_controller, activation, cx, trace)
 }
 
 fn set_menus(cx: &mut App) {

@@ -1,4 +1,5 @@
 use crate::core::{
+    icon::IconRef,
     plugin::PluginManifest,
     plugin_spec::{
         PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
@@ -10,13 +11,17 @@ pub const PLUGIN_ID: &str = "json-parser";
 
 pub fn manifest() -> PluginManifest {
     PluginManifest {
-        id: PLUGIN_ID,
-        name: "JSON 解析",
-        description: "JSON 格式化、验证与 JSONPath 查询",
-        keywords: &["json", "格式化", "format", "parse", "解析", "query"],
+        id: PLUGIN_ID.into(),
+        name: "JSON 解析".into(),
+        description: "JSON 格式化、验证与 JSONPath 查询".into(),
+        keywords: ["json", "格式化", "format", "parse", "解析", "query"]
+            .into_iter()
+            .map(Into::into)
+            .collect(),
         background: false,
+        dynamic_commands: false,
         visual: PluginVisualSpec {
-            icon: "icons/json.svg",
+            icon: IconRef::asset("icons/json.svg"),
             accent: PluginAccent::Green,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
@@ -24,12 +29,12 @@ pub fn manifest() -> PluginManifest {
             window: WindowSpec::ratio(0.82, 0.84),
         },
         stats: PluginStats {
-            primary: "格式化",
-            secondary: "JSONPath",
-            tertiary: "serde_json",
+            primary: "格式化".into(),
+            secondary: "JSONPath".into(),
+            tertiary: "serde_json".into(),
         },
-        command_hint: "双栏输入/输出与 JSONPath 查询",
-        command_prefixes: &["json", "jq"],
+        command_hint: "双栏输入/输出与 JSONPath 查询".into(),
+        command_prefixes: ["json", "jq"].into_iter().map(Into::into).collect(),
     }
 }
 
@@ -45,13 +50,13 @@ mod tests {
     #[test]
     fn manifest_has_correct_id() {
         let manifest = manifest();
-        assert_eq!(manifest.id, "json-parser");
+        assert_eq!(manifest.id.as_ref(), "json-parser");
     }
 
     #[test]
     fn manifest_has_correct_name() {
         let manifest = manifest();
-        assert_eq!(manifest.name, "JSON 解析");
+        assert_eq!(manifest.name.as_ref(), "JSON 解析");
     }
 
     #[test]
@@ -69,8 +74,13 @@ mod tests {
     #[test]
     fn manifest_has_prefixes() {
         let manifest = manifest();
-        assert!(manifest.command_prefixes.contains(&"json"));
-        assert!(manifest.command_prefixes.contains(&"jq"));
+        assert!(
+            manifest
+                .command_prefixes
+                .iter()
+                .any(|p| p.as_ref() == "json")
+        );
+        assert!(manifest.command_prefixes.iter().any(|p| p.as_ref() == "jq"));
     }
 
     #[test]

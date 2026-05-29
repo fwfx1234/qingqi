@@ -7,9 +7,8 @@ use std::{
 
 use anyhow::Result;
 use gpui::{
-    App, AppContext, AsyncApp, Component, Entity, ExternalPaths, InteractiveElement,
-    IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window, div,
-    hsla, px,
+    App, AppContext, AsyncApp, Component, Entity, ExternalPaths, InteractiveElement, IntoElement,
+    ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window, div, hsla, px,
 };
 
 use crate::{
@@ -218,7 +217,11 @@ impl QrPanel {
             .spawn(async move |async_cx| {
                 let result = async_cx
                     .background_executor()
-                    .spawn(async move { service.list_history(&query).map_err(|error| error.to_string()) })
+                    .spawn(async move {
+                        service
+                            .list_history(&query)
+                            .map_err(|error| error.to_string())
+                    })
                     .await;
                 if let Ok(mut slot) = pending.lock() {
                     *slot = Some(QrBackgroundResult::History(result));
@@ -448,7 +451,9 @@ impl QrPanel {
             .spawn(async move |async_cx| {
                 let result = async_cx
                     .background_executor()
-                    .spawn(async move { service.clear_history().map_err(|error| error.to_string()) })
+                    .spawn(
+                        async move { service.clear_history().map_err(|error| error.to_string()) },
+                    )
                     .await;
                 if let Ok(mut slot) = pending.lock() {
                     *slot = Some(QrBackgroundResult::ClearHistory(result));
@@ -468,7 +473,11 @@ impl QrPanel {
             .spawn(async move |async_cx| {
                 let result = async_cx
                     .background_executor()
-                    .spawn(async move { service.remove_history(&id).map_err(|error| error.to_string()) })
+                    .spawn(async move {
+                        service
+                            .remove_history(&id)
+                            .map_err(|error| error.to_string())
+                    })
                     .await;
                 if let Ok(mut slot) = pending.lock() {
                     *slot = Some(QrBackgroundResult::RemoveHistory(result));
@@ -522,7 +531,11 @@ impl QrPanel {
     }
 
     fn collect_pending(&mut self, cx: &mut App) {
-        let pending = self.pending_action.lock().ok().and_then(|mut slot| slot.take());
+        let pending = self
+            .pending_action
+            .lock()
+            .ok()
+            .and_then(|mut slot| slot.take());
         let Some(action) = pending else {
             return;
         };
@@ -802,12 +815,10 @@ impl RenderOnce for QrCodeElement {
                                                         move |_, window, cx| {
                                                             let text =
                                                                 panel.borrow().input_text(cx);
-                                                            panel
-                                                                .borrow_mut()
-                                                                .generate_from_text(
-                                                                    &text,
-                                                                    cx.to_async(),
-                                                                );
+                                                            panel.borrow_mut().generate_from_text(
+                                                                &text,
+                                                                cx.to_async(),
+                                                            );
                                                             window.refresh();
                                                         }
                                                     }),
@@ -1032,12 +1043,10 @@ fn scan_panel(
                             let panel = Rc::clone(&panel);
                             move |paths: &ExternalPaths, window, cx| {
                                 if let Some(path) = paths.paths().first() {
-                                    panel
-                                        .borrow_mut()
-                                        .scan_path_text(
-                                            path.to_string_lossy().to_string(),
-                                            cx.to_async(),
-                                        );
+                                    panel.borrow_mut().scan_path_text(
+                                        path.to_string_lossy().to_string(),
+                                        cx.to_async(),
+                                    );
                                     window.refresh();
                                 }
                             }
@@ -1208,9 +1217,7 @@ fn history_panel(
                                 .on_click({
                                     let panel = Rc::clone(&panel);
                                     move |_, window, cx| {
-                                        panel
-                                            .borrow_mut()
-                                            .refresh_history(cx, cx.to_async());
+                                        panel.borrow_mut().refresh_history(cx, cx.to_async());
                                         window.refresh();
                                     }
                                 }),

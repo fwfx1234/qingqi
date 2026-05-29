@@ -13,9 +13,10 @@ use gpui_component::{
 };
 
 use crate::{
-    app::{events::AppEventBus, theme, ui},
+    app::{theme, ui},
     core::{
-        plugin::{PluginManifest, PluginRuntime, PluginSession},
+        icon::IconRef,
+        plugin::{InlineView, Plugin, PluginCx, PluginManifest, PluginView},
         plugin_spec::{
             PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
             PluginWindowMode, WindowSpec,
@@ -29,18 +30,20 @@ impl GpuiDemoRuntime {
     pub fn new() -> Self {
         Self
     }
-}
 
-impl PluginRuntime for GpuiDemoRuntime {
-    fn manifest(&self) -> PluginManifest {
+    pub fn manifest_static() -> PluginManifest {
         PluginManifest {
-            id: "gpui-demo",
-            name: "GPUI 学习演示",
-            description: "GPUI 组件、布局和交互的 Rust 实验场",
-            keywords: &["gpui", "rust", "学习", "demo", "组件", "演示", "教程"],
+            id: "gpui-demo".into(),
+            name: "GPUI 学习演示".into(),
+            description: "GPUI 组件、布局和交互的 Rust 实验场".into(),
+            keywords: ["gpui", "rust", "学习", "demo", "组件", "演示", "教程"]
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             background: false,
+            dynamic_commands: false,
             visual: PluginVisualSpec {
-                icon: "qta/mdi6.school-outline.png",
+                icon: IconRef::asset("qta/mdi6.school-outline.png"),
                 accent: PluginAccent::Purple,
                 category: PluginCategory::Tool,
                 status: PluginStatus::Preview,
@@ -48,49 +51,51 @@ impl PluginRuntime for GpuiDemoRuntime {
                 window: WindowSpec::ratio(0.8, 0.8),
             },
             stats: PluginStats {
-                primary: "控件范式",
-                secondary: "布局样例",
-                tertiary: "持续沉淀",
+                primary: "控件范式".into(),
+                secondary: "布局样例".into(),
+                tertiary: "持续沉淀".into(),
             },
-            command_hint: "用于沉淀 Qingqi 的 GPUI 组件、布局和交互范式",
-            command_prefixes: &["gpui", "demo"],
+            command_hint: "用于沉淀 Qingqi 的 GPUI 组件、布局和交互范式".into(),
+            command_prefixes: ["gpui", "demo"].into_iter().map(Into::into).collect(),
         }
     }
+}
 
-    fn open_session(
-        &mut self,
-        _: AppEventBus,
-        cx: &mut App,
-    ) -> anyhow::Result<Box<dyn PluginSession>> {
-        let slider = cx.new(|_| {
+impl Plugin for GpuiDemoRuntime {
+    fn manifest(&self) -> PluginManifest {
+        Self::manifest_static()
+    }
+
+    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+        let slider = cx.app.new(|_| {
             SliderState::new()
                 .min(0.0)
                 .max(100.0)
                 .step(1.0)
                 .default_value(65.0)
         });
-        Ok(Box::new(GpuiDemoSession {
+        Ok(PluginView::Inline(Box::new(GpuiDemoView {
             active_tab: 0,
             dark_switch: false,
             checkbox_checked: true,
             slider,
-        }))
+        })))
     }
 }
 
-struct GpuiDemoSession {
+struct GpuiDemoView {
     active_tab: usize,
     dark_switch: bool,
     checkbox_checked: bool,
     slider: Entity<SliderState>,
 }
 
-impl PluginSession for GpuiDemoSession {
-    fn plugin_id(&self) -> &'static str {
+impl InlineView for GpuiDemoView {
+    fn plugin_id(&self) -> &str {
         "gpui-demo"
     }
 
-    fn title(&self) -> &'static str {
+    fn title(&self) -> &str {
         "GPUI 学习演示"
     }
 

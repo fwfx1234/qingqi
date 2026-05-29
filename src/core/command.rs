@@ -1,9 +1,17 @@
 use std::{fmt, path::Path};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum CommandTarget {
-    PluginOpen {
-        plugin_id: String,
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Activation {
+    Run(Action),
+    Open { plugin_id: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Action {
+    LaunchApp {
+        path: String,
     },
     PluginAction {
         plugin_id: String,
@@ -12,16 +20,20 @@ pub enum CommandTarget {
     },
 }
 
-impl CommandTarget {
+impl Activation {
     pub fn plugin_id(&self) -> &str {
         match self {
-            Self::PluginOpen { plugin_id } | Self::PluginAction { plugin_id, .. } => plugin_id,
+            Self::Run(Action::LaunchApp { .. }) => "app",
+            Self::Open { plugin_id } | Self::Run(Action::PluginAction { plugin_id, .. }) => {
+                plugin_id
+            }
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CommandKind {
+    App,
     Plugin,
     DynamicAction,
 }
@@ -29,13 +41,14 @@ pub enum CommandKind {
 impl fmt::Display for CommandKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::App => f.write_str("应用"),
             Self::Plugin => f.write_str("插件"),
             Self::DynamicAction => f.write_str("动作"),
         }
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CommandItem {
     pub id: String,
     pub plugin_id: String,
@@ -45,10 +58,12 @@ pub struct CommandItem {
     pub prefixes: Vec<String>,
     pub icon: String,
     pub kind: CommandKind,
-    pub target: CommandTarget,
+    pub activation: Activation,
     pub usage_key: String,
     pub recommend_matchers: Vec<ContextMatcher>,
 }
+
+pub type Command = CommandItem;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommandMatch {
@@ -56,7 +71,7 @@ pub struct CommandMatch {
     pub reason: &'static str,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContextMatcher {
     pub source: ContextSource,
     pub kind: ContextKind,
@@ -81,13 +96,13 @@ impl ContextMatcher {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ContextSource {
     Input,
     Clipboard,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ContextKind {
     Clipboard,
     Text,
@@ -107,6 +122,30 @@ pub struct LauncherContext {
 }
 
 impl CommandItem {
+    pub fn app_launch(
+        path: impl Into<String>,
+        title: impl Into<String>,
+        subtitle: impl Into<String>,
+        keywords: impl IntoIterator<Item = impl Into<String>>,
+        icon: impl Into<String>,
+    ) -> Self {
+        let path = path.into();
+        Self {
+            id: format!("app:{path}"),
+            plugin_id: String::from("app"),
+            title: title.into(),
+            subtitle: subtitle.into(),
+            keywords: keywords.into_iter().map(Into::into).collect(),
+            prefixes: vec![String::from("app"), String::from("open")],
+            icon: icon.into(),
+            kind: CommandKind::App,
+            activation: Activation::Run(Action::LaunchApp { path }),
+            usage_key: String::new(),
+            recommend_matchers: Vec::new(),
+        }
+        .with_default_usage_key()
+    }
+
     pub fn plugin_open(
         plugin_id: impl Into<String>,
         title: impl Into<String>,
@@ -125,7 +164,7 @@ impl CommandItem {
             prefixes: prefixes.into_iter().map(Into::into).collect(),
             icon: icon.into(),
             kind: CommandKind::Plugin,
-            target: CommandTarget::PluginOpen { plugin_id },
+            activation: Activation::Open { plugin_id },
             usage_key: String::new(),
             recommend_matchers: Vec::new(),
         }
@@ -153,11 +192,11 @@ impl CommandItem {
             prefixes: prefixes.into_iter().map(Into::into).collect(),
             icon: icon.into(),
             kind: CommandKind::DynamicAction,
-            target: CommandTarget::PluginAction {
+            activation: Activation::Run(Action::PluginAction {
                 plugin_id,
                 action_id,
                 payload,
-            },
+            }),
             usage_key: String::new(),
             recommend_matchers: Vec::new(),
         }
@@ -285,13 +324,14 @@ impl CommandItem {
     }
 
     fn with_default_usage_key(mut self) -> Self {
-        self.usage_key = match &self.target {
-            CommandTarget::PluginOpen { plugin_id } => format!("plugin:{plugin_id}"),
-            CommandTarget::PluginAction {
+        self.usage_key = match &self.activation {
+            Activation::Run(Action::LaunchApp { path }) => format!("app:{path}"),
+            Activation::Open { plugin_id } => format!("plugin:{plugin_id}"),
+            Activation::Run(Action::PluginAction {
                 payload: Some(payload),
                 ..
-            } if is_app_path(payload) => format!("app:{payload}"),
-            CommandTarget::PluginAction { .. } => self.id.clone(),
+            }) if is_app_path(payload) => format!("app:{payload}"),
+            Activation::Run(Action::PluginAction { .. }) => self.id.clone(),
         };
         self
     }
@@ -490,7 +530,7 @@ fn is_app_path(value: &str) -> bool {
 
 #[derive(Clone, Debug)]
 pub struct CommandInvocation {
-    pub target: CommandTarget,
+    pub activation: Activation,
 }
 
 #[derive(Clone, Debug, Default)]

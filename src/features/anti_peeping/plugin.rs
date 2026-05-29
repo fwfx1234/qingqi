@@ -6,13 +6,10 @@ use gpui::{
     WindowBounds, WindowKind, WindowOptions, div, img, prelude::FluentBuilder, px,
 };
 
-use crate::{
-    app::events::AppEventBus,
-    core::{
-        command::CommandItem,
-        plugin::{PluginManifest, PluginRuntime, PluginSession},
-        storage::AppPaths,
-    },
+use crate::core::{
+    command::CommandItem,
+    plugin::{Plugin, PluginCx, PluginManifest, PluginView, WindowView},
+    storage::AppPaths,
 };
 
 use super::manifest;
@@ -102,7 +99,7 @@ impl AntiPeepingRuntime {
     }
 }
 
-impl PluginRuntime for AntiPeepingRuntime {
+impl Plugin for AntiPeepingRuntime {
     fn manifest(&self) -> PluginManifest {
         manifest::manifest()
     }
@@ -110,34 +107,30 @@ impl PluginRuntime for AntiPeepingRuntime {
     fn commands(&self) -> Vec<CommandItem> {
         let m = self.manifest();
         vec![CommandItem::plugin_open(
-            m.id,
+            m.id.as_ref(),
             "打开防窥屏",
             "全屏遮盖所有屏幕内容",
-            m.keywords.iter().copied(),
-            m.command_prefixes.iter().copied(),
-            m.visual.icon,
+            m.keywords.iter().map(|s| s.as_ref()),
+            m.command_prefixes.iter().map(|s| s.as_ref()),
+            m.visual.icon.as_str(),
         )]
     }
 
-    fn open_session(
-        &mut self,
-        _events: AppEventBus,
-        cx: &mut App,
-    ) -> anyhow::Result<Box<dyn PluginSession>> {
+    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         if !*self.active.borrow() {
             *self.active.borrow_mut() = true;
             let image_path = Rc::clone(&self.image_path);
             let overlay_windows = Rc::clone(&self.overlay_windows);
             let active = Rc::clone(&self.active);
-            Self::open_overlays(cx, image_path, overlay_windows, active);
+            Self::open_overlays(cx.app, image_path, overlay_windows, active);
         }
-        Ok(Box::new(AntiPeepingSession {
+        Ok(PluginView::Window(Box::new(AntiPeepingView {
             active: Rc::clone(&self.active),
             image_path: Rc::clone(&self.image_path),
             overlay_windows: Rc::clone(&self.overlay_windows),
             paths: self.paths.clone(),
             draft_path: self.image_path.borrow().clone().unwrap_or_default(),
-        }))
+        })))
     }
 
     fn close_idle(&mut self) {
@@ -145,7 +138,7 @@ impl PluginRuntime for AntiPeepingRuntime {
     }
 }
 
-struct AntiPeepingSession {
+struct AntiPeepingView {
     active: Rc<RefCell<bool>>,
     image_path: Rc<RefCell<Option<String>>>,
     overlay_windows: Rc<RefCell<Vec<AnyWindowHandle>>>,
@@ -153,12 +146,12 @@ struct AntiPeepingSession {
     draft_path: String,
 }
 
-impl PluginSession for AntiPeepingSession {
-    fn plugin_id(&self) -> &'static str {
+impl WindowView for AntiPeepingView {
+    fn plugin_id(&self) -> &str {
         manifest::PLUGIN_ID
     }
 
-    fn title(&self) -> &'static str {
+    fn title(&self) -> &str {
         "防窥屏"
     }
 

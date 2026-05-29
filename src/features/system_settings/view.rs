@@ -6,9 +6,9 @@ use gpui::{
 };
 
 use crate::{
-    app::{text_input::TextInput, theme, theme_store::ThemeMode},
+    app::{app_index::AppIndexSnapshot, text_input::TextInput, theme, theme_store::ThemeMode},
     core::shortcut::{CORE_PLUGIN_ID, ShortcutScope, ShortcutView},
-    features::{app_launcher::service::AppIndexSnapshot, system_settings::plugin::SettingsPanel},
+    features::system_settings::plugin::SettingsPanel,
     platform::macos::PermissionStatus,
 };
 
@@ -453,10 +453,7 @@ fn app_index_row(
     let text_primary = theme::token("color-text-primary", dark);
 
     let (status_line, show_rescan) = if !has_snapshot {
-        (
-            String::from("应用索引服务不可用 — 启动 app-launcher 插件后可用"),
-            false,
-        )
+        (String::from("应用索引服务不可用"), false)
     } else if let Some(ref snap) = snapshot {
         if snap.scan_running {
             if snap.icon_refresh_running {

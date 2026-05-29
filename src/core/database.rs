@@ -17,13 +17,8 @@ pub type PooledConnection = r2d2::PooledConnection<SqliteConnectionManager>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DatabaseLocation {
-    App {
-        filename: String,
-    },
-    FeatureState {
-        feature: String,
-        filename: String,
-    },
+    App { filename: String },
+    FeatureState { feature: String, filename: String },
     Path(PathBuf),
 }
 

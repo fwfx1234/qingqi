@@ -19,6 +19,7 @@ use gpui_component::scroll::Scrollbar;
 
 use crate::{
     app::{
+        app_catalog::AppCatalog,
         events::{AppEventBus, AppEventKind},
         text_input::{TextInput, TextInputStyle},
         theme, theme_mode, ui,
@@ -26,10 +27,11 @@ use crate::{
     },
     core::{
         command::{
-            CommandItem, CommandKind, CommandTarget, ContextKind, detect_text_context_kinds,
+            Activation, CommandItem, CommandKind, ContextKind,
+            build_launcher_context_with_clipboard_kinds, detect_text_context_kinds,
             push_context_kind, unique_context_kinds,
         },
-        plugin::{PluginListItem, PluginManager, PluginSession},
+        plugin::{InlineView, ListView, PluginListItem, PluginManager},
         plugin_spec::{PluginStatus, PluginVisualSpec, PluginWindowMode},
     },
     features::clipboard::{
@@ -60,10 +62,10 @@ static PLUGIN_OPEN_TRACE_ID: AtomicU64 = AtomicU64::new(1);
 enum LauncherMode {
     Search,
     InlinePlugin {
-        session: Box<dyn PluginSession>,
+        session: Box<dyn InlineView>,
     },
     ListPlugin {
-        session: Box<dyn PluginSession>,
+        session: Box<dyn ListView>,
         items: Rc<Vec<PluginListItem>>,
         selected: usize,
     },
@@ -71,6 +73,7 @@ enum LauncherMode {
 
 pub struct Launcher {
     plugin_manager: Rc<RefCell<PluginManager>>,
+    app_catalog: Arc<AppCatalog>,
     clipboard_service: Arc<Mutex<ClipboardService>>,
     plugin_visuals: HashMap<String, PluginVisualSpec>,
     query_input: Option<Entity<TextInput>>,
@@ -111,14 +114,16 @@ impl Launcher {
 
     pub fn new(
         plugin_manager: Rc<RefCell<PluginManager>>,
+        app_catalog: Arc<AppCatalog>,
         clipboard_service: Arc<Mutex<ClipboardService>>,
         _cx: &App,
     ) -> Self {
         let (all_commands, plugin_visuals, last_commands_revision) = {
             let mut manager = plugin_manager.borrow_mut();
             let clipboard_kinds = Self::latest_clipboard_context_kinds(&clipboard_service);
-            let all_commands = manager.commands_with_clipboard(clipboard_kinds);
-            let last_commands_revision = manager.commands_revision();
+            let mut all_commands = app_catalog.search("", COMMAND_SEARCH_LIMIT);
+            all_commands.extend(manager.commands_with_clipboard(clipboard_kinds));
+            let last_commands_revision = manager.command_cache_revision();
             let plugin_visuals = manager
                 .manifests()
                 .into_iter()
@@ -129,6 +134,7 @@ impl Launcher {
         let results = Self::default_results(&all_commands, &plugin_visuals);
         Self {
             plugin_manager,
+            app_catalog,
             clipboard_service,
             plugin_visuals,
             query_input: None,
@@ -178,6 +184,7 @@ impl Launcher {
                 };
                 if event.kind == AppEventKind::CommandsChanged {
                     let _ = launcher.update(async_cx, |launcher, cx| {
+                        launcher.plugin_manager.borrow_mut().invalidate_commands();
                         launcher.refresh_results_after_commands_changed(cx);
                         cx.notify();
                     });
@@ -188,11 +195,8 @@ impl Launcher {
 
     fn refresh_results_after_commands_changed(&mut self, cx: &mut Context<Self>) {
         let clipboard_kinds = self.current_cached_clipboard_context_kinds();
-        self.last_commands_revision = self.plugin_manager.borrow_mut().commands_revision();
-        self.all_commands = self
-            .plugin_manager
-            .borrow_mut()
-            .commands_with_clipboard(clipboard_kinds.clone());
+        self.last_commands_revision = self.plugin_manager.borrow_mut().command_cache_revision();
+        self.all_commands = self.default_commands_with_clipboard(clipboard_kinds.clone());
 
         let query = self.query(cx);
         if matches!(self.mode, LauncherMode::Search) {
@@ -201,15 +205,7 @@ impl Launcher {
             if query.trim().is_empty() {
                 self.results = Self::default_results(&self.all_commands, &self.plugin_visuals);
             } else {
-                self.results = Rc::new(
-                    self.plugin_manager
-                        .borrow_mut()
-                        .commands_for_query_with_clipboard(
-                            &query,
-                            COMMAND_SEARCH_LIMIT,
-                            clipboard_kinds,
-                        ),
-                );
+                self.results = Rc::new(self.commands_for_query(&query, clipboard_kinds));
             }
             self.selected = self.selected.min(self.results.len().saturating_sub(1));
             self.results_visible_start = visible_start_for_selection(self.selected);
@@ -295,6 +291,7 @@ impl Launcher {
 
     fn is_default_command(item: &CommandItem, visuals: &HashMap<String, PluginVisualSpec>) -> bool {
         match item.kind {
+            CommandKind::App => true,
             CommandKind::DynamicAction => true,
             CommandKind::Plugin => visuals
                 .get(&item.plugin_id)
@@ -335,14 +332,8 @@ impl Launcher {
             return;
         }
 
-        let query_commands = self
-            .plugin_manager
-            .borrow_mut()
-            .commands_for_query_with_clipboard(
-                &query,
-                COMMAND_SEARCH_LIMIT,
-                self.current_clipboard_context_kinds(cx),
-            );
+        let query_commands =
+            self.commands_for_query(&query, self.current_clipboard_context_kinds(cx));
         self.results = Rc::new(query_commands);
         self.selected = self.selected.min(self.results.len().saturating_sub(1));
         self.results_visible_start = visible_start_for_selection(self.selected);
@@ -358,6 +349,62 @@ impl Launcher {
         Self::latest_clipboard_context_kinds(&self.clipboard_service)
     }
 
+    fn default_commands_with_clipboard(
+        &mut self,
+        clipboard_kinds: Vec<ContextKind>,
+    ) -> Vec<CommandItem> {
+        let mut commands = self.app_catalog.search("", COMMAND_SEARCH_LIMIT);
+        commands.extend(
+            self.plugin_manager
+                .borrow_mut()
+                .commands_with_clipboard(clipboard_kinds),
+        );
+        commands
+    }
+
+    fn commands_for_query(
+        &mut self,
+        query: &str,
+        clipboard_kinds: Vec<ContextKind>,
+    ) -> Vec<CommandItem> {
+        let mut commands = self.app_catalog.search(query, COMMAND_SEARCH_LIMIT);
+        commands.extend(
+            self.plugin_manager
+                .borrow_mut()
+                .commands_for_query_with_clipboard(
+                    query,
+                    COMMAND_SEARCH_LIMIT,
+                    clipboard_kinds.clone(),
+                ),
+        );
+
+        let mut seen = HashSet::new();
+        let commands = commands
+            .into_iter()
+            .filter(|command| seen.insert(command.id.clone()))
+            .collect::<Vec<_>>();
+        let known_prefixes = commands
+            .iter()
+            .flat_map(|command| command.prefixes.iter().cloned())
+            .collect::<Vec<_>>();
+        let context =
+            build_launcher_context_with_clipboard_kinds(query, &known_prefixes, clipboard_kinds);
+        let mut scored = commands
+            .into_iter()
+            .filter_map(|command| {
+                command
+                    .score_with_context(&context)
+                    .map(|matched| (matched.score, command))
+            })
+            .collect::<Vec<_>>();
+        scored.sort_by(|(left_score, left), (right_score, right)| {
+            right_score
+                .cmp(left_score)
+                .then_with(|| left.title.cmp(&right.title))
+        });
+        scored.into_iter().map(|(_, command)| command).collect()
+    }
+
     fn refresh_clipboard_context_async(&mut self, cx: &mut Context<Self>) {
         let service = Arc::clone(&self.clipboard_service);
         self.search_task = Some(cx.spawn(async move |launcher, async_cx| {
@@ -369,27 +416,19 @@ impl Launcher {
 
             let _ = launcher.update(async_cx, |launcher, cx| {
                 let current_query = launcher.query(cx);
-                launcher.last_commands_revision =
-                    launcher.plugin_manager.borrow_mut().commands_revision();
-                launcher.all_commands = launcher
+                launcher.last_commands_revision = launcher
                     .plugin_manager
                     .borrow_mut()
-                    .commands_with_clipboard(clipboard_kinds.clone());
+                    .command_cache_revision();
+                launcher.all_commands =
+                    launcher.default_commands_with_clipboard(clipboard_kinds.clone());
 
                 if current_query.trim().is_empty() {
                     launcher.results =
                         Self::default_results(&launcher.all_commands, &launcher.plugin_visuals);
                 } else {
-                    launcher.results = Rc::new(
-                        launcher
-                            .plugin_manager
-                            .borrow_mut()
-                            .commands_for_query_with_clipboard(
-                                &current_query,
-                                COMMAND_SEARCH_LIMIT,
-                                clipboard_kinds,
-                            ),
-                    );
+                    launcher.results =
+                        Rc::new(launcher.commands_for_query(&current_query, clipboard_kinds));
                 }
 
                 launcher.selected = launcher
@@ -472,7 +511,7 @@ impl Launcher {
     }
 
     fn refresh_plugin_list_if_needed(&mut self, cx: &mut Context<Self>) {
-        let revision = self.plugin_manager.borrow_mut().commands_revision();
+        let revision = self.plugin_manager.borrow_mut().command_cache_revision();
         if revision == self.plugin_list_revision {
             return;
         }
@@ -493,16 +532,14 @@ impl Launcher {
     }
 
     fn refresh_commands_if_needed(&mut self, cx: &App) -> bool {
-        let revision = self.plugin_manager.borrow_mut().commands_revision();
+        let revision = self.plugin_manager.borrow_mut().command_cache_revision();
         if revision == self.last_commands_revision {
             return false;
         }
 
         self.last_commands_revision = revision;
-        self.all_commands = self
-            .plugin_manager
-            .borrow_mut()
-            .commands_with_clipboard(self.current_clipboard_context_kinds(cx));
+        self.all_commands =
+            self.default_commands_with_clipboard(self.current_clipboard_context_kinds(cx));
         true
     }
 
@@ -602,12 +639,12 @@ impl Launcher {
         self.plugin_manager
             .borrow()
             .record_command_launch_background(&item, cx);
-        let target = item.target.clone();
-        let CommandTarget::PluginOpen { plugin_id } = &target else {
+        let activation = item.activation.clone();
+        let Activation::Open { plugin_id } = &activation else {
             if let Some(window_controller) = self.window_controller.clone() {
                 let _ = crate::app::runtime::run_command_with_trace(
                     window_controller,
-                    target,
+                    activation,
                     cx,
                     Some(trace),
                 );
@@ -616,7 +653,7 @@ impl Launcher {
             return;
         };
 
-        let visual = self.plugin_visuals.get(plugin_id).copied();
+        let visual = self.plugin_visuals.get(plugin_id).cloned();
         let launch_input = item.launch_input(&self.query(cx));
         match visual
             .map(|visual| visual.mode)
@@ -626,7 +663,7 @@ impl Launcher {
                 if let Some(window_controller) = self.window_controller.clone() {
                     let _ = crate::app::runtime::run_command_with_trace(
                         window_controller,
-                        target.clone(),
+                        activation.clone(),
                         cx,
                         Some(trace),
                     );
@@ -641,7 +678,10 @@ impl Launcher {
             }
             PluginWindowMode::Inline => {
                 let session_started = Instant::now();
-                let session_result = self.plugin_manager.borrow_mut().open_session(plugin_id, cx);
+                let session_result = self
+                    .plugin_manager
+                    .borrow_mut()
+                    .open_inline_view(plugin_id, cx);
                 log_launcher_step(
                     plugin_id,
                     "open inline session",
@@ -668,7 +708,7 @@ impl Launcher {
                             error = %error,
                             "open inline plugin failed"
                         );
-                        self.run_command(item.target, cx);
+                        self.run_command(item.activation, cx);
                         self.close_window_app(window, cx);
                     }
                 }
@@ -677,7 +717,10 @@ impl Launcher {
             }
             PluginWindowMode::List => {
                 let session_started = Instant::now();
-                let session_result = self.plugin_manager.borrow_mut().open_session(plugin_id, cx);
+                let session_result = self
+                    .plugin_manager
+                    .borrow_mut()
+                    .open_list_view(plugin_id, cx);
                 log_launcher_step(plugin_id, "open list session", session_started, Some(trace));
                 match session_result {
                     Ok(mut session) => {
@@ -706,7 +749,7 @@ impl Launcher {
                             error = %error,
                             "open list plugin failed"
                         );
-                        self.run_command(item.target, cx);
+                        self.run_command(item.activation, cx);
                         self.close_window_app(window, cx);
                     }
                 }
@@ -732,9 +775,9 @@ impl Launcher {
         }
     }
 
-    fn run_command(&mut self, target: CommandTarget, cx: &mut App) -> Option<String> {
+    fn run_command(&mut self, activation: Activation, cx: &mut App) -> Option<String> {
         if let Some(window_controller) = self.window_controller.clone() {
-            crate::app::runtime::run_command(window_controller, target, cx)
+            crate::app::runtime::run_command(window_controller, activation, cx)
         } else {
             tracing::warn!("launcher missing window controller while running command");
             None
@@ -857,8 +900,8 @@ impl Launcher {
 
     fn close_plugin_mode(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         match std::mem::replace(&mut self.mode, LauncherMode::Search) {
-            LauncherMode::InlinePlugin { mut session, .. }
-            | LauncherMode::ListPlugin { mut session, .. } => session.on_close(),
+            LauncherMode::InlinePlugin { mut session, .. } => session.on_close(),
+            LauncherMode::ListPlugin { mut session, .. } => session.on_close(),
             LauncherMode::Search => {}
         }
         self.results_scroll.scroll_to_item(0, ScrollStrategy::Top);
@@ -866,24 +909,13 @@ impl Launcher {
         self.plugin_list_visible_start = 0;
         let clipboard_kinds = self.current_cached_clipboard_context_kinds();
         let query = self.query(cx);
-        self.all_commands = self
-            .plugin_manager
-            .borrow_mut()
-            .commands_with_clipboard(clipboard_kinds.clone());
+        self.all_commands = self.default_commands_with_clipboard(clipboard_kinds.clone());
         if query.trim().is_empty() {
             self.results = Self::default_results(&self.all_commands, &self.plugin_visuals);
             self.selected = self.selected.min(self.results.len().saturating_sub(1));
             self.results_visible_start = visible_start_for_selection(self.selected);
         } else {
-            self.results = Rc::new(
-                self.plugin_manager
-                    .borrow_mut()
-                    .commands_for_query_with_clipboard(
-                        &query,
-                        COMMAND_SEARCH_LIMIT,
-                        clipboard_kinds,
-                    ),
-            );
+            self.results = Rc::new(self.commands_for_query(&query, clipboard_kinds));
             self.selected = self.selected.min(self.results.len().saturating_sub(1));
             self.results_visible_start = visible_start_for_selection(self.selected);
         }
@@ -1165,7 +1197,7 @@ fn launcher_quick_tab(
                     .find(|item| {
                         item.plugin_id == plugin_id
                             && item.kind == CommandKind::Plugin
-                            && matches!(item.target, CommandTarget::PluginOpen { .. })
+                            && matches!(item.activation, Activation::Open { .. })
                     })
                     .cloned()
                 {
@@ -1813,6 +1845,7 @@ fn result_badge(item: &CommandItem, dark: bool) -> (String, gpui::Hsla, gpui::Rg
     let tag_fg = theme::launcher_faint_text(dark);
 
     match item.kind {
+        CommandKind::App => (String::from("应用"), tag_bg, tag_fg),
         CommandKind::DynamicAction => (
             String::from("动作"),
             theme::rgba_with_alpha(theme::launcher_accent(dark), if dark { 0.12 } else { 0.08 }),

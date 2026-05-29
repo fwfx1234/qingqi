@@ -1,14 +1,19 @@
 use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, Styled, Window, div, px, rgb};
 
 use crate::{
-    app::{events::AppEventBus, ui},
+    app::ui,
     core::{
-        plugin::{PluginManifest, PluginRuntime, PluginSession},
-        plugin_spec::{PluginOverviewSection, PluginStats},
+        plugin::{
+            InlineView, ListItem, ListView, Plugin, PluginCx, PluginManifest, PluginView,
+            WindowView,
+        },
+        plugin_spec::{PluginOverviewSection, PluginStats, PluginWindowMode},
     },
 };
 
 pub struct StubPluginRuntime {
+    id: &'static str,
+    title: &'static str,
     manifest: PluginManifest,
     hero: &'static str,
     sections: &'static [(&'static str, &'static str)],
@@ -16,11 +21,15 @@ pub struct StubPluginRuntime {
 
 impl StubPluginRuntime {
     pub fn new(
+        id: &'static str,
+        title: &'static str,
         manifest: PluginManifest,
         hero: &'static str,
         sections: &'static [(&'static str, &'static str)],
     ) -> Self {
         Self {
+            id,
+            title,
             manifest,
             hero,
             sections,
@@ -28,46 +37,54 @@ impl StubPluginRuntime {
     }
 }
 
-impl PluginRuntime for StubPluginRuntime {
+impl Plugin for StubPluginRuntime {
     fn manifest(&self) -> PluginManifest {
-        self.manifest
+        self.manifest.clone()
     }
 
-    fn open_session(
-        &mut self,
-        _: AppEventBus,
-        _: &mut App,
-    ) -> anyhow::Result<Box<dyn PluginSession>> {
-        Ok(Box::new(StubPluginSession {
-            manifest: self.manifest,
+    fn open(&mut self, _: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+        let mode = self.manifest.visual.mode;
+        let view = StubPluginView {
+            id: self.id,
+            title: self.title,
+            manifest: self.manifest.clone(),
             hero: self.hero,
             sections: self
                 .sections
                 .iter()
                 .map(|(title, body)| PluginOverviewSection::new(*title, *body))
                 .collect(),
-        }))
+        };
+        Ok(match mode {
+            PluginWindowMode::Inline => PluginView::Inline(Box::new(view)),
+            PluginWindowMode::List => PluginView::List(Box::new(view)),
+            PluginWindowMode::Window => PluginView::Window(Box::new(view)),
+        })
     }
 }
 
-struct StubPluginSession {
+struct StubPluginView {
+    id: &'static str,
+    title: &'static str,
     manifest: PluginManifest,
     hero: &'static str,
     sections: Vec<PluginOverviewSection>,
 }
 
-impl PluginSession for StubPluginSession {
-    fn plugin_id(&self) -> &'static str {
-        self.manifest.id
+impl WindowView for StubPluginView {
+    fn plugin_id(&self) -> &str {
+        self.id
     }
 
-    fn title(&self) -> &'static str {
-        self.manifest.name
+    fn title(&self) -> &str {
+        self.title
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
         StubPluginPage {
-            manifest: self.manifest,
+            id: self.id,
+            title: self.title,
+            manifest: self.manifest.clone(),
             hero: self.hero,
             sections: self.sections.clone(),
         }
@@ -75,7 +92,37 @@ impl PluginSession for StubPluginSession {
     }
 }
 
+impl InlineView for StubPluginView {
+    fn plugin_id(&self) -> &str {
+        self.id
+    }
+
+    fn title(&self) -> &str {
+        self.title
+    }
+
+    fn render(&mut self, window: &mut Window, cx: &mut App) -> AnyElement {
+        WindowView::render(self, window, cx)
+    }
+}
+
+impl ListView for StubPluginView {
+    fn plugin_id(&self) -> &str {
+        self.id
+    }
+
+    fn title(&self) -> &str {
+        self.title
+    }
+
+    fn items(&mut self, _cx: &mut App) -> Vec<ListItem> {
+        Vec::new()
+    }
+}
+
 struct StubPluginPage {
+    id: &'static str,
+    title: &'static str,
     manifest: PluginManifest,
     hero: &'static str,
     sections: Vec<PluginOverviewSection>,
@@ -91,8 +138,8 @@ impl IntoElement for StubPluginPage {
 
 impl RenderOnce for StubPluginPage {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let visual = self.manifest.visual;
-        let stats: PluginStats = self.manifest.stats;
+        let visual = self.manifest.visual.clone();
+        let stats: PluginStats = self.manifest.stats.clone();
         let accent = ui::accent_color(visual.accent);
 
         div()
@@ -113,7 +160,7 @@ impl RenderOnce for StubPluginPage {
                     .p_4()
                     .flex()
                     .gap_3()
-                    .child(ui::icon_tile(visual.icon, visual.accent, 52.0))
+                    .child(ui::icon_tile(visual.icon.as_str(), visual.accent, 52.0))
                     .child(
                         div()
                             .flex_1()
@@ -126,8 +173,8 @@ impl RenderOnce for StubPluginPage {
                                     .items_center()
                                     .gap_2()
                                     .child(ui::page_title(
-                                        self.manifest.name,
-                                        self.manifest.description,
+                                        self.manifest.name.to_string(),
+                                        self.manifest.description.to_string(),
                                     ))
                                     .child(ui::status_pill(visual.status.label(), visual.status))
                                     .child(ui::category_pill(
@@ -154,12 +201,12 @@ impl RenderOnce for StubPluginPage {
                                     ))
                                     .child(ui::stat_card(
                                         "补全状态",
-                                        stats.secondary,
+                                        stats.secondary.to_string(),
                                         visual.accent,
                                     ))
                                     .child(ui::stat_card(
                                         "实现策略",
-                                        stats.tertiary,
+                                        stats.tertiary.to_string(),
                                         visual.accent,
                                     )),
                             ),
@@ -191,7 +238,11 @@ impl RenderOnce for StubPluginPage {
                     )
             }))
             .child(ui::status_bar(
-                format!("{}: {}", self.manifest.name, self.manifest.command_hint),
+                format!(
+                    "{}: {}",
+                    self.manifest.name.as_ref(),
+                    self.manifest.command_hint.as_ref()
+                ),
                 rgb(0x475569),
             ))
     }

@@ -1,28 +1,21 @@
 use gpui::{App, IntoElement, Window};
 
 use crate::{
-    app::events::AppEventBus,
-    core::plugin::{
-        ConfiguredPluginRuntime, PanelPluginSession, PluginSession,
-    },
+    core::plugin::{ConfiguredPluginRuntime, PanelPluginView, PluginCx, PluginView},
     features::about::{manifest, view::AboutPage},
 };
 
 pub type AboutRuntime = ConfiguredPluginRuntime<()>;
 
 pub fn runtime() -> AboutRuntime {
-    ConfiguredPluginRuntime::new(manifest::manifest).with_session(open_session)
+    ConfiguredPluginRuntime::new(manifest::manifest).with_view(open_view)
 }
 
-fn open_session(
-    _: &mut (),
-    _: AppEventBus,
-    _: &mut App,
-) -> anyhow::Result<Box<dyn PluginSession>> {
-    Ok(Box::new(PanelPluginSession::new(
+fn open_view(_: &mut (), _: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+    Ok(PluginView::Inline(Box::new(PanelPluginView::new(
         manifest::PLUGIN_ID,
         "关于",
         (),
         |_, _window: &mut Window, _cx: &mut App| AboutPage.into_any_element(),
-    )))
+    ))))
 }

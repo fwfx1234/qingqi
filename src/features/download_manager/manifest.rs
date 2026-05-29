@@ -1,4 +1,5 @@
 use crate::core::{
+    icon::IconRef,
     plugin::PluginManifest,
     plugin_spec::{
         PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
@@ -10,13 +11,17 @@ pub const PLUGIN_ID: &str = "download-manager";
 
 pub fn manifest() -> PluginManifest {
     PluginManifest {
-        id: PLUGIN_ID,
-        name: "下载管理器",
-        description: "多任务文件下载，支持断点续传与速度监控",
-        keywords: &["下载", "download", "文件", "file", "http", "url"],
+        id: PLUGIN_ID.into(),
+        name: "下载管理器".into(),
+        description: "多任务文件下载，支持断点续传与速度监控".into(),
+        keywords: ["下载", "download", "文件", "file", "http", "url"]
+            .into_iter()
+            .map(Into::into)
+            .collect(),
         background: false,
+        dynamic_commands: false,
         visual: PluginVisualSpec {
-            icon: "qta/mdi6.download.png",
+            icon: IconRef::asset("qta/mdi6.download.png"),
             accent: PluginAccent::Green,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
@@ -24,11 +29,11 @@ pub fn manifest() -> PluginManifest {
             window: WindowSpec::ratio(0.86, 0.82),
         },
         stats: PluginStats {
-            primary: "多任务下载",
-            secondary: "断点续传",
-            tertiary: "reqwest",
+            primary: "多任务下载".into(),
+            secondary: "断点续传".into(),
+            tertiary: "reqwest".into(),
         },
-        command_hint: "输入 URL 或粘贴链接开始下载",
-        command_prefixes: &["down", "download"],
+        command_hint: "输入 URL 或粘贴链接开始下载".into(),
+        command_prefixes: ["down", "download"].into_iter().map(Into::into).collect(),
     }
 }

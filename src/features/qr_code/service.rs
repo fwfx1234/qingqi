@@ -77,6 +77,7 @@ impl QrCodeService {
             .push(QrHistoryKind::Copy, &normalized, "")
     }
 
+    #[allow(clippy::never_loop)]
     pub fn scan_image(&self, path: &Path) -> Result<String> {
         ensure!(path.exists(), "图片不存在: {}", path.display());
 

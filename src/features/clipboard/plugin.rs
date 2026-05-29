@@ -9,8 +9,8 @@ use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 use crate::{
     app::events::AppEventBus,
     core::{
-        command::{CommandItem, CommandTarget, ContextKind, ContextMatcher},
-        plugin::{PluginRuntime, PluginSession},
+        command::{Activation, CommandItem, ContextKind, ContextMatcher},
+        plugin::{Plugin, PluginCx, PluginView, WindowView},
         shortcut::{ShortcutDescriptor, ShortcutScope, ShortcutTarget},
     },
     features::clipboard::{manifest, service::ClipboardService, view},
@@ -34,7 +34,7 @@ impl ClipboardRuntime {
     }
 }
 
-impl PluginRuntime for ClipboardRuntime {
+impl Plugin for ClipboardRuntime {
     fn manifest(&self) -> crate::core::plugin::PluginManifest {
         manifest::manifest()
     }
@@ -43,33 +43,33 @@ impl PluginRuntime for ClipboardRuntime {
         let manifest = self.manifest();
         vec![
             CommandItem::plugin_open(
-                manifest.id,
-                manifest.name,
-                manifest.description,
-                manifest.keywords.iter().copied(),
-                manifest.command_prefixes.iter().copied(),
-                manifest.visual.icon,
+                manifest.id.as_ref(),
+                manifest.name.as_ref(),
+                manifest.description.as_ref(),
+                manifest.keywords.iter().map(|s| s.as_ref()),
+                manifest.command_prefixes.iter().map(|s| s.as_ref()),
+                manifest.visual.icon.as_str(),
             )
             .with_recommend_matchers([ContextMatcher::clipboard(ContextKind::Clipboard, 30)]),
         ]
     }
 
-    fn open_session(&mut self, _: AppEventBus, cx: &mut App) -> Result<Box<dyn PluginSession>> {
+    fn open(&mut self, cx: &mut PluginCx<'_>) -> Result<PluginView> {
         if let Ok(service) = self.service.lock() {
-            let _ = service.capture_current(cx);
+            let _ = service.capture_current(cx.app);
         }
 
-        let panel = cx.new(|cx| {
+        let panel = cx.app.new(|cx| {
             let mut panel = view::ClipboardPanel::new(Arc::clone(&self.service));
             panel.init(cx);
             panel
         });
 
-        panel.update(cx, |panel, cx| {
+        panel.update(cx.app, |panel, cx| {
             panel.refresh_async(cx);
         });
 
-        Ok(Box::new(ClipboardSession { panel }))
+        Ok(PluginView::Window(Box::new(ClipboardView { panel })))
     }
 
     fn shortcuts(&self) -> Vec<ShortcutDescriptor> {
@@ -89,11 +89,11 @@ impl PluginRuntime for ClipboardRuntime {
         vec![
             ShortcutDescriptor::new(
                 "clipboard.open-history",
-                manifest.id,
+                manifest.id.as_ref(),
                 "剪贴板历史",
                 ShortcutScope::Global,
                 "Alt+V",
-                ShortcutTarget::Command(CommandTarget::PluginOpen {
+                ShortcutTarget::Command(Activation::Open {
                     plugin_id: manifest.id.to_string(),
                 }),
             )
@@ -177,16 +177,16 @@ impl PluginRuntime for ClipboardRuntime {
     fn close_idle(&mut self) {}
 }
 
-struct ClipboardSession {
+struct ClipboardView {
     panel: Entity<view::ClipboardPanel>,
 }
 
-impl PluginSession for ClipboardSession {
-    fn plugin_id(&self) -> &'static str {
+impl WindowView for ClipboardView {
+    fn plugin_id(&self) -> &str {
         manifest::PLUGIN_ID
     }
 
-    fn title(&self) -> &'static str {
+    fn title(&self) -> &str {
         "剪贴板历史"
     }
 
@@ -228,6 +228,12 @@ mod tests {
         let database = Arc::new(DatabaseService::new(AppPaths::for_test(
             path.parent().unwrap().to_path_buf(),
         )));
+        database
+            .register_database(crate::core::database::DatabaseSpec::path(
+                "clipboard/history",
+                path.clone(),
+            ))
+            .unwrap();
         let service = ClipboardService::new(database, path);
         service
             .set_hotkey(String::from("Ctrl+Alt+V"))

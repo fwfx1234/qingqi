@@ -3,12 +3,11 @@ use std::{cell::RefCell, rc::Rc};
 use gpui::{App, IntoElement, Window};
 
 use crate::{
-    app::events::AppEventBus,
     core::{
         command::{CommandItem, ContextKind, ContextMatcher},
         plugin::{
-            ConfiguredPluginRuntime, PanelPluginSession, PluginListItem, PluginManifest,
-            PluginSession, recommended_plugin_command,
+            ConfiguredPluginRuntime, PanelPluginView, PluginCx, PluginManifest, PluginView,
+            recommended_plugin_command,
         },
         storage::AppPaths,
     },
@@ -20,7 +19,7 @@ pub type ImageCompressRuntime = ConfiguredPluginRuntime<AppPaths>;
 pub fn runtime(paths: AppPaths) -> ImageCompressRuntime {
     ConfiguredPluginRuntime::with_state(manifest::manifest, paths)
         .with_commands(commands)
-        .with_session(open_session)
+        .with_view(open_view)
 }
 
 fn commands(manifest: PluginManifest) -> Vec<CommandItem> {
@@ -34,13 +33,9 @@ fn commands(manifest: PluginManifest) -> Vec<CommandItem> {
     )
 }
 
-fn open_session(
-    paths: &mut AppPaths,
-    _: AppEventBus,
-    _: &mut App,
-) -> anyhow::Result<Box<dyn PluginSession>> {
-    Ok(Box::new(
-        PanelPluginSession::new(
+fn open_view(paths: &mut AppPaths, _: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+    Ok(PluginView::Inline(Box::new(
+        PanelPluginView::new(
             manifest::PLUGIN_ID,
             "图片压缩",
             Rc::new(RefCell::new(view::ImageCompressPanel::new(
@@ -55,8 +50,7 @@ fn open_session(
         )
         .with_input_changed(|panel, text, _cx| {
             panel.borrow_mut().import_from_launch_input(text);
-            Vec::<PluginListItem>::new()
         })
         .with_close(|panel| panel.borrow_mut().clear_transient_state()),
-    ))
+    )))
 }

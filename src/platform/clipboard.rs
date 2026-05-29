@@ -489,8 +489,8 @@ unsafe fn nsdata_to_vec(data: *mut std::ffi::c_void) -> Option<Vec<u8>> {
 #[cfg(target_os = "macos")]
 #[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn nsarray_of_file_urls(paths: &[String]) -> anyhow::Result<*mut std::ffi::c_void> {
-    let array = new_mutable_array()
-        .ok_or_else(|| anyhow::anyhow!("failed to allocate NSMutableArray"))?;
+    let array =
+        new_mutable_array().ok_or_else(|| anyhow::anyhow!("failed to allocate NSMutableArray"))?;
     let url_class = get_class("NSURL").ok_or_else(|| anyhow::anyhow!("failed to load NSURL"))?;
     for path in paths {
         let ns_path = nsstring(path)
@@ -729,11 +729,8 @@ unsafe fn send_void_arg(
         fn objc_msgSend();
     }
 
-    type MsgSend = unsafe extern "C" fn(
-        *mut std::ffi::c_void,
-        *mut std::ffi::c_void,
-        *mut std::ffi::c_void,
-    );
+    type MsgSend =
+        unsafe extern "C" fn(*mut std::ffi::c_void, *mut std::ffi::c_void, *mut std::ffi::c_void);
 
     let Some(sel) = selector(selector_name) else {
         return;

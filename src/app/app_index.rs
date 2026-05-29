@@ -6,11 +6,12 @@ use std::{
 };
 
 use crate::{
-    core::database::DatabaseService,
-    core::page::Page,
-    features::app_launcher::store::{
+    app::app_index_store::{
         AppIndexCache, AppIndexStore, AppLaunchUsage, query_terms, search_text,
     },
+    app::events::{AppEventBus, AppEventKind},
+    core::database::DatabaseService,
+    core::page::Page,
     platform::apps::{
         InstalledApp, clear_broken_icon_paths, open_application, populate_application_icons,
         scan_application_metadata, scan_application_paths,
@@ -48,12 +49,21 @@ struct AppIndexState {
 pub struct AppIndexService {
     store: AppIndexStore,
     state: Mutex<AppIndexState>,
+    events: Option<AppEventBus>,
 }
 
 impl AppIndexService {
     pub const DEFAULT_PAGE_LIMIT: usize = 40;
 
     pub fn new(database: Arc<DatabaseService>) -> Self {
+        Self::build(database, None)
+    }
+
+    pub fn with_events(database: Arc<DatabaseService>, events: AppEventBus) -> Self {
+        Self::build(database, Some(events))
+    }
+
+    fn build(database: Arc<DatabaseService>, events: Option<AppEventBus>) -> Self {
         let store = AppIndexStore::new(database, "app-launcher/index");
         let (mut cache, last_error) = match store.load() {
             Ok(cache) => (cache, None),
@@ -79,6 +89,7 @@ impl AppIndexService {
                 probe_running: false,
                 last_probe_at: 0,
             }),
+            events,
         }
     }
 
@@ -163,6 +174,7 @@ impl AppIndexService {
                 state.revision += 1;
             }
         }
+        self.publish_commands_changed();
         result
     }
 
@@ -280,6 +292,8 @@ impl AppIndexService {
         state.last_scan = Some(timestamp);
         state.last_error = cache_error;
         state.revision += 1;
+        drop(state);
+        self.publish_commands_changed();
         tracing::info!(
             duration_ms = started.elapsed().as_millis() as u64,
             "app index scan finished"
@@ -294,6 +308,7 @@ impl AppIndexService {
             state.revision += 1;
             state.last_scan.clone()
         };
+        self.publish_commands_changed();
 
         let app_count = apps.len();
         let save_started = Instant::now();
@@ -313,6 +328,14 @@ impl AppIndexService {
                 state.last_error = Some(format!("保存应用元数据缓存失败: {error}"));
                 state.revision += 1;
             }
+        }
+        drop(state);
+        self.publish_commands_changed();
+    }
+
+    fn publish_commands_changed(&self) {
+        if let Some(events) = &self.events {
+            events.publish("app-catalog", AppEventKind::CommandsChanged);
         }
     }
 }
@@ -486,6 +509,7 @@ mod tests {
                 probe_running: false,
                 last_probe_at: 0,
             }),
+            events: None,
         };
 
         let page = service.search_page("browser", 1, 1);
@@ -511,6 +535,7 @@ mod tests {
                 probe_running: false,
                 last_probe_at: 0,
             }),
+            events: None,
         };
 
         service.publish_metadata_pass(vec![AppEntry {
@@ -564,6 +589,7 @@ mod tests {
                 probe_running: false,
                 last_probe_at: 0,
             }),
+            events: None,
         };
 
         let page = service.search_page("", 0, 10);

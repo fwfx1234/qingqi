@@ -5,9 +5,9 @@ use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 use crate::{
     app::events::{AppEventBus, AppEventKind},
     core::{
-        command::{CommandInvocation, CommandItem, CommandOutcome, CommandTarget},
+        command::{Action, Activation, CommandInvocation, CommandItem, CommandOutcome},
         database::{DatabaseService, DatabaseSpec},
-        plugin::{PluginRuntime, PluginSession},
+        plugin::{Plugin, PluginCx, PluginView, WindowView},
         storage::AppPaths,
     },
     features::quick_launch::{manifest, service::QuickLaunchService, view::QuickLaunchView},
@@ -27,7 +27,7 @@ impl QuickLaunchRuntime {
     }
 }
 
-impl PluginRuntime for QuickLaunchRuntime {
+impl Plugin for QuickLaunchRuntime {
     fn manifest(&self) -> crate::core::plugin::PluginManifest {
         manifest::manifest()
     }
@@ -40,40 +40,37 @@ impl PluginRuntime for QuickLaunchRuntime {
         )]
     }
 
-    fn commands_revision(&self) -> u64 {
-        self.service.revision()
-    }
-
-    fn open_session(
-        &mut self,
-        _: AppEventBus,
-        cx: &mut App,
-    ) -> anyhow::Result<Box<dyn PluginSession>> {
-        Ok(Box::new(QuickLaunchSession {
-            view: cx.new(|cx| QuickLaunchView::new(Arc::clone(&self.service), cx)),
-        }))
+    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+        Ok(PluginView::Window(Box::new(QuickLaunchWindowView {
+            view: cx
+                .app
+                .new(|cx| QuickLaunchView::new(Arc::clone(&self.service), cx)),
+        })))
     }
 
     fn commands(&self) -> Vec<CommandItem> {
         let manifest = self.manifest();
         let mut commands = vec![CommandItem::plugin_open(
-            manifest.id,
-            manifest.name,
-            manifest.description,
-            manifest.keywords.iter().copied(),
-            manifest.command_prefixes.iter().copied(),
-            manifest.visual.icon,
+            manifest.id.as_ref(),
+            manifest.name.as_ref(),
+            manifest.description.as_ref(),
+            manifest.keywords.iter().map(|s| s.as_ref()),
+            manifest.command_prefixes.iter().map(|s| s.as_ref()),
+            manifest.visual.icon.as_str(),
         )];
-        let actions = self.service.list_actions("", Some(true)).unwrap_or_default();
+        let actions = self
+            .service
+            .list_actions("", Some(true))
+            .unwrap_or_default();
         commands.extend(actions.into_iter().map(|action| {
             CommandItem::plugin_action(
-                manifest.id,
+                manifest.id.as_ref(),
                 format!("action-{}", action.id),
                 action.name.clone(),
                 action.description.clone(),
                 action.command_keywords(),
                 ["ql", "quick"],
-                manifest.visual.icon,
+                manifest.visual.icon.as_str(),
                 Some(action.id.to_string()),
             )
             .with_usage_key(format!("quick-launch:action:{}", action.id))
@@ -86,7 +83,7 @@ impl PluginRuntime for QuickLaunchRuntime {
         invocation: CommandInvocation,
         _cx: &mut App,
     ) -> anyhow::Result<CommandOutcome> {
-        if let CommandTarget::PluginAction { payload, .. } = invocation.target
+        if let Activation::Run(Action::PluginAction { payload, .. }) = invocation.activation
             && let Some(id) = payload
         {
             let message = match id.parse::<i64>() {
@@ -141,16 +138,16 @@ impl PluginRuntime for QuickLaunchRuntime {
     fn close_idle(&mut self) {}
 }
 
-struct QuickLaunchSession {
+struct QuickLaunchWindowView {
     view: Entity<QuickLaunchView>,
 }
 
-impl PluginSession for QuickLaunchSession {
-    fn plugin_id(&self) -> &'static str {
+impl WindowView for QuickLaunchWindowView {
+    fn plugin_id(&self) -> &str {
         manifest::PLUGIN_ID
     }
 
-    fn title(&self) -> &'static str {
+    fn title(&self) -> &str {
         "快速启动"
     }
 

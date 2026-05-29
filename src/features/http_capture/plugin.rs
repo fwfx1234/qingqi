@@ -3,11 +3,10 @@ use std::sync::{Arc, Mutex};
 use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 
 use crate::{
-    app::events::AppEventBus,
     core::{
         command::{CommandItem, ContextKind, ContextMatcher},
         database::{DatabaseService, DatabaseSpec},
-        plugin::{PluginManifest, PluginRuntime, PluginSession},
+        plugin::{Plugin, PluginCx, PluginManifest, PluginView, WindowView},
         storage::AppPaths,
     },
     features::http_capture::{manifest, store::CaptureStore, view::CapturePanel},
@@ -30,7 +29,7 @@ impl HttpCaptureRuntime {
     }
 }
 
-impl PluginRuntime for HttpCaptureRuntime {
+impl Plugin for HttpCaptureRuntime {
     fn manifest(&self) -> PluginManifest {
         manifest::manifest()
     }
@@ -47,40 +46,36 @@ impl PluginRuntime for HttpCaptureRuntime {
         let manifest = self.manifest();
         vec![
             CommandItem::plugin_open(
-                manifest.id,
-                manifest.name,
-                manifest.description,
-                manifest.keywords.iter().copied(),
-                manifest.command_prefixes.iter().copied(),
-                manifest.visual.icon,
+                manifest.id.as_ref(),
+                manifest.name.as_ref(),
+                manifest.description.as_ref(),
+                manifest.keywords.iter().map(|s| s.as_ref()),
+                manifest.command_prefixes.iter().map(|s| s.as_ref()),
+                manifest.visual.icon.as_str(),
             )
             .with_recommend_matchers([ContextMatcher::new(ContextKind::Url, 90)]),
         ]
     }
 
-    fn open_session(
-        &mut self,
-        _events: AppEventBus,
-        cx: &mut App,
-    ) -> anyhow::Result<Box<dyn PluginSession>> {
+    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let store = Arc::clone(&self.store);
-        let view = cx.new(|cx| CapturePanel::new(store, cx));
-        Ok(Box::new(HttpCaptureSession { view }))
+        let view = cx.app.new(|cx| CapturePanel::new(store, cx));
+        Ok(PluginView::Window(Box::new(HttpCaptureView { view })))
     }
 
     fn close_idle(&mut self) {}
 }
 
-struct HttpCaptureSession {
+struct HttpCaptureView {
     view: Entity<CapturePanel>,
 }
 
-impl PluginSession for HttpCaptureSession {
-    fn plugin_id(&self) -> &'static str {
+impl WindowView for HttpCaptureView {
+    fn plugin_id(&self) -> &str {
         manifest::PLUGIN_ID
     }
 
-    fn title(&self) -> &'static str {
+    fn title(&self) -> &str {
         "HTTP 抓包"
     }
 

@@ -1,10 +1,12 @@
 use std::{
     any::Any,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     panic::{AssertUnwindSafe, catch_unwind},
+    sync::Arc,
 };
 
 use gpui::{App, Window};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     app::events::AppEventBus,
@@ -20,8 +22,8 @@ use crate::{
     },
 };
 
-#[derive(Clone, Debug)]
-pub struct PluginListItem {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ListItem {
     pub id: String,
     pub title: String,
     pub subtitle: String,
@@ -30,7 +32,9 @@ pub struct PluginListItem {
     pub enabled: bool,
 }
 
-impl PluginListItem {
+pub type PluginListItem = ListItem;
+
+impl ListItem {
     pub fn new(
         id: impl Into<String>,
         title: impl Into<String>,
@@ -53,41 +57,101 @@ impl PluginListItem {
     }
 }
 
-pub trait PluginSession {
-    fn plugin_id(&self) -> &'static str;
-    fn title(&self) -> &'static str;
-    fn render(&mut self, window: &mut Window, cx: &mut App) -> gpui::AnyElement;
-    fn list_items(&mut self, _cx: &mut App) -> Vec<PluginListItem> {
-        Vec::new()
+pub enum PluginView {
+    Inline(Box<dyn InlineView>),
+    List(Box<dyn ListView>),
+    Window(Box<dyn WindowView>),
+}
+
+impl PluginView {
+    pub fn into_inline(self) -> anyhow::Result<Box<dyn InlineView>> {
+        match self {
+            Self::Inline(view) => Ok(view),
+            _ => anyhow::bail!("plugin returned a non-inline view"),
+        }
     }
-    fn on_input_changed(&mut self, _text: &str, cx: &mut App) -> Vec<PluginListItem> {
-        self.list_items(cx)
+
+    pub fn into_list(self) -> anyhow::Result<Box<dyn ListView>> {
+        match self {
+            Self::List(view) => Ok(view),
+            _ => anyhow::bail!("plugin returned a non-list view"),
+        }
+    }
+
+    pub fn into_window(self) -> anyhow::Result<Box<dyn WindowView>> {
+        match self {
+            Self::Window(view) => Ok(view),
+            _ => anyhow::bail!("plugin returned a non-window view"),
+        }
+    }
+}
+
+pub trait WindowView {
+    fn plugin_id(&self) -> &str;
+    fn title(&self) -> &str;
+    fn render(&mut self, window: &mut Window, cx: &mut App) -> gpui::AnyElement;
+    fn on_reopen(&mut self, _window: &mut Window, _cx: &mut App) {}
+    fn on_close(&mut self) {}
+}
+
+pub trait InlineView {
+    fn plugin_id(&self) -> &str;
+    fn title(&self) -> &str;
+    fn render(&mut self, window: &mut Window, cx: &mut App) -> gpui::AnyElement;
+    fn on_input_changed(&mut self, _text: &str, _cx: &mut App) {}
+    fn on_enter(&mut self, _cx: &mut App) -> bool {
+        false
+    }
+    fn on_close(&mut self) {}
+}
+
+pub trait ListView {
+    fn plugin_id(&self) -> &str;
+    fn title(&self) -> &str;
+    fn items(&mut self, _cx: &mut App) -> Vec<ListItem>;
+    fn on_input_changed(&mut self, text: &str, cx: &mut App) -> Vec<ListItem> {
+        let _ = text;
+        self.items(cx)
     }
     fn on_enter(&mut self, _cx: &mut App) -> bool {
         false
     }
     fn on_list_item_selected(&mut self, _item_id: &str, _cx: &mut App) {}
-    fn on_reopen(&mut self, _window: &mut Window, _cx: &mut App) {}
     fn on_close(&mut self) {}
 }
 
-pub trait PluginRuntime {
+pub struct PluginCx<'a> {
+    pub events: AppEventBus,
+    pub app: &'a mut App,
+}
+
+impl<'a> PluginCx<'a> {
+    pub fn new(events: AppEventBus, app: &'a mut App) -> Self {
+        Self { events, app }
+    }
+
+    pub fn notify_commands_changed(&self, plugin: &PluginId) {
+        self.events.publish(
+            plugin.as_ref(),
+            crate::app::events::AppEventKind::CommandsChanged,
+        );
+    }
+}
+
+pub trait Plugin {
     fn manifest(&self) -> PluginManifest;
     fn database_specs(&self) -> Vec<DatabaseSpec> {
         Vec::new()
     }
-    fn commands_revision(&self) -> u64 {
-        0
-    }
     fn commands(&self) -> Vec<CommandItem> {
         let manifest = self.manifest();
         vec![CommandItem::plugin_open(
-            manifest.id,
-            manifest.name,
-            manifest.description,
-            manifest.keywords.iter().copied(),
-            manifest.command_prefixes.iter().copied(),
-            manifest.visual.icon,
+            manifest.id.as_ref(),
+            manifest.name.as_ref(),
+            manifest.description.as_ref(),
+            manifest.keywords.iter().map(|s| s.as_ref()),
+            manifest.command_prefixes.iter().map(|s| s.as_ref()),
+            manifest.visual.icon.as_str(),
         )]
     }
     fn commands_for_query(&self, query: &str, limit: usize) -> Vec<CommandItem> {
@@ -97,11 +161,7 @@ pub trait PluginRuntime {
             .filter(|command| command.score(query).is_some())
             .collect()
     }
-    fn open_session(
-        &mut self,
-        events: AppEventBus,
-        cx: &mut App,
-    ) -> anyhow::Result<Box<dyn PluginSession>>;
+    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView>;
     fn handle_command(
         &mut self,
         invocation: CommandInvocation,
@@ -130,23 +190,28 @@ pub trait PluginRuntime {
     fn close_idle(&mut self) {}
 }
 
-#[derive(Clone, Copy, Debug)]
+pub type PluginId = Arc<str>;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PluginManifest {
-    pub id: &'static str,
-    pub name: &'static str,
-    pub description: &'static str,
-    pub keywords: &'static [&'static str],
+    pub id: PluginId,
+    pub name: Arc<str>,
+    pub description: Arc<str>,
+    pub keywords: Vec<Arc<str>>,
     pub background: bool,
+    pub dynamic_commands: bool,
     pub visual: PluginVisualSpec,
     pub stats: PluginStats,
-    pub command_hint: &'static str,
-    pub command_prefixes: &'static [&'static str],
+    pub command_hint: Arc<str>,
+    pub command_prefixes: Vec<Arc<str>>,
 }
+
+pub type Manifest = PluginManifest;
 
 pub struct ConfiguredPluginRuntime<S> {
     manifest: fn() -> PluginManifest,
     commands: fn(PluginManifest) -> Vec<CommandItem>,
-    open_session: fn(&mut S, AppEventBus, &mut App) -> anyhow::Result<Box<dyn PluginSession>>,
+    open_view: fn(&mut S, &mut PluginCx<'_>) -> anyhow::Result<PluginView>,
     state: S,
 }
 
@@ -161,7 +226,7 @@ impl<S> ConfiguredPluginRuntime<S> {
         Self {
             manifest,
             commands: default_plugin_commands,
-            open_session: |_, _, _| anyhow::bail!("plugin session factory is not configured"),
+            open_view: |_, _| anyhow::bail!("plugin view factory is not configured"),
             state,
         }
     }
@@ -171,16 +236,16 @@ impl<S> ConfiguredPluginRuntime<S> {
         self
     }
 
-    pub fn with_session(
+    pub fn with_view(
         mut self,
-        open_session: fn(&mut S, AppEventBus, &mut App) -> anyhow::Result<Box<dyn PluginSession>>,
+        open_view: fn(&mut S, &mut PluginCx<'_>) -> anyhow::Result<PluginView>,
     ) -> Self {
-        self.open_session = open_session;
+        self.open_view = open_view;
         self
     }
 }
 
-impl<S> PluginRuntime for ConfiguredPluginRuntime<S> {
+impl<S> Plugin for ConfiguredPluginRuntime<S> {
     fn manifest(&self) -> PluginManifest {
         (self.manifest)()
     }
@@ -189,27 +254,23 @@ impl<S> PluginRuntime for ConfiguredPluginRuntime<S> {
         (self.commands)(self.manifest())
     }
 
-    fn open_session(
-        &mut self,
-        events: AppEventBus,
-        cx: &mut App,
-    ) -> anyhow::Result<Box<dyn PluginSession>> {
-        (self.open_session)(&mut self.state, events, cx)
+    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+        (self.open_view)(&mut self.state, cx)
     }
 
     fn close_idle(&mut self) {}
 }
 
-pub struct PanelPluginSession<P> {
+pub struct PanelPluginView<P> {
     plugin_id: &'static str,
     title: &'static str,
     panel: P,
     render: fn(&mut P, &mut Window, &mut App) -> gpui::AnyElement,
-    on_input_changed: fn(&mut P, &str, &mut App) -> Vec<PluginListItem>,
+    on_input_changed: fn(&mut P, &str, &mut App),
     on_close: fn(&mut P),
 }
 
-impl<P> PanelPluginSession<P> {
+impl<P> PanelPluginView<P> {
     pub fn new(
         plugin_id: &'static str,
         title: &'static str,
@@ -221,15 +282,12 @@ impl<P> PanelPluginSession<P> {
             title,
             panel,
             render,
-            on_input_changed: |_, _, _| Vec::new(),
+            on_input_changed: |_, _, _| {},
             on_close: |_| {},
         }
     }
 
-    pub fn with_input_changed(
-        mut self,
-        on_input_changed: fn(&mut P, &str, &mut App) -> Vec<PluginListItem>,
-    ) -> Self {
+    pub fn with_input_changed(mut self, on_input_changed: fn(&mut P, &str, &mut App)) -> Self {
         self.on_input_changed = on_input_changed;
         self
     }
@@ -240,12 +298,12 @@ impl<P> PanelPluginSession<P> {
     }
 }
 
-impl<P> PluginSession for PanelPluginSession<P> {
-    fn plugin_id(&self) -> &'static str {
+impl<P> WindowView for PanelPluginView<P> {
+    fn plugin_id(&self) -> &str {
         self.plugin_id
     }
 
-    fn title(&self) -> &'static str {
+    fn title(&self) -> &str {
         self.title
     }
 
@@ -253,8 +311,26 @@ impl<P> PluginSession for PanelPluginSession<P> {
         (self.render)(&mut self.panel, window, cx)
     }
 
-    fn on_input_changed(&mut self, text: &str, cx: &mut App) -> Vec<PluginListItem> {
-        (self.on_input_changed)(&mut self.panel, text, cx)
+    fn on_close(&mut self) {
+        (self.on_close)(&mut self.panel);
+    }
+}
+
+impl<P> InlineView for PanelPluginView<P> {
+    fn plugin_id(&self) -> &str {
+        self.plugin_id
+    }
+
+    fn title(&self) -> &str {
+        self.title
+    }
+
+    fn render(&mut self, window: &mut Window, cx: &mut App) -> gpui::AnyElement {
+        (self.render)(&mut self.panel, window, cx)
+    }
+
+    fn on_input_changed(&mut self, text: &str, cx: &mut App) {
+        (self.on_input_changed)(&mut self.panel, text, cx);
     }
 
     fn on_close(&mut self) {
@@ -264,12 +340,12 @@ impl<P> PluginSession for PanelPluginSession<P> {
 
 pub fn default_plugin_commands(manifest: PluginManifest) -> Vec<CommandItem> {
     vec![CommandItem::plugin_open(
-        manifest.id,
-        manifest.name,
-        manifest.description,
-        manifest.keywords.iter().copied(),
-        manifest.command_prefixes.iter().copied(),
-        manifest.visual.icon,
+        manifest.id.as_ref(),
+        manifest.name.as_ref(),
+        manifest.description.as_ref(),
+        manifest.keywords.iter().map(|s| s.as_ref()),
+        manifest.command_prefixes.iter().map(|s| s.as_ref()),
+        manifest.visual.icon.as_str(),
     )]
 }
 
@@ -279,20 +355,21 @@ pub fn recommended_plugin_command(
 ) -> Vec<CommandItem> {
     vec![
         CommandItem::plugin_open(
-            manifest.id,
-            manifest.name,
-            manifest.description,
-            manifest.keywords.iter().copied(),
-            manifest.command_prefixes.iter().copied(),
-            manifest.visual.icon,
+            manifest.id.as_ref(),
+            manifest.name.as_ref(),
+            manifest.description.as_ref(),
+            manifest.keywords.iter().map(|s| s.as_ref()),
+            manifest.command_prefixes.iter().map(|s| s.as_ref()),
+            manifest.visual.icon.as_str(),
         )
         .with_recommend_matchers(matchers),
     ]
 }
 
 pub struct PluginManager {
-    runtimes: HashMap<&'static str, Box<dyn PluginRuntime>>,
-    runtime_order: Vec<&'static str>,
+    runtimes: HashMap<Arc<str>, Box<dyn Plugin>>,
+    runtime_order: Vec<Arc<str>>,
+    dynamic_runtime_ids: HashSet<Arc<str>>,
     command_cache: Vec<CommandItem>,
     command_cache_revision: u64,
     command_cache_valid: bool,
@@ -305,6 +382,7 @@ impl PluginManager {
         Self {
             runtimes: HashMap::new(),
             runtime_order: Vec::new(),
+            dynamic_runtime_ids: HashSet::new(),
             command_cache: Vec::new(),
             command_cache_revision: 0,
             command_cache_valid: false,
@@ -313,7 +391,7 @@ impl PluginManager {
         }
     }
 
-    pub fn register(&mut self, runtime: Box<dyn PluginRuntime>) {
+    pub fn register(&mut self, runtime: Box<dyn Plugin>) {
         let manifest = match catch_unwind(AssertUnwindSafe(|| runtime.manifest())) {
             Ok(manifest) => manifest,
             Err(error) => {
@@ -324,12 +402,18 @@ impl PluginManager {
                 return;
             }
         };
+        let dynamic_commands = manifest.dynamic_commands;
         let id = manifest.id;
-        if !self.runtimes.contains_key(id) {
-            self.runtime_order.push(id);
+        if !self.runtimes.contains_key(&id) {
+            self.runtime_order.push(id.clone());
+        }
+        if dynamic_commands {
+            self.dynamic_runtime_ids.insert(id.clone());
+        } else {
+            self.dynamic_runtime_ids.remove(&id);
         }
         self.runtimes.insert(id, runtime);
-        self.command_cache_valid = false;
+        self.invalidate_commands();
     }
 
     pub fn commands(&mut self) -> Vec<CommandItem> {
@@ -343,12 +427,12 @@ impl PluginManager {
             .filter_map(|plugin_id| {
                 self.runtimes
                     .get(plugin_id)
-                    .map(|runtime| (*plugin_id, runtime))
+                    .map(|runtime| (plugin_id.clone(), runtime))
             })
             .flat_map(|(plugin_id, runtime)| {
                 catch_unwind(AssertUnwindSafe(|| runtime.shortcuts())).unwrap_or_else(|error| {
                     tracing::error!(
-                        plugin_id,
+                        plugin_id = plugin_id.as_ref(),
                         error = %panic_message(error),
                         "plugin panicked while building shortcuts"
                     );
@@ -395,7 +479,7 @@ impl PluginManager {
             .flat_map(|(plugin_id, runtime)| {
                 catch_unwind(AssertUnwindSafe(|| runtime.commands())).unwrap_or_else(|error| {
                     tracing::error!(
-                        plugin_id = *plugin_id,
+                        plugin_id = plugin_id.as_ref(),
                         error = %panic_message(error),
                         "plugin panicked while building commands"
                     );
@@ -407,29 +491,13 @@ impl PluginManager {
         commands
     }
 
-    pub fn commands_revision(&mut self) -> u64 {
-        self.refresh_command_cache();
+    pub fn command_cache_revision(&mut self) -> u64 {
         self.command_cache_revision
     }
 
-    fn current_runtime_commands_revision(&self) -> u64 {
-        self.runtimes
-            .iter()
-            .map(|(plugin_id, runtime)| {
-                catch_unwind(AssertUnwindSafe(|| runtime.commands_revision())).unwrap_or_else(
-                    |error| {
-                        tracing::error!(
-                            plugin_id = *plugin_id,
-                            error = %panic_message(error),
-                            "plugin panicked while reading commands revision"
-                        );
-                        0
-                    },
-                )
-            })
-            .fold(self.runtimes.len() as u64, |acc, revision| {
-                acc.wrapping_mul(31).wrapping_add(revision)
-            })
+    pub fn invalidate_commands(&mut self) {
+        self.command_cache_valid = false;
+        self.command_cache_revision = self.command_cache_revision.wrapping_add(1);
     }
 
     pub fn commands_for_query(&mut self, query: &str, limit: usize) -> Vec<CommandItem> {
@@ -477,12 +545,15 @@ impl PluginManager {
             .collect::<Vec<_>>();
 
         for (plugin_id, runtime) in self.runtimes.iter() {
+            if !self.dynamic_runtime_ids.contains(plugin_id) {
+                continue;
+            }
             let dynamic_commands = catch_unwind(AssertUnwindSafe(|| {
                 runtime.commands_for_query(runtime_query, 0)
             }))
             .unwrap_or_else(|error| {
                 tracing::error!(
-                    plugin_id = *plugin_id,
+                    plugin_id = plugin_id.as_ref(),
                     error = %panic_message(error),
                     "plugin panicked while querying dynamic commands"
                 );
@@ -609,12 +680,10 @@ impl PluginManager {
     }
 
     fn refresh_command_cache(&mut self) {
-        let revision = self.current_runtime_commands_revision();
-        if self.command_cache_valid && self.command_cache_revision == revision {
+        if self.command_cache_valid {
             return;
         }
         self.command_cache = self.build_commands();
-        self.command_cache_revision = revision;
         self.command_cache_valid = true;
     }
 
@@ -626,7 +695,7 @@ impl PluginManager {
                 catch_unwind(AssertUnwindSafe(|| runtime.manifest()))
                     .map_err(|error| {
                         tracing::error!(
-                            plugin_id = *plugin_id,
+                            plugin_id = plugin_id.as_ref(),
                             error = %panic_message(error),
                             "plugin panicked while reading manifest"
                         );
@@ -634,28 +703,47 @@ impl PluginManager {
                     .ok()
             })
             .collect::<Vec<_>>();
-        manifests.sort_by(|a, b| a.name.cmp(b.name));
+        manifests.sort_by(|a, b| a.name.cmp(&b.name));
         manifests
     }
 
-    pub fn open_session(
-        &mut self,
-        plugin_id: &str,
-        cx: &mut App,
-    ) -> anyhow::Result<Box<dyn PluginSession>> {
+    pub fn open(&mut self, plugin_id: &str, cx: &mut App) -> anyhow::Result<PluginView> {
         let runtime = self
             .runtimes
             .get_mut(plugin_id)
             .ok_or_else(|| anyhow::anyhow!("plugin not registered: {plugin_id}"))?;
         let events = self.events.clone();
-        catch_unwind(AssertUnwindSafe(|| runtime.open_session(events, cx))).unwrap_or_else(
-            |error| {
-                Err(anyhow::anyhow!(
-                    "plugin {plugin_id} panicked while opening: {}",
-                    panic_message(error)
-                ))
-            },
-        )
+        let mut plugin_cx = PluginCx::new(events, cx);
+        catch_unwind(AssertUnwindSafe(|| runtime.open(&mut plugin_cx))).unwrap_or_else(|error| {
+            Err(anyhow::anyhow!(
+                "plugin {plugin_id} panicked while opening: {}",
+                panic_message(error)
+            ))
+        })
+    }
+
+    pub fn open_window_view(
+        &mut self,
+        plugin_id: &str,
+        cx: &mut App,
+    ) -> anyhow::Result<Box<dyn WindowView>> {
+        self.open(plugin_id, cx).and_then(PluginView::into_window)
+    }
+
+    pub fn open_inline_view(
+        &mut self,
+        plugin_id: &str,
+        cx: &mut App,
+    ) -> anyhow::Result<Box<dyn InlineView>> {
+        self.open(plugin_id, cx).and_then(PluginView::into_inline)
+    }
+
+    pub fn open_list_view(
+        &mut self,
+        plugin_id: &str,
+        cx: &mut App,
+    ) -> anyhow::Result<Box<dyn ListView>> {
+        self.open(plugin_id, cx).and_then(PluginView::into_list)
     }
 
     pub fn handle_command(
@@ -663,7 +751,7 @@ impl PluginManager {
         invocation: CommandInvocation,
         cx: &mut App,
     ) -> anyhow::Result<CommandOutcome> {
-        let plugin_id = invocation.target.plugin_id().to_string();
+        let plugin_id = invocation.activation.plugin_id().to_string();
         let runtime = self
             .runtimes
             .get_mut(plugin_id.as_str())
@@ -683,7 +771,7 @@ impl PluginManager {
             let background = catch_unwind(AssertUnwindSafe(|| runtime.manifest().background))
                 .unwrap_or_else(|error| {
                     tracing::error!(
-                        plugin_id = *plugin_id,
+                        plugin_id = plugin_id.as_ref(),
                         error = %panic_message(error),
                         "plugin panicked while checking background mode"
                     );
@@ -694,7 +782,7 @@ impl PluginManager {
                 let _ = catch_unwind(AssertUnwindSafe(|| runtime.start_background(events, cx)))
                     .map_err(|error| {
                         tracing::error!(
-                            plugin_id = *plugin_id,
+                            plugin_id = plugin_id.as_ref(),
                             error = %panic_message(error),
                             "plugin panicked while starting background work"
                         );
@@ -707,7 +795,7 @@ impl PluginManager {
         for (plugin_id, runtime) in self.runtimes.iter_mut() {
             let _ = catch_unwind(AssertUnwindSafe(|| runtime.shutdown())).map_err(|error| {
                 tracing::error!(
-                    plugin_id = *plugin_id,
+                    plugin_id = plugin_id.as_ref(),
                     error = %panic_message(error),
                     "plugin panicked while shutting down"
                 );

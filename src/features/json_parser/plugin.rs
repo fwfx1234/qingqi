@@ -3,12 +3,11 @@ use std::{cell::RefCell, rc::Rc};
 use gpui::{App, IntoElement, Window};
 
 use crate::{
-    app::events::AppEventBus,
     core::{
         command::{CommandItem, ContextKind, ContextMatcher},
         plugin::{
-            ConfiguredPluginRuntime, PanelPluginSession, PluginListItem, PluginManifest,
-            PluginSession, recommended_plugin_command,
+            ConfiguredPluginRuntime, PanelPluginView, PluginCx, PluginManifest, PluginView,
+            recommended_plugin_command,
         },
     },
     features::json_parser::{manifest, view},
@@ -19,7 +18,7 @@ pub type JsonParserRuntime = ConfiguredPluginRuntime<()>;
 pub fn runtime() -> JsonParserRuntime {
     ConfiguredPluginRuntime::new(manifest::manifest)
         .with_commands(commands)
-        .with_session(open_session)
+        .with_view(open_view)
 }
 
 fn commands(manifest: PluginManifest) -> Vec<CommandItem> {
@@ -32,13 +31,9 @@ fn commands(manifest: PluginManifest) -> Vec<CommandItem> {
     )
 }
 
-fn open_session(
-    _: &mut (),
-    _: AppEventBus,
-    _: &mut App,
-) -> anyhow::Result<Box<dyn PluginSession>> {
-    Ok(Box::new(
-        PanelPluginSession::new(
+fn open_view(_: &mut (), _: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+    Ok(PluginView::Inline(Box::new(
+        PanelPluginView::new(
             manifest::PLUGIN_ID,
             "JSON 解析",
             Rc::new(RefCell::new(view::JsonPanel::new())),
@@ -51,8 +46,7 @@ fn open_session(
         )
         .with_input_changed(|panel, text, cx| {
             panel.borrow_mut().set_launch_input(text, cx);
-            Vec::<PluginListItem>::new()
         })
         .with_close(|panel| panel.borrow_mut().clear()),
-    ))
+    )))
 }

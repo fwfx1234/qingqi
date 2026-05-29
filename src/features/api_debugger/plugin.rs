@@ -7,7 +7,7 @@ use crate::{
     core::{
         command::{CommandItem, ContextKind, ContextMatcher},
         database::{DatabaseService, DatabaseSpec},
-        plugin::{PluginRuntime, PluginSession},
+        plugin::{Plugin, PluginCx, PluginView, WindowView},
         storage::AppPaths,
     },
     features::api_debugger::{manifest, service::ApiService, view},
@@ -74,7 +74,7 @@ impl Default for ApiDebuggerRuntime {
     }
 }
 
-impl PluginRuntime for ApiDebuggerRuntime {
+impl Plugin for ApiDebuggerRuntime {
     fn manifest(&self) -> crate::core::plugin::PluginManifest {
         manifest::manifest()
     }
@@ -87,12 +87,12 @@ impl PluginRuntime for ApiDebuggerRuntime {
         let manifest = self.manifest();
         vec![
             CommandItem::plugin_open(
-                manifest.id,
-                manifest.name,
-                manifest.description,
-                manifest.keywords.iter().copied(),
-                manifest.command_prefixes.iter().copied(),
-                manifest.visual.icon,
+                manifest.id.as_ref(),
+                manifest.name.as_ref(),
+                manifest.description.as_ref(),
+                manifest.keywords.iter().map(|s| s.as_ref()),
+                manifest.command_prefixes.iter().map(|s| s.as_ref()),
+                manifest.visual.icon.as_str(),
             )
             .with_recommend_matchers([
                 ContextMatcher::new(ContextKind::Url, 120),
@@ -101,32 +101,25 @@ impl PluginRuntime for ApiDebuggerRuntime {
         ]
     }
 
-    fn open_session(
-        &mut self,
-        events: AppEventBus,
-        cx: &mut App,
-    ) -> anyhow::Result<Box<dyn PluginSession>> {
+    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let service = self.service();
-        self.ensure_watcher(Arc::clone(&service), events, cx);
-        Ok(Box::new(ApiDebuggerSession {
-            panel: Rc::new(RefCell::new(view::ApiDebuggerPanel::new(
-                service,
-                cx,
-            ))),
-        }))
+        self.ensure_watcher(Arc::clone(&service), cx.events.clone(), cx.app);
+        Ok(PluginView::Window(Box::new(ApiDebuggerView {
+            panel: Rc::new(RefCell::new(view::ApiDebuggerPanel::new(service, cx.app))),
+        })))
     }
 }
 
-struct ApiDebuggerSession {
+struct ApiDebuggerView {
     panel: Rc<RefCell<view::ApiDebuggerPanel>>,
 }
 
-impl PluginSession for ApiDebuggerSession {
-    fn plugin_id(&self) -> &'static str {
+impl WindowView for ApiDebuggerView {
+    fn plugin_id(&self) -> &str {
         manifest::PLUGIN_ID
     }
 
-    fn title(&self) -> &'static str {
+    fn title(&self) -> &str {
         "API 调试器"
     }
 
