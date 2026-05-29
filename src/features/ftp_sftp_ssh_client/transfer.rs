@@ -204,7 +204,7 @@ impl TransferService {
         direction: TransferDirection,
         local_path: &str,
         remote_path: &str,
-        size: i64,
+        _size: i64,
     ) {
         // Mark as running
         if let Ok(mut items) = self.items.lock() {

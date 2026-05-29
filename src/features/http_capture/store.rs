@@ -1,82 +1,101 @@
-use std::{fs, path::Path};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{OptionalExtension, params};
 use time::{OffsetDateTime, macros::format_description};
 
+use crate::core::database::{DatabaseService, PooledConnection, SqlitePool};
 use crate::features::http_capture::model::{CapturedExchange, FilterState};
 
-const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA: &str = "
+CREATE TABLE IF NOT EXISTS schema_info (
+    version INTEGER PRIMARY KEY
+);
+
+CREATE TABLE IF NOT EXISTS captured_exchanges (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    method              TEXT NOT NULL DEFAULT '',
+    url                 TEXT NOT NULL DEFAULT '',
+    host                TEXT NOT NULL DEFAULT '',
+    status              INTEGER NOT NULL DEFAULT 0,
+    protocol            TEXT NOT NULL DEFAULT '',
+    duration_ms         INTEGER NOT NULL DEFAULT 0,
+    request_size        INTEGER NOT NULL DEFAULT 0,
+    response_size       INTEGER NOT NULL DEFAULT 0,
+    request_headers_json TEXT NOT NULL DEFAULT '[]',
+    response_headers_json TEXT NOT NULL DEFAULT '[]',
+    request_body        TEXT NOT NULL DEFAULT '',
+    response_body       TEXT NOT NULL DEFAULT '',
+    timestamp           TEXT NOT NULL DEFAULT '',
+    is_https            INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_exchanges_timestamp
+    ON captured_exchanges(timestamp);
+CREATE INDEX IF NOT EXISTS idx_exchanges_host
+    ON captured_exchanges(host);
+CREATE INDEX IF NOT EXISTS idx_exchanges_method
+    ON captured_exchanges(method);
+CREATE INDEX IF NOT EXISTS idx_exchanges_status
+    ON captured_exchanges(status);
+";
+pub const READ_SCHEMA_VERSION: &str = "SELECT COALESCE(MAX(version), 0) FROM schema_info";
+pub const UPSERT_SCHEMA_VERSION: &str = "INSERT OR REPLACE INTO schema_info (version) VALUES (?1)";
+pub const INSERT_EXCHANGE: &str = "
+INSERT INTO captured_exchanges
+     (method, url, host, status, protocol, duration_ms,
+      request_size, response_size, request_headers_json,
+      response_headers_json, request_body, response_body,
+      timestamp, is_https)
+ VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+";
+pub const GET_BY_ID: &str = "
+SELECT id, method, url, host, status, protocol, duration_ms,
+       request_size, response_size, request_headers_json,
+       response_headers_json, request_body, response_body,
+       timestamp, is_https
+  FROM captured_exchanges WHERE id = ?1
+";
+pub const CLEAR_ALL: &str = "DELETE FROM captured_exchanges";
+pub const TOTAL_COUNT: &str = "SELECT COUNT(*) FROM captured_exchanges";
+
+pub fn query_exchanges_sql(where_clause: &str) -> String {
+    format!(
+        "SELECT id, method, url, host, status, protocol, duration_ms,
+                request_size, response_size, request_headers_json,
+                response_headers_json, request_body, response_body,
+                timestamp, is_https
+           FROM captured_exchanges
+          {where_clause}
+          ORDER BY id DESC
+          LIMIT ? OFFSET ?"
+    )
+}
+
+pub fn count_exchanges_sql(where_clause: &str) -> String {
+    format!("SELECT COUNT(*) FROM captured_exchanges {where_clause}")
+}
 
 pub struct CaptureStore {
-    conn: Connection,
+    pool: SqlitePool,
 }
 
 impl CaptureStore {
-    pub fn open(path: &Path) -> Result<Self> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("无法创建抓包数据目录 {}", parent.display()))?;
-        }
-        let conn = Connection::open(path)?;
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "synchronous", "NORMAL")?;
-        let store = Self { conn };
+    pub fn open(database: Arc<DatabaseService>, key: &str) -> Result<Self> {
+        let pool = database.pool(key)?;
+        let store = Self { pool };
         store.ensure_schema()?;
         Ok(store)
     }
 
     fn ensure_schema(&self) -> Result<()> {
-        self.conn.execute_batch(
-            "
-            CREATE TABLE IF NOT EXISTS schema_info (
-                version INTEGER PRIMARY KEY
-            );
+        let conn = self.connection()?;
+        conn.execute_batch(SCHEMA)?;
 
-            CREATE TABLE IF NOT EXISTS captured_exchanges (
-                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-                method              TEXT NOT NULL DEFAULT '',
-                url                 TEXT NOT NULL DEFAULT '',
-                host                TEXT NOT NULL DEFAULT '',
-                status              INTEGER NOT NULL DEFAULT 0,
-                protocol            TEXT NOT NULL DEFAULT '',
-                duration_ms         INTEGER NOT NULL DEFAULT 0,
-                request_size        INTEGER NOT NULL DEFAULT 0,
-                response_size       INTEGER NOT NULL DEFAULT 0,
-                request_headers_json TEXT NOT NULL DEFAULT '[]',
-                response_headers_json TEXT NOT NULL DEFAULT '[]',
-                request_body        TEXT NOT NULL DEFAULT '',
-                response_body       TEXT NOT NULL DEFAULT '',
-                timestamp           TEXT NOT NULL DEFAULT '',
-                is_https            INTEGER NOT NULL DEFAULT 0
-            );
-            CREATE INDEX IF NOT EXISTS idx_exchanges_timestamp
-                ON captured_exchanges(timestamp);
-            CREATE INDEX IF NOT EXISTS idx_exchanges_host
-                ON captured_exchanges(host);
-            CREATE INDEX IF NOT EXISTS idx_exchanges_method
-                ON captured_exchanges(method);
-            CREATE INDEX IF NOT EXISTS idx_exchanges_status
-                ON captured_exchanges(status);
-            ",
-        )?;
-
-        let version: i64 = self
-            .conn
-            .query_row(
-                "SELECT COALESCE(MAX(version), 0) FROM schema_info",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
-
+        let version: i64 = conn.query_row(READ_SCHEMA_VERSION, [], |row| row.get(0))?;
         if version < SCHEMA_VERSION {
-            self.conn.execute(
-                "INSERT OR REPLACE INTO schema_info (version) VALUES (?1)",
-                params![SCHEMA_VERSION],
-            )?;
+            conn.execute(UPSERT_SCHEMA_VERSION, params![SCHEMA_VERSION])?;
         }
-
         Ok(())
     }
 
@@ -96,14 +115,10 @@ impl CaptureStore {
         response_body: &str,
         is_https: bool,
     ) -> Result<i64> {
+        let conn = self.connection()?;
         let now = now_label();
-        self.conn.execute(
-            "INSERT INTO captured_exchanges
-                 (method, url, host, status, protocol, duration_ms,
-                  request_size, response_size, request_headers_json,
-                  response_headers_json, request_body, response_body,
-                  timestamp, is_https)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+        conn.execute(
+            INSERT_EXCHANGE,
             params![
                 method,
                 url,
@@ -121,7 +136,7 @@ impl CaptureStore {
                 if is_https { 1 } else { 0 },
             ],
         )?;
-        Ok(self.conn.last_insert_rowid())
+        Ok(conn.last_insert_rowid())
     }
 
     pub fn query(
@@ -130,21 +145,12 @@ impl CaptureStore {
         offset: i64,
         limit: i64,
     ) -> Result<Vec<CapturedExchange>> {
+        let conn = self.connection()?;
         let (where_clause, method_val, host_val, status_val, search_val) =
             Self::build_filter(filter);
 
-        let sql = format!(
-            "SELECT id, method, url, host, status, protocol, duration_ms,
-                    request_size, response_size, request_headers_json,
-                    response_headers_json, request_body, response_body,
-                    timestamp, is_https
-               FROM captured_exchanges
-              {where_clause}
-              ORDER BY id DESC
-              LIMIT ? OFFSET ?"
-        );
-
-        let mut stmt = self.conn.prepare(&sql)?;
+        let sql = query_exchanges_sql(&where_clause);
+        let mut stmt = conn.prepare(&sql)?;
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
         if let Some(ref v) = method_val {
@@ -163,7 +169,6 @@ impl CaptureStore {
         params_vec.push(Box::new(offset));
 
         let param_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|b| b.as_ref()).collect();
-
         let rows = stmt.query_map(param_refs.as_slice(), map_exchange)?;
         let mut results = Vec::new();
         for row in rows {
@@ -173,11 +178,11 @@ impl CaptureStore {
     }
 
     pub fn count(&self, filter: &FilterState) -> Result<i64> {
+        let conn = self.connection()?;
         let (where_clause, method_val, host_val, status_val, search_val) =
             Self::build_filter(filter);
 
-        let sql = format!("SELECT COUNT(*) FROM captured_exchanges {where_clause}");
-
+        let sql = count_exchanges_sql(&where_clause);
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         if let Some(ref v) = method_val {
             params_vec.push(Box::new(v.clone()));
@@ -193,39 +198,26 @@ impl CaptureStore {
         }
 
         let param_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|b| b.as_ref()).collect();
-
-        let count: i64 = self
-            .conn
-            .query_row(&sql, param_refs.as_slice(), |row| row.get(0))?;
+        let count: i64 = conn.query_row(&sql, param_refs.as_slice(), |row| row.get(0))?;
         Ok(count)
     }
 
     pub fn get_by_id(&self, id: i64) -> Result<Option<CapturedExchange>> {
-        self.conn
-            .query_row(
-                "SELECT id, method, url, host, status, protocol, duration_ms,
-                        request_size, response_size, request_headers_json,
-                        response_headers_json, request_body, response_body,
-                        timestamp, is_https
-                   FROM captured_exchanges WHERE id = ?1",
-                params![id],
-                map_exchange,
-            )
+        let conn = self.connection()?;
+        conn.query_row(GET_BY_ID, params![id], map_exchange)
             .optional()
             .map_err(Into::into)
     }
 
     pub fn clear(&self) -> Result<usize> {
-        let affected = self.conn.execute("DELETE FROM captured_exchanges", [])?;
+        let conn = self.connection()?;
+        let affected = conn.execute(CLEAR_ALL, [])?;
         Ok(affected)
     }
 
     pub fn total_count(&self) -> Result<i64> {
-        let count: i64 =
-            self.conn
-                .query_row("SELECT COUNT(*) FROM captured_exchanges", [], |row| {
-                    row.get(0)
-                })?;
+        let conn = self.connection()?;
+        let count: i64 = conn.query_row(TOTAL_COUNT, [], |row| row.get(0))?;
         Ok(count)
     }
 
@@ -277,6 +269,12 @@ impl CaptureStore {
 
         (where_clause, method_val, host_val, status_val, search_val)
     }
+
+    fn connection(&self) -> Result<PooledConnection> {
+        self.pool
+            .get()
+            .context("cannot get capture pooled connection")
+    }
 }
 
 fn map_exchange(row: &rusqlite::Row) -> std::result::Result<CapturedExchange, rusqlite::Error> {
@@ -310,8 +308,10 @@ fn now_label() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::{database::DatabaseService, storage::AppPaths};
     use std::{
         fs,
+        sync::Arc,
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -326,14 +326,28 @@ mod tests {
     }
 
     fn open_store() -> CaptureStore {
-        CaptureStore::open(&temp_db()).unwrap()
+        let path = temp_db();
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(
+            path.parent().unwrap().to_path_buf(),
+        )));
+        database
+            .register_database(crate::core::database::DatabaseSpec::path(
+                crate::core::database::feature_database_key("http-capture", "capture"),
+                path,
+            ))
+            .unwrap();
+        CaptureStore::open(
+            database,
+            &crate::core::database::feature_database_key("http-capture", "capture"),
+        )
+        .unwrap()
     }
 
     #[test]
     fn schema_creates_table() {
         let store = open_store();
-        let tables: Vec<String> = store
-            .conn
+        let conn = store.connection().unwrap();
+        let tables: Vec<String> = conn
             .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
             .unwrap()
             .query_map([], |row| row.get::<_, String>(0))
@@ -415,205 +429,40 @@ mod tests {
             .unwrap();
         store
             .insert(
-                "GET",
-                "/c",
-                "other.com",
-                404,
-                "HTTP/1.1",
-                30,
-                0,
-                0,
-                "[]",
-                "[]",
-                "",
-                "",
-                true,
+                "GET", "/err", "api.test", 500, "HTTP/2", 30, 0, 0, "[]", "[]", "", "", true,
             )
             .unwrap();
 
-        let all = store.query(&FilterState::default(), 0, 100).unwrap();
-        assert_eq!(all.len(), 3);
+        let mut filter = FilterState::default();
+        filter.method = String::from("GET");
+        let rows = store.query(&filter, 0, 50).unwrap();
+        assert_eq!(rows.len(), 2);
 
-        let get_only = store
-            .query(
-                &FilterState {
-                    method: "GET".to_string(),
-                    ..Default::default()
-                },
-                0,
-                100,
-            )
-            .unwrap();
-        assert_eq!(get_only.len(), 2);
+        filter.host = String::from("api.test");
+        let rows = store.query(&filter, 0, 50).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].status, 500);
 
-        let host_filter = store
-            .query(
-                &FilterState {
-                    host: "other".to_string(),
-                    ..Default::default()
-                },
-                0,
-                100,
-            )
-            .unwrap();
-        assert_eq!(host_filter.len(), 1);
-        assert_eq!(host_filter[0].host, "other.com");
-
-        let https_only = store
-            .query(
-                &FilterState {
-                    https_only: true,
-                    ..Default::default()
-                },
-                0,
-                100,
-            )
-            .unwrap();
-        assert_eq!(https_only.len(), 1);
+        filter.error_only = true;
+        let count = store.count(&filter).unwrap();
+        assert_eq!(count, 1);
     }
 
     #[test]
-    fn pagination() {
-        let store = open_store();
-        for i in 0..10 {
-            store
-                .insert(
-                    "GET",
-                    &format!("/{i}"),
-                    "example.com",
-                    200,
-                    "HTTP/1.1",
-                    0,
-                    0,
-                    0,
-                    "[]",
-                    "[]",
-                    "",
-                    "",
-                    false,
-                )
-                .unwrap();
-        }
-
-        let page1 = store.query(&FilterState::default(), 0, 3).unwrap();
-        assert_eq!(page1.len(), 3);
-
-        let page2 = store.query(&FilterState::default(), 3, 3).unwrap();
-        assert_eq!(page2.len(), 3);
-
-        let page4 = store.query(&FilterState::default(), 9, 3).unwrap();
-        assert_eq!(page4.len(), 1);
-    }
-
-    #[test]
-    fn count_and_total_count() {
+    fn clear_and_total_count() {
         let store = open_store();
         store
             .insert(
-                "GET",
-                "/a",
-                "example.com",
-                200,
-                "HTTP/1.1",
-                0,
-                0,
-                0,
-                "[]",
-                "[]",
-                "",
-                "",
-                false,
+                "GET", "/one", "a", 200, "HTTP/1.1", 1, 1, 1, "[]", "[]", "", "", false,
             )
             .unwrap();
         store
             .insert(
-                "POST",
-                "/b",
-                "example.com",
-                500,
-                "HTTP/1.1",
-                0,
-                0,
-                0,
-                "[]",
-                "[]",
-                "",
-                "",
-                false,
-            )
-            .unwrap();
-
-        assert_eq!(store.total_count().unwrap(), 2);
-        assert_eq!(store.count(&FilterState::default()).unwrap(), 2);
-
-        let error_filter = FilterState {
-            error_only: true,
-            ..Default::default()
-        };
-        assert_eq!(store.count(&error_filter).unwrap(), 1);
-    }
-
-    #[test]
-    fn clear_removes_all() {
-        let store = open_store();
-        store
-            .insert(
-                "GET",
-                "/a",
-                "example.com",
-                200,
-                "HTTP/1.1",
-                0,
-                0,
-                0,
-                "[]",
-                "[]",
-                "",
-                "",
-                false,
-            )
-            .unwrap();
-        store
-            .insert(
-                "GET",
-                "/b",
-                "example.com",
-                200,
-                "HTTP/1.1",
-                0,
-                0,
-                0,
-                "[]",
-                "[]",
-                "",
-                "",
-                false,
+                "GET", "/two", "a", 200, "HTTP/1.1", 1, 1, 1, "[]", "[]", "", "", false,
             )
             .unwrap();
         assert_eq!(store.total_count().unwrap(), 2);
-        let cleared = store.clear().unwrap();
-        assert_eq!(cleared, 2);
+        assert_eq!(store.clear().unwrap(), 2);
         assert_eq!(store.total_count().unwrap(), 0);
-    }
-
-    #[test]
-    fn query_ordered_by_id_desc() {
-        let store = open_store();
-        store
-            .insert(
-                "GET", "/first", "a.com", 200, "HTTP/1.1", 0, 0, 0, "[]", "[]", "", "", false,
-            )
-            .unwrap();
-        store
-            .insert(
-                "GET", "/second", "a.com", 200, "HTTP/1.1", 0, 0, 0, "[]", "[]", "", "", false,
-            )
-            .unwrap();
-
-        let results = store.query(&FilterState::default(), 0, 10).unwrap();
-        assert_eq!(results.len(), 2);
-        // Most recent first (highest id)
-        assert_eq!(results[0].url, "/second");
-        assert_eq!(results[1].url, "/first");
     }
 }

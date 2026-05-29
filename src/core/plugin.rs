@@ -10,10 +10,11 @@ use crate::{
     app::events::AppEventBus,
     core::{
         command::{
-            CommandInvocation, CommandItem, CommandKind, CommandOutcome, ContextKind,
+            CommandInvocation, CommandItem, CommandOutcome, ContextKind, ContextMatcher,
             build_launcher_context_with_clipboard_kinds,
         },
         command_usage::{CommandUsage, CommandUsageStore},
+        database::DatabaseSpec,
         plugin_spec::{PluginStats, PluginVisualSpec},
         shortcut::ShortcutDescriptor,
     },
@@ -72,6 +73,9 @@ pub trait PluginSession {
 
 pub trait PluginRuntime {
     fn manifest(&self) -> PluginManifest;
+    fn database_specs(&self) -> Vec<DatabaseSpec> {
+        Vec::new()
+    }
     fn commands_revision(&self) -> u64 {
         0
     }
@@ -137,6 +141,153 @@ pub struct PluginManifest {
     pub stats: PluginStats,
     pub command_hint: &'static str,
     pub command_prefixes: &'static [&'static str],
+}
+
+pub struct ConfiguredPluginRuntime<S> {
+    manifest: fn() -> PluginManifest,
+    commands: fn(PluginManifest) -> Vec<CommandItem>,
+    open_session: fn(&mut S, AppEventBus, &mut App) -> anyhow::Result<Box<dyn PluginSession>>,
+    state: S,
+}
+
+impl ConfiguredPluginRuntime<()> {
+    pub fn new(manifest: fn() -> PluginManifest) -> Self {
+        Self::with_state(manifest, ())
+    }
+}
+
+impl<S> ConfiguredPluginRuntime<S> {
+    pub fn with_state(manifest: fn() -> PluginManifest, state: S) -> Self {
+        Self {
+            manifest,
+            commands: default_plugin_commands,
+            open_session: |_, _, _| anyhow::bail!("plugin session factory is not configured"),
+            state,
+        }
+    }
+
+    pub fn with_commands(mut self, commands: fn(PluginManifest) -> Vec<CommandItem>) -> Self {
+        self.commands = commands;
+        self
+    }
+
+    pub fn with_session(
+        mut self,
+        open_session: fn(&mut S, AppEventBus, &mut App) -> anyhow::Result<Box<dyn PluginSession>>,
+    ) -> Self {
+        self.open_session = open_session;
+        self
+    }
+}
+
+impl<S> PluginRuntime for ConfiguredPluginRuntime<S> {
+    fn manifest(&self) -> PluginManifest {
+        (self.manifest)()
+    }
+
+    fn commands(&self) -> Vec<CommandItem> {
+        (self.commands)(self.manifest())
+    }
+
+    fn open_session(
+        &mut self,
+        events: AppEventBus,
+        cx: &mut App,
+    ) -> anyhow::Result<Box<dyn PluginSession>> {
+        (self.open_session)(&mut self.state, events, cx)
+    }
+
+    fn close_idle(&mut self) {}
+}
+
+pub struct PanelPluginSession<P> {
+    plugin_id: &'static str,
+    title: &'static str,
+    panel: P,
+    render: fn(&mut P, &mut Window, &mut App) -> gpui::AnyElement,
+    on_input_changed: fn(&mut P, &str, &mut App) -> Vec<PluginListItem>,
+    on_close: fn(&mut P),
+}
+
+impl<P> PanelPluginSession<P> {
+    pub fn new(
+        plugin_id: &'static str,
+        title: &'static str,
+        panel: P,
+        render: fn(&mut P, &mut Window, &mut App) -> gpui::AnyElement,
+    ) -> Self {
+        Self {
+            plugin_id,
+            title,
+            panel,
+            render,
+            on_input_changed: |_, _, _| Vec::new(),
+            on_close: |_| {},
+        }
+    }
+
+    pub fn with_input_changed(
+        mut self,
+        on_input_changed: fn(&mut P, &str, &mut App) -> Vec<PluginListItem>,
+    ) -> Self {
+        self.on_input_changed = on_input_changed;
+        self
+    }
+
+    pub fn with_close(mut self, on_close: fn(&mut P)) -> Self {
+        self.on_close = on_close;
+        self
+    }
+}
+
+impl<P> PluginSession for PanelPluginSession<P> {
+    fn plugin_id(&self) -> &'static str {
+        self.plugin_id
+    }
+
+    fn title(&self) -> &'static str {
+        self.title
+    }
+
+    fn render(&mut self, window: &mut Window, cx: &mut App) -> gpui::AnyElement {
+        (self.render)(&mut self.panel, window, cx)
+    }
+
+    fn on_input_changed(&mut self, text: &str, cx: &mut App) -> Vec<PluginListItem> {
+        (self.on_input_changed)(&mut self.panel, text, cx)
+    }
+
+    fn on_close(&mut self) {
+        (self.on_close)(&mut self.panel);
+    }
+}
+
+pub fn default_plugin_commands(manifest: PluginManifest) -> Vec<CommandItem> {
+    vec![CommandItem::plugin_open(
+        manifest.id,
+        manifest.name,
+        manifest.description,
+        manifest.keywords.iter().copied(),
+        manifest.command_prefixes.iter().copied(),
+        manifest.visual.icon,
+    )]
+}
+
+pub fn recommended_plugin_command(
+    manifest: PluginManifest,
+    matchers: impl IntoIterator<Item = ContextMatcher>,
+) -> Vec<CommandItem> {
+    vec![
+        CommandItem::plugin_open(
+            manifest.id,
+            manifest.name,
+            manifest.description,
+            manifest.keywords.iter().copied(),
+            manifest.command_prefixes.iter().copied(),
+            manifest.visual.icon,
+        )
+        .with_recommend_matchers(matchers),
+    ]
 }
 
 pub struct PluginManager {
@@ -392,7 +543,6 @@ impl PluginManager {
                     .cmp(left_score)
                     .then_with(|| right_usage.use_count.cmp(&left_usage.use_count))
                     .then_with(|| right_usage.last_used_at.cmp(&left_usage.last_used_at))
-                    .then_with(|| command_kind_rank(left).cmp(&command_kind_rank(right)))
                     .then_with(|| left.title.cmp(&right.title))
             });
             return;
@@ -406,7 +556,6 @@ impl PluginManager {
                 .cmp(&left_usage.use_count)
                 .then_with(|| right_usage.last_used_at.cmp(&left_usage.last_used_at))
                 .then_with(|| right_score.cmp(left_score))
-                .then_with(|| command_kind_rank(left).cmp(&command_kind_rank(right)))
                 .then_with(|| left.title.cmp(&right.title))
         });
     }
@@ -600,9 +749,106 @@ pub fn panic_message(error: Box<dyn Any + Send>) -> String {
     }
 }
 
-fn command_kind_rank(command: &CommandItem) -> usize {
-    match command.kind {
-        CommandKind::Plugin => 0,
-        CommandKind::DynamicAction => 1,
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::{database::DatabaseService, storage::AppPaths};
+    use std::{
+        fs,
+        sync::Arc,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temp_db(name: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+        let dir = std::env::temp_dir().join(format!("qingqi-plugin-manager-{nanos}"));
+        let _ = fs::create_dir_all(&dir);
+        dir.join(name)
+    }
+
+    fn usage_store(name: &str) -> CommandUsageStore {
+        let path = temp_db(name);
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(
+            path.parent().unwrap().to_path_buf(),
+        )));
+        database
+            .register_database(crate::core::database::DatabaseSpec::path(
+                "command-usage",
+                path,
+            ))
+            .unwrap();
+        CommandUsageStore::new(database, "command-usage")
+    }
+
+    #[test]
+    fn empty_query_sort_treats_plugin_and_action_as_peers() {
+        let events = AppEventBus::default();
+        let usage_store = usage_store("sort-peer.db");
+        usage_store
+            .record_launch("app:/Applications/Fixture.app")
+            .unwrap();
+        let manager = PluginManager::new(events, usage_store);
+        let plugin = CommandItem::plugin_open(
+            "quick-launch",
+            "快速启动",
+            "启动项",
+            ["quick"],
+            ["ql"],
+            "icons/rocket.svg",
+        );
+        let app = CommandItem::plugin_action(
+            "app-launcher",
+            "open-fixture",
+            "Fixture App",
+            "dev.fixture.app",
+            ["fixture"],
+            ["app"],
+            "",
+            Some(String::from("/Applications/Fixture.app")),
+        );
+
+        let sorted = manager.sorted_commands("", vec![plugin, app], false);
+
+        assert_eq!(sorted[0].title, "Fixture App");
+    }
+
+    #[test]
+    fn empty_query_sort_treats_apps_and_quick_launch_actions_as_peers() {
+        let events = AppEventBus::default();
+        let usage_store = usage_store("sort-apps-quick-launch.db");
+        usage_store.record_launch("quick-launch:action:42").unwrap();
+        usage_store.record_launch("quick-launch:action:42").unwrap();
+        usage_store
+            .record_launch("app:/Applications/Fixture.app")
+            .unwrap();
+        let manager = PluginManager::new(events, usage_store);
+        let app = CommandItem::plugin_action(
+            "app-launcher",
+            "open-fixture",
+            "Fixture App",
+            "dev.fixture.app",
+            ["fixture"],
+            ["app"],
+            "",
+            Some(String::from("/Applications/Fixture.app")),
+        );
+        let quick_launch = CommandItem::plugin_action(
+            "quick-launch",
+            "action-42",
+            "Build Project",
+            "Run local build",
+            ["build"],
+            ["ql", "quick"],
+            "qta/fa5s.bolt.png",
+            Some(String::from("42")),
+        )
+        .with_usage_key("quick-launch:action:42");
+
+        let sorted = manager.sorted_commands("", vec![app, quick_launch], false);
+
+        assert_eq!(sorted[0].title, "Build Project");
     }
 }

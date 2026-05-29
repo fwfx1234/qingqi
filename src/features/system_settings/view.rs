@@ -322,7 +322,7 @@ fn retention_control(
                 .child("−")
                 .on_click({
                     let panel = Rc::clone(&panel);
-                    move |_, window, cx| {
+                    move |_, window, _cx| {
                         panel.borrow_mut().adjust_retention(-30);
                         window.refresh();
                     }
@@ -367,7 +367,7 @@ fn retention_control(
                 .child("+")
                 .on_click({
                     let panel = Rc::clone(&panel);
-                    move |_, window, cx| {
+                    move |_, window, _cx| {
                         panel.borrow_mut().adjust_retention(30);
                         window.refresh();
                     }
@@ -395,7 +395,7 @@ fn retention_control(
                 .child("保存")
                 .on_click({
                     let panel = Rc::clone(&panel);
-                    move |_, window, cx| {
+                    move |_, window, _cx| {
                         panel.borrow_mut().save_retention();
                         window.refresh();
                     }
@@ -424,7 +424,7 @@ fn retention_control(
                 .child("默认")
                 .on_click({
                     let panel = Rc::clone(&panel);
-                    move |_, window, cx| {
+                    move |_, window, _cx| {
                         panel.borrow_mut().restore_default_retention();
                         window.refresh();
                     }
@@ -488,7 +488,7 @@ fn app_index_row(
 
     let action = if show_rescan {
         action_button(dark, "重扫描", true, {
-            move |_, window, cx| {
+            move |_, window, _cx| {
                 panel.borrow_mut().request_rescan();
                 window.refresh();
             }
@@ -540,7 +540,7 @@ fn app_index_action_button(
 ) -> AnyElement {
     if available {
         action_button(dark, "重建索引", true, {
-            move |_, window, cx| {
+            move |_, window, _cx| {
                 panel.borrow_mut().request_rescan();
                 window.refresh();
             }
@@ -575,7 +575,7 @@ fn plugin_dir_button(
         .text_size(theme::font_size_caption())
         .text_color(theme::token("color-text-primary", dark))
         .child("打开目录")
-        .on_click(move |_, window, cx| {
+        .on_click(move |_, window, _cx| {
             panel.borrow_mut().open_plugin_dir();
             window.refresh();
         })
@@ -610,7 +610,7 @@ fn icon_cache_clear_button(
                 .text_size(theme::font_size_caption())
                 .text_color(theme::white())
                 .child("清理缓存")
-                .on_click(move |_, window, cx| {
+                .on_click(move |_, window, _cx| {
                     panel.borrow_mut().clear_icon_cache();
                     window.refresh();
                 }),
@@ -1191,7 +1191,7 @@ fn accessibility_row(
                         .text_size(theme::font_size_caption())
                         .text_color(theme::white())
                         .child("打开设置")
-                        .on_click(move |_, window, cx| {
+                        .on_click(move |_, window, _cx| {
                             panel.borrow_mut().open_accessibility_settings();
                             window.refresh();
                         }),
@@ -1268,7 +1268,7 @@ fn diag_path_row(
                 .text_size(theme::font_size_caption())
                 .text_color(theme::token("color-text-primary", dark))
                 .child("打开")
-                .on_click(move |_, window, cx| {
+                .on_click(move |_, window, _cx| {
                     match action {
                         DiagAction::DataDir => panel.borrow_mut().open_data_dir(),
                         DiagAction::ConfigDir => panel.borrow_mut().open_config_dir(),
@@ -1427,7 +1427,7 @@ fn seg_button(
                 .bg(theme::token("color-bg-surface", dark))
                 .cursor_pointer()
         })
-        .on_click(move |_, window, cx| {
+        .on_click(move |_, window, _cx| {
             panel.borrow_mut().set_theme_mode(mode);
             window.refresh();
         });

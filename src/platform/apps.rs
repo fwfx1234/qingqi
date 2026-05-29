@@ -14,6 +14,7 @@ const SCAN_DIRS: &[&str] = &[
     "/System/Applications",
     "/System/Library/CoreServices/Applications",
 ];
+const APP_SCAN_MAX_DEPTH: usize = 4;
 const ICON_SIZE_PX: u32 = 64;
 const ICON_CACHE_VERSION: u8 = 2;
 const ICON_TRIM_ALPHA_THRESHOLD: u8 = 8;
@@ -34,12 +35,20 @@ pub fn scan_application_metadata() -> Vec<InstalledApp> {
     let mut seen_names = HashSet::new();
 
     for directory in SCAN_DIRS {
-        collect_apps(Path::new(directory), &mut seen_names, &mut apps);
+        collect_apps(
+            Path::new(directory),
+            0,
+            APP_SCAN_MAX_DEPTH,
+            &mut seen_names,
+            &mut apps,
+        );
     }
 
     if let Ok(home) = std::env::var("HOME") {
         collect_apps(
             Path::new(&home).join("Applications").as_path(),
+            0,
+            APP_SCAN_MAX_DEPTH,
             &mut seen_names,
             &mut apps,
         );
@@ -52,10 +61,15 @@ pub fn scan_application_metadata() -> Vec<InstalledApp> {
 pub fn scan_application_paths() -> Vec<String> {
     let mut paths = HashSet::new();
     for directory in SCAN_DIRS {
-        collect_app_paths(Path::new(directory), &mut paths);
+        collect_app_paths(Path::new(directory), 0, APP_SCAN_MAX_DEPTH, &mut paths);
     }
     if let Ok(home) = std::env::var("HOME") {
-        collect_app_paths(Path::new(&home).join("Applications").as_path(), &mut paths);
+        collect_app_paths(
+            Path::new(&home).join("Applications").as_path(),
+            0,
+            APP_SCAN_MAX_DEPTH,
+            &mut paths,
+        );
     }
     let mut list = paths.into_iter().collect::<Vec<_>>();
     list.sort();
@@ -118,59 +132,136 @@ pub fn open_application(path: &str) -> Result<(), String> {
         .map_err(|error| format!("启动失败: {error}"))
 }
 
-fn collect_apps(directory: &Path, seen_names: &mut HashSet<String>, apps: &mut Vec<InstalledApp>) {
+fn collect_apps(
+    directory: &Path,
+    depth: usize,
+    max_depth: usize,
+    seen_names: &mut HashSet<String>,
+    apps: &mut Vec<InstalledApp>,
+) {
     let Ok(entries) = std::fs::read_dir(directory) else {
         return;
     };
 
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("app") {
+        if path.extension().and_then(|ext| ext.to_str()) == Some("app") {
+            if is_nested_helper_app(&path) {
+                continue;
+            }
+
+            collect_apps(
+                path.join("Contents").join("Applications").as_path(),
+                depth + 1,
+                max_depth,
+                seen_names,
+                apps,
+            );
+            push_app_metadata(path, seen_names, apps);
             continue;
         }
 
-        let Some(stem) = path
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .map(ToOwned::to_owned)
-        else {
-            continue;
-        };
-
-        if stem.is_empty() || !seen_names.insert(stem.clone()) {
-            continue;
+        if depth < max_depth && path.is_dir() && should_descend_app_scan_dir(&path) {
+            collect_apps(&path, depth + 1, max_depth, seen_names, apps);
         }
-
-        let info = read_info_dictionary(&path);
-        let bundle_id = bundle_id_from_info(&info);
-        let name = display_name_from_info(&info, &stem);
-        let aliases = app_aliases(&info, &stem, bundle_id.as_deref(), &name);
-        apps.push(InstalledApp {
-            icon_letter: name
-                .chars()
-                .next()
-                .map(|ch| ch.to_string())
-                .unwrap_or_else(|| String::from("A")),
-            aliases,
-            bundle_id,
-            icon_path: None,
-            name,
-            path: path.to_string_lossy().to_string(),
-        });
     }
 }
 
-fn collect_app_paths(directory: &Path, paths: &mut HashSet<String>) {
+fn push_app_metadata(
+    path: PathBuf,
+    seen_names: &mut HashSet<String>,
+    apps: &mut Vec<InstalledApp>,
+) {
+    let Some(stem) = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .map(ToOwned::to_owned)
+    else {
+        return;
+    };
+
+    let info = read_info_dictionary(&path);
+    let bundle_id = bundle_id_from_info(&info);
+    let name = display_name_from_info(&info, &stem);
+    let dedupe_key = bundle_id
+        .clone()
+        .unwrap_or_else(|| name.clone())
+        .to_lowercase();
+    if stem.is_empty() || dedupe_key.is_empty() || !seen_names.insert(dedupe_key) {
+        return;
+    }
+
+    let aliases = app_aliases(&info, &stem, bundle_id.as_deref(), &name);
+    apps.push(InstalledApp {
+        icon_letter: name
+            .chars()
+            .next()
+            .map(|ch| ch.to_string())
+            .unwrap_or_else(|| String::from("A")),
+        aliases,
+        bundle_id,
+        icon_path: None,
+        name,
+        path: path.to_string_lossy().to_string(),
+    });
+}
+
+fn collect_app_paths(
+    directory: &Path,
+    depth: usize,
+    max_depth: usize,
+    paths: &mut HashSet<String>,
+) {
     let Ok(entries) = std::fs::read_dir(directory) else {
         return;
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("app") {
+        if path.extension().and_then(|ext| ext.to_str()) == Some("app") {
+            if !is_nested_helper_app(&path) {
+                collect_app_paths(
+                    path.join("Contents").join("Applications").as_path(),
+                    depth + 1,
+                    max_depth,
+                    paths,
+                );
+                paths.insert(path.to_string_lossy().to_string());
+            }
             continue;
         }
-        paths.insert(path.to_string_lossy().to_string());
+
+        if depth < max_depth && path.is_dir() && should_descend_app_scan_dir(&path) {
+            collect_app_paths(&path, depth + 1, max_depth, paths);
+        }
     }
+}
+
+fn should_descend_app_scan_dir(path: &Path) -> bool {
+    !path
+        .components()
+        .any(|component| os_str_eq_ignore_ascii_case(component.as_os_str(), "Contents"))
+}
+
+fn is_nested_helper_app(path: &Path) -> bool {
+    path.components()
+        .any(|component| os_str_eq_ignore_ascii_case(component.as_os_str(), "Contents"))
+        && !has_component_pair(path, "Contents", "Applications")
+}
+
+fn has_component_pair(path: &Path, left: &str, right: &str) -> bool {
+    let mut saw_left = false;
+    for component in path.components() {
+        let value = component.as_os_str();
+        if saw_left && os_str_eq_ignore_ascii_case(value, right) {
+            return true;
+        }
+        saw_left = os_str_eq_ignore_ascii_case(value, left);
+    }
+    false
+}
+
+fn os_str_eq_ignore_ascii_case(value: &std::ffi::OsStr, expected: &str) -> bool {
+    value.to_string_lossy().eq_ignore_ascii_case(expected)
 }
 
 fn bundle_id_from_info(info: &plist::Dictionary) -> Option<String> {
@@ -560,8 +651,8 @@ fn trim_transparent_padding(image: &DynamicImage) -> Option<DynamicImage> {
 mod tests {
     use super::{
         InstalledApp, app_aliases, bundle_id_suffix, camel_case_split, clear_broken_icon_paths,
-        clear_dir_files, icon_cache_dir, normalize_search_text, resolve_resource_icon,
-        trim_transparent_padding, validate_cached_icon,
+        clear_dir_files, collect_app_paths, collect_apps, icon_cache_dir, normalize_search_text,
+        resolve_resource_icon, trim_transparent_padding, validate_cached_icon,
     };
     use image::{DynamicImage, ImageBuffer, Rgba};
     use plist::Value;
@@ -694,6 +785,46 @@ mod tests {
 
         assert!(app.icon_path.is_none());
         assert_eq!(app.icon_letter, "S");
+    }
+
+    #[test]
+    fn recursive_scan_includes_public_nested_apps_and_skips_helpers() {
+        let root = temp_dir("recursive-scan");
+        let visible = root.join("Utilities").join("Visible.app");
+        let bundled_visible = root
+            .join("Xcode.app")
+            .join("Contents")
+            .join("Applications")
+            .join("Instruments.app");
+        let helper = root
+            .join("Code.app")
+            .join("Contents")
+            .join("Frameworks")
+            .join("Code Helper.app");
+
+        fs::create_dir_all(visible.join("Contents")).expect("visible app");
+        fs::create_dir_all(bundled_visible.join("Contents")).expect("bundled app");
+        fs::create_dir_all(helper.join("Contents")).expect("helper app");
+
+        let mut apps = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        collect_apps(&root, 0, 4, &mut seen, &mut apps);
+
+        assert!(apps.iter().any(|app| app.path == visible.to_string_lossy()));
+        assert!(
+            apps.iter()
+                .any(|app| app.path == bundled_visible.to_string_lossy())
+        );
+        assert!(
+            !apps.iter().any(|app| app.path == helper.to_string_lossy()),
+            "helper apps inside Contents should stay hidden"
+        );
+
+        let mut paths = std::collections::HashSet::new();
+        collect_app_paths(&root, 0, 4, &mut paths);
+        assert!(paths.contains(&visible.to_string_lossy().to_string()));
+        assert!(paths.contains(&bundled_visible.to_string_lossy().to_string()));
+        assert!(!paths.contains(&helper.to_string_lossy().to_string()));
     }
 
     #[test]

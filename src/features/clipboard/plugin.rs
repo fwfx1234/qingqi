@@ -132,12 +132,43 @@ impl PluginRuntime for ClipboardRuntime {
                     .background_executor()
                     .timer(Duration::from_millis(700))
                     .await;
-                let service = Arc::clone(&service);
-                let _ = async_cx.update(move |cx| {
-                    if let Ok(service) = service.lock() {
-                        let _ = service.capture_current(cx);
+                let service_for_snapshot = Arc::clone(&service);
+                let snapshot = async_cx
+                    .background_executor()
+                    .spawn(async move {
+                        let service = service_for_snapshot
+                            .lock()
+                            .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
+                        let Some(change_count) = service.current_change_count()? else {
+                            return Ok(None);
+                        };
+                        let snapshot = crate::platform::clipboard::read_background_snapshot(
+                            change_count,
+                            service.last_seen_image_id(),
+                        );
+                        Ok::<_, anyhow::Error>(Some(snapshot))
+                    })
+                    .await;
+
+                match snapshot {
+                    Ok(Some(snapshot)) => {
+                        let service = Arc::clone(&service);
+                        let _ = async_cx.update(move |_cx| {
+                            if let Ok(service) = service.lock() {
+                                let _ = service.capture_snapshot(snapshot);
+                            }
+                        });
                     }
-                });
+                    Ok(None) => {}
+                    Err(_) => {
+                        let service = Arc::clone(&service);
+                        let _ = async_cx.update(move |cx| {
+                            if let Ok(service) = service.lock() {
+                                let _ = service.capture_current(cx);
+                            }
+                        });
+                    }
+                }
             }
         })
         .detach();
@@ -173,9 +204,11 @@ impl PluginSession for ClipboardSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::{database::DatabaseService, storage::AppPaths};
     use std::{
         fs,
         path::PathBuf,
+        sync::Arc,
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -191,7 +224,11 @@ mod tests {
 
     #[test]
     fn shortcut_uses_legacy_hotkey_config_and_persists_back() {
-        let service = ClipboardService::new(temp_db("clipboard-plugin.db"));
+        let path = temp_db("clipboard-plugin.db");
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(
+            path.parent().unwrap().to_path_buf(),
+        )));
+        let service = ClipboardService::new(database, path);
         service
             .set_hotkey(String::from("Ctrl+Alt+V"))
             .expect("legacy hotkey should persist");

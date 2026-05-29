@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use gpui::{
     App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement, KeyDownEvent,
     ParentElement, Pixels, Point, Render, ScrollStrategy, StatefulInteractiveElement, Styled,
-    Subscription, UniformListScrollHandle, Window, div, hsla, point, px, uniform_list,
+    Subscription, Task, UniformListScrollHandle, Window, div, hsla, point, px, uniform_list,
 };
 
 use crate::{
@@ -113,6 +113,12 @@ pub struct QuickLaunchView {
     editor: Option<ActionEditorState>,
     focus_target: Option<FocusTarget>,
     last_runtime_revision: u64,
+    loading: bool,
+    reload_generation: u64,
+    pending_selected_action_id: Option<i64>,
+    reload_task: Option<Task<()>>,
+    history_task: Option<Task<()>>,
+    action_task: Option<Task<()>>,
     list_scroll: UniformListScrollHandle,
     subscriptions: Vec<Subscription>,
 }
@@ -150,10 +156,16 @@ impl QuickLaunchView {
             editor: None,
             focus_target: Some(FocusTarget::Query),
             last_runtime_revision: snapshot.revision,
+            loading: false,
+            reload_generation: 0,
+            pending_selected_action_id: None,
+            reload_task: None,
+            history_task: None,
+            action_task: None,
             list_scroll: UniformListScrollHandle::new(),
             subscriptions: Vec::new(),
         };
-        this.reload_actions();
+        this.reload_actions(cx);
         this.observe_query_input(cx);
         this
     }
@@ -162,34 +174,62 @@ impl QuickLaunchView {
         let query_input = self.query_input.clone();
         let subscription = cx.observe(&query_input, |view, _, cx| {
             view.sync_query(cx);
-            cx.notify();
         });
         self.subscriptions.push(subscription);
     }
 
-    fn sync_query(&mut self, cx: &App) {
+    fn sync_query(&mut self, cx: &mut Context<Self>) {
         self.query = self.query_input.read(cx).text();
         self.selected = 0;
         self.notice = None;
-        self.reload_actions();
+        self.pending_selected_action_id = None;
+        self.reload_actions(cx);
     }
 
-    fn reload_actions(&mut self) {
-        match self.service.list_actions(&self.query, None) {
-            Ok(actions) => {
-                let ids: Vec<i64> = actions.iter().map(|a| a.id).collect();
-                self.latest_run_summaries =
-                    self.service.latest_run_summaries(&ids).unwrap_or_default();
-                self.actions = actions;
-                self.selected = self.selected.min(self.actions.len().saturating_sub(1));
-            }
-            Err(error) => {
-                self.actions.clear();
-                self.latest_run_summaries.clear();
-                self.selected = 0;
-                self.notice = Some(format!("读取动作失败: {error}"));
-            }
-        }
+    fn reload_actions(&mut self, cx: &mut Context<Self>) {
+        self.loading = true;
+        self.reload_generation = self.reload_generation.wrapping_add(1);
+        let generation = self.reload_generation;
+        let query = self.query.clone();
+        let service = Arc::clone(&self.service);
+
+        self.reload_task = Some(cx.spawn(async move |view, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let actions = service.list_actions(&query, None)?;
+                    let ids: Vec<i64> = actions.iter().map(|action| action.id).collect();
+                    let latest_run_summaries =
+                        service.latest_run_summaries(&ids).unwrap_or_default();
+                    anyhow::Ok((actions, latest_run_summaries))
+                })
+                .await;
+
+            let _ = view.update(async_cx, |view, cx| {
+                if view.reload_generation != generation {
+                    return;
+                }
+                view.loading = false;
+                match result {
+                    Ok((actions, latest_run_summaries)) => {
+                        view.actions = actions;
+                        view.latest_run_summaries = latest_run_summaries;
+                        if let Some(action_id) = view.pending_selected_action_id.take() {
+                            view.select_action_id(action_id);
+                        } else {
+                            view.selected = view.selected.min(view.actions.len().saturating_sub(1));
+                        }
+                    }
+                    Err(error) => {
+                        view.actions.clear();
+                        view.latest_run_summaries.clear();
+                        view.selected = 0;
+                        view.notice = Some(format!("读取动作失败: {error}"));
+                    }
+                }
+                cx.notify();
+            });
+        }));
     }
 
     fn move_selection(&mut self, delta: isize, cx: &mut Context<Self>) {
@@ -227,24 +267,36 @@ impl QuickLaunchView {
     }
 
     fn run_action(&mut self, action: QuickAction, cx: &mut Context<Self>) {
-        match self.service.required_parameters(action.id) {
-            Ok(specs) if !specs.is_empty() => {
-                self.open_pending(action, specs, cx);
-                return;
-            }
-            Ok(_) => {}
-            Err(error) => {
-                self.notice = Some(format!("读取参数失败: {error}"));
-                cx.notify();
-                return;
-            }
-        }
+        self.notice = Some(format!("正在准备执行 {}", action.name));
+        let service = Arc::clone(&self.service);
+        self.action_task = Some(cx.spawn(async move |view, async_cx| {
+            let action_for_task = action.clone();
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let specs = service.required_parameters(action_for_task.id)?;
+                    if !specs.is_empty() {
+                        anyhow::Ok((Some(specs), None))
+                    } else {
+                        let message = service.start_action(action_for_task.id)?;
+                        anyhow::Ok((None, Some(message)))
+                    }
+                })
+                .await;
 
-        self.notice = Some(
-            self.service
-                .start_action(action.id)
-                .unwrap_or_else(|error| format!("执行失败: {error}")),
-        );
+            let _ = view.update(async_cx, |view, cx| match result {
+                Ok((Some(specs), _)) => view.open_pending(action.clone(), specs, cx),
+                Ok((None, Some(message))) => {
+                    view.notice = Some(message);
+                    cx.notify();
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    view.notice = Some(format!("执行失败: {error}"));
+                    cx.notify();
+                }
+            });
+        }));
         cx.notify();
     }
 
@@ -267,11 +319,18 @@ impl QuickLaunchView {
     }
 
     fn stop_action(&mut self, action_id: i64, cx: &mut Context<Self>) {
-        self.notice = Some(
-            self.service
-                .stop_action(action_id)
-                .unwrap_or_else(|error| format!("停止失败: {error}")),
-        );
+        self.notice = Some(String::from("正在请求停止..."));
+        let service = Arc::clone(&self.service);
+        self.action_task = Some(cx.spawn(async move |view, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move { service.stop_action(action_id) })
+                .await;
+            let _ = view.update(async_cx, |view, cx| {
+                view.notice = Some(result.unwrap_or_else(|error| format!("停止失败: {error}")));
+                cx.notify();
+            });
+        }));
         cx.notify();
     }
 
@@ -285,20 +344,32 @@ impl QuickLaunchView {
     }
 
     fn open_history(&mut self, action: QuickAction, cx: &mut Context<Self>) {
-        match self.service.list_runs(action.id, HISTORY_LIMIT) {
-            Ok(runs) => {
-                self.history = Some(HistorySheetState {
-                    action_id: action.id,
-                    action_name: action.name.clone(),
-                    runs,
-                });
-                self.notice = Some(format!("已加载 {} 的最近记录", action.name));
-            }
-            Err(error) => {
-                self.history = None;
-                self.notice = Some(format!("读取历史失败: {error}"));
-            }
-        }
+        self.notice = Some(format!("正在加载 {} 的最近记录...", action.name));
+        let service = Arc::clone(&self.service);
+        self.history_task = Some(cx.spawn(async move |view, async_cx| {
+            let action_for_task = action.clone();
+            let result = async_cx
+                .background_executor()
+                .spawn(async move { service.list_runs(action_for_task.id, HISTORY_LIMIT) })
+                .await;
+            let _ = view.update(async_cx, |view, cx| {
+                match result {
+                    Ok(runs) => {
+                        view.history = Some(HistorySheetState {
+                            action_id: action.id,
+                            action_name: action.name.clone(),
+                            runs,
+                        });
+                        view.notice = Some(format!("已加载 {} 的最近记录", action.name));
+                    }
+                    Err(error) => {
+                        view.history = None;
+                        view.notice = Some(format!("读取历史失败: {error}"));
+                    }
+                }
+                cx.notify();
+            });
+        }));
         cx.notify();
     }
 
@@ -497,26 +568,39 @@ impl QuickLaunchView {
             }
         };
 
-        let outcome = match editor.mode {
-            ActionEditorMode::Create => self.service.create_action(draft),
-            ActionEditorMode::Edit(action_id) => self.service.update_action(action_id, draft),
-        };
-
-        match outcome {
-            Ok(action) => {
-                self.reload_actions();
-                self.select_action_id(action.id);
-                self.editor = None;
-                self.notice = Some(match editor.mode {
-                    ActionEditorMode::Create => format!("已创建动作 {}", action.name),
-                    ActionEditorMode::Edit(_) => format!("已保存动作 {}", action.name),
-                });
-                self.focus_target = Some(FocusTarget::Query);
-            }
-            Err(error) => {
-                self.notice = Some(format!("保存失败: {error}"));
-            }
-        }
+        self.notice = Some(String::from("正在保存动作..."));
+        let service = Arc::clone(&self.service);
+        self.action_task = Some(cx.spawn(async move |view, async_cx| {
+            let mode = editor.mode;
+            let draft_for_task = draft.clone();
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    match mode {
+                        ActionEditorMode::Create => service.create_action(draft_for_task),
+                        ActionEditorMode::Edit(action_id) => {
+                            service.update_action(action_id, draft_for_task)
+                        }
+                    }
+                })
+                .await;
+            let _ = view.update(async_cx, |view, cx| match result {
+                Ok(action) => {
+                    view.editor = None;
+                    view.notice = Some(match mode {
+                        ActionEditorMode::Create => format!("已创建动作 {}", action.name),
+                        ActionEditorMode::Edit(_) => format!("已保存动作 {}", action.name),
+                    });
+                    view.focus_target = Some(FocusTarget::Query);
+                    view.pending_selected_action_id = Some(action.id);
+                    view.reload_actions(cx);
+                }
+                Err(error) => {
+                    view.notice = Some(format!("保存失败: {error}"));
+                    cx.notify();
+                }
+            });
+        }));
         cx.notify();
     }
 
@@ -530,17 +614,26 @@ impl QuickLaunchView {
     }
 
     fn duplicate_action(&mut self, action: QuickAction, cx: &mut Context<Self>) {
-        match self.service.duplicate_action(action.id) {
-            Ok(created) => {
-                self.action_menu = None;
-                self.reload_actions();
-                self.select_action_id(created.id);
-                self.notice = Some(format!("已复制为 {}", created.name));
-            }
-            Err(error) => {
-                self.notice = Some(format!("复制失败: {error}"));
-            }
-        }
+        self.notice = Some(format!("正在复制 {}...", action.name));
+        let service = Arc::clone(&self.service);
+        self.action_task = Some(cx.spawn(async move |view, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move { service.duplicate_action(action.id) })
+                .await;
+            let _ = view.update(async_cx, |view, cx| match result {
+                Ok(created) => {
+                    view.action_menu = None;
+                    view.notice = Some(format!("已复制为 {}", created.name));
+                    view.pending_selected_action_id = Some(created.id);
+                    view.reload_actions(cx);
+                }
+                Err(error) => {
+                    view.notice = Some(format!("复制失败: {error}"));
+                    cx.notify();
+                }
+            });
+        }));
         cx.notify();
     }
 
@@ -555,21 +648,30 @@ impl QuickLaunchView {
     }
 
     fn set_action_enabled(&mut self, action: QuickAction, enabled: bool, cx: &mut Context<Self>) {
-        match self.service.set_action_enabled(action.id, enabled) {
-            Ok(updated) => {
-                self.action_menu = None;
-                self.reload_actions();
-                self.select_action_id(updated.id);
-                self.notice = Some(if updated.enabled {
-                    format!("已启用 {}", updated.name)
-                } else {
-                    format!("已停用 {}", updated.name)
-                });
-            }
-            Err(error) => {
-                self.notice = Some(format!("切换失败: {error}"));
-            }
-        }
+        self.notice = Some(format!("正在更新 {}...", action.name));
+        let service = Arc::clone(&self.service);
+        self.action_task = Some(cx.spawn(async move |view, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move { service.set_action_enabled(action.id, enabled) })
+                .await;
+            let _ = view.update(async_cx, |view, cx| match result {
+                Ok(updated) => {
+                    view.action_menu = None;
+                    view.notice = Some(if updated.enabled {
+                        format!("已启用 {}", updated.name)
+                    } else {
+                        format!("已停用 {}", updated.name)
+                    });
+                    view.pending_selected_action_id = Some(updated.id);
+                    view.reload_actions(cx);
+                }
+                Err(error) => {
+                    view.notice = Some(format!("切换失败: {error}"));
+                    cx.notify();
+                }
+            });
+        }));
         cx.notify();
     }
 
@@ -598,27 +700,37 @@ impl QuickLaunchView {
             .iter()
             .position(|action| action.id == action_id);
 
-        match self.service.delete_action(action_id) {
-            Ok(message) => {
-                self.delete_confirm = None;
-                if self
-                    .history
-                    .as_ref()
-                    .map(|history| history.action_id == action_id)
-                    .unwrap_or(false)
-                {
-                    self.history = None;
+        self.notice = Some(String::from("正在删除动作..."));
+        let service = Arc::clone(&self.service);
+        self.action_task = Some(cx.spawn(async move |view, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move { service.delete_action(action_id) })
+                .await;
+            let _ = view.update(async_cx, |view, cx| match result {
+                Ok(message) => {
+                    view.delete_confirm = None;
+                    if view
+                        .history
+                        .as_ref()
+                        .map(|history| history.action_id == action_id)
+                        .unwrap_or(false)
+                    {
+                        view.history = None;
+                    }
+                    if let Some(index) = deleted_index {
+                        view.selected = index.min(view.actions.len().saturating_sub(1));
+                    }
+                    view.pending_selected_action_id = None;
+                    view.notice = Some(message);
+                    view.reload_actions(cx);
                 }
-                self.reload_actions();
-                if let Some(index) = deleted_index {
-                    self.selected = index.min(self.actions.len().saturating_sub(1));
+                Err(error) => {
+                    view.notice = Some(format!("删除失败: {error}"));
+                    cx.notify();
                 }
-                self.notice = Some(message);
-            }
-            Err(error) => {
-                self.notice = Some(format!("删除失败: {error}"));
-            }
-        }
+            });
+        }));
         cx.notify();
     }
 
@@ -632,20 +744,32 @@ impl QuickLaunchView {
     }
 
     fn open_latest_result(&mut self, action_id: i64, action_name: String, cx: &mut Context<Self>) {
-        match self.service.list_runs(action_id, 1) {
-            Ok(runs) => {
-                if let Some(run) = runs.into_iter().next() {
-                    self.open_result(action_name, run, cx);
-                } else {
-                    self.notice = Some(format!("{action_name} 还没有运行记录"));
-                    cx.notify();
+        self.notice = Some(format!("正在读取 {action_name} 的最新结果..."));
+        let service = Arc::clone(&self.service);
+        self.history_task = Some(cx.spawn(async move |view, async_cx| {
+            let action_name_for_task = action_name.clone();
+            let result = async_cx
+                .background_executor()
+                .spawn(async move { service.list_runs(action_id, 1) })
+                .await;
+            let _ = view.update(async_cx, |view, cx| {
+                match result {
+                    Ok(runs) => {
+                        if let Some(run) = runs.into_iter().next() {
+                            view.open_result(action_name.clone(), run, cx);
+                        } else {
+                            view.notice = Some(format!("{action_name} 还没有运行记录"));
+                            cx.notify();
+                        }
+                    }
+                    Err(error) => {
+                        view.notice = Some(format!("读取最新结果失败: {error}"));
+                        cx.notify();
+                    }
                 }
-            }
-            Err(error) => {
-                self.notice = Some(format!("读取最新结果失败: {error}"));
-                cx.notify();
-            }
-        }
+                let _ = action_name_for_task;
+            });
+        }));
     }
 
     fn set_result(&mut self, action_name: String, run: QuickRun) {
@@ -662,15 +786,27 @@ impl QuickLaunchView {
         let Some(history) = self.history.clone() else {
             return;
         };
-        match self.service.list_runs(history.action_id, HISTORY_LIMIT) {
-            Ok(runs) => {
-                self.history = Some(HistorySheetState { runs, ..history });
-                self.notice = Some(String::from("运行历史已刷新"));
-            }
-            Err(error) => {
-                self.notice = Some(format!("刷新历史失败: {error}"));
-            }
-        }
+        self.notice = Some(String::from("正在刷新运行历史..."));
+        let service = Arc::clone(&self.service);
+        self.history_task = Some(cx.spawn(async move |view, async_cx| {
+            let history_for_task = history.clone();
+            let result = async_cx
+                .background_executor()
+                .spawn(async move { service.list_runs(history_for_task.action_id, HISTORY_LIMIT) })
+                .await;
+            let _ = view.update(async_cx, |view, cx| {
+                match result {
+                    Ok(runs) => {
+                        view.history = Some(HistorySheetState { runs, ..history });
+                        view.notice = Some(String::from("运行历史已刷新"));
+                    }
+                    Err(error) => {
+                        view.notice = Some(format!("刷新历史失败: {error}"));
+                    }
+                }
+                cx.notify();
+            });
+        }));
         cx.notify();
     }
 
@@ -830,7 +966,8 @@ impl QuickLaunchView {
         self.query.clear();
         self.selected = 0;
         self.notice = None;
-        self.reload_actions();
+        self.pending_selected_action_id = None;
+        self.reload_actions(cx);
         self.focus_target = Some(FocusTarget::Query);
         cx.notify();
     }
@@ -910,6 +1047,9 @@ impl QuickLaunchView {
     fn status_text(&self) -> String {
         if let Some(notice) = self.notice.as_ref() {
             return notice.clone();
+        }
+        if self.loading {
+            return String::from("正在加载动作...");
         }
 
         if self.actions.is_empty() {

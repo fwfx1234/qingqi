@@ -15,11 +15,12 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
-    core::storage::AppPaths,
+    core::{database::DatabaseService, storage::AppPaths},
     features::api_debugger::{
+        data_source::ApiDebuggerDataSource,
         model::{CollectionNode, HttpTab, NodeKind, RequestSnapshot},
         script_service,
-        store::{ApiDebuggerStore, ApiWorkspace},
+        store::ApiWorkspace,
         variable_service,
     },
 };
@@ -141,28 +142,32 @@ struct ApiServiceState {
     in_flight: bool,
     pending_response: Option<ApiResponse>,
     pending_error: Option<String>,
+    pending_notice: Option<String>,
     last_tab_id: String,
 }
 
 pub struct ApiService {
     revision: AtomicU64,
     state: Mutex<ApiServiceState>,
-    store: ApiDebuggerStore,
+    data_source: ApiDebuggerDataSource,
 }
 
 impl ApiService {
-    pub fn new(paths: AppPaths) -> Self {
-        let db_path = paths.database("api_debugger.db");
-        let store = ApiDebuggerStore::open(&db_path).expect("无法打开 API 调试器数据库");
+    pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> Self {
+        let _ = paths;
+        let data_source =
+            ApiDebuggerDataSource::open(database, "api_debugger/main")
+                .expect("无法打开 API 调试器数据库");
         Self {
             revision: AtomicU64::new(0),
             state: Mutex::new(ApiServiceState {
                 in_flight: false,
                 pending_response: None,
                 pending_error: None,
+                pending_notice: None,
                 last_tab_id: String::new(),
             }),
-            store,
+            data_source,
         }
     }
 
@@ -191,6 +196,20 @@ impl ApiService {
             .and_then(|mut state| state.pending_error.take())
     }
 
+    pub fn take_pending_notice(&self) -> Option<String> {
+        self.state
+            .lock()
+            .ok()
+            .and_then(|mut state| state.pending_notice.take())
+    }
+
+    fn publish_notice(&self, notice: String) {
+        if let Ok(mut state) = self.state.lock() {
+            state.pending_notice = Some(notice);
+        }
+        self.revision.fetch_add(1, Ordering::SeqCst);
+    }
+
     pub fn load_workspace(&self) -> Result<ApiWorkspace> {
         let groups = self.build_collection_tree()?;
         let environments = self.list_environments_ui();
@@ -198,7 +217,7 @@ impl ApiService {
     }
 
     pub fn list_environments_ui(&self) -> Vec<ApiEnvironment> {
-        match self.store.list_environments() {
+        match self.data_source.list_environments() {
             Ok(envs_full) if !envs_full.is_empty() => {
                 envs_full.iter().map(env_full_to_ui).collect()
             }
@@ -213,20 +232,20 @@ impl ApiService {
         url: &str,
         request: &ApiRequest,
     ) -> Result<()> {
-        let nodes = self.store.list_collection_nodes()?;
+        let nodes = self.data_source.list_collection_nodes()?;
         if let Some(node) = nodes
             .iter()
             .find(|n| n.name == title && n.kind == NodeKind::Endpoint)
         {
             let snapshot = request_to_snapshot(method, url, request);
-            self.store
+            self.data_source
                 .update_collection_node(&node.id, title, method, url, &snapshot)?;
         }
         Ok(())
     }
 
     fn build_collection_tree(&self) -> Result<Vec<ApiGroup>> {
-        let nodes = self.store.list_collection_nodes()?;
+        let nodes = self.data_source.list_collection_nodes()?;
         Ok(build_groups_from_nodes(&nodes))
     }
 
@@ -240,9 +259,18 @@ impl ApiService {
             .enumerate()
             .map(|(i, env)| env_ui_to_full(env, &format!("env-{i}")))
             .collect();
-        self.store.save_environments_full(&envs_full)?;
+        self.data_source.save_environments_full(&envs_full)?;
         self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(())
+    }
+
+    pub fn save_workspace_async(self: &Arc<Self>, environments: Vec<ApiEnvironment>) {
+        let service = Arc::clone(self);
+        thread::spawn(move || {
+            if let Err(error) = service.save_workspace(&[], &environments) {
+                service.publish_notice(format!("工作区保存失败: {error}"));
+            }
+        });
     }
 
     pub fn send_request(
@@ -319,7 +347,7 @@ impl ApiService {
                 let title = resp.status_line.clone();
                 let method = request.method.label().to_string();
                 let url_str = build_final_url(&environment, &request);
-                let _ = service.store.insert_history(
+                let _ = service.data_source.insert_history(
                     &tid,
                     &method,
                     &url_str,
@@ -333,7 +361,7 @@ impl ApiService {
                 // Preserve existing tab fields so send doesn't overwrite the
                 // view-persisted draft state with partial data.
                 let existing = service
-                    .store
+                    .data_source
                     .list_tabs()
                     .ok()
                     .and_then(|tabs| tabs.into_iter().find(|t| t.id == tid));
@@ -373,7 +401,7 @@ impl ApiService {
                     active_request_tab: existing_active_tab,
                     updated_at: String::new(),
                 };
-                let _ = service.store.save_tab(&tab);
+                let _ = service.data_source.save_tab(&tab);
             }
 
             service.revision.fetch_add(1, Ordering::SeqCst);
@@ -393,8 +421,8 @@ impl ApiService {
 
     pub fn create_environment(&self, name: &str, base_url: &str) -> Result<ApiEnvironment> {
         let id = format!("env-{}", Uuid::new_v4().simple());
-        let env = self.store.create_environment(&id, name, base_url)?;
-        let full = self.store.list_environments()?;
+        let env = self.data_source.create_environment(&id, name, base_url)?;
+        let full = self.data_source.list_environments()?;
         let result = full
             .iter()
             .find(|f| f.env.id == id)
@@ -415,20 +443,32 @@ impl ApiService {
         Ok(result)
     }
 
+    pub fn create_environment_async(self: &Arc<Self>, name: String, base_url: String) {
+        let service = Arc::clone(self);
+        thread::spawn(move || match service.create_environment(&name, &base_url) {
+            Ok(env) => service.publish_notice(format!("已创建环境 {}", env.name)),
+            Err(error) => service.publish_notice(format!("创建环境失败: {error}")),
+        });
+    }
+
     pub fn duplicate_environment(&self, source_index: usize) -> Result<ApiEnvironment> {
-        let envs_full = self.store.list_environments()?;
+        let envs_full = self.data_source.list_environments()?;
         let source = envs_full
             .get(source_index)
             .ok_or_else(|| anyhow!("环境索引 {source_index} 超出范围"))?;
         let new_id = format!("env-{}", Uuid::new_v4().simple());
         let new_name = format!("{} 副本", source.env.name);
-        let new_env = self
-            .store
-            .create_environment(&new_id, &new_name, &source.env.base_url)?;
+        let new_env =
+            self.data_source
+                .create_environment(&new_id, &new_name, &source.env.base_url)?;
         // Copy variables
         for var in &source.variables {
-            self.store
-                .upsert_env_variable(&new_id, var.enabled, &var.var_key, &var.var_value)?;
+            self.data_source.upsert_env_variable(
+                &new_id,
+                var.enabled,
+                &var.var_key,
+                &var.var_value,
+            )?;
         }
         // Copy headers
         let header_rows: Vec<(bool, String, String)> = source
@@ -437,7 +477,8 @@ impl ApiService {
             .map(|h| (h.enabled, h.header_key.clone(), h.header_value.clone()))
             .collect();
         if !header_rows.is_empty() {
-            self.store.replace_env_headers(&new_id, &header_rows)?;
+            self.data_source
+                .replace_env_headers(&new_id, &header_rows)?;
         }
         self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(ApiEnvironment {
@@ -470,19 +511,36 @@ impl ApiService {
         })
     }
 
+    pub fn duplicate_environment_async(self: &Arc<Self>, source_index: usize) {
+        let service = Arc::clone(self);
+        thread::spawn(move || match service.duplicate_environment(source_index) {
+            Ok(env) => service.publish_notice(format!("已复制为 {}", env.name)),
+            Err(error) => service.publish_notice(format!("复制环境失败: {error}")),
+        });
+    }
+
     pub fn delete_environment_by_index(&self, index: usize) -> Result<bool> {
-        let envs_full = self.store.list_environments()?;
+        let envs_full = self.data_source.list_environments()?;
         if envs_full.len() <= 1 {
             bail!("至少保留一个环境");
         }
         let target = envs_full
             .get(index)
             .ok_or_else(|| anyhow!("环境索引 {index} 超出范围"))?;
-        let deleted = self.store.delete_environment(&target.env.id)?;
+        let deleted = self.data_source.delete_environment(&target.env.id)?;
         if deleted {
             self.revision.fetch_add(1, Ordering::SeqCst);
         }
         Ok(deleted)
+    }
+
+    pub fn delete_environment_by_index_async(self: &Arc<Self>, index: usize) {
+        let service = Arc::clone(self);
+        thread::spawn(move || match service.delete_environment_by_index(index) {
+            Ok(true) => service.publish_notice(String::from("已删除环境")),
+            Ok(false) => service.publish_notice(String::from("环境未删除")),
+            Err(error) => service.publish_notice(format!("删除环境失败: {error}")),
+        });
     }
 
     pub fn save_environment_fields(
@@ -493,42 +551,80 @@ impl ApiService {
         variables_kv: &str,
         headers_kv: &str,
     ) -> Result<()> {
-        let envs_full = self.store.list_environments()?;
+        let envs_full = self.data_source.list_environments()?;
         let target = envs_full
             .get(index)
             .ok_or_else(|| anyhow!("环境索引 {index} 超出范围"))?;
         let env_id = target.env.id.clone();
-        self.store.update_environment(&env_id, name, base_url)?;
+        self.data_source
+            .update_environment(&env_id, name, base_url)?;
         let var_rows: Vec<(bool, String, String)> = parse_kv_lines(variables_kv);
-        self.store.replace_env_variables(&env_id, &var_rows)?;
+        self.data_source.replace_env_variables(&env_id, &var_rows)?;
         let hdr_rows: Vec<(bool, String, String)> = parse_kv_lines(headers_kv);
-        self.store.replace_env_headers(&env_id, &hdr_rows)?;
+        self.data_source.replace_env_headers(&env_id, &hdr_rows)?;
         self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(())
+    }
+
+    pub fn save_environment_fields_async(
+        self: &Arc<Self>,
+        index: usize,
+        name: String,
+        base_url: String,
+        variables_kv: String,
+        headers_kv: String,
+    ) {
+        let service = Arc::clone(self);
+        thread::spawn(move || {
+            match service.save_environment_fields(
+                index,
+                &name,
+                &base_url,
+                &variables_kv,
+                &headers_kv,
+            ) {
+                Ok(()) => service.publish_notice(format!("已保存环境 {}", name)),
+                Err(error) => service.publish_notice(format!("保存环境失败: {error}")),
+            }
+        });
     }
 
     // ── Tab persistence ──
 
     pub fn load_persisted_tabs(&self) -> Vec<HttpTab> {
-        self.store.list_tabs().unwrap_or_default()
+        self.data_source.list_tabs().unwrap_or_default()
     }
 
     pub fn save_tab_state(&self, tab: &HttpTab) -> Result<()> {
-        self.store.save_tab(tab)?;
+        self.data_source.save_tab(tab)?;
         self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 
+    pub fn save_tab_state_async(self: &Arc<Self>, tab: HttpTab) {
+        let service = Arc::clone(self);
+        thread::spawn(move || {
+            let _ = service.save_tab_state(&tab);
+        });
+    }
+
     pub fn delete_persisted_tab(&self, tab_id: &str) -> Result<bool> {
-        let deleted = self.store.delete_tab(tab_id)?;
+        let deleted = self.data_source.delete_tab(tab_id)?;
         if deleted {
             self.revision.fetch_add(1, Ordering::SeqCst);
         }
         Ok(deleted)
     }
 
+    pub fn delete_persisted_tab_async(self: &Arc<Self>, tab_id: String) {
+        let service = Arc::clone(self);
+        thread::spawn(move || {
+            let _ = service.delete_persisted_tab(&tab_id);
+        });
+    }
+
     pub fn load_persisted_tab_by_id(&self, tab_id: &str) -> Option<HttpTab> {
-        self.store
+        self.data_source
             .list_tabs()
             .unwrap_or_default()
             .into_iter()
@@ -619,7 +715,8 @@ pub fn format_auth_for_input(auth_type: &str, auth_value: &str) -> String {
 impl Default for ApiService {
     fn default() -> Self {
         let paths = AppPaths::resolve().expect("failed to resolve qingqi data path");
-        Self::new(paths)
+        let database = Arc::new(DatabaseService::new(paths.clone()));
+        Self::new(database, paths)
     }
 }
 
@@ -1290,18 +1387,27 @@ impl HttpMethod {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::{database::DatabaseService, storage::AppPaths};
     use crate::features::api_debugger::model::RequestSnapshot;
     use std::fs;
+    use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    fn temp_store() -> ApiDebuggerStore {
+    fn temp_store() -> ApiDebuggerDataSource {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or_default();
         let dir = std::env::temp_dir().join(format!("qingqi-api-svc-test-{nanos}"));
         let _ = fs::create_dir_all(&dir);
-        ApiDebuggerStore::open(&dir.join("test.db")).unwrap()
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(dir.clone())));
+        database
+            .register_database(crate::core::database::DatabaseSpec::path(
+                "api_debugger/main",
+                dir.join("test.db"),
+            ))
+            .unwrap();
+        ApiDebuggerDataSource::open(database, "api_debugger/main").unwrap()
     }
 
     #[test]
@@ -1728,9 +1834,10 @@ mod tests {
                 in_flight: false,
                 pending_response: None,
                 pending_error: None,
+                pending_notice: None,
                 last_tab_id: String::new(),
             }),
-            store,
+            data_source: store,
         };
         let env = service
             .create_environment("测试环境", "http://test.api.com")
@@ -1750,9 +1857,10 @@ mod tests {
                 in_flight: false,
                 pending_response: None,
                 pending_error: None,
+                pending_notice: None,
                 last_tab_id: String::new(),
             }),
-            store,
+            data_source: store,
         };
         // Index 0 is the seeded default environment
         let dup = service.duplicate_environment(0).unwrap();
@@ -1770,9 +1878,10 @@ mod tests {
                 in_flight: false,
                 pending_response: None,
                 pending_error: None,
+                pending_notice: None,
                 last_tab_id: String::new(),
             }),
-            store,
+            data_source: store,
         };
         // Only one seeded env — cannot delete
         let result = service.delete_environment_by_index(0);
@@ -1789,9 +1898,10 @@ mod tests {
                 in_flight: false,
                 pending_response: None,
                 pending_error: None,
+                pending_notice: None,
                 last_tab_id: String::new(),
             }),
-            store,
+            data_source: store,
         };
         service
             .create_environment("额外环境", "http://extra.com")
@@ -1809,9 +1919,10 @@ mod tests {
                 in_flight: false,
                 pending_response: None,
                 pending_error: None,
+                pending_notice: None,
                 last_tab_id: String::new(),
             }),
-            store,
+            data_source: store,
         };
         service
             .save_environment_fields(
@@ -1838,9 +1949,10 @@ mod tests {
                 in_flight: false,
                 pending_response: None,
                 pending_error: None,
+                pending_notice: None,
                 last_tab_id: String::new(),
             }),
-            store,
+            data_source: store,
         };
         let tab = HttpTab {
             id: "tab-uuid-1".into(),
@@ -1888,9 +2000,10 @@ mod tests {
                 in_flight: false,
                 pending_response: None,
                 pending_error: None,
+                pending_notice: None,
                 last_tab_id: String::new(),
             }),
-            store,
+            data_source: store,
         };
 
         let tab_a = HttpTab {
@@ -2275,9 +2388,10 @@ mod tests {
                 in_flight: false,
                 pending_response: None,
                 pending_error: None,
+                pending_notice: None,
                 last_tab_id: String::new(),
             }),
-            store,
+            data_source: store,
         };
         let draft = sample_draft();
         let tab = build_http_tab("tab-uuid-1", "node-1", "Sample", "POST", &draft);

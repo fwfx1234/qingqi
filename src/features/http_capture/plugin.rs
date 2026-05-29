@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 
@@ -6,6 +6,7 @@ use crate::{
     app::events::AppEventBus,
     core::{
         command::{CommandItem, ContextKind, ContextMatcher},
+        database::{DatabaseService, DatabaseSpec},
         plugin::{PluginManifest, PluginRuntime, PluginSession},
         storage::AppPaths,
     },
@@ -13,15 +14,18 @@ use crate::{
 };
 
 pub struct HttpCaptureRuntime {
-    store: Rc<CaptureStore>,
+    store: Arc<Mutex<CaptureStore>>,
 }
 
 impl HttpCaptureRuntime {
-    pub fn new(paths: AppPaths) -> anyhow::Result<Self> {
-        let db_path = paths.feature_state(manifest::PLUGIN_ID, "capture.db");
-        let store = CaptureStore::open(&db_path)?;
+    pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> anyhow::Result<Self> {
+        let _ = paths;
+        let store = CaptureStore::open(
+            database,
+            &crate::core::database::feature_database_key(manifest::PLUGIN_ID, "capture"),
+        )?;
         Ok(Self {
-            store: Rc::new(store),
+            store: Arc::new(Mutex::new(store)),
         })
     }
 }
@@ -29,6 +33,14 @@ impl HttpCaptureRuntime {
 impl PluginRuntime for HttpCaptureRuntime {
     fn manifest(&self) -> PluginManifest {
         manifest::manifest()
+    }
+
+    fn database_specs(&self) -> Vec<DatabaseSpec> {
+        vec![DatabaseSpec::feature(
+            manifest::PLUGIN_ID,
+            "capture",
+            "capture.db",
+        )]
     }
 
     fn commands(&self) -> Vec<CommandItem> {
@@ -51,7 +63,7 @@ impl PluginRuntime for HttpCaptureRuntime {
         _events: AppEventBus,
         cx: &mut App,
     ) -> anyhow::Result<Box<dyn PluginSession>> {
-        let store = Rc::clone(&self.store);
+        let store = Arc::clone(&self.store);
         let view = cx.new(|cx| CapturePanel::new(store, cx));
         Ok(Box::new(HttpCaptureSession { view }))
     }

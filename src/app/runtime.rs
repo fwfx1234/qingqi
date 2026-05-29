@@ -20,6 +20,7 @@ use crate::{
     },
     core::{
         command_usage::CommandUsageStore,
+        database::DatabaseService,
         keymap::{OpenClipboard, OpenLauncher, Quit, register_in_app_bindings},
         plugin::PluginManager,
         shortcut::{ShortcutAction, ShortcutService},
@@ -29,13 +30,14 @@ use crate::{
         clipboard::{plugin::ClipboardRuntime, service::ClipboardService},
         registry::register_builtin_plugins,
     },
+    platform::power::PowerManager,
 };
 
 pub fn run() -> Result<()> {
     let paths = AppPaths::resolve()?;
     init_tracing(paths.log_file("qingqi.log").as_path());
 
-    tracing::info!(
+    tracing::debug!(
         data_dir = %paths.data_dir().display(),
         log_file = %paths.log_file("qingqi.log").display(),
         "qingqi starting"
@@ -43,13 +45,25 @@ pub fn run() -> Result<()> {
 
     let theme_store = Arc::new(Mutex::new(ThemeStore::new(paths.config("theme.json"))));
     let events = AppEventBus::new();
+    let database = Arc::new(DatabaseService::new(paths.clone()));
+    database.register_database(crate::core::database::DatabaseSpec::app(
+        "command-usage",
+        "command_usage.db",
+    ))?;
+    database.register_database(crate::core::database::DatabaseSpec::feature(
+        "clipboard",
+        "history",
+        "clipboard.db",
+    ))?;
     let mut plugins = PluginManager::new(
         events.clone(),
-        CommandUsageStore::new(paths.database("command_usage.db")),
+        CommandUsageStore::new(Arc::clone(&database), "command-usage"),
     );
 
-    let clipboard_runtime =
-        ClipboardRuntime::new(ClipboardService::new(paths.database("clipboard.db")));
+    let clipboard_runtime = ClipboardRuntime::new(ClipboardService::new(
+        Arc::clone(&database),
+        paths.database("clipboard.db"),
+    ));
     let clipboard_service = clipboard_runtime.service();
     clipboard_runtime
         .service()
@@ -57,18 +71,27 @@ pub fn run() -> Result<()> {
         .map(|mut service| service.start())
         .ok();
     plugins.register(Box::new(clipboard_runtime));
-    register_builtin_plugins(&mut plugins, paths, Arc::clone(&theme_store))?;
+    register_builtin_plugins(
+        &mut plugins,
+        paths.clone(),
+        Arc::clone(&theme_store),
+        Arc::clone(&database),
+    )?;
 
     let plugins = Rc::new(RefCell::new(plugins));
     let window_controller = Rc::new(RefCell::new(WindowController::new(
         Rc::clone(&plugins),
         Arc::clone(&clipboard_service),
+        events.clone(),
     )));
-    let app = gpui::Application::new();
+    let power_manager = Rc::new(RefCell::new(PowerManager::load(paths.config("power.json"))));
+    let app = gpui::Application::new().with_assets(crate::app::assets::ProjectAssets);
+    let plugins_for_shutdown = Rc::clone(&plugins);
     app.on_reopen({
         let window_controller = Rc::clone(&window_controller);
         move |cx| WindowController::show_launcher(Rc::clone(&window_controller), cx)
     });
+    let database_for_shutdown = Arc::clone(&database);
     app.run(move |cx| {
         gpui_component::init(cx);
         TextInput::register_bindings(cx);
@@ -114,13 +137,23 @@ pub fn run() -> Result<()> {
         }
         background.start_hotkey_events(Rc::clone(&window_controller), cx);
 
-        match crate::platform::tray::install_tray() {
-            Ok(()) => background.start_tray_poll(Rc::clone(&window_controller), cx),
+        let initial_mode = power_manager.borrow().mode();
+        match crate::platform::tray::install_tray(initial_mode) {
+            Ok(()) => {
+                background.start_tray_poll(
+                    Rc::clone(&window_controller),
+                    Rc::clone(&power_manager),
+                    cx,
+                );
+                background.start_power_poll(Rc::clone(&power_manager), cx);
+            }
             Err(error) => tracing::warn!(error, "system tray install failed"),
         }
         cx.set_global(shortcut_service);
         cx.set_global(background);
     });
+    plugins_for_shutdown.borrow_mut().shutdown();
+    database_for_shutdown.shutdown();
     Ok(())
 }
 
@@ -135,7 +168,7 @@ fn init_tracing(log_path: &Path) {
     };
 
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("qingqi=info,warn"));
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("qingqi=debug,warn"));
 
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)

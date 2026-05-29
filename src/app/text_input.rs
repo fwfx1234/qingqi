@@ -1195,12 +1195,14 @@ impl Element for TextElement {
             window.paint_quad(selection);
         }
 
-        let layout = prepaint.layout.take().unwrap();
+        let Some(layout) = prepaint.layout.take() else {
+            return;
+        };
         for (line_index, line) in layout.lines.iter().enumerate() {
             let origin = line_origin(bounds, layout.line_height, line_index);
-            line.shaped
-                .paint(origin, layout.line_height, window, cx)
-                .unwrap();
+            if let Err(error) = line.shaped.paint(origin, layout.line_height, window, cx) {
+                tracing::warn!(error = ?error, "text input paint failed");
+            }
         }
 
         if focus_handle.is_focused(window)

@@ -6,6 +6,7 @@ use crate::{
     app::events::{AppEventBus, AppEventKind},
     core::{
         command::{CommandInvocation, CommandItem, CommandOutcome, CommandTarget},
+        database::{DatabaseService, DatabaseSpec},
         plugin::{PluginRuntime, PluginSession},
         storage::AppPaths,
     },
@@ -18,9 +19,9 @@ pub struct QuickLaunchRuntime {
 }
 
 impl QuickLaunchRuntime {
-    pub fn new(paths: AppPaths) -> anyhow::Result<Self> {
+    pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> anyhow::Result<Self> {
         Ok(Self {
-            service: Arc::new(QuickLaunchService::new(paths)?),
+            service: Arc::new(QuickLaunchService::new(database, paths)?),
             watch_started: false,
         })
     }
@@ -29,6 +30,18 @@ impl QuickLaunchRuntime {
 impl PluginRuntime for QuickLaunchRuntime {
     fn manifest(&self) -> crate::core::plugin::PluginManifest {
         manifest::manifest()
+    }
+
+    fn database_specs(&self) -> Vec<DatabaseSpec> {
+        vec![DatabaseSpec::feature(
+            manifest::PLUGIN_ID,
+            "actions",
+            "actions.db",
+        )]
+    }
+
+    fn commands_revision(&self) -> u64 {
+        self.service.revision()
     }
 
     fn open_session(
@@ -51,10 +64,7 @@ impl PluginRuntime for QuickLaunchRuntime {
             manifest.command_prefixes.iter().copied(),
             manifest.visual.icon,
         )];
-        let actions = self
-            .service
-            .list_actions("", Some(true))
-            .unwrap_or_default();
+        let actions = self.service.list_actions("", Some(true)).unwrap_or_default();
         commands.extend(actions.into_iter().map(|action| {
             CommandItem::plugin_action(
                 manifest.id,
@@ -66,6 +76,7 @@ impl PluginRuntime for QuickLaunchRuntime {
                 manifest.visual.icon,
                 Some(action.id.to_string()),
             )
+            .with_usage_key(format!("quick-launch:action:{}", action.id))
         }));
         commands
     }
@@ -145,5 +156,65 @@ impl PluginSession for QuickLaunchSession {
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
         self.view.clone().into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        core::{database::DatabaseService, storage::AppPaths},
+        features::quick_launch::{model::QuickActionDraft, store::QuickLaunchStore},
+    };
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temp_paths(name: &str) -> AppPaths {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+        let dir = std::env::temp_dir().join(format!("qingqi-quick-launch-plugin-{name}-{nanos}"));
+        fs::create_dir_all(&dir).expect("temp dir");
+        AppPaths::for_test(dir)
+    }
+
+    #[test]
+    fn action_commands_use_stable_usage_keys() {
+        let paths = temp_paths("usage-key");
+        let database = Arc::new(DatabaseService::new(paths.clone()));
+        database
+            .register_database(crate::core::database::DatabaseSpec::feature(
+                manifest::PLUGIN_ID,
+                "actions",
+                "actions.db",
+            ))
+            .unwrap();
+        let store = QuickLaunchStore::open(
+            Arc::clone(&database),
+            &crate::core::database::feature_database_key(manifest::PLUGIN_ID, "actions"),
+        )
+        .unwrap();
+        let action = store
+            .create_action(&QuickActionDraft::script(
+                "Build Project",
+                "demo action",
+                "echo ok",
+            ))
+            .unwrap();
+        let runtime = QuickLaunchRuntime::new(database, paths).unwrap();
+
+        let command = runtime
+            .commands()
+            .into_iter()
+            .find(|command| command.title == "Build Project")
+            .expect("quick launch action command should be present");
+
+        assert_eq!(
+            command.usage_key,
+            format!("quick-launch:action:{}", action.id)
+        );
     }
 }

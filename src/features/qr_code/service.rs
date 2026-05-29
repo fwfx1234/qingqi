@@ -28,44 +28,38 @@ pub struct QrMatrix {
     pub cells: Vec<bool>,
 }
 
+#[derive(Clone)]
 pub struct QrCodeService {
-    save_root: PathBuf,
     history_store: QrHistoryStore,
 }
 
 impl QrCodeService {
     pub fn new(paths: AppPaths) -> Result<Self> {
-        let save_root = paths.feature_output_dir(PLUGIN_ID);
         let history_path = paths.feature_state(PLUGIN_ID, "history.json");
-        Self::from_paths(save_root, history_path)
+        Self::from_history_path(history_path)
     }
 
-    pub fn from_paths(save_root: PathBuf, history_path: PathBuf) -> Result<Self> {
+    pub fn from_history_path(history_path: PathBuf) -> Result<Self> {
         Ok(Self {
-            save_root,
             history_store: QrHistoryStore::open(history_path)?,
         })
-    }
-
-    pub fn save_root(&self) -> &Path {
-        &self.save_root
     }
 
     pub fn preview(&self, text: &str) -> Result<QrMatrix> {
         generate(text)
     }
 
-    pub fn save(&self, text: &str) -> Result<PathBuf> {
+    pub fn save_to_dir(&self, text: &str, target_dir: &Path) -> Result<PathBuf> {
         let matrix = self.preview(text)?;
-        fs::create_dir_all(&self.save_root)
-            .with_context(|| format!("无法创建输出目录 {}", self.save_root.display()))?;
+        fs::create_dir_all(target_dir)
+            .with_context(|| format!("无法创建输出目录 {}", target_dir.display()))?;
 
         let digest = short_hash(text);
         let timestamp = OffsetDateTime::now_local()
             .unwrap_or_else(|_| OffsetDateTime::now_utc())
             .format(FILE_STAMP_FORMAT)
             .unwrap_or_else(|_| String::from("qr"));
-        let base = self.save_root.join(format!("qr_{timestamp}_{digest}.png"));
+        let base = target_dir.join(format!("qr_{timestamp}_{digest}.png"));
         let target = unique_path(&base);
 
         save_png(&matrix, &target)?;
@@ -132,14 +126,14 @@ impl QrCodeService {
         self.history_store.remove(id)
     }
 
-    pub fn export_history_auto(&self) -> Result<PathBuf> {
-        fs::create_dir_all(&self.save_root)
-            .with_context(|| format!("无法创建输出目录 {}", self.save_root.display()))?;
+    pub fn export_history_to_dir(&self, target_dir: &Path) -> Result<PathBuf> {
+        fs::create_dir_all(target_dir)
+            .with_context(|| format!("无法创建输出目录 {}", target_dir.display()))?;
         let timestamp = OffsetDateTime::now_local()
             .unwrap_or_else(|_| OffsetDateTime::now_utc())
             .format(FILE_STAMP_FORMAT)
             .unwrap_or_else(|_| String::from("history"));
-        let target = unique_path(&self.save_root.join(format!("qr_history_{timestamp}.txt")));
+        let target = unique_path(&target_dir.join(format!("qr_history_{timestamp}.txt")));
         self.history_store.export(&target)
     }
 }
@@ -327,11 +321,10 @@ mod tests {
     fn saves_png_and_history() {
         let root = temp_dir("save");
         let history_path = root.join("history.json");
-        let service =
-            QrCodeService::from_paths(root.clone(), history_path).expect("service should build");
+        let service = QrCodeService::from_history_path(history_path).expect("service should build");
 
         let saved = service
-            .save("https://openai.com")
+            .save_to_dir("https://openai.com", &root)
             .expect("save should succeed");
         let metadata = fs::metadata(&saved).expect("png should exist");
         assert!(metadata.len() > 0);
@@ -347,14 +340,13 @@ mod tests {
     fn records_copy_and_exports_history() {
         let root = temp_dir("export");
         let history_path = root.join("history.json");
-        let service =
-            QrCodeService::from_paths(root.clone(), history_path).expect("service should build");
+        let service = QrCodeService::from_history_path(history_path).expect("service should build");
 
         service
             .record_copy("hello")
             .expect("copy record should succeed");
         let exported = service
-            .export_history_auto()
+            .export_history_to_dir(&root)
             .expect("history export should succeed");
         let raw = fs::read_to_string(exported).expect("history export should be readable");
         assert!(raw.contains("hello"));
@@ -366,8 +358,7 @@ mod tests {
     fn scans_generated_png_and_records_history() {
         let root = temp_dir("scan");
         let history_path = root.join("history.json");
-        let service =
-            QrCodeService::from_paths(root.clone(), history_path).expect("service should build");
+        let service = QrCodeService::from_history_path(history_path).expect("service should build");
         let png_path = root.join("scan-target.png");
         let content = "https://openai.com/research";
 

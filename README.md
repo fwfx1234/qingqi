@@ -30,7 +30,7 @@
 - `src/core`：命令、插件协议、快捷键、存储和基础抽象。
 - `src/features`：各业务功能模块（插件实现）。
 - `src/platform`：系统相关能力（应用扫描、剪贴板、shell、tray 等）。
-- `assets`：图标与静态资源。
+- `assets`：图标与静态资源（`app-icon.svg` / `tray-icon.svg` 为源文件，构建时由 `build.rs` 生成 bundle 所需 PNG）。
 
 ## 本地开发
 

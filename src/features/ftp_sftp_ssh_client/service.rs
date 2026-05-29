@@ -12,7 +12,7 @@ use std::{
 use anyhow::{Context, Result, anyhow, ensure};
 
 use crate::{
-    core::storage::AppPaths,
+    core::{database::DatabaseService, storage::AppPaths},
     features::ftp_sftp_ssh_client::{
         backend::{
             RemoteTerminal, create_backend, make_remote_version_hint, now_unix_secs,
@@ -82,7 +82,7 @@ impl SessionRuntime {
 }
 
 pub struct FtpSftpSshService {
-    db_path: PathBuf,
+    database: Arc<DatabaseService>,
     cache_dir: PathBuf,
     sessions: Mutex<HashMap<i64, SessionRuntime>>,
     active_profile_id: Mutex<Option<i64>>,
@@ -91,13 +91,12 @@ pub struct FtpSftpSshService {
 }
 
 impl FtpSftpSshService {
-    pub fn new(paths: AppPaths) -> Result<Self> {
-        let db_path = paths.feature_state(PLUGIN_ID, "profiles.db");
+    pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> Result<Self> {
         let cache_dir = paths.feature_state(PLUGIN_ID, "edited-cache");
         std::fs::create_dir_all(&cache_dir)
             .with_context(|| format!("无法创建缓存目录 {}", cache_dir.display()))?;
         let service = Self {
-            db_path,
+            database,
             cache_dir,
             sessions: Mutex::new(HashMap::new()),
             active_profile_id: Mutex::new(None),
@@ -1191,7 +1190,10 @@ impl FtpSftpSshService {
     }
 
     pub(crate) fn open_store(&self) -> Result<RemoteProfileStore> {
-        RemoteProfileStore::open(&self.db_path)
+        RemoteProfileStore::open(
+            Arc::clone(&self.database),
+            &crate::core::database::feature_database_key(PLUGIN_ID, "profiles"),
+        )
     }
 
     pub(crate) fn bump(&self) {

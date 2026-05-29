@@ -23,6 +23,13 @@ impl AppPaths {
         Ok(Self { data_dir })
     }
 
+    #[cfg(test)]
+    pub fn for_test(data_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            data_dir: data_dir.into(),
+        }
+    }
+
     pub fn data_dir(&self) -> &Path {
         self.data_dir.as_path()
     }
@@ -80,7 +87,7 @@ mod tests {
             .unwrap_or_default();
         let dir = std::env::temp_dir().join(format!("qingqi-storage-{label}-{nanos}"));
         fs::create_dir_all(&dir).expect("temp dir");
-        AppPaths { data_dir: dir }
+        AppPaths::for_test(dir)
     }
 
     #[test]

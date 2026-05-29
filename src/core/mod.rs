@@ -1,5 +1,7 @@
 pub mod command;
 pub mod command_usage;
+pub mod database;
+pub mod dict_store;
 pub mod job;
 pub mod keymap;
 pub mod page;

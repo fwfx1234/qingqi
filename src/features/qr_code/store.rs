@@ -40,6 +40,7 @@ pub struct QrHistoryRecord {
     pub created_at: String,
 }
 
+#[derive(Clone)]
 pub struct QrHistoryStore {
     path: PathBuf,
 }

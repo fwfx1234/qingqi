@@ -1,5 +1,6 @@
 use super::shared::{header_action_button, theme_button};
 use super::*;
+use gpui_component::scroll::ScrollableElement;
 
 pub(super) fn settings_page(
     handle: Entity<ClipboardPanel>,
@@ -12,12 +13,14 @@ pub(super) fn settings_page(
         .size_full()
         .flex()
         .flex_col()
+        .overflow_hidden()
         .bg(theme::token("color-bg-page", dark))
         .child(settings_header(handle.clone(), status_text, dark))
         .child(
             div()
                 .flex_1()
                 .min_h(px(0.0))
+                .overflow_y_scrollbar()
                 .p(px(14.0))
                 .child(settings_panel(handle, config, inputs, dark)),
         )
@@ -29,10 +32,12 @@ fn settings_header(
     dark: bool,
 ) -> impl IntoElement {
     div()
-        .h(px(52.0))
-        .px(px(16.0))
+        .h(px(62.0))
+        .pl(px(108.0))
+        .pr(px(16.0))
         .border_b_1()
         .border_color(theme::token("color-border-default", dark))
+        .bg(theme::token("color-bg-page", dark))
         .flex()
         .items_center()
         .gap(px(12.0))
@@ -83,7 +88,8 @@ fn settings_panel(
     let (ignore_patterns_input, max_text_chars_input, hotkey_input) = inputs;
 
     div()
-        .size_full()
+        .w_full()
+        .min_w(px(0.0))
         .rounded(px(6.0))
         .border_1()
         .border_color(theme::token("color-border-default", dark))
@@ -125,7 +131,7 @@ fn settings_panel(
                 let handle = handle.clone();
                 move |_, cx| {
                     let _ = cx.update_entity(&handle, |panel, cx| {
-                        panel.toggle_capture_text();
+                        panel.toggle_capture_text(cx);
                         cx.notify();
                     });
                 }
@@ -147,7 +153,7 @@ fn settings_panel(
                 let handle = handle.clone();
                 move |_, cx| {
                     let _ = cx.update_entity(&handle, |panel, cx| {
-                        panel.toggle_capture_image();
+                        panel.toggle_capture_image(cx);
                         cx.notify();
                     });
                 }
@@ -169,7 +175,7 @@ fn settings_panel(
                 let handle = handle.clone();
                 move |_, cx| {
                     let _ = cx.update_entity(&handle, |panel, cx| {
-                        panel.toggle_capture_files();
+                        panel.toggle_capture_files(cx);
                         cx.notify();
                     });
                 }
@@ -296,9 +302,11 @@ fn settings_row(
         .items_center()
         .justify_between()
         .gap_3()
+        .overflow_hidden()
         .child(
             div()
                 .flex_1()
+                .min_w(px(0.0))
                 .flex()
                 .flex_col()
                 .gap_1()
@@ -311,16 +319,19 @@ fn settings_row(
                 .child(
                     div()
                         .text_size(px(12.0))
+                        .line_height(px(18.0))
+                        .line_clamp(2)
                         .text_color(theme::token("color-text-secondary", dark))
                         .child(detail.into()),
                 ),
         )
-        .child(action)
+        .child(div().flex_shrink_0().child(action))
 }
 
 fn settings_input_group(field: impl IntoElement, actions: impl IntoElement) -> impl IntoElement {
     div()
         .flex()
+        .flex_shrink_0()
         .items_center()
         .gap_2()
         .child(field)

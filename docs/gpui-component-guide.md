@@ -191,7 +191,7 @@ the default shadcn-like appearance if it drifts from the target screen.
 5. Evaluate component editor only for JSON/API/Quick Launch use cases.
 6. Consider Root-enabling plugin windows after a single plugin proves overlay
    value.
-7. Update this document and `docs/migration-guide.md` when a component pattern
+7. Update this document and `docs/architecture.md` when a component pattern
    becomes the preferred Qingqi pattern.
 
 ## Testing Requirements

@@ -328,6 +328,13 @@ impl ApiDebuggerPanel {
         if let Some(error) = self.service.take_pending_error() {
             self.notice = format!("请求失败: {error}");
         }
+        if let Some(notice) = self.service.take_pending_notice() {
+            self.environments = self.service.list_environments_ui();
+            self.selected_environment = self
+                .selected_environment
+                .min(self.environments.len().saturating_sub(1));
+            self.notice = notice;
+        }
     }
 
     fn selected_request(&self) -> &ApiRequest {
@@ -405,12 +412,7 @@ impl ApiDebuggerPanel {
     }
 
     fn persist_workspace(&mut self) {
-        if let Err(error) = self
-            .service
-            .save_workspace(&self.groups, &self.environments)
-        {
-            self.notice = format!("工作区保存失败: {error}");
-        }
+        self.service.save_workspace_async(self.environments.clone());
         self.persist_endpoint_if_needed();
     }
 
@@ -496,7 +498,7 @@ impl ApiDebuggerPanel {
             request.method.label(),
             &draft,
         );
-        let _ = self.service.save_tab_state(&tab);
+        self.service.save_tab_state_async(tab);
     }
 
     fn restore_inputs_from_tab(
@@ -538,7 +540,7 @@ impl ApiDebuggerPanel {
             return;
         }
         let tab_id = self.open_tabs[tab_index].tab_id().to_string();
-        let _ = self.service.delete_persisted_tab(&tab_id);
+        self.service.delete_persisted_tab_async(tab_id);
         self.open_tabs.remove(tab_index);
         if self.open_tabs.is_empty() {
             self.active_tab = OpenTab::new_request(0);
@@ -759,19 +761,15 @@ impl ApiDebuggerPanel {
     fn save_environment_changes(&mut self, cx: &mut App) {
         self.sync_models(cx);
         let env = self.selected_environment().clone();
-        if let Err(error) = self.service.save_environment_fields(
+        self.service.save_environment_fields_async(
             self.selected_environment,
-            &env.name,
-            &env.base_url,
-            &format_rows(&env.variables),
-            &format_rows(&env.headers),
-        ) {
-            self.notice = format!("保存环境失败: {error}");
-            return;
-        }
-        self.environments = self.service.list_environments_ui();
+            env.name.clone(),
+            env.base_url.clone(),
+            format_rows(&env.variables),
+            format_rows(&env.headers),
+        );
         self.show_env_manager = false;
-        self.notice = format!("已保存环境 {}", env.name);
+        self.notice = String::from("正在保存环境...");
     }
 
     fn reset_environment_changes(&mut self, cx: &mut App) {
@@ -780,57 +778,23 @@ impl ApiDebuggerPanel {
     }
 
     fn create_new_environment(&mut self) {
-        match self.service.create_environment("新环境", "") {
-            Ok(env) => {
-                self.environments = self.service.list_environments_ui();
-                self.selected_environment = self
-                    .environments
-                    .iter()
-                    .position(|e| e.name == env.name)
-                    .unwrap_or(0);
-                self.notice = format!("已创建环境 {}", env.name);
-            }
-            Err(error) => self.notice = format!("创建环境失败: {error}"),
-        }
+        self.service
+            .create_environment_async(String::from("新环境"), String::new());
+        self.notice = String::from("正在创建环境...");
     }
 
     fn duplicate_current_environment(&mut self, cx: &mut App) {
         self.sync_models(cx);
-        match self
-            .service
-            .duplicate_environment(self.selected_environment)
-        {
-            Ok(env) => {
-                self.environments = self.service.list_environments_ui();
-                self.selected_environment = self
-                    .environments
-                    .iter()
-                    .position(|e| e.name == env.name)
-                    .unwrap_or(0);
-                self.reload_environment_inputs(cx);
-                self.notice = format!("已复制为 {}", env.name);
-            }
-            Err(error) => self.notice = format!("复制环境失败: {error}"),
-        }
+        self.service
+            .duplicate_environment_async(self.selected_environment);
+        self.notice = String::from("正在复制环境...");
     }
 
     fn delete_current_environment(&mut self, cx: &mut App) {
         self.sync_models(cx);
-        match self
-            .service
-            .delete_environment_by_index(self.selected_environment)
-        {
-            Ok(true) => {
-                self.environments = self.service.list_environments_ui();
-                self.selected_environment = self
-                    .selected_environment
-                    .min(self.environments.len().saturating_sub(1));
-                self.reload_environment_inputs(cx);
-                self.notice = String::from("已删除环境");
-            }
-            Ok(false) => self.notice = String::from("环境未删除"),
-            Err(error) => self.notice = format!("删除环境失败: {error}"),
-        }
+        self.service
+            .delete_environment_by_index_async(self.selected_environment);
+        self.notice = String::from("正在删除环境...");
     }
 
     fn open_collection_menu(&mut self, title: impl Into<String>, position: Option<(f32, f32)>) {
@@ -1081,7 +1045,7 @@ fn collection_tree(
                 )
                 .child(icon_button("api-tree-add", "+", dark, {
                     let panel = Rc::clone(&panel);
-                    move |_, cx| {
+                    move |_, _cx| {
                         panel
                             .borrow_mut()
                             .open_collection_menu("集合", Some((442.0, 86.0)));
@@ -1181,7 +1145,7 @@ fn group_section(
                 .on_click({
                     let panel = Rc::clone(&panel);
                     let group_name = group_name.clone();
-                    move |event, window, cx| {
+                    move |event, _window, cx| {
                         if event.is_right_click() {
                             panel.borrow_mut().open_collection_menu(
                                 group_name.clone(),
@@ -1484,7 +1448,7 @@ fn open_tabs_bar(
                         .child("▾"),
                 )
                 .on_click({
-                    move |_, window, cx| {
+                    move |_, window, _cx| {
                         let mut panel = env_panel.borrow_mut();
                         panel.show_env_popup = true;
                         panel.show_env_manager = false;
@@ -1686,7 +1650,7 @@ fn editor_panel(
                                 })
                                 .child(tab.label())
                                 .on_click({
-                                    move |_, window, cx| {
+                                    move |_, _window, cx| {
                                         let mut panel = tab_panel.borrow_mut();
                                         panel.sync_models(cx);
                                         panel.persist_current_tab_state(cx);
@@ -1812,7 +1776,7 @@ fn response_panel(
                                 })
                                 .child(tab.label())
                                 .on_click({
-                                    move |_, window, cx| {
+                                    move |_, window, _cx| {
                                         tab_panel.borrow_mut().response_tab = tab;
                                         window.refresh();
                                     }
@@ -1957,7 +1921,7 @@ fn env_popup(
                 .child("⚙ 管理环境")
                 .on_click({
                     let panel = Rc::clone(&panel);
-                    move |_, window, cx| {
+                    move |_, window, _cx| {
                         let mut panel = panel.borrow_mut();
                         panel.show_env_popup = false;
                         panel.show_env_manager = true;
@@ -2035,7 +1999,7 @@ fn env_manager_dialog(
                 )
                 .child(soft_button("api-env-close", "关闭", dark, {
                     let panel = Rc::clone(&panel);
-                    move |_, cx| {
+                    move |_, _cx| {
                         panel.borrow_mut().show_env_manager = false;
                     }
                 })),
@@ -2065,7 +2029,7 @@ fn env_manager_dialog(
                                 .child(section_micro_label("环境", dark))
                                 .child(soft_button("api-env-add", "+ 新建", dark, {
                                     let panel = Rc::clone(&panel);
-                                    move |_, cx| {
+                                    move |_, _cx| {
                                         panel.borrow_mut().create_new_environment();
                                     }
                                 })),
@@ -2281,7 +2245,7 @@ fn env_manager_dialog(
                                                 })
                                                 .child(tab.label())
                                                 .on_click({
-                                                    move |_, window, cx| {
+                                                    move |_, window, _cx| {
                                                         tab_panel.borrow_mut().env_detail_tab = tab;
                                                         window.refresh();
                                                     }
@@ -2372,13 +2336,13 @@ fn env_manager_dialog(
                 .child(div().flex_1())
                 .child(action_link("api-env-export", "📤 导出", false, dark, {
                     let panel = Rc::clone(&panel);
-                    move |_, cx| {
+                    move |_, _cx| {
                         panel.borrow_mut().notice = String::from("环境导出入口已预留");
                     }
                 }))
                 .child(action_link("api-env-import", "📥 导入", false, dark, {
                     let panel = Rc::clone(&panel);
-                    move |_, cx| {
+                    move |_, _cx| {
                         panel.borrow_mut().notice = String::from("环境导入入口已预留");
                     }
                 }))
@@ -2470,7 +2434,7 @@ fn context_menu_overlay(
                 .bg(hsla(0.0, 0.0, 0.0, 0.001))
                 .on_click({
                     let panel = Rc::clone(&panel);
-                    move |_, window, cx| {
+                    move |_, window, _cx| {
                         panel.borrow_mut().close_collection_menu();
                         window.refresh();
                     }
@@ -2508,7 +2472,7 @@ fn context_menu_overlay(
                     dark,
                     {
                         let panel = Rc::clone(&panel);
-                        move |_, cx| {
+                        move |_, _cx| {
                             let mut panel = panel.borrow_mut();
                             panel.notice = String::from("集合编辑功能会在下一轮补齐");
                             panel.close_collection_menu();
@@ -2522,7 +2486,7 @@ fn context_menu_overlay(
                     dark,
                     {
                         let panel = Rc::clone(&panel);
-                        move |_, cx| {
+                        move |_, _cx| {
                             let mut panel = panel.borrow_mut();
                             panel.notice = String::from("新建分组功能会在下一轮补齐");
                             panel.close_collection_menu();
@@ -2536,7 +2500,7 @@ fn context_menu_overlay(
                     dark,
                     {
                         let panel = Rc::clone(&panel);
-                        move |_, cx| {
+                        move |_, _cx| {
                             let mut panel = panel.borrow_mut();
                             panel.notice = String::from("OpenAPI 导出入口已预留");
                             panel.close_collection_menu();
@@ -2551,7 +2515,7 @@ fn context_menu_overlay(
                     dark,
                     {
                         let panel = Rc::clone(&panel);
-                        move |_, cx| {
+                        move |_, _cx| {
                             let mut panel = panel.borrow_mut();
                             panel.notice = String::from("复制集合项功能会在下一轮补齐");
                             panel.close_collection_menu();
@@ -2564,7 +2528,7 @@ fn context_menu_overlay(
                     "🗑 删除",
                     "",
                     dark,
-                    move |_, cx| {
+                    move |_, _cx| {
                         let mut panel = panel.borrow_mut();
                         panel.notice = String::from("删除集合项功能会在下一轮补齐");
                         panel.close_collection_menu();

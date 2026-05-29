@@ -6,6 +6,7 @@ use crate::{
     app::events::{AppEventBus, AppEventKind},
     core::{
         command::{CommandItem, ContextKind, ContextMatcher},
+        database::{DatabaseService, DatabaseSpec},
         plugin::{PluginRuntime, PluginSession},
         storage::AppPaths,
     },
@@ -13,25 +14,40 @@ use crate::{
 };
 
 pub struct ApiDebuggerRuntime {
-    service: Arc<ApiService>,
+    database: Arc<DatabaseService>,
+    paths: AppPaths,
+    service: Option<Arc<ApiService>>,
     watch_started: bool,
 }
 
 impl ApiDebuggerRuntime {
-    pub fn new(paths: AppPaths) -> Self {
+    pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> Self {
         Self {
-            service: Arc::new(ApiService::new(paths)),
+            database,
+            paths,
+            service: None,
             watch_started: false,
         }
     }
 
-    fn ensure_watcher(&mut self, events: AppEventBus, cx: &mut App) {
+    fn service(&mut self) -> Arc<ApiService> {
+        if let Some(service) = &self.service {
+            return Arc::clone(service);
+        }
+        let service = Arc::new(ApiService::new(
+            Arc::clone(&self.database),
+            self.paths.clone(),
+        ));
+        self.service = Some(Arc::clone(&service));
+        service
+    }
+
+    fn ensure_watcher(&mut self, service: Arc<ApiService>, events: AppEventBus, cx: &mut App) {
         if self.watch_started {
             return;
         }
         self.watch_started = true;
 
-        let service = Arc::clone(&self.service);
         cx.spawn(async move |async_cx| {
             let mut revision = service.revision();
             loop {
@@ -53,13 +69,18 @@ impl ApiDebuggerRuntime {
 impl Default for ApiDebuggerRuntime {
     fn default() -> Self {
         let paths = AppPaths::resolve().expect("failed to resolve qingqi data path");
-        Self::new(paths)
+        let database = Arc::new(DatabaseService::new(paths.clone()));
+        Self::new(database, paths)
     }
 }
 
 impl PluginRuntime for ApiDebuggerRuntime {
     fn manifest(&self) -> crate::core::plugin::PluginManifest {
         manifest::manifest()
+    }
+
+    fn database_specs(&self) -> Vec<DatabaseSpec> {
+        vec![DatabaseSpec::app("api_debugger/main", "api_debugger.db")]
     }
 
     fn commands(&self) -> Vec<CommandItem> {
@@ -85,10 +106,11 @@ impl PluginRuntime for ApiDebuggerRuntime {
         events: AppEventBus,
         cx: &mut App,
     ) -> anyhow::Result<Box<dyn PluginSession>> {
-        self.ensure_watcher(events, cx);
+        let service = self.service();
+        self.ensure_watcher(Arc::clone(&service), events, cx);
         Ok(Box::new(ApiDebuggerSession {
             panel: Rc::new(RefCell::new(view::ApiDebuggerPanel::new(
-                Arc::clone(&self.service),
+                service,
                 cx,
             ))),
         }))

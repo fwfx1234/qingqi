@@ -3,13 +3,12 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use gpui::prelude::FluentBuilder;
 use gpui::{
-    App, AppContext, BorrowAppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
-    KeyDownEvent, ObjectFit, ParentElement, Render, ScrollStrategy, StatefulInteractiveElement,
-    Styled, StyledImage, Subscription, Task, Window, div, hsla, img, px,
+    App, AppContext, BorrowAppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, KeyDownEvent, ObjectFit, ParentElement, Render, ScrollStrategy,
+    StatefulInteractiveElement, Styled, StyledImage, Subscription, Task, UniformListScrollHandle,
+    Window, div, hsla, img, px,
 };
-use gpui_component::VirtualListScrollHandle;
 
 use crate::{
     app::{
@@ -40,14 +39,16 @@ pub(super) enum ClipboardTab {
 }
 
 pub struct ClipboardPanel {
+    focus_handle: Option<FocusHandle>,
     service: Arc<Mutex<ClipboardService>>,
     query_input: Option<Entity<TextInput>>,
+    preview_input: Option<Entity<TextInput>>,
     ignore_patterns_input: Option<Entity<TextInput>>,
     max_text_chars_input: Option<Entity<TextInput>>,
     hotkey_input: Option<Entity<TextInput>>,
     query: String,
     filter: ClipboardFilter,
-    items: Vec<ClipboardRecord>,
+    items: Arc<Vec<ClipboardRecord>>,
     selected: usize,
     tab: ClipboardTab,
     message: String,
@@ -57,44 +58,49 @@ pub struct ClipboardPanel {
     loading: bool,
     has_more: bool,
     load_task: Option<Task<()>>,
-    history_scroll: VirtualListScrollHandle,
-    preview_file_scroll: VirtualListScrollHandle,
+    action_task: Option<Task<()>>,
+    history_scroll: UniformListScrollHandle,
+    preview_file_scroll: UniformListScrollHandle,
     subscriptions: Vec<Subscription>,
 }
 
 impl ClipboardPanel {
     pub(crate) fn new(service: Arc<Mutex<ClipboardService>>) -> Self {
         Self {
+            focus_handle: None,
             service,
             query_input: None,
+            preview_input: None,
             ignore_patterns_input: None,
             max_text_chars_input: None,
             hotkey_input: None,
             query: String::new(),
             filter: ClipboardFilter::All,
-            items: Vec::new(),
+            items: Arc::new(Vec::new()),
             selected: 0,
             tab: ClipboardTab::History,
             message: String::new(),
             status_text: String::new(),
-            focus_pending: true,
+            focus_pending: false,
             load_generation: 0,
             loading: false,
             has_more: false,
             load_task: None,
-            history_scroll: VirtualListScrollHandle::new(),
-            preview_file_scroll: VirtualListScrollHandle::new(),
+            action_task: None,
+            history_scroll: UniformListScrollHandle::new(),
+            preview_file_scroll: UniformListScrollHandle::new(),
             subscriptions: Vec::new(),
         }
     }
 
     pub(crate) fn init(&mut self, cx: &mut Context<Self>) {
+        self.focus_handle = Some(cx.focus_handle());
         self.ensure_inputs(cx);
         self.observe_query_input(cx);
     }
 
     pub(crate) fn refresh_async(&mut self, cx: &mut Context<Self>) {
-        self.items.clear();
+        self.items = Arc::new(Vec::new());
         self.selected = 0;
         self.has_more = false;
         self.loading = true;
@@ -106,7 +112,7 @@ impl ClipboardPanel {
 
     pub(crate) fn reopen(&mut self, cx: &mut Context<Self>) {
         self.tab = ClipboardTab::History;
-        self.focus_pending = true;
+        self.focus_pending = false;
         if let Ok(service) = self.service.lock() {
             let _ = service.capture_current(cx);
         }
@@ -141,6 +147,26 @@ impl ClipboardPanel {
             self.query_input = Some(input);
         }
 
+        if self.preview_input.is_none() {
+            let input = cx.new(|cx| {
+                let mut input = TextInput::new(cx, "", "");
+                input.set_multiline(true, cx);
+                input.set_monospace(true, cx);
+                input.set_read_only(true, cx);
+                input.set_chrome(false, cx);
+                input.set_style(
+                    TextInputStyle {
+                        height: 9999.0,
+                        font_size: 12.0,
+                        padding: 0.0,
+                    },
+                    cx,
+                );
+                input
+            });
+            self.preview_input = Some(input);
+        }
+
         let config = self.settings_snapshot();
         if self.ignore_patterns_input.is_none() {
             let value = format_ignore_patterns(&config);
@@ -148,6 +174,7 @@ impl ClipboardPanel {
                 let mut input = TextInput::new(cx, "每行一条规则，或使用 | 分隔", value);
                 input.set_multiline(true, cx);
                 input.set_monospace(true, cx);
+                input.set_chrome(false, cx);
                 input.set_style(
                     TextInputStyle {
                         height: 96.0,
@@ -173,6 +200,7 @@ impl ClipboardPanel {
                     },
                     cx,
                 );
+                input.set_chrome(false, cx);
                 input
             });
             self.max_text_chars_input = Some(input);
@@ -190,6 +218,7 @@ impl ClipboardPanel {
                     },
                     cx,
                 );
+                input.set_chrome(false, cx);
                 input
             });
             self.hotkey_input = Some(input);
@@ -262,7 +291,7 @@ impl ClipboardPanel {
                 }
                 panel.loading = false;
                 match rows_result {
-                    Ok(rows) => panel.apply_loaded_rows(rows, reset, limit),
+                    Ok(rows) => panel.apply_loaded_rows(rows, reset, limit, cx),
                     Err(error) => panel.message = format!("加载失败: {error}"),
                 }
                 if reset && !panel.items.is_empty() {
@@ -276,24 +305,33 @@ impl ClipboardPanel {
         }));
     }
 
-    fn apply_loaded_rows(&mut self, mut rows: Vec<ClipboardRecord>, reset: bool, limit: usize) {
+    fn apply_loaded_rows(
+        &mut self,
+        mut rows: Vec<ClipboardRecord>,
+        reset: bool,
+        limit: usize,
+        cx: &mut Context<Self>,
+    ) {
         self.has_more = rows.len() > limit;
         if self.has_more {
             rows.truncate(limit);
         }
 
         if reset {
-            self.items = rows;
+            self.items = Arc::new(rows);
         } else {
-            self.items.extend(rows);
+            let mut merged = self.items.as_ref().clone();
+            merged.extend(rows);
+            self.items = Arc::new(merged);
         }
 
         if self.selected >= self.items.len() {
             self.selected = self.items.len().saturating_sub(1);
         }
+        self.sync_preview_input(cx);
     }
 
-    fn select(&mut self, index: usize) {
+    fn select(&mut self, index: usize, cx: &mut Context<Self>) {
         if self.items.is_empty() {
             self.selected = 0;
             return;
@@ -303,6 +341,7 @@ impl ClipboardPanel {
             .scroll_to_item(self.selected, ScrollStrategy::Center);
         self.preview_file_scroll
             .scroll_to_item(0, ScrollStrategy::Top);
+        self.sync_preview_input(cx);
     }
 
     fn move_selection(&mut self, delta: isize, cx: &mut Context<Self>) -> bool {
@@ -317,6 +356,7 @@ impl ClipboardPanel {
             .scroll_to_item(self.selected, ScrollStrategy::Center);
         self.preview_file_scroll
             .scroll_to_item(0, ScrollStrategy::Top);
+        self.sync_preview_input(cx);
         self.status_text = self.status_text();
         cx.notify();
         true
@@ -342,6 +382,22 @@ impl ClipboardPanel {
             return false;
         };
         self.set_filter_async(filter, cx);
+        self.status_text = self.status_text();
+        true
+    }
+
+    fn cycle_visible_filter(&mut self, delta: isize, cx: &mut Context<Self>) -> bool {
+        if self.tab != ClipboardTab::History {
+            self.tab = ClipboardTab::History;
+        }
+        let filters = keyboard_filters();
+        let current = filters
+            .iter()
+            .position(|filter| *filter == self.filter)
+            .unwrap_or(0) as isize;
+        let len = filters.len() as isize;
+        let next = (current + delta).rem_euclid(len) as usize;
+        self.set_filter_async(filters[next], cx);
         self.status_text = self.status_text();
         true
     }
@@ -382,6 +438,25 @@ impl ClipboardPanel {
             || (self.query_focused(window, cx) && !self.query.is_empty())
     }
 
+    fn navigation_key_owned_by_input(&self, window: &Window, cx: &App) -> bool {
+        self.settings_input_focused(window, cx) || self.query_focused(window, cx)
+    }
+
+    fn sync_preview_input(&self, cx: &mut Context<Self>) {
+        let text = self
+            .items
+            .get(self.selected)
+            .map(preview_text_for_record_for_panel)
+            .unwrap_or_default();
+        if let Some(input) = self.preview_input.as_ref() {
+            input.update(cx, |input, input_cx| {
+                if input.text() != text {
+                    input.set_text(text.clone(), input_cx);
+                }
+            });
+        }
+    }
+
     fn handle_panel_key(
         &mut self,
         event: &KeyDownEvent,
@@ -391,15 +466,9 @@ impl ClipboardPanel {
         let key = event.keystroke.key.as_str();
         let modifiers = event.keystroke.modifiers;
         let primary = modifiers.platform || modifiers.control;
-        tracing::info!(
-            target: "clipboard.key",
-            key,
-            primary,
-            "clipboard key event"
-        );
 
         if key == "escape" {
-            window.remove_window();
+            window.defer(cx, |window, _cx| window.remove_window());
             cx.stop_propagation();
             return;
         }
@@ -439,20 +508,18 @@ impl ClipboardPanel {
             "down" => self.move_selection(1, cx),
             "enter" if !self.settings_input_focused(window, cx) => {
                 self.copy_selected(cx);
-                window.remove_window();
+                window.defer(cx, |window, _cx| window.remove_window());
                 true
             }
             "backspace" | "delete" if !self.delete_key_owned_by_input(window, cx) => {
                 self.delete_selected(cx);
                 true
             }
-            "left" if !self.settings_input_focused(window, cx) => {
-                self.set_tab(ClipboardTab::History);
-                true
+            "left" if !self.navigation_key_owned_by_input(window, cx) => {
+                self.cycle_visible_filter(-1, cx)
             }
-            "right" if !self.settings_input_focused(window, cx) => {
-                self.set_tab(ClipboardTab::Settings);
-                true
+            "right" if !self.navigation_key_owned_by_input(window, cx) => {
+                self.cycle_visible_filter(1, cx)
             }
             _ => false,
         };
@@ -477,7 +544,14 @@ impl ClipboardPanel {
         } else {
             String::from("写回剪贴板失败")
         };
-        self.status_text = self.status_text();
+        self.status_text = self.message.clone();
+    }
+
+    fn focus_panel(&self, window: &mut Window, cx: &App) {
+        if let Some(focus_handle) = self.focus_handle.as_ref() {
+            window.focus(focus_handle);
+            let _ = cx;
+        }
     }
 
     fn toggle_selected_pin(&mut self, cx: &mut Context<Self>) {
@@ -485,19 +559,30 @@ impl ClipboardPanel {
             return;
         };
         let id = item.id;
-        let result = self
-            .service
-            .lock()
-            .ok()
-            .and_then(|service| service.toggle_pin(id).ok())
-            .flatten();
-        match result {
-            Some(true) => self.message = String::from("已置顶"),
-            Some(false) => self.message = String::from("已取消置顶"),
-            None => self.message = String::from("置顶失败"),
-        }
-        self.refresh_async(cx);
-        self.status_text = self.status_text();
+        let service = Arc::clone(&self.service);
+        self.message = String::from("正在更新置顶状态...");
+        self.status_text = self.message.clone();
+        self.action_task = Some(cx.spawn(async move |panel, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let service = service
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
+                    service.toggle_pin(id)
+                })
+                .await;
+
+            let _ = panel.update(async_cx, |panel, cx| {
+                match result {
+                    Ok(Some(true)) => panel.message = String::from("已置顶"),
+                    Ok(Some(false)) => panel.message = String::from("已取消置顶"),
+                    Ok(None) | Err(_) => panel.message = String::from("置顶失败"),
+                }
+                panel.status_text = panel.message.clone();
+                panel.refresh_async(cx);
+            });
+        }));
     }
 
     fn delete_selected(&mut self, cx: &mut Context<Self>) {
@@ -505,19 +590,30 @@ impl ClipboardPanel {
             return;
         };
         let id = item.id;
-        let deleted = self
-            .service
-            .lock()
-            .ok()
-            .and_then(|service| service.delete(id).ok())
-            .unwrap_or(false);
-        self.message = if deleted {
-            String::from("已删除")
-        } else {
-            String::from("删除失败")
-        };
-        self.refresh_async(cx);
-        self.status_text = self.status_text();
+        let service = Arc::clone(&self.service);
+        self.message = String::from("正在删除...");
+        self.status_text = self.message.clone();
+        self.action_task = Some(cx.spawn(async move |panel, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let service = service
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
+                    service.delete(id)
+                })
+                .await;
+
+            let _ = panel.update(async_cx, |panel, cx| {
+                panel.message = if matches!(result, Ok(true)) {
+                    String::from("已删除")
+                } else {
+                    String::from("删除失败")
+                };
+                panel.status_text = panel.message.clone();
+                panel.refresh_async(cx);
+            });
+        }));
     }
 
     fn open_selected_parent_dir(&mut self, cx: &mut Context<Self>) {
@@ -606,34 +702,55 @@ impl ClipboardPanel {
     }
 
     fn clear_unpinned(&mut self, cx: &mut Context<Self>) {
-        let count = self
-            .service
-            .lock()
-            .ok()
-            .and_then(|service| service.clear_unpinned().ok())
-            .unwrap_or(0);
-        self.message = format!("已清理 {count} 条未置顶记录");
-        self.refresh_async(cx);
-        self.status_text = self.status_text();
+        let service = Arc::clone(&self.service);
+        self.message = String::from("正在清理未置顶记录...");
+        self.status_text = self.message.clone();
+        self.action_task = Some(cx.spawn(async move |panel, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let service = service
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
+                    service.clear_unpinned()
+                })
+                .await;
+
+            let _ = panel.update(async_cx, |panel, cx| {
+                let count = result.unwrap_or(0);
+                panel.message = format!("已清理 {count} 条未置顶记录");
+                panel.status_text = panel.message.clone();
+                panel.refresh_async(cx);
+            });
+        }));
     }
 
     fn clear_all(&mut self, cx: &mut Context<Self>) {
-        let count = self
-            .service
-            .lock()
-            .ok()
-            .and_then(|service| service.clear_all().ok())
-            .unwrap_or(0);
-        self.message = format!("已清空 {count} 条记录");
-        self.refresh_async(cx);
-        self.status_text = self.status_text();
+        let service = Arc::clone(&self.service);
+        self.message = String::from("正在清空记录...");
+        self.status_text = self.message.clone();
+        self.action_task = Some(cx.spawn(async move |panel, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let service = service
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
+                    service.clear_all()
+                })
+                .await;
+
+            let _ = panel.update(async_cx, |panel, cx| {
+                let count = result.unwrap_or(0);
+                panel.message = format!("已清空 {count} 条记录");
+                panel.status_text = panel.message.clone();
+                panel.refresh_async(cx);
+            });
+        }));
     }
 
     fn set_tab(&mut self, tab: ClipboardTab) {
         self.tab = tab;
-        if tab == ClipboardTab::History {
-            self.focus_pending = true;
-        }
         self.status_text = self.status_text();
     }
 
@@ -644,80 +761,113 @@ impl ClipboardPanel {
             .unwrap_or_default()
     }
 
-    fn toggle_capture_text(&mut self) {
+    fn toggle_capture_text(&mut self, cx: &mut Context<Self>) {
         let enabled = !self.settings_snapshot().capture_text;
-        self.message = match self
-            .service
-            .lock()
-            .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))
-            .and_then(|service| service.set_capture_text(enabled))
-        {
-            Ok(_) => {
-                self.status_text = self.status_text();
-                if enabled {
-                    String::from("已开启文本采集")
-                } else {
-                    String::from("已关闭文本采集")
-                }
-            }
-            Err(error) => format!("保存设置失败: {error}"),
-        };
+        let service = Arc::clone(&self.service);
+        self.message = String::from("正在保存设置...");
+        self.status_text = self.message.clone();
+        self.action_task = Some(cx.spawn(async move |panel, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let service = service
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
+                    service.set_capture_text(enabled)
+                })
+                .await;
+            let _ = panel.update(async_cx, |panel, cx| {
+                panel.message = match result {
+                    Ok(_) if enabled => String::from("已开启文本采集"),
+                    Ok(_) => String::from("已关闭文本采集"),
+                    Err(error) => format!("保存设置失败: {error}"),
+                };
+                panel.status_text = panel.message.clone();
+                cx.notify();
+            });
+        }));
     }
 
-    fn toggle_capture_image(&mut self) {
+    fn toggle_capture_image(&mut self, cx: &mut Context<Self>) {
         let enabled = !self.settings_snapshot().capture_image;
-        self.message = match self
-            .service
-            .lock()
-            .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))
-            .and_then(|service| service.set_capture_image(enabled))
-        {
-            Ok(_) => {
-                self.status_text = self.status_text();
-                if enabled {
-                    String::from("已开启图片采集")
-                } else {
-                    String::from("已关闭图片采集")
-                }
-            }
-            Err(error) => format!("保存设置失败: {error}"),
-        };
+        let service = Arc::clone(&self.service);
+        self.message = String::from("正在保存设置...");
+        self.status_text = self.message.clone();
+        self.action_task = Some(cx.spawn(async move |panel, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let service = service
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
+                    service.set_capture_image(enabled)
+                })
+                .await;
+            let _ = panel.update(async_cx, |panel, cx| {
+                panel.message = match result {
+                    Ok(_) if enabled => String::from("已开启图片采集"),
+                    Ok(_) => String::from("已关闭图片采集"),
+                    Err(error) => format!("保存设置失败: {error}"),
+                };
+                panel.status_text = panel.message.clone();
+                cx.notify();
+            });
+        }));
     }
 
-    fn toggle_capture_files(&mut self) {
+    fn toggle_capture_files(&mut self, cx: &mut Context<Self>) {
         let enabled = !self.settings_snapshot().capture_files;
-        self.message = match self
-            .service
-            .lock()
-            .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))
-            .and_then(|service| service.set_capture_files(enabled))
-        {
-            Ok(_) => {
-                self.status_text = self.status_text();
-                if enabled {
-                    String::from("已开启文件采集")
-                } else {
-                    String::from("已关闭文件采集")
-                }
-            }
-            Err(error) => format!("保存设置失败: {error}"),
-        };
+        let service = Arc::clone(&self.service);
+        self.message = String::from("正在保存设置...");
+        self.status_text = self.message.clone();
+        self.action_task = Some(cx.spawn(async move |panel, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let service = service
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
+                    service.set_capture_files(enabled)
+                })
+                .await;
+            let _ = panel.update(async_cx, |panel, cx| {
+                panel.message = match result {
+                    Ok(_) if enabled => String::from("已开启文件采集"),
+                    Ok(_) => String::from("已关闭文件采集"),
+                    Err(error) => format!("保存设置失败: {error}"),
+                };
+                panel.status_text = panel.message.clone();
+                cx.notify();
+            });
+        }));
     }
 
     fn set_max_text_chars(&mut self, next: usize, cx: &mut Context<Self>) {
-        self.message = match self
-            .service
-            .lock()
-            .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))
-            .and_then(|service| service.set_max_text_chars(next))
-        {
-            Ok(_) => {
-                self.sync_max_text_chars_input(next, cx);
-                self.status_text = self.status_text();
-                format!("最大文本长度已调整为 {next}")
-            }
-            Err(error) => format!("保存设置失败: {error}"),
-        };
+        let service = Arc::clone(&self.service);
+        self.message = String::from("正在保存设置...");
+        self.status_text = self.message.clone();
+        self.action_task = Some(cx.spawn(async move |panel, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let service = service
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
+                    service.set_max_text_chars(next)
+                })
+                .await;
+            let _ = panel.update(async_cx, |panel, cx| {
+                panel.message = match result {
+                    Ok(_) => {
+                        panel.sync_max_text_chars_input(next, cx);
+                        format!("最大文本长度已调整为 {next}")
+                    }
+                    Err(error) => format!("保存设置失败: {error}"),
+                };
+                panel.status_text = panel.message.clone();
+                cx.notify();
+            });
+        }));
     }
 
     fn save_max_text_chars(&mut self, cx: &mut Context<Self>) {
@@ -743,35 +893,60 @@ impl ClipboardPanel {
             .map(|input| input.read(cx).text())
             .unwrap_or_default();
         let patterns = ClipboardService::parse_ignore_patterns(&text);
-        self.message = match self
-            .service
-            .lock()
-            .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))
-            .and_then(|service| service.set_ignore_patterns(patterns.clone()))
-        {
-            Ok(_) => {
-                self.sync_ignore_patterns_input(&patterns, cx);
-                self.status_text = self.status_text();
-                String::from("过滤规则已保存")
-            }
-            Err(error) => format!("保存设置失败: {error}"),
-        };
+        let service = Arc::clone(&self.service);
+        self.message = String::from("正在保存规则...");
+        self.status_text = self.message.clone();
+        self.action_task = Some(cx.spawn(async move |panel, async_cx| {
+            let patterns_for_task = patterns.clone();
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let service = service
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
+                    service.set_ignore_patterns(patterns_for_task)
+                })
+                .await;
+            let _ = panel.update(async_cx, |panel, cx| {
+                panel.message = match result {
+                    Ok(_) => {
+                        panel.sync_ignore_patterns_input(&patterns, cx);
+                        String::from("过滤规则已保存")
+                    }
+                    Err(error) => format!("保存设置失败: {error}"),
+                };
+                panel.status_text = panel.message.clone();
+                cx.notify();
+            });
+        }));
     }
 
     fn clear_ignore_patterns(&mut self, cx: &mut Context<Self>) {
-        self.message = match self
-            .service
-            .lock()
-            .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))
-            .and_then(|service| service.set_ignore_patterns(Vec::new()))
-        {
-            Ok(_) => {
-                self.sync_ignore_patterns_input(&[], cx);
-                self.status_text = self.status_text();
-                String::from("过滤规则已清空")
-            }
-            Err(error) => format!("保存设置失败: {error}"),
-        };
+        let service = Arc::clone(&self.service);
+        self.message = String::from("正在清空规则...");
+        self.status_text = self.message.clone();
+        self.action_task = Some(cx.spawn(async move |panel, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let service = service
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
+                    service.set_ignore_patterns(Vec::new())
+                })
+                .await;
+            let _ = panel.update(async_cx, |panel, cx| {
+                panel.message = match result {
+                    Ok(_) => {
+                        panel.sync_ignore_patterns_input(&[], cx);
+                        String::from("过滤规则已清空")
+                    }
+                    Err(error) => format!("保存设置失败: {error}"),
+                };
+                panel.status_text = panel.message.clone();
+                cx.notify();
+            });
+        }));
     }
 
     fn save_hotkey(&mut self, cx: &mut Context<Self>) {
@@ -787,25 +962,38 @@ impl ClipboardPanel {
                 return;
             }
         };
-        self.message = match self
-            .service
-            .lock()
-            .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))
-            .and_then(|service| service.set_hotkey(normalized.clone()))
-        {
-            Ok(_) => {
-                self.sync_hotkey_input(&normalized, cx);
-                let refresh_result =
-                    cx.update_global::<ShortcutService, _>(|service, cx| service.refresh(cx));
-                self.status_text = self.status_text();
-                if let Err(error) = refresh_result {
-                    format!("剪贴板快捷键已保存为 {normalized}，刷新注册失败: {error}")
-                } else {
-                    format!("剪贴板快捷键已保存为 {normalized}")
-                }
-            }
-            Err(error) => format!("保存设置失败: {error}"),
-        };
+        let service = Arc::clone(&self.service);
+        self.message = String::from("正在保存快捷键...");
+        self.status_text = self.message.clone();
+        self.action_task = Some(cx.spawn(async move |panel, async_cx| {
+            let normalized_for_task = normalized.clone();
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let service = service
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
+                    service.set_hotkey(normalized_for_task)
+                })
+                .await;
+            let _ = panel.update(async_cx, |panel, cx| {
+                panel.message = match result {
+                    Ok(_) => {
+                        panel.sync_hotkey_input(&normalized, cx);
+                        let refresh_result = cx
+                            .update_global::<ShortcutService, _>(|service, cx| service.refresh(cx));
+                        if let Err(error) = refresh_result {
+                            format!("剪贴板快捷键已保存为 {normalized}，刷新注册失败: {error}")
+                        } else {
+                            format!("剪贴板快捷键已保存为 {normalized}")
+                        }
+                    }
+                    Err(error) => format!("保存设置失败: {error}"),
+                };
+                panel.status_text = panel.message.clone();
+                cx.notify();
+            });
+        }));
     }
 
     fn sync_ignore_patterns_input(&self, patterns: &[String], cx: &mut Context<Self>) {
@@ -891,7 +1079,7 @@ impl ClipboardPanel {
                 ""
             };
             format!(
-                "{} · 关键词“{}”已加载 {} 条记录{more}",
+                "{} · 关键词“{}”匹配到 {} 条记录{more}",
                 self.filter.label(),
                 self.query,
                 count
@@ -919,15 +1107,16 @@ fn render_tab_bar(
         .flex()
         .items_center()
         .gap(px(4.0))
-        .children(tabs.into_iter().map(|(tab, label)| {
+        .children(tabs.into_iter().enumerate().map(|(idx, (tab, label))| {
             let is_active = active == tab;
             let h = handle.clone();
             div()
+                .id(("clipboard-tab", idx as u64))
                 .h(px(28.0))
                 .px(px(12.0))
                 .rounded(px(6.0))
                 .bg(if is_active {
-                    theme::token("color-bg-surface", dark)
+                    theme::token("color-bg-surface", dark).into()
                 } else {
                     hsla(0.0, 0.0, 0.0, 0.0)
                 })
@@ -944,13 +1133,13 @@ fn render_tab_bar(
                 .text_size(px(12.0))
                 .cursor_pointer()
                 .hover(move |style| {
-                    if !is_active {
-                        style.bg(theme::token("color-row-hover", dark))
+                    style.bg(if !is_active {
+                        theme::token("color-row-hover", dark).into()
                     } else {
-                        style
-                    }
+                        hsla(0.0, 0.0, 0.0, 0.0)
+                    })
                 })
-                .on_click(move |_, _, cx| {
+                .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
                     let _ = cx.update_entity(&h, |panel, cx| {
                         panel.set_tab(tab);
                         cx.notify();
@@ -970,6 +1159,12 @@ impl Render for ClipboardPanel {
                 window.focus(&query_input.focus_handle(cx));
             }
             self.focus_pending = false;
+        } else if let Some(focus_handle) = self.focus_handle.as_ref()
+            && !focus_handle.is_focused(window)
+            && !self.query_focused(window, cx)
+            && !self.settings_input_focused(window, cx)
+        {
+            window.focus(focus_handle);
         }
 
         let handle = cx.entity();
@@ -979,6 +1174,7 @@ impl Render for ClipboardPanel {
         let selected = self.selected;
         let query = self.query.clone();
         let query_input = self.query_input.clone().expect("query input missing");
+        let preview_input = self.preview_input.clone().expect("preview input missing");
         let item_count = self.items.len();
         let selected_record = self.items.get(self.selected).cloned();
         let settings_inputs = (
@@ -1001,8 +1197,12 @@ impl Render for ClipboardPanel {
             .bg(theme::token("color-bg-page", dark))
             .text_color(theme::token("color-text-primary", dark))
             .font_family("PingFang SC")
+            .track_focus(
+                self.focus_handle
+                    .as_ref()
+                    .expect("panel focus handle missing"),
+            )
             .capture_key_down(cx.listener(Self::handle_panel_key))
-            .child(render_tab_bar(handle.clone(), tab, dark))
             .child(if tab == ClipboardTab::History {
                 history_page(
                     handle.clone(),
@@ -1015,7 +1215,7 @@ impl Render for ClipboardPanel {
                     current_filter,
                     status_text,
                     self.history_scroll.clone(),
-                    self.preview_file_scroll.clone(),
+                    preview_input,
                     dark,
                 )
                 .into_any_element()
@@ -1032,15 +1232,41 @@ impl Render for ClipboardPanel {
     }
 }
 
+impl Focusable for ClipboardPanel {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus_handle
+            .clone()
+            .expect("clipboard panel focus handle missing")
+    }
+}
+
+fn preview_text_for_record_for_panel(item: &ClipboardRecord) -> String {
+    match item.kind {
+        history_store::ClipboardItemKind::Files => {
+            let paths = item.parsed_file_paths();
+            if paths.is_empty() {
+                item.preview.clone()
+            } else {
+                paths.join("\n")
+            }
+        }
+        _ => item.content.clone(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::{database::DatabaseService, storage::AppPaths};
 
     #[test]
     fn status_text_reflects_filter_and_query_state() {
-        let mut panel = ClipboardPanel::new(Arc::new(Mutex::new(ClipboardService::new(
-            std::env::temp_dir().join("clipboard-status-test.db"),
-        ))));
+        let path = std::env::temp_dir().join("clipboard-status-test.db");
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(
+            path.parent().unwrap().to_path_buf(),
+        )));
+        let mut panel =
+            ClipboardPanel::new(Arc::new(Mutex::new(ClipboardService::new(database, path))));
         panel.filter = ClipboardFilter::Code;
         assert_eq!(panel.status_text(), "代码 · 暂无剪贴板记录");
 
@@ -1052,7 +1278,7 @@ mod tests {
         panel.query = String::from("json");
         assert_eq!(panel.status_text(), "代码 · 没有匹配记录");
 
-        panel.items = vec![ClipboardRecord {
+        panel.items = Arc::new(vec![ClipboardRecord {
             id: 1,
             kind: history_store::ClipboardItemKind::Text,
             content: String::from("{\"ok\":true}"),
@@ -1060,7 +1286,7 @@ mod tests {
             pinned: false,
             created_at: String::from("05-26 10:00:00"),
             badge: String::from("JSON"),
-        }];
+        }]);
         assert_eq!(panel.status_text(), "代码 · 关键词“json”匹配到 1 条记录");
 
         panel.query.clear();
@@ -1069,9 +1295,11 @@ mod tests {
 
     #[test]
     fn tab_switching_and_settings_snapshot_work() {
-        let service = Arc::new(Mutex::new(ClipboardService::new(
-            std::env::temp_dir().join("clipboard-settings-test.db"),
+        let path = std::env::temp_dir().join("clipboard-settings-test.db");
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(
+            path.parent().unwrap().to_path_buf(),
         )));
+        let service = Arc::new(Mutex::new(ClipboardService::new(database, path)));
         let mut panel = ClipboardPanel::new(Arc::clone(&service));
 
         assert_eq!(panel.tab, ClipboardTab::History);

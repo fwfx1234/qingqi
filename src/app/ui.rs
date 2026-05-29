@@ -187,8 +187,13 @@ pub fn mono_block(text: impl Into<SharedString>) -> impl IntoElement {
 
 pub fn icon_element(icon: &str, tint: gpui::Rgba, size_px: f32) -> impl IntoElement {
     let resolved = resolve_icon_path(icon);
-    if icon.ends_with(".png") {
-        img(std::path::PathBuf::from(&resolved))
+    if icon.ends_with(".png") || icon.ends_with("app-icon.svg") {
+        let path = if icon.ends_with("app-icon.svg") {
+            resolve_icon_path(app_icon_png_for_size(size_px))
+        } else {
+            resolved
+        };
+        img(std::path::PathBuf::from(path))
             .size(px(size_px))
             .into_any_element()
     } else {
@@ -197,6 +202,22 @@ pub fn icon_element(icon: &str, tint: gpui::Rgba, size_px: f32) -> impl IntoElem
             .size(px(size_px))
             .text_color(tint)
             .into_any_element()
+    }
+}
+
+fn app_icon_png_for_size(size_px: f32) -> &'static str {
+    if size_px <= 20.0 {
+        "app_icon_16.png"
+    } else if size_px <= 40.0 {
+        "app_icon_32.png"
+    } else if size_px <= 56.0 {
+        "app_icon_64.png"
+    } else if size_px <= 96.0 {
+        "app_icon_128.png"
+    } else if size_px <= 192.0 {
+        "app_icon_256.png"
+    } else {
+        "app_icon_512.png"
     }
 }
 

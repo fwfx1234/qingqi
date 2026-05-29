@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::{
     app::{
@@ -13,13 +13,13 @@ use crate::{
 };
 use gpui::{
     AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
-    SharedString, StatefulInteractiveElement, Styled, Subscription, Window, div, px,
+    SharedString, StatefulInteractiveElement, Styled, Subscription, Task, Window, div, px,
 };
 
 const PAGE_SIZE: i64 = 50;
 
 pub struct CapturePanel {
-    store: Rc<CaptureStore>,
+    store: Arc<Mutex<CaptureStore>>,
     search_input: Entity<TextInput>,
     host_input: Entity<TextInput>,
     filter: FilterState,
@@ -31,11 +31,15 @@ pub struct CapturePanel {
     offset: i64,
     engine_running: bool,
     notice: Option<String>,
+    loading: bool,
+    load_generation: u64,
+    reload_task: Option<Task<()>>,
+    detail_task: Option<Task<()>>,
     subscriptions: Vec<Subscription>,
 }
 
 impl CapturePanel {
-    pub fn new(store: Rc<CaptureStore>, cx: &mut Context<Self>) -> Self {
+    pub fn new(store: Arc<Mutex<CaptureStore>>, cx: &mut Context<Self>) -> Self {
         let search_input = cx.new(|cx| {
             let mut input = TextInput::new(cx, "搜索 URL 关键词", "");
             input.set_style(
@@ -76,10 +80,14 @@ impl CapturePanel {
             offset: 0,
             engine_running: false,
             notice: None,
+            loading: false,
+            load_generation: 0,
+            reload_task: None,
+            detail_task: None,
             subscriptions: Vec::new(),
         };
         this.observe_inputs(cx);
-        this.refresh_from_store();
+        this.refresh_from_store(cx);
         this
     }
 
@@ -88,8 +96,7 @@ impl CapturePanel {
         let sub = cx.observe(&search, |panel, _, cx| {
             panel.filter.search = panel.search_input.read(cx).text();
             panel.offset = 0;
-            panel.refresh_from_store();
-            cx.notify();
+            panel.refresh_from_store(cx);
         });
         self.subscriptions.push(sub);
 
@@ -97,63 +104,112 @@ impl CapturePanel {
         let sub = cx.observe(&host, |panel, _, cx| {
             panel.filter.host = panel.host_input.read(cx).text();
             panel.offset = 0;
-            panel.refresh_from_store();
-            cx.notify();
+            panel.refresh_from_store(cx);
         });
         self.subscriptions.push(sub);
     }
 
-    fn refresh_from_store(&mut self) {
-        match self.store.query(&self.filter, self.offset, PAGE_SIZE) {
-            Ok(rows) => {
-                // Apply hide_static in-memory (extension-based filtering can't be
-                // pushed to SQL cleanly).
-                if self.filter.hide_static {
-                    self.exchanges = rows
-                        .into_iter()
-                        .filter(|ex| self.filter.matches(ex))
-                        .collect();
-                } else {
-                    self.exchanges = rows;
+    fn refresh_from_store(&mut self, cx: &mut Context<Self>) {
+        self.loading = true;
+        self.notice = None;
+        self.load_generation = self.load_generation.wrapping_add(1);
+        let generation = self.load_generation;
+        let store = Arc::clone(&self.store);
+        let filter = self.filter.clone();
+        let offset = self.offset;
+
+        self.reload_task = Some(cx.spawn(async move |panel, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let store = store
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("capture store lock poisoned"))?;
+                    let rows = store.query(&filter, offset, PAGE_SIZE)?;
+                    let exchanges = if filter.hide_static {
+                        rows.into_iter().filter(|ex| filter.matches(ex)).collect()
+                    } else {
+                        rows
+                    };
+                    let total = store.count(&filter)?;
+                    anyhow::Ok((exchanges, total))
+                })
+                .await;
+
+            let _ = panel.update(async_cx, |panel, cx| {
+                if panel.load_generation != generation {
+                    return;
                 }
-            }
-            Err(e) => {
-                self.exchanges.clear();
-                self.notice = Some(format!("查询失败: {e}"));
-            }
-        }
-        match self.store.count(&self.filter) {
-            Ok(n) => self.total = n,
-            Err(e) => {
-                self.total = 0;
-                self.notice = Some(format!("计数失败: {e}"));
-            }
-        }
-        self.selected_id = None;
-        self.selected_detail = None;
+                panel.loading = false;
+                panel.selected_id = None;
+                panel.selected_detail = None;
+                match result {
+                    Ok((rows, total)) => {
+                        panel.exchanges = rows;
+                        panel.total = total;
+                    }
+                    Err(error) => {
+                        panel.exchanges.clear();
+                        panel.total = 0;
+                        panel.notice = Some(format!("查询失败: {error}"));
+                    }
+                }
+                cx.notify();
+            });
+        }));
     }
 
     fn select_exchange(&mut self, id: i64, cx: &mut Context<Self>) {
         self.selected_id = Some(id);
-        match self.store.get_by_id(id) {
-            Ok(detail) => self.selected_detail = detail,
-            Err(e) => {
-                self.notice = Some(format!("读取详情失败: {e}"));
-            }
-        }
+        self.selected_detail = None;
+        let store = Arc::clone(&self.store);
+        self.detail_task = Some(cx.spawn(async move |panel, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let store = store
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("capture store lock poisoned"))?;
+                    store.get_by_id(id)
+                })
+                .await;
+            let _ = panel.update(async_cx, |panel, cx| {
+                if panel.selected_id != Some(id) {
+                    return;
+                }
+                match result {
+                    Ok(detail) => panel.selected_detail = detail,
+                    Err(error) => panel.notice = Some(format!("读取详情失败: {error}")),
+                }
+                cx.notify();
+            });
+        }));
         cx.notify();
     }
 
     fn clear_all(&mut self, cx: &mut Context<Self>) {
-        match self.store.clear() {
-            Ok(_) => {
-                self.notice = Some(String::from("已清空所有抓包记录"));
-            }
-            Err(e) => {
-                self.notice = Some(format!("清空失败: {e}"));
-            }
-        }
-        self.refresh_from_store();
+        self.loading = true;
+        self.notice = Some(String::from("正在清空抓包记录..."));
+        let store = Arc::clone(&self.store);
+        self.reload_task = Some(cx.spawn(async move |panel, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let store = store
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("capture store lock poisoned"))?;
+                    store.clear()
+                })
+                .await;
+            let _ = panel.update(async_cx, |panel, cx| {
+                panel.loading = false;
+                panel.notice = Some(match result {
+                    Ok(_) => String::from("已清空所有抓包记录"),
+                    Err(error) => format!("清空失败: {error}"),
+                });
+                panel.refresh_from_store(cx);
+            });
+        }));
         cx.notify();
     }
 
@@ -164,29 +220,25 @@ impl CapturePanel {
             self.filter.method = method.to_string();
         }
         self.offset = 0;
-        self.refresh_from_store();
-        cx.notify();
+        self.refresh_from_store(cx);
     }
 
     fn toggle_error_only(&mut self, cx: &mut Context<Self>) {
         self.filter.error_only = !self.filter.error_only;
         self.offset = 0;
-        self.refresh_from_store();
-        cx.notify();
+        self.refresh_from_store(cx);
     }
 
     fn toggle_https_only(&mut self, cx: &mut Context<Self>) {
         self.filter.https_only = !self.filter.https_only;
         self.offset = 0;
-        self.refresh_from_store();
-        cx.notify();
+        self.refresh_from_store(cx);
     }
 
     fn toggle_hide_static(&mut self, cx: &mut Context<Self>) {
         self.filter.hide_static = !self.filter.hide_static;
         self.offset = 0;
-        self.refresh_from_store();
-        cx.notify();
+        self.refresh_from_store(cx);
     }
 
     fn set_detail_tab(&mut self, tab: DetailTab, cx: &mut Context<Self>) {
@@ -203,29 +255,29 @@ impl CapturePanel {
             input.clear(cx);
         });
         self.offset = 0;
-        self.refresh_from_store();
-        cx.notify();
+        self.refresh_from_store(cx);
     }
 
     fn next_page(&mut self, cx: &mut Context<Self>) {
         if self.offset + PAGE_SIZE < self.total {
             self.offset += PAGE_SIZE;
-            self.refresh_from_store();
-            cx.notify();
+            self.refresh_from_store(cx);
         }
     }
 
     fn prev_page(&mut self, cx: &mut Context<Self>) {
         if self.offset > 0 {
             self.offset = (self.offset - PAGE_SIZE).max(0);
-            self.refresh_from_store();
-            cx.notify();
+            self.refresh_from_store(cx);
         }
     }
 
     fn status_text(&self) -> String {
         if let Some(ref notice) = self.notice {
             return notice.clone();
+        }
+        if self.loading {
+            return String::from("正在加载抓包记录...");
         }
         if self.exchanges.is_empty() {
             return String::from("捕获引擎未接入 — 当前仅展示已持久化的抓包数据");

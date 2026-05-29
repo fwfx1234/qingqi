@@ -1,4 +1,5 @@
 pub mod about;
+pub mod anti_peeping;
 pub mod api_debugger;
 pub mod app_launcher;
 pub mod clipboard;

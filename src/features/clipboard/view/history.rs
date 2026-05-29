@@ -1,9 +1,11 @@
-use super::shared::header_action_button;
 use super::*;
-use std::rc::Rc;
+use std::sync::Arc;
 
-use gpui::{ListSizingBehavior, Size as GpuiSize};
-use gpui_component::{Icon, IconName, VirtualListScrollHandle, scroll::Scrollbar, v_virtual_list};
+use gpui::{UniformListScrollHandle, hsla, uniform_list};
+use gpui_component::{
+    Icon, IconName, Sizable, Size as ComponentSize,
+    scroll::{Scrollbar, ScrollbarShow},
+};
 
 pub(super) fn keyboard_filters() -> [ClipboardFilter; 5] {
     [
@@ -17,7 +19,7 @@ pub(super) fn keyboard_filters() -> [ClipboardFilter; 5] {
 
 pub(super) fn history_page(
     handle: Entity<ClipboardPanel>,
-    items: Vec<ClipboardRecord>,
+    items: Arc<Vec<ClipboardRecord>>,
     selected: usize,
     query: &str,
     query_input: Entity<TextInput>,
@@ -25,41 +27,47 @@ pub(super) fn history_page(
     item_count: usize,
     current_filter: ClipboardFilter,
     status_text: String,
-    history_scroll: VirtualListScrollHandle,
-    preview_file_scroll: VirtualListScrollHandle,
+    history_scroll: UniformListScrollHandle,
+    preview_input: Entity<TextInput>,
     dark: bool,
 ) -> impl IntoElement {
     div()
         .flex_1()
         .min_h(px(0.0))
-        .relative()
+        .flex()
         .overflow_hidden()
         .child(
             div()
-                .relative()
-                .size_full()
+                .flex_1()
+                .min_w(px(0.0))
+                .h_full()
                 .flex()
+                .flex_col()
+                .bg(theme::token("color-bg-subtle", dark))
+                .child(history_top_bar(
+                    handle.clone(),
+                    query_input,
+                    item_count,
+                    dark,
+                ))
                 .child(
                     div()
                         .flex_1()
-                        .min_w(px(0.0))
+                        .min_h(px(0.0))
                         .flex()
                         .flex_col()
-                        .child(history_left_header(
+                        .child(div().px(px(16.0)).pt(px(16.0)).child(render_filter_tabs(
                             handle.clone(),
-                            item_count,
-                            query_input,
                             current_filter,
-                            status_text.clone(),
                             dark,
-                        ))
+                        )))
+                        .child(history_filter_divider(dark))
                         .child(
                             div()
                                 .flex_1()
                                 .min_h(px(0.0))
-                                .px(px(8.0))
-                                .pt(px(4.0))
-                                .pb(px(10.0))
+                                .px(px(12.0))
+                                .pb(px(14.0))
                                 .child(history_list(
                                     handle.clone(),
                                     items,
@@ -69,93 +77,131 @@ pub(super) fn history_page(
                                     dark,
                                 )),
                         ),
-                )
-                .child(detail_panel(
-                    handle,
-                    selected_record,
-                    status_text,
-                    preview_file_scroll,
-                    dark,
-                )),
+                ),
         )
-}
-
-fn history_left_header(
-    handle: Entity<ClipboardPanel>,
-    item_count: usize,
-    query_input: Entity<TextInput>,
-    current_filter: ClipboardFilter,
-    status_text: String,
-    dark: bool,
-) -> impl IntoElement {
-    div()
-        .pt(px(14.0))
-        .pb(px(12.0))
-        .px(px(16.0))
-        .border_b_1()
-        .border_color(theme::token("color-border-default", dark))
-        .flex()
-        .flex_col()
-        .gap(px(10.0))
         .child(
             div()
+                .w(px(430.0))
+                .min_w(px(430.0))
+                .h_full()
+                .border_l_1()
+                .border_color(theme::token("color-border-default", dark))
+                .bg(theme::token("color-bg-page", dark))
                 .flex()
-                .items_center()
-                .gap(px(10.0))
+                .flex_col()
                 .child(
                     div()
                         .flex_1()
-                        .min_w(px(0.0))
-                        .h(px(32.0))
-                        .rounded(px(9.0))
-                        .border_1()
-                        .border_color(theme::token("color-border-default", dark))
-                        .bg(theme::token("color-bg-elevated", dark))
-                        .px(px(10.0))
-                        .flex()
-                        .items_center()
-                        .gap(px(8.0))
-                        .child(
-                            Icon::new(IconName::Search)
-                                .size_4()
-                                .text_color(theme::token("color-text-placeholder", dark)),
-                        )
-                        .child(div().flex_1().child(query_input.into_any_element())),
-                )
-                .child(header_action_button(
-                    "clipboard-open-settings",
-                    dark,
-                    "⚙",
-                    {
-                        let handle = handle.clone();
-                        move |_, cx| {
-                            let _ = cx.update_entity(&handle, |panel, cx| {
-                                panel.set_tab(ClipboardTab::Settings);
-                                cx.notify();
-                            });
-                        }
-                    },
-                )),
-        )
-        .child(render_filter_tabs(handle.clone(), current_filter, dark))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .text_size(px(11.0))
-                        .text_color(theme::token("color-text-secondary", dark))
-                        .child(status_text),
-                )
-                .child(
-                    div()
-                        .text_size(px(11.0))
-                        .text_color(theme::token("color-text-placeholder", dark))
-                        .child(format!("{item_count} 条")),
+                        .min_h(px(0.0))
+                        .px(px(24.0))
+                        .pt(px(24.0))
+                        .pb(px(14.0))
+                        .child(detail_panel(
+                            handle,
+                            selected_record,
+                            status_text,
+                            preview_input,
+                            dark,
+                        )),
                 ),
         )
+}
+
+fn history_top_bar(
+    handle: Entity<ClipboardPanel>,
+    query_input: Entity<TextInput>,
+    item_count: usize,
+    dark: bool,
+) -> impl IntoElement {
+    div()
+        .h(px(62.0))
+        .px(px(18.0))
+        .border_b_1()
+        .border_color(theme::token("color-border-default", dark))
+        .bg(theme::token("color-bg-page", dark))
+        .flex()
+        .items_center()
+        .child(div().w(px(220.0)))
+        .child(
+            div()
+                .flex_1()
+                .flex()
+                .justify_center()
+                .child(search_field(query_input, dark).w(px(326.0))),
+        )
+        .child(
+            div()
+                .w(px(220.0))
+                .flex()
+                .items_center()
+                .justify_end()
+                .gap(px(10.0))
+                .child(
+                    div()
+                        .text_size(px(13.0))
+                        .text_color(theme::token("color-text-secondary", dark))
+                        .child(format!("{item_count} 条")),
+                )
+                .child(top_bar_icon_button(handle, dark)),
+        )
+}
+
+fn top_bar_icon_button(handle: Entity<ClipboardPanel>, dark: bool) -> impl IntoElement {
+    div()
+        .id("clipboard-open-settings")
+        .size(px(30.0))
+        .rounded(px(6.0))
+        .border_1()
+        .border_color(theme::token("color-border-default", dark))
+        .bg(theme::token("color-bg-elevated", dark))
+        .flex()
+        .items_center()
+        .justify_center()
+        .hover(|style| {
+            style
+                .bg(theme::token("color-row-hover", dark))
+                .cursor_pointer()
+        })
+        .child(
+            Icon::new(IconName::Settings)
+                .with_size(ComponentSize::Small)
+                .text_color(theme::token("color-text-secondary", dark)),
+        )
+        .on_click(move |_, _, cx| {
+            let _ = cx.update_entity(&handle, |panel, cx| {
+                panel.set_tab(ClipboardTab::Settings);
+                cx.notify();
+            });
+        })
+}
+
+fn history_filter_divider(dark: bool) -> impl IntoElement {
+    div()
+        .w_full()
+        .mt(px(14.0))
+        .mb(px(10.0))
+        .h(px(1.0))
+        .bg(theme::token("color-border-default", dark))
+}
+
+fn search_field(query_input: Entity<TextInput>, dark: bool) -> gpui::Div {
+    div()
+        .min_w(px(0.0))
+        .h(px(32.0))
+        .rounded(px(9.0))
+        .border_1()
+        .border_color(theme::token("color-border-default", dark))
+        .bg(theme::token("color-bg-elevated", dark))
+        .px(px(10.0))
+        .flex()
+        .items_center()
+        .gap(px(8.0))
+        .child(
+            Icon::new(IconName::Search)
+                .with_size(ComponentSize::Medium)
+                .text_color(theme::token("color-text-placeholder", dark)),
+        )
+        .child(div().flex_1().child(query_input.into_any_element()))
 }
 
 fn render_filter_tabs(
@@ -163,21 +209,21 @@ fn render_filter_tabs(
     active: ClipboardFilter,
     dark: bool,
 ) -> impl IntoElement {
-    div()
-        .flex()
-        .items_center()
-        .gap(px(6.0))
-        .children(keyboard_filters().into_iter().map(|filter| {
+    let tabs: Vec<gpui::AnyElement> = keyboard_filters()
+        .into_iter()
+        .enumerate()
+        .map(|(idx, filter)| {
             let is_active = active == filter;
             let h = handle.clone();
-            div()
+            let el = div()
+                .id(("clipboard-filter-tab", idx))
                 .h(px(26.0))
                 .px(px(10.0))
                 .rounded(px(6.0))
                 .bg(if is_active {
                     theme::rgba_with_alpha(theme::launcher_accent(dark), 0.12)
                 } else {
-                    theme::token("color-bg-elevated", dark)
+                    theme::token("color-bg-elevated", dark).into()
                 })
                 .border_1()
                 .border_color(if is_active {
@@ -196,15 +242,16 @@ fn render_filter_tabs(
                 } else {
                     gpui::FontWeight::NORMAL
                 })
-                .cursor_pointer()
                 .hover(move |style| {
-                    if !is_active {
-                        style.bg(theme::token("color-row-hover", dark))
-                    } else {
-                        style
-                    }
+                    style
+                        .bg(if !is_active {
+                            theme::token("color-row-hover", dark).into()
+                        } else {
+                            hsla(0.0, 0.0, 0.0, 0.0)
+                        })
+                        .cursor_pointer()
                 })
-                .on_click(move |_, _, cx| {
+                .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
                     let _ = cx.update_entity(&h, |panel, cx| {
                         panel.set_filter_async(filter, cx);
                         cx.notify();
@@ -214,15 +261,20 @@ fn render_filter_tabs(
                 .items_center()
                 .justify_center()
                 .child(filter.label())
-        }))
+                .into_any_element();
+            el
+        })
+        .collect();
+
+    div().flex().items_center().gap(px(6.0)).children(tabs)
 }
 
 fn history_list(
     handle: Entity<ClipboardPanel>,
-    items: Vec<ClipboardRecord>,
+    items: Arc<Vec<ClipboardRecord>>,
     selected: usize,
     query: &str,
-    scroll: VirtualListScrollHandle,
+    scroll: UniformListScrollHandle,
     dark: bool,
 ) -> impl IntoElement {
     let is_empty = items.is_empty();
@@ -236,23 +288,23 @@ fn history_list(
 
 fn history_virtual_list(
     handle: Entity<ClipboardPanel>,
-    items: Vec<ClipboardRecord>,
+    items: Arc<Vec<ClipboardRecord>>,
     selected: usize,
-    scroll: VirtualListScrollHandle,
+    scroll: UniformListScrollHandle,
     dark: bool,
 ) -> impl IntoElement {
     let item_count = items.len();
-    let item_sizes = Rc::new(vec![GpuiSize::new(px(0.0), px(73.0)); item_count]);
     div()
         .relative()
         .size_full()
         .child(
-            v_virtual_list(
-                handle.clone(),
+            uniform_list(
                 "clipboard-history-list",
-                item_sizes,
-                move |panel, range, _, cx| {
-                    panel.maybe_prefetch_history(range.end, cx);
+                item_count,
+                move |range, _window, cx| {
+                    let _ = cx.update_entity(&handle, |panel, cx| {
+                        panel.maybe_prefetch_history(range.end, cx);
+                    });
                     range
                         .map(|index| {
                             let item = items[index].clone();
@@ -261,11 +313,10 @@ fn history_virtual_list(
                         .collect::<Vec<_>>()
                 },
             )
-            .track_scroll(&scroll)
-            .with_sizing_behavior(ListSizingBehavior::Infer)
+            .track_scroll(scroll.clone())
             .size_full(),
         )
-        .child(Scrollbar::vertical(&scroll))
+        .child(Scrollbar::vertical(&scroll).scrollbar_show(ScrollbarShow::Scrolling))
 }
 
 fn empty_state_text(query: &str, dark: bool, is_empty: bool) -> impl IntoElement {
@@ -319,6 +370,7 @@ fn history_row(
 ) -> impl IntoElement {
     let title = history_item_title(&item);
     let subtitle = history_item_meta(&item);
+    let pinned = item.pinned;
     let icon_surface = if selected {
         theme::rgba_with_alpha(theme::launcher_accent(dark), 0.12)
     } else {
@@ -330,10 +382,14 @@ fn history_row(
         hsla(0.0, 0.0, 0.0, 0.0)
     };
     let title_color = theme::token("color-text-primary", dark);
+    let pin_handle = handle.clone();
+    let delete_handle = handle.clone();
 
     div()
         .id(("clipboard-row", item.id as u64))
         .w_full()
+        .h(px(86.0))
+        .flex_none()
         .p(px(12.0))
         .rounded(px(8.0))
         .bg(row_bg)
@@ -348,32 +404,20 @@ fn history_row(
         })
         .on_click(move |event, window, cx| {
             let _ = cx.update_entity(&handle, |panel, cx| {
-                panel.select(index);
+                panel.select(index, cx);
                 if event.click_count() >= 2 {
                     panel.copy_selected(cx);
                 }
                 cx.notify();
             });
             if event.click_count() >= 2 {
-                window.remove_window();
+                window.defer(cx, |window, _cx| window.remove_window());
             }
         })
         .flex()
         .items_center()
         .gap(px(10.0))
-        .child(
-            div()
-                .size(px(32.0))
-                .rounded(px(8.0))
-                .bg(icon_surface)
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(px(10.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(history_item_icon_color(&item, dark))
-                .child(history_item_icon(&item)),
-        )
+        .child(history_row_media(&item, icon_surface, dark))
         .child(
             div()
                 .flex_1()
@@ -397,25 +441,114 @@ fn history_row(
                         .child(subtitle),
                 ),
         )
-        .when(item.pinned, |el| {
-            el.child(
-                div()
-                    .px(px(6.0))
-                    .h(px(18.0))
-                    .rounded(px(4.0))
-                    .bg(theme::rgba_with_alpha(
-                        theme::accent_color(theme::ThemeAccent::Amber),
-                        0.12,
-                    ))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(px(9.0))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme::accent_color(theme::ThemeAccent::Amber))
-                    .child("PIN"),
-            )
+        .child(row_icon_button(
+            if pinned {
+                IconName::Star
+            } else {
+                IconName::StarOff
+            },
+            "clipboard-row-pin",
+            dark,
+            move |_, _, cx| {
+                let _ = cx.update_entity(&pin_handle, |panel, cx| {
+                    panel.select(index, cx);
+                    panel.toggle_selected_pin(cx);
+                    cx.notify();
+                });
+            },
+        ))
+        .child(row_icon_button(
+            IconName::Delete,
+            "clipboard-row-delete",
+            dark,
+            move |_, _, cx| {
+                let _ = cx.update_entity(&delete_handle, |panel, cx| {
+                    panel.select(index, cx);
+                    panel.delete_selected(cx);
+                    cx.notify();
+                });
+            },
+        ))
+}
+
+fn row_icon_button(
+    icon: IconName,
+    id: &'static str,
+    dark: bool,
+    on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
+) -> impl IntoElement {
+    div()
+        .id(id)
+        .size(px(28.0))
+        .rounded(px(6.0))
+        .border_1()
+        .border_color(theme::token("color-border-default", dark))
+        .bg(theme::token("color-bg-elevated", dark))
+        .flex()
+        .items_center()
+        .justify_center()
+        .hover(|style| {
+            style
+                .bg(theme::token("color-row-hover", dark))
+                .cursor_pointer()
         })
+        .child(
+            Icon::new(icon)
+                .with_size(ComponentSize::Small)
+                .text_color(theme::token("color-text-secondary", dark)),
+        )
+        .on_click(move |event, window, cx| {
+            on_click(event, window, cx);
+            cx.stop_propagation();
+        })
+}
+
+fn history_row_media(
+    item: &ClipboardRecord,
+    icon_surface: gpui::Hsla,
+    dark: bool,
+) -> impl IntoElement {
+    if item.kind == history_store::ClipboardItemKind::Image {
+        return div()
+            .size(px(42.0))
+            .rounded(px(8.0))
+            .border_1()
+            .border_color(theme::token("color-border-default", dark))
+            .bg(theme::token("color-bg-elevated", dark))
+            .overflow_hidden()
+            .child(
+                img(PathBuf::from(item.content.clone()))
+                    .object_fit(ObjectFit::Cover)
+                    .size_full()
+                    .with_fallback(move || {
+                        icon_label("IMG", icon_surface, theme::token("color-warning", dark))
+                            .into_any_element()
+                    })
+                    .into_any_element(),
+            )
+            .into_any_element();
+    }
+
+    icon_label(
+        history_item_icon(item),
+        icon_surface,
+        history_item_icon_color(item, dark),
+    )
+    .into_any_element()
+}
+
+fn icon_label(label: &'static str, surface: gpui::Hsla, color: gpui::Rgba) -> impl IntoElement {
+    div()
+        .size(px(42.0))
+        .rounded(px(8.0))
+        .bg(surface)
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(10.0))
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(color)
+        .child(label)
 }
 
 fn history_item_title(item: &ClipboardRecord) -> String {
@@ -433,16 +566,22 @@ fn history_item_meta(item: &ClipboardRecord) -> String {
     parts.push(item.created_at.clone());
     parts.push(match item.kind {
         history_store::ClipboardItemKind::Text => {
-            let badges = history_store::text_badges(&item.content);
-            if badges.is_empty() {
+            let mut labels: Vec<&str> = Vec::new();
+            if !item.badge.is_empty() {
+                labels.push(item.badge.as_str());
+            }
+            if history_store::contains_sensitive(&item.content) {
+                labels.push("敏感");
+            }
+            if labels.is_empty() {
                 history_store::text_stats(&item.content)
             } else {
-                badges.join(" · ")
+                labels.join(" · ")
             }
         }
         history_store::ClipboardItemKind::Image => String::from("图片剪贴板"),
         history_store::ClipboardItemKind::Files => {
-            let paths = history_store::parse_file_paths(&item.content);
+            let paths = item.parsed_file_paths();
             if paths.is_empty() {
                 String::from("文件列表")
             } else {
@@ -455,15 +594,11 @@ fn history_item_meta(item: &ClipboardRecord) -> String {
 
 fn history_item_icon(item: &ClipboardRecord) -> &'static str {
     match item.kind {
-        history_store::ClipboardItemKind::Text => {
-            if item.badge == "链接" {
-                "URL"
-            } else if item.badge == "JSON" {
-                "JSN"
-            } else {
-                "TXT"
-            }
-        }
+        history_store::ClipboardItemKind::Text => match item.badge_kind() {
+            history_store::ClipboardBadgeKind::Link => "URL",
+            history_store::ClipboardBadgeKind::Json => "JSN",
+            history_store::ClipboardBadgeKind::Other => "TXT",
+        },
         history_store::ClipboardItemKind::Image => "IMG",
         history_store::ClipboardItemKind::Files => "FIL",
     }
@@ -471,520 +606,148 @@ fn history_item_icon(item: &ClipboardRecord) -> &'static str {
 
 fn history_item_icon_color(item: &ClipboardRecord, dark: bool) -> gpui::Rgba {
     match item.kind {
-        history_store::ClipboardItemKind::Text => {
-            if item.badge == "链接" {
-                theme::token("color-success", dark)
-            } else if item.badge == "JSON" {
-                theme::launcher_accent(dark)
-            } else {
-                theme::token("color-text-secondary", dark)
-            }
-        }
+        history_store::ClipboardItemKind::Text => match item.badge_kind() {
+            history_store::ClipboardBadgeKind::Link => theme::token("color-success", dark),
+            history_store::ClipboardBadgeKind::Json => theme::launcher_accent(dark),
+            history_store::ClipboardBadgeKind::Other => theme::token("color-text-secondary", dark),
+        },
         history_store::ClipboardItemKind::Image => theme::token("color-warning", dark),
         history_store::ClipboardItemKind::Files => theme::token("color-danger", dark),
     }
 }
 
-fn detail_preview_card(
-    handle: Entity<ClipboardPanel>,
+fn preview_content(
     item: ClipboardRecord,
-    preview_file_scroll: VirtualListScrollHandle,
+    preview_input: Entity<TextInput>,
     dark: bool,
 ) -> impl IntoElement {
     match item.kind {
-        history_store::ClipboardItemKind::Image => {
-            image_detail_preview(item, dark).into_any_element()
-        }
+        history_store::ClipboardItemKind::Image => div()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                img(PathBuf::from(item.content))
+                    .object_fit(ObjectFit::Contain)
+                    .size_full()
+                    .with_fallback(move || {
+                        preview_unavailable("图片文件不可用", dark).into_any_element()
+                    })
+                    .into_any_element(),
+            )
+            .into_any_element(),
+        _ => preview_text(preview_input, dark).into_any_element(),
+    }
+}
+
+fn preview_text_for_record(item: &ClipboardRecord) -> String {
+    match item.kind {
         history_store::ClipboardItemKind::Files => {
-            file_detail_preview(handle, item, preview_file_scroll, dark).into_any_element()
+            let paths = item.parsed_file_paths();
+            if paths.is_empty() {
+                item.preview.clone()
+            } else {
+                paths.join("\n")
+            }
         }
-        _ => text_detail_preview(item, dark).into_any_element(),
+        _ => item.content.clone(),
     }
 }
 
-fn image_detail_preview(item: ClipboardRecord, dark: bool) -> impl IntoElement {
-    let badges = image_detail_badges(&item);
+fn preview_text(preview_input: Entity<TextInput>, dark: bool) -> impl IntoElement {
     div()
-        .flex_1()
-        .min_h(px(0.0))
-        .flex()
-        .flex_col()
-        .gap(px(10.0))
-        .child(image_preview_box(PathBuf::from(item.content), dark))
-        .child(detail_meta_footer(badges, item.created_at, dark))
-}
-
-fn text_detail_preview(item: ClipboardRecord, dark: bool) -> impl IntoElement {
-    let badges = text_detail_badges(&item);
-    div()
-        .flex_1()
-        .min_h(px(0.0))
-        .flex()
-        .flex_col()
-        .gap(px(10.0))
-        .child(text_preview_box(item.content.clone(), dark))
-        .child(detail_meta_footer(badges, item.created_at, dark))
-}
-
-fn file_detail_preview(
-    handle: Entity<ClipboardPanel>,
-    item: ClipboardRecord,
-    preview_file_scroll: VirtualListScrollHandle,
-    dark: bool,
-) -> impl IntoElement {
-    let paths = history_store::parse_file_paths(&item.content);
-    let badges = file_detail_badges(&item, &paths);
-    div()
-        .flex_1()
-        .min_h(px(0.0))
-        .flex()
-        .flex_col()
-        .gap(px(10.0))
-        .child(file_preview_box(handle, &paths, preview_file_scroll, dark))
-        .child(detail_meta_footer(badges, item.created_at, dark))
-}
-
-fn detail_meta_footer(badges: Vec<String>, created_at: String, dark: bool) -> impl IntoElement {
-    div()
-        .flex()
-        .items_center()
-        .justify_between()
-        .gap(px(10.0))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .flex_wrap()
-                .gap(px(6.0))
-                .children(
-                    badges
-                        .into_iter()
-                        .map(|label| detail_mini_badge(label, dark)),
-                ),
-        )
-        .child(
-            div()
-                .text_size(px(11.0))
-                .line_height(px(16.0))
-                .text_color(theme::token("color-text-secondary", dark))
-                .child(created_at),
-        )
-}
-
-fn image_detail_badges(item: &ClipboardRecord) -> Vec<String> {
-    let mut badges = item
-        .preview
-        .split('·')
-        .map(str::trim)
-        .filter(|part| !part.is_empty() && *part != "图片剪贴板")
-        .map(String::from)
-        .collect::<Vec<_>>();
-    if item.pinned {
-        badges.insert(0, String::from("已置顶"));
-    }
-    if badges.is_empty() {
-        badges.push(String::from("图片"));
-    }
-    badges.truncate(4);
-    badges
-}
-
-fn text_detail_badges(item: &ClipboardRecord) -> Vec<String> {
-    let mut badges = history_store::text_badges(&item.content)
-        .into_iter()
-        .map(String::from)
-        .collect::<Vec<_>>();
-    if item.pinned {
-        badges.insert(0, String::from("已置顶"));
-    }
-    badges.push(history_store::text_stats(&item.content));
-    badges.truncate(4);
-    badges
-}
-
-fn file_detail_badges(item: &ClipboardRecord, paths: &[String]) -> Vec<String> {
-    let mut badges = Vec::new();
-    if item.pinned {
-        badges.push(String::from("已置顶"));
-    }
-    badges.push(format!("{} 个文件", paths.len()));
-    // Show file extensions as badges
-    let mut extensions: Vec<String> = paths
-        .iter()
-        .filter_map(|p| {
-            std::path::Path::new(p)
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|e| e.to_uppercase())
-        })
-        .collect();
-    extensions.sort();
-    extensions.dedup();
-    for ext in extensions.iter().take(3) {
-        badges.push(ext.clone());
-    }
-    badges.truncate(4);
-    badges
-}
-
-fn image_preview_box(path: PathBuf, dark: bool) -> impl IntoElement {
-    div()
-        .w_full()
-        .flex_1()
-        .min_h(px(220.0))
-        .rounded(px(10.0))
-        .bg(theme::token("color-bg-surface", dark))
-        .overflow_hidden()
-        .flex()
-        .items_center()
-        .justify_center()
-        .child(
-            img(path)
-                .object_fit(ObjectFit::Contain)
-                .size_full()
-                .with_fallback(move || {
-                    div()
-                        .size_full()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .text_size(px(12.0))
-                        .text_color(theme::token("color-text-placeholder", dark))
-                        .child("图片文件不可用")
-                        .into_any_element()
-                })
-                .into_any_element(),
-        )
-}
-
-fn text_preview_box(content: String, dark: bool) -> impl IntoElement {
-    div()
-        .id("clipboard-text-preview-scroll")
-        .w_full()
-        .flex_1()
-        .min_h(px(0.0))
-        .p(px(14.0))
-        .rounded(px(10.0))
-        .bg(theme::token("color-bg-surface", dark))
-        .overflow_y_scroll()
-        .font_family("SF Mono")
-        .text_size(px(11.0))
-        .line_height(px(17.0))
+        .size_full()
+        .px(px(14.0))
+        .py(px(12.0))
         .text_color(theme::token("color-text-regular", dark))
-        .child(content)
+        .child(preview_input)
 }
 
-fn file_preview_box(
-    handle: Entity<ClipboardPanel>,
-    paths: &[String],
-    scroll: VirtualListScrollHandle,
-    dark: bool,
-) -> impl IntoElement {
-    let states = history_store::file_path_states(paths);
+fn preview_empty(dark: bool) -> impl IntoElement {
+    preview_unavailable("选择一条记录", dark)
+}
 
+fn preview_unavailable(message: &'static str, dark: bool) -> impl IntoElement {
     div()
-        .id("clipboard-file-preview-scroll")
-        .w_full()
-        .flex_1()
-        .min_h(px(0.0))
-        .p(px(10.0))
-        .rounded(px(10.0))
-        .bg(theme::token("color-bg-surface", dark))
-        .overflow_hidden()
-        .when(states.is_empty(), |el| {
-            el.child(
-                div()
-                    .size_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(px(12.0))
-                    .text_color(theme::token("color-text-placeholder", dark))
-                    .child("文件记录不包含有效路径"),
-            )
-        })
-        .when(!states.is_empty(), |el| {
-            let item_sizes = Rc::new(vec![GpuiSize::new(px(0.0), px(56.0)); states.len()]);
-            el.child(
-                div()
-                    .relative()
-                    .size_full()
-                    .child(
-                        v_virtual_list(
-                            handle.clone(),
-                            "clipboard-file-preview-list",
-                            item_sizes,
-                            move |_, range, _, _| {
-                                range
-                                    .map(|index| {
-                                        let state = states[index].clone();
-                                        file_preview_row(handle.clone(), state, index, dark)
-                                    })
-                                    .collect::<Vec<_>>()
-                            },
-                        )
-                        .track_scroll(&scroll)
-                        .with_sizing_behavior(ListSizingBehavior::Infer)
-                        .size_full(),
-                    )
-                    .child(Scrollbar::vertical(&scroll)),
-            )
-        })
-}
-
-fn file_preview_row(
-    handle: Entity<ClipboardPanel>,
-    state: history_store::FilePathState,
-    index: usize,
-    dark: bool,
-) -> impl IntoElement {
-    let exists = state.can_reveal();
-    let kind_label = if state.is_dir { "目录" } else { "文件" };
-    let status_label = if exists { kind_label } else { "已不存在" };
-    let name_color = if exists {
-        theme::token("color-text-primary", dark)
-    } else {
-        theme::token("color-text-placeholder", dark)
-    };
-    let path_color = theme::token("color-text-placeholder", dark);
-    let badge_color = if exists {
-        theme::launcher_accent(dark)
-    } else {
-        theme::token("color-danger", dark)
-    };
-    let badge_bg = theme::rgba_with_alpha(badge_color, if exists { 0.10 } else { 0.14 });
-    let display_name = state.display_name.clone();
-    let raw_path = state.path.clone();
-    let click_path = state.path.clone();
-
-    let row = div()
-        .id(("clipboard-file-row", index))
-        .w_full()
-        .px(px(8.0))
-        .py(px(6.0))
-        .rounded(px(6.0))
-        .flex()
-        .items_center()
-        .gap(px(10.0))
-        .child(
-            div()
-                .min_w(px(0.0))
-                .flex_1()
-                .flex()
-                .flex_col()
-                .gap(px(2.0))
-                .child(
-                    div()
-                        .text_size(px(13.0))
-                        .text_color(name_color)
-                        .line_clamp(1)
-                        .child(display_name),
-                )
-                .child(
-                    div()
-                        .text_size(px(11.0))
-                        .line_height(px(15.0))
-                        .text_color(path_color)
-                        .line_clamp(1)
-                        .child(raw_path),
-                ),
-        )
-        .child(
-            div()
-                .px(px(6.0))
-                .h(px(18.0))
-                .rounded(px(4.0))
-                .bg(badge_bg)
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(px(10.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(badge_color)
-                .child(status_label),
-        );
-
-    if exists {
-        row.hover(|style| {
-            style
-                .bg(theme::token("color-row-hover", dark))
-                .cursor_pointer()
-        })
-        .on_click(move |_, _, cx| {
-            let path = click_path.clone();
-            let _ = cx.update_entity(&handle, |panel, cx| {
-                panel.reveal_path_in_finder(&path, cx);
-                cx.notify();
-            });
-        })
-    } else {
-        row
-    }
-}
-
-fn detail_empty_state(dark: bool) -> impl IntoElement {
-    div()
-        .flex_1()
-        .flex()
-        .flex_col()
-        .items_center()
-        .justify_center()
-        .gap_3()
-        .child(
-            div()
-                .size(px(48.0))
-                .rounded(px(12.0))
-                .bg(theme::rgba_with_alpha(theme::launcher_accent(dark), 0.10))
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(px(16.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::launcher_accent(dark))
-                .child("预"),
-        )
-        .child(
-            div()
-                .text_size(px(14.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::token("color-text-primary", dark))
-                .child("选择一条记录"),
-        )
-        .child(
-            div()
-                .text_size(px(12.0))
-                .text_color(theme::token("color-text-secondary", dark))
-                .child("查看内容预览和操作"),
-        )
-}
-
-fn detail_mini_badge(label: String, dark: bool) -> impl IntoElement {
-    div()
-        .h(px(18.0))
-        .px_1()
-        .rounded(px(4.0))
-        .bg(theme::rgba_with_alpha(theme::launcher_accent(dark), 0.08))
+        .size_full()
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(10.0))
-        .text_color(theme::token("color-text-secondary", dark))
-        .child(label)
-        .into_any_element()
+        .text_size(px(12.0))
+        .text_color(theme::token("color-text-placeholder", dark))
+        .child(message)
 }
 
 fn detail_panel(
     handle: Entity<ClipboardPanel>,
-    selected: Option<ClipboardRecord>,
+    selected_record: Option<ClipboardRecord>,
     _status_text: String,
-    preview_file_scroll: VirtualListScrollHandle,
+    preview_input: Entity<TextInput>,
     dark: bool,
 ) -> impl IntoElement {
-    let is_pinned = selected.as_ref().map_or(false, |r| r.pinned);
-    let has_selected = selected.is_some();
-    let is_files = selected
-        .as_ref()
-        .map_or(false, |r| r.kind == history_store::ClipboardItemKind::Files);
-    div()
-        .w(px(420.0))
-        .h_full()
-        .p(px(14.0))
-        .bg(theme::token("color-bg-subtle", dark))
-        .flex()
-        .flex_col()
-        .gap(px(10.0))
-        .child(
-            div()
-                .flex_1()
-                .min_h(px(0.0))
-                .rounded(px(12.0))
-                .border_1()
-                .border_color(theme::token("color-border-default", dark))
-                .bg(theme::token("color-bg-page", dark))
-                .p(px(12.0))
-                .overflow_hidden()
-                .flex()
-                .flex_col()
-                .child(
-                    selected
-                        .clone()
-                        .map(|item| {
-                            detail_preview_card(
-                                handle.clone(),
-                                item,
-                                preview_file_scroll.clone(),
-                                dark,
-                            )
-                            .into_any_element()
-                        })
-                        .unwrap_or_else(|| detail_empty_state(dark).into_any_element()),
-                ),
-        )
-        .when(is_files && has_selected, |el| {
-            let record = selected.clone().unwrap();
-            let paths = history_store::parse_file_paths(&record.content);
-            let states = history_store::file_path_states(&paths);
-            let total = states.len();
-            let existing = states.iter().filter(|state| state.can_reveal()).count();
-            let has_existing = existing > 0;
-            let has_open_target = states
-                .iter()
-                .any(history_store::FilePathState::has_actionable_target);
-            el.child(file_path_status(existing, total, dark))
-                .child(file_detail_action_row(
-                    handle.clone(),
-                    has_existing,
-                    has_open_target,
-                    dark,
-                ))
-        })
-        .child(detail_actions(handle, has_selected, is_pinned, dark))
+    let has_selected = selected_record.is_some();
+    let is_pinned = selected_record.as_ref().is_some_and(|item| item.pinned);
+
+    let panel = div().size_full().flex().flex_col().gap(px(10.0)).child(
+        div()
+            .flex_1()
+            .min_h(px(0.0))
+            .rounded(px(8.0))
+            .border_1()
+            .border_color(theme::token("color-border-default", dark))
+            .bg(theme::token("color-bg-surface", dark))
+            .overflow_hidden()
+            .child(
+                selected_record
+                    .map(|item| preview_content(item, preview_input, dark).into_any_element())
+                    .unwrap_or_else(|| preview_empty(dark).into_any_element()),
+            ),
+    );
+
+    if has_selected {
+        panel.child(detail_actions(handle, is_pinned, dark))
+    } else {
+        panel
+    }
 }
 
-fn detail_actions(
-    handle: Entity<ClipboardPanel>,
-    has_selected: bool,
-    is_pinned: bool,
-    dark: bool,
-) -> impl IntoElement {
+fn detail_actions(handle: Entity<ClipboardPanel>, is_pinned: bool, dark: bool) -> impl IntoElement {
     div()
         .flex()
         .items_center()
-        .gap(px(6.0))
-        .when(has_selected, |el| {
-            el.child(detail_action_button("复制", dark, {
-                let handle = handle.clone();
-                move |_, window, cx| {
-                    let _ = cx.update_entity(&handle, |panel, cx| {
-                        panel.copy_selected(cx);
-                        cx.notify();
-                    });
-                    window.remove_window();
-                }
-            }))
-            .child(detail_action_button(
-                if is_pinned { "取消置顶" } else { "置顶" },
-                dark,
-                {
-                    let handle = handle.clone();
-                    move |_, _, cx| {
-                        let _ = cx.update_entity(&handle, |panel, cx| {
-                            panel.toggle_selected_pin(cx);
-                            cx.notify();
-                        });
-                    }
-                },
-            ))
-            .child(detail_action_button("删除", dark, {
+        .gap(px(8.0))
+        .child(detail_action_button("复制", dark, {
+            let handle = handle.clone();
+            move |_, _, cx| {
+                let _ = cx.update_entity(&handle, |panel, cx| {
+                    panel.copy_selected(cx);
+                    cx.notify();
+                });
+            }
+        }))
+        .child(detail_action_button(
+            if is_pinned { "取消置顶" } else { "置顶" },
+            dark,
+            {
                 let handle = handle.clone();
                 move |_, _, cx| {
                     let _ = cx.update_entity(&handle, |panel, cx| {
-                        panel.delete_selected(cx);
+                        panel.toggle_selected_pin(cx);
                         cx.notify();
                     });
                 }
-            }))
-        })
+            },
+        ))
+        .child(detail_action_button("删除", dark, {
+            let handle = handle.clone();
+            move |_, _, cx| {
+                let _ = cx.update_entity(&handle, |panel, cx| {
+                    panel.delete_selected(cx);
+                    cx.notify();
+                });
+            }
+        }))
 }
 
 fn detail_action_button(
@@ -994,132 +757,22 @@ fn detail_action_button(
 ) -> impl IntoElement {
     div()
         .id(label)
-        .h(px(26.0))
-        .px(px(10.0))
+        .h(px(28.0))
+        .px(px(12.0))
         .rounded(px(6.0))
-        .bg(theme::token("color-bg-surface", dark))
         .border_1()
         .border_color(theme::token("color-border-default", dark))
+        .bg(theme::token("color-bg-surface", dark))
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(12.0))
+        .text_color(theme::token("color-text-primary", dark))
         .hover(|style| {
             style
                 .bg(theme::token("color-row-hover", dark))
                 .cursor_pointer()
         })
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .text_color(theme::token("color-text-secondary", dark))
         .child(label)
         .on_click(on_click)
-}
-
-fn file_detail_action_row(
-    handle: Entity<ClipboardPanel>,
-    has_existing: bool,
-    has_open_target: bool,
-    dark: bool,
-) -> impl IntoElement {
-    let reveal_handle = handle.clone();
-    let open_handle = handle.clone();
-    div()
-        .flex()
-        .items_center()
-        .gap(px(6.0))
-        .child(file_action_button(
-            "在访达中显示",
-            "clipboard-file-reveal",
-            has_existing,
-            dark,
-            move |_, _, cx| {
-                let _ = cx.update_entity(&reveal_handle, |panel, cx| {
-                    panel.reveal_first_existing_in_finder(cx);
-                    cx.notify();
-                });
-            },
-        ))
-        .child(file_action_button(
-            "打开目录",
-            "clipboard-file-open-dir",
-            has_open_target,
-            dark,
-            move |_, _, cx| {
-                let _ = cx.update_entity(&open_handle, |panel, cx| {
-                    panel.open_selected_parent_dir(cx);
-                    cx.notify();
-                });
-            },
-        ))
-}
-
-fn file_action_button(
-    label: &'static str,
-    button_id: &'static str,
-    enabled: bool,
-    dark: bool,
-    on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
-) -> impl IntoElement {
-    let color = if enabled {
-        theme::launcher_accent(dark)
-    } else {
-        theme::token("color-text-placeholder", dark)
-    };
-    div()
-        .id(button_id)
-        .h(px(26.0))
-        .px(px(10.0))
-        .rounded(px(6.0))
-        .bg(if enabled {
-            theme::rgba_with_alpha(theme::launcher_accent(dark), 0.10)
-        } else {
-            theme::rgba_with_alpha(theme::token("color-bg-surface", dark), 0.50)
-        })
-        .border_1()
-        .border_color(if enabled {
-            theme::launcher_accent(dark)
-        } else {
-            theme::token("color-border-default", dark)
-        })
-        .hover(move |style| {
-            if enabled {
-                style
-                    .bg(theme::rgba_with_alpha(theme::launcher_accent(dark), 0.18))
-                    .cursor_pointer()
-            } else {
-                style
-            }
-        })
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .text_color(color)
-        .child(label)
-        .on_click(move |event, window, cx| {
-            if enabled {
-                on_click(event, window, cx);
-            }
-        })
-}
-
-fn file_path_status(existing: usize, total: usize, dark: bool) -> impl IntoElement {
-    let text = if total == 0 {
-        String::from("无文件路径")
-    } else if existing == 0 {
-        String::from("所有文件路径已不存在")
-    } else if existing == total {
-        format!("{total} 个路径都存在")
-    } else {
-        format!("{existing}/{total} 个路径存在")
-    };
-    let color = if total == 0 || existing == 0 {
-        theme::token("color-text-placeholder", dark)
-    } else {
-        theme::token("color-text-secondary", dark)
-    };
-    div()
-        .flex()
-        .items_center()
-        .gap(px(6.0))
-        .child(div().text_size(px(11.0)).text_color(color).child(text))
 }

@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     rc::Rc,
     sync::{
         Arc, Mutex,
@@ -12,12 +12,14 @@ use std::{
 use gpui::{
     App, AppContext, BoxShadow, Context, Entity, Focusable, InteractiveElement, IntoElement,
     KeyDownEvent, ParentElement, Render, ScrollStrategy, StatefulInteractiveElement, Styled,
-    Subscription, Task, Window, div, hsla, point, prelude::FluentBuilder, px, rgb, size,
+    Subscription, Task, UniformListScrollHandle, Window, div, hsla, point, prelude::FluentBuilder,
+    px, rgb, size, uniform_list,
 };
-use gpui_component::{VirtualListScrollHandle, v_virtual_list};
+use gpui_component::scroll::Scrollbar;
 
 use crate::{
     app::{
+        events::{AppEventBus, AppEventKind},
         text_input::{TextInput, TextInputStyle},
         theme, theme_mode, ui,
         window_controller::{PluginOpenTrace, WindowControllerHandle},
@@ -51,7 +53,7 @@ const RESULTS_MAX_HEIGHT: f32 =
 const LAUNCHER_WIDTH: f32 = 800.0;
 const EMPTY_RESULTS_HEIGHT: f32 = 180.0;
 const SEARCH_DEBOUNCE: Duration = Duration::from_millis(70);
-const COMMAND_SEARCH_LIMIT: usize = 120;
+const COMMAND_SEARCH_LIMIT: usize = 5_000;
 const PLUGIN_LIST_PREFETCH_THRESHOLD: usize = 40;
 static PLUGIN_OPEN_TRACE_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -83,11 +85,13 @@ pub struct Launcher {
     pending_query: String,
     search_generation: u64,
     last_commands_revision: u64,
+    plugin_list_revision: u64,
     last_window_height: f32,
-    results_scroll: VirtualListScrollHandle,
-    plugin_list_scroll: VirtualListScrollHandle,
+    results_scroll: UniformListScrollHandle,
+    plugin_list_scroll: UniformListScrollHandle,
     plugin_list_visible_start: usize,
     search_task: Option<Task<()>>,
+    event_task: Option<Task<()>>,
     mode: LauncherMode,
     _subscriptions: Vec<Subscription>,
 }
@@ -139,18 +143,86 @@ impl Launcher {
             pending_query: String::new(),
             search_generation: 0,
             last_commands_revision,
+            plugin_list_revision: last_commands_revision,
             last_window_height: 0.0,
-            results_scroll: VirtualListScrollHandle::new(),
-            plugin_list_scroll: VirtualListScrollHandle::new(),
+            results_scroll: UniformListScrollHandle::new(),
+            plugin_list_scroll: UniformListScrollHandle::new(),
             plugin_list_visible_start: 0,
             search_task: None,
+            event_task: None,
             mode: LauncherMode::Search,
             _subscriptions: Vec::new(),
         }
     }
 
-    pub fn initialize_async(&mut self, cx: &mut Context<Self>) {
+    pub fn initialize_async(&mut self, events: AppEventBus, cx: &mut Context<Self>) {
         self.refresh_clipboard_context_async(cx);
+        self.start_event_watch(events, cx);
+    }
+
+    fn start_event_watch(&mut self, events: AppEventBus, cx: &mut Context<Self>) {
+        if self.event_task.is_some() {
+            return;
+        }
+
+        self.event_task = Some(cx.spawn(async move |launcher, async_cx| {
+            let receiver = Arc::new(Mutex::new(events.subscribe()));
+            loop {
+                let rx = Arc::clone(&receiver);
+                let event = async_cx
+                    .background_executor()
+                    .spawn(async move { rx.lock().ok()?.recv().ok() })
+                    .await;
+                let Some(event) = event else {
+                    break;
+                };
+                if event.kind == AppEventKind::CommandsChanged {
+                    let _ = launcher.update(async_cx, |launcher, cx| {
+                        launcher.refresh_results_after_commands_changed(cx);
+                        cx.notify();
+                    });
+                }
+            }
+        }));
+    }
+
+    fn refresh_results_after_commands_changed(&mut self, cx: &mut Context<Self>) {
+        let clipboard_kinds = self.current_cached_clipboard_context_kinds();
+        self.last_commands_revision = self.plugin_manager.borrow_mut().commands_revision();
+        self.all_commands = self
+            .plugin_manager
+            .borrow_mut()
+            .commands_with_clipboard(clipboard_kinds.clone());
+
+        let query = self.query(cx);
+        if matches!(self.mode, LauncherMode::Search) {
+            self.last_query = query.clone();
+            self.pending_query = query.clone();
+            if query.trim().is_empty() {
+                self.results = Self::default_results(&self.all_commands, &self.plugin_visuals);
+            } else {
+                self.results = Rc::new(
+                    self.plugin_manager
+                        .borrow_mut()
+                        .commands_for_query_with_clipboard(
+                            &query,
+                            COMMAND_SEARCH_LIMIT,
+                            clipboard_kinds,
+                        ),
+                );
+            }
+            self.selected = self.selected.min(self.results.len().saturating_sub(1));
+            self.results_visible_start = visible_start_for_selection(self.selected);
+            if !self.results.is_empty() {
+                self.results_scroll
+                    .scroll_to_item(self.selected, ScrollStrategy::Top);
+            }
+            self.update_message();
+        }
+
+        if matches!(self.mode, LauncherMode::ListPlugin { .. }) {
+            self.plugin_list_revision = 0;
+        }
     }
 
     pub fn clipboard_context_kinds(
@@ -399,6 +471,27 @@ impl Launcher {
         };
     }
 
+    fn refresh_plugin_list_if_needed(&mut self, cx: &mut Context<Self>) {
+        let revision = self.plugin_manager.borrow_mut().commands_revision();
+        if revision == self.plugin_list_revision {
+            return;
+        }
+        self.plugin_list_revision = revision;
+
+        let query = self.query(cx);
+        if let LauncherMode::ListPlugin {
+            session,
+            items,
+            selected,
+        } = &mut self.mode
+        {
+            let next_items = session.on_input_changed(&query, cx);
+            merge_plugin_list_items(items, next_items);
+            *selected = (*selected).min(items.len().saturating_sub(1));
+            self.plugin_list_visible_start = visible_start_for_selection(*selected);
+        }
+    }
+
     fn refresh_commands_if_needed(&mut self, cx: &App) -> bool {
         let revision = self.plugin_manager.borrow_mut().commands_revision();
         if revision == self.last_commands_revision {
@@ -428,10 +521,6 @@ impl Launcher {
         content_height.min(RESULTS_MAX_HEIGHT)
     }
 
-    fn virtual_item_sizes(count: usize) -> Rc<Vec<gpui::Size<gpui::Pixels>>> {
-        Rc::new(vec![size(px(0.0), px(ROW_SLOT)); count])
-    }
-
     fn open_selected(&mut self, window: &mut Window, cx: &mut App) {
         let trace = PluginOpenTrace::new(PLUGIN_OPEN_TRACE_ID.fetch_add(1, Ordering::Relaxed));
         match &mut self.mode {
@@ -458,7 +547,7 @@ impl Launcher {
                         Some(trace),
                     );
                     log_launcher_total(session.plugin_id(), trace);
-                    self.close_window(window);
+                    self.close_window_app(window, cx);
                 } else {
                     log_launcher_step(
                         session.plugin_id(),
@@ -496,7 +585,7 @@ impl Launcher {
                         Some(trace),
                     );
                     log_launcher_total(session.plugin_id(), trace);
-                    self.close_window(window);
+                    self.close_window_app(window, cx);
                 }
             }
         }
@@ -523,7 +612,7 @@ impl Launcher {
                     Some(trace),
                 );
             }
-            self.close_window(window);
+            self.close_window_app(window, cx);
             return;
         };
 
@@ -548,7 +637,7 @@ impl Launcher {
                     started,
                     Some(trace),
                 );
-                self.close_window(window);
+                self.close_window_app(window, cx);
             }
             PluginWindowMode::Inline => {
                 let session_started = Instant::now();
@@ -580,7 +669,7 @@ impl Launcher {
                             "open inline plugin failed"
                         );
                         self.run_command(item.target, cx);
-                        self.close_window(window);
+                        self.close_window_app(window, cx);
                     }
                 }
                 log_launcher_step(plugin_id, "launcher open command", started, Some(trace));
@@ -618,7 +707,7 @@ impl Launcher {
                             "open list plugin failed"
                         );
                         self.run_command(item.target, cx);
-                        self.close_window(window);
+                        self.close_window_app(window, cx);
                     }
                 }
                 log_launcher_step(plugin_id, "launcher open command", started, Some(trace));
@@ -702,7 +791,7 @@ impl Launcher {
 
             let more_items = session.on_input_changed(&query, cx);
             if more_items.len() > items.len() {
-                *items = Rc::new(more_items);
+                merge_plugin_list_items(items, more_items);
             }
         }
     }
@@ -763,7 +852,7 @@ impl Launcher {
                 return;
             }
         }
-        self.close_window(window);
+        self.close_window(window, cx);
     }
 
     fn close_plugin_mode(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -805,17 +894,27 @@ impl Launcher {
         cx.notify();
     }
 
-    fn close_window(&mut self, window: &mut Window) {
+    fn close_window(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(controller) = self.window_controller.as_ref() {
             controller.borrow_mut().clear_launcher_window();
         }
-        window.remove_window();
+        window.defer(cx, |window, _cx| window.remove_window());
+    }
+
+    fn close_window_app(&mut self, window: &mut Window, cx: &mut App) {
+        if let Some(controller) = self.window_controller.as_ref() {
+            controller.borrow_mut().clear_launcher_window();
+        }
+        window.defer(cx, |window, _cx| window.remove_window());
     }
 }
 
 impl Render for Launcher {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let render_started = Instant::now();
+        if matches!(self.mode, LauncherMode::ListPlugin { .. }) {
+            self.refresh_plugin_list_if_needed(cx);
+        }
         let desired_height = match &self.mode {
             LauncherMode::Search => Self::window_height_for_results(self.results.len()),
             LauncherMode::InlinePlugin { .. } => HEADER_HEIGHT + RESULTS_MAX_HEIGHT,
@@ -970,35 +1069,41 @@ impl Render for Launcher {
                         )
                     }
                 } else {
-                    let item_sizes = Self::virtual_item_sizes(results_count);
                     launcher.child(
-                        v_virtual_list(
-                            cx.entity(),
-                            "launcher-results",
-                            item_sizes,
-                            move |_, range, _window, _cx| {
-                                range
-                                    .map(|idx| {
-                                        let item = results_clone[idx].clone();
-                                        div().h(px(ROW_SLOT)).flex_none().pb(px(ROW_GAP)).child(
-                                            result_row(
-                                                scroll_handle.clone(),
-                                                item,
-                                                idx == sel,
-                                                idx,
-                                                dark,
-                                            ),
-                                        )
-                                    })
-                                    .collect::<Vec<_>>()
-                            },
-                        )
-                        .track_scroll(&self.results_scroll)
-                        .h(px(Self::results_height_for_count(results_count)))
-                        .max_h(px(RESULTS_MAX_HEIGHT))
-                        .px(px(12.0))
-                        .pt(px(RESULTS_PADDING_TOP))
-                        .pb(px(RESULTS_PADDING_BOTTOM)),
+                        div()
+                            .relative()
+                            .h(px(Self::results_height_for_count(results_count)))
+                            .max_h(px(RESULTS_MAX_HEIGHT))
+                            .child(
+                                uniform_list(
+                                    "launcher-results",
+                                    results_count,
+                                    move |range, _window, _cx| {
+                                        range
+                                            .map(|idx| {
+                                                let item = results_clone[idx].clone();
+                                                div()
+                                                    .h(px(ROW_SLOT))
+                                                    .flex_none()
+                                                    .pb(px(ROW_GAP))
+                                                    .child(result_row(
+                                                        scroll_handle.clone(),
+                                                        item,
+                                                        idx == sel,
+                                                        idx,
+                                                        dark,
+                                                    ))
+                                            })
+                                            .collect::<Vec<_>>()
+                                    },
+                                )
+                                .track_scroll(self.results_scroll.clone())
+                                .size_full()
+                                .px(px(12.0))
+                                .pt(px(RESULTS_PADDING_TOP))
+                                .pb(px(RESULTS_PADDING_BOTTOM)),
+                            )
+                            .child(Scrollbar::vertical(&self.results_scroll)),
                     )
                 }
             })
@@ -1089,7 +1194,7 @@ fn launcher_quick_tab(
 
 fn plugin_list(
     handle: Option<Entity<Launcher>>,
-    scroll: VirtualListScrollHandle,
+    scroll: UniformListScrollHandle,
     items: Rc<Vec<PluginListItem>>,
     selected: usize,
     query: String,
@@ -1121,39 +1226,78 @@ fn plugin_list(
             )
             .into_any_element();
     }
-    v_virtual_list(
-        handle
-            .clone()
-            .expect("launcher handle missing for plugin list"),
-        "launcher-plugin-list",
-        Launcher::virtual_item_sizes(count),
-        move |launcher, range, _window, cx| {
-            launcher.maybe_prefetch_plugin_items(range.end, cx);
-            range
-                .map(|idx| {
-                    let item = items[idx].clone();
-                    div()
-                        .h(px(ROW_SLOT))
-                        .flex_none()
-                        .pb(px(ROW_GAP))
-                        .child(plugin_list_row(
-                            handle.clone(),
-                            item,
-                            idx == selected,
-                            idx,
-                            dark,
-                        ))
-                })
-                .collect::<Vec<_>>()
-        },
-    )
-    .track_scroll(&scroll)
-    .h(px(Launcher::results_height_for_count(count)))
-    .max_h(px(RESULTS_MAX_HEIGHT))
-    .px(px(12.0))
-    .pt(px(RESULTS_PADDING_TOP))
-    .pb(px(RESULTS_PADDING_BOTTOM))
-    .into_any_element()
+    let Some(list_handle) = handle.clone() else {
+        return div()
+            .relative()
+            .w_full()
+            .h(px(Launcher::results_height_for_count(0)))
+            .max_h(px(RESULTS_MAX_HEIGHT))
+            .overflow_hidden()
+            .child(
+                div()
+                    .w_full()
+                    .h(px(EMPTY_RESULTS_HEIGHT))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(px(13.0))
+                    .text_color(theme::launcher_muted_text(dark))
+                    .child("启动器尚未完成初始化"),
+            )
+            .into_any_element();
+    };
+    div()
+        .relative()
+        .h(px(Launcher::results_height_for_count(count)))
+        .max_h(px(RESULTS_MAX_HEIGHT))
+        .child(
+            uniform_list("launcher-plugin-list", count, move |range, _window, cx| {
+                let _ = cx.update_entity(&list_handle, |launcher, cx| {
+                    launcher.maybe_prefetch_plugin_items(range.end, cx);
+                });
+                range
+                    .map(|idx| {
+                        let item = items[idx].clone();
+                        div()
+                            .h(px(ROW_SLOT))
+                            .flex_none()
+                            .pb(px(ROW_GAP))
+                            .child(plugin_list_row(
+                                handle.clone(),
+                                item,
+                                idx == selected,
+                                idx,
+                                dark,
+                            ))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .track_scroll(scroll.clone())
+            .size_full()
+            .px(px(12.0))
+            .pt(px(RESULTS_PADDING_TOP))
+            .pb(px(RESULTS_PADDING_BOTTOM)),
+        )
+        .child(Scrollbar::vertical(&scroll))
+        .into_any_element()
+}
+
+fn merge_plugin_list_items(items: &mut Rc<Vec<PluginListItem>>, next_items: Vec<PluginListItem>) {
+    let mut merged = items.as_ref().clone();
+    let mut seen = merged
+        .iter()
+        .map(|item| item.id.clone())
+        .collect::<HashSet<_>>();
+
+    for next_item in next_items {
+        if let Some(existing) = merged.iter_mut().find(|item| item.id == next_item.id) {
+            *existing = next_item;
+        } else if seen.insert(next_item.id.clone()) {
+            merged.push(next_item);
+        }
+    }
+
+    *items = Rc::new(merged);
 }
 
 fn plugin_list_row(
@@ -1225,7 +1369,7 @@ fn plugin_list_row(
                                 entity_cx,
                             );
                         session.on_list_item_selected(&item_for_click.id, entity_cx);
-                        launcher.close_window(window);
+                        launcher.close_window(window, entity_cx);
                     }
                 }
             });
@@ -1233,15 +1377,8 @@ fn plugin_list_row(
         .flex()
         .items_center()
         .gap(px(12.0))
-        .child(if item.icon.ends_with(".png") {
-            div()
-                .size(px(36.0))
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(ui::icon_element(item.icon.as_str(), accent, 32.0))
-                .into_any_element()
-        } else {
+        .child({
+            let icon = item.icon.clone();
             div()
                 .size(px(36.0))
                 .rounded(px(10.0))
@@ -1251,13 +1388,16 @@ fn plugin_list_row(
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(
+                .child(if icon.is_empty() {
                     div()
                         .text_size(px(15.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(accent)
-                        .child("↗"),
-                )
+                        .child("↗")
+                        .into_any_element()
+                } else {
+                    ui::icon_element(icon.as_str(), accent, 28.0).into_any_element()
+                })
                 .into_any_element()
         })
         .child(
@@ -1273,14 +1413,14 @@ fn plugin_list_row(
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .text_color(title_color)
                         .line_height(px(20.0))
-                        .child(item.title),
+                        .child(item.title.clone()),
                 )
                 .child(
                     div()
                         .text_size(px(12.0))
                         .line_height(px(17.0))
                         .text_color(subtitle_color)
-                        .child(item.subtitle),
+                        .child(item.subtitle.clone()),
                 ),
         )
 }
@@ -1360,7 +1500,7 @@ fn scroll_selection_into_view(
     selected: usize,
     len: usize,
     visible_start: &mut usize,
-    scroll_handle: &VirtualListScrollHandle,
+    scroll_handle: &UniformListScrollHandle,
 ) {
     let visible_end = (*visible_start + VISIBLE_ROWS).min(len);
     if selected < *visible_start {
@@ -1494,14 +1634,14 @@ fn result_row(
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .text_color(title_color)
                         .line_height(px(20.0))
-                        .child(item.title),
+                        .child(item.title.clone()),
                 )
                 .child(
                     div()
                         .text_size(px(12.0))
                         .line_height(px(17.0))
                         .text_color(subtitle_color)
-                        .child(item.subtitle),
+                        .child(item.subtitle.clone()),
                 ),
         )
         .when(!badge_label.is_empty(), |row| {
@@ -1527,27 +1667,29 @@ fn launcher_icon(
     border: gpui::Hsla,
     tint: gpui::Rgba,
 ) -> impl IntoElement {
-    let label = launcher_icon_label(item);
     let icon = item.icon.clone();
-    let use_asset = icon.ends_with(".png");
 
-    let tile = div().size(px(36.0)).flex().items_center().justify_center();
-
-    if use_asset {
-        tile.child(ui::icon_element(icon.as_str(), tint, 32.0))
-    } else {
-        tile.rounded(px(10.0))
-            .bg(surface)
-            .border_1()
-            .border_color(border)
-            .child(
+    div()
+        .size(px(36.0))
+        .rounded(px(10.0))
+        .bg(surface)
+        .border_1()
+        .border_color(border)
+        .flex()
+        .items_center()
+        .justify_center()
+        .child({
+            if icon.is_empty() {
                 div()
-                    .text_size(px(if label.is_ascii() { 10.0 } else { 15.0 }))
+                    .text_size(px(10.0))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(tint)
-                    .child(label),
-            )
-    }
+                    .child(launcher_icon_label(item))
+                    .into_any_element()
+            } else {
+                ui::icon_element(icon.as_str(), tint, 28.0).into_any_element()
+            }
+        })
 }
 
 fn launcher_icon_tint(plugin_id: &str, dark: bool) -> gpui::Rgba {
@@ -1627,7 +1769,7 @@ fn log_launcher_enter_started(
     mode: &'static str,
     item_title: Option<&str>,
 ) {
-    tracing::info!(
+    tracing::debug!(
         plugin_id,
         trace_id = trace.id,
         mode,
@@ -1639,7 +1781,7 @@ fn log_launcher_enter_started(
 fn log_launcher_total(plugin_id: &str, trace: PluginOpenTrace) {
     let duration_ms = trace.started.elapsed().as_millis() as u64;
     if duration_ms < 50 {
-        tracing::info!(
+        tracing::debug!(
             plugin_id,
             trace_id = trace.id,
             duration_ms,

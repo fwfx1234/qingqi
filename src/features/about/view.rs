@@ -33,22 +33,15 @@ impl RenderOnce for AboutPage {
                     .flex_col()
                     .items_center()
                     .gap(px(12.0))
-                    // ── Icon (72px, matching suishou AboutPage) ───────────
                     .child(
                         div()
-                            .size(px(72.0))
                             .rounded(px(16.0))
-                            .bg(theme::accent_soft(theme::ThemeAccent::Amber))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(
-                                div()
-                                    .text_size(px(30.0))
-                                    .font_weight(gpui::FontWeight::BOLD)
-                                    .text_color(theme::accent_color(theme::ThemeAccent::Amber))
-                                    .child("韧"),
-                            ),
+                            .overflow_hidden()
+                            .child(ui::icon_element(
+                                "app-icon.svg",
+                                theme::launcher_accent(dark),
+                                72.0,
+                            )),
                     )
                     // ── App name ──────────────────────────────────────────
                     .child(

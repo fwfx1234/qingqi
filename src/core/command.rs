@@ -172,14 +172,16 @@ impl CommandItem {
         self
     }
 
+    pub fn with_usage_key(mut self, usage_key: impl Into<String>) -> Self {
+        self.usage_key = usage_key.into();
+        self
+    }
+
     pub fn score(&self, query: &str) -> Option<CommandMatch> {
         let q = query.trim().to_lowercase();
         if q.is_empty() {
             return Some(CommandMatch {
-                score: match self.kind {
-                    CommandKind::Plugin => 20,
-                    CommandKind::DynamicAction => 8,
-                },
+                score: 10,
                 reason: "default",
             });
         }

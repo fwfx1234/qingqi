@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc, time::Duration};
+use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
 use gpui::{AnyElement, App, IntoElement, Window};
 
@@ -6,6 +6,7 @@ use crate::{
     app::events::{AppEventBus, AppEventKind},
     core::{
         command::{CommandItem, ContextKind, ContextMatcher},
+        database::{DatabaseService, DatabaseSpec},
         plugin::{PluginManifest, PluginRuntime, PluginSession},
         storage::AppPaths,
     },
@@ -14,29 +15,42 @@ use crate::{
 use super::{manifest, service::DownloadService, store::DownloadStore, view};
 
 pub struct DownloadManagerRuntime {
-    service: Rc<RefCell<DownloadService>>,
+    database: Arc<DatabaseService>,
+    paths: AppPaths,
+    service: Option<Rc<RefCell<DownloadService>>>,
     watch_started: bool,
 }
 
 impl DownloadManagerRuntime {
-    pub fn new(paths: AppPaths) -> anyhow::Result<Self> {
-        let db_path = paths.feature_state(manifest::PLUGIN_ID, "tasks.db");
-        let store = DownloadStore::open(&db_path)?;
-        let save_dir = paths.feature_output_dir(manifest::PLUGIN_ID);
-        let service = DownloadService::new(store, save_dir);
+    pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> anyhow::Result<Self> {
         Ok(Self {
-            service: Rc::new(RefCell::new(service)),
+            database,
+            paths,
+            service: None,
             watch_started: false,
         })
     }
 
-    fn ensure_watcher(&mut self, events: AppEventBus, cx: &mut App) {
+    fn service(&mut self) -> anyhow::Result<Rc<RefCell<DownloadService>>> {
+        if let Some(service) = &self.service {
+            return Ok(Rc::clone(service));
+        }
+        let store = DownloadStore::open(
+            Arc::clone(&self.database),
+            &crate::core::database::feature_database_key(manifest::PLUGIN_ID, "tasks"),
+        )?;
+        let save_dir = self.paths.feature_output_dir(manifest::PLUGIN_ID);
+        let service = Rc::new(RefCell::new(DownloadService::new(store, save_dir)));
+        self.service = Some(Rc::clone(&service));
+        Ok(service)
+    }
+
+    fn ensure_watcher(&mut self, service: Rc<RefCell<DownloadService>>, events: AppEventBus, cx: &mut App) {
         if self.watch_started {
             return;
         }
         self.watch_started = true;
 
-        let service = Rc::clone(&self.service);
         cx.spawn(async move |async_cx| {
             let mut revision = service.borrow().revision();
             loop {
@@ -59,6 +73,10 @@ impl DownloadManagerRuntime {
 impl PluginRuntime for DownloadManagerRuntime {
     fn manifest(&self) -> PluginManifest {
         manifest::manifest()
+    }
+
+    fn database_specs(&self) -> Vec<DatabaseSpec> {
+        vec![DatabaseSpec::feature(manifest::PLUGIN_ID, "tasks", "tasks.db")]
     }
 
     fn commands(&self) -> Vec<CommandItem> {
@@ -84,15 +102,16 @@ impl PluginRuntime for DownloadManagerRuntime {
         events: AppEventBus,
         cx: &mut App,
     ) -> anyhow::Result<Box<dyn PluginSession>> {
-        self.ensure_watcher(events, cx);
-        let panel = Rc::new(RefCell::new(view::DownloadManagerPanel::new(Rc::clone(
-            &self.service,
-        ))));
+        let service = self.service()?;
+        self.ensure_watcher(Rc::clone(&service), events, cx);
+        let panel = Rc::new(RefCell::new(view::DownloadManagerPanel::new(service)));
         panel.borrow_mut().init(cx);
         Ok(Box::new(DownloadManagerSession { panel }))
     }
 
-    fn close_idle(&mut self) {}
+    fn close_idle(&mut self) {
+        self.service = None;
+    }
 }
 
 struct DownloadManagerSession {

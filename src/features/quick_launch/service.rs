@@ -15,7 +15,7 @@ use anyhow::{Context, Result, anyhow, ensure};
 use time::{OffsetDateTime, macros::format_description};
 
 use crate::{
-    core::storage::AppPaths,
+    core::{database::DatabaseService, storage::AppPaths},
     features::quick_launch::{
         manifest::PLUGIN_ID,
         model::{
@@ -97,9 +97,12 @@ struct ExecutionState {
 }
 
 impl QuickLaunchService {
-    pub fn new(paths: AppPaths) -> Result<Self> {
-        let path = paths.feature_state(PLUGIN_ID, "actions.db");
-        let store = QuickLaunchStore::open(&path)?;
+    pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> Result<Self> {
+        let _ = paths;
+        let store = QuickLaunchStore::open(
+            database,
+            &crate::core::database::feature_database_key(PLUGIN_ID, "actions"),
+        )?;
         let service = Self {
             store: Mutex::new(store),
             execution: Mutex::new(ExecutionState::default()),
@@ -979,11 +982,13 @@ mod tests {
     use std::{
         fs,
         path::PathBuf,
+        sync::Arc,
         thread,
         time::{Duration, SystemTime, UNIX_EPOCH},
     };
 
     use super::*;
+    use crate::core::{database::DatabaseService, storage::AppPaths};
 
     fn sample_action() -> QuickAction {
         QuickAction {
@@ -1023,7 +1028,21 @@ mod tests {
     }
 
     fn test_service(name: &str) -> Arc<QuickLaunchService> {
-        let store = QuickLaunchStore::open(&temp_db(name)).expect("store should open");
+        let path = temp_db(name);
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(
+            path.parent().unwrap().to_path_buf(),
+        )));
+        database
+            .register_database(crate::core::database::DatabaseSpec::path(
+                crate::core::database::feature_database_key("quick-launch", "actions"),
+                path,
+            ))
+            .unwrap();
+        let store = QuickLaunchStore::open(
+            database,
+            &crate::core::database::feature_database_key("quick-launch", "actions"),
+        )
+        .expect("store should open");
         Arc::new(QuickLaunchService {
             store: Mutex::new(store),
             execution: Mutex::new(ExecutionState::default()),

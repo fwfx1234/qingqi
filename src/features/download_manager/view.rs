@@ -20,7 +20,7 @@ use crate::{
 use super::{
     model::{DownloadTask, TaskStatus},
     service::DownloadService,
-    store::TaskCounts,
+    store::{DownloadStats, TaskCounts},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -78,6 +78,11 @@ impl FilterTab {
 pub struct DownloadManagerPanel {
     service: Rc<RefCell<DownloadService>>,
     tasks: Vec<DownloadTask>,
+    job_summary: DownloadJobSummary,
+    task_counts: TaskCounts,
+    settings_snapshot: super::model::DownloadSettings,
+    save_dir_snapshot: String,
+    stats_snapshot: DownloadStats,
     filter: FilterTab,
     url_input_entity: Option<Entity<TextInput>>,
     url_text: String,
@@ -102,10 +107,32 @@ pub struct DownloadManagerPanel {
 impl DownloadManagerPanel {
     pub fn new(service: Rc<RefCell<DownloadService>>) -> Self {
         let tasks = Self::load_tasks(&service, FilterTab::All);
-        let service_revision = service.borrow().revision();
+        let (
+            job_summary,
+            task_counts,
+            settings_snapshot,
+            save_dir_snapshot,
+            stats_snapshot,
+            service_revision,
+        ) = {
+            let svc = service.borrow();
+            (
+                DownloadJobSummary::from_jobs(svc.job_snapshots()),
+                svc.task_counts(),
+                svc.settings_snapshot(),
+                svc.effective_save_dir().to_string_lossy().to_string(),
+                svc.stats(),
+                svc.revision(),
+            )
+        };
         Self {
             service,
             tasks,
+            job_summary,
+            task_counts,
+            settings_snapshot,
+            save_dir_snapshot,
+            stats_snapshot,
             filter: FilterTab::All,
             url_input_entity: None,
             url_text: String::new(),
@@ -267,8 +294,14 @@ impl DownloadManagerPanel {
     }
 
     pub fn refresh(&mut self) {
+        let service = self.service.borrow();
         self.tasks = Self::load_tasks(&self.service, self.filter);
-        self.service_revision = self.service.borrow().revision();
+        self.job_summary = DownloadJobSummary::from_jobs(service.job_snapshots());
+        self.task_counts = service.task_counts();
+        self.settings_snapshot = service.settings_snapshot();
+        self.save_dir_snapshot = service.effective_save_dir().to_string_lossy().to_string();
+        self.stats_snapshot = service.stats();
+        self.service_revision = service.revision();
     }
 
     fn refresh_if_stale(&mut self) {
@@ -662,15 +695,11 @@ impl RenderOnce for DownloadManagerElement {
         let show_settings = panel.show_settings;
         let url_input = panel.url_input_entity.clone().expect("url input missing");
         let message = panel.message.clone();
-        let job_summary = DownloadJobSummary::from_jobs(panel.service.borrow().job_snapshots());
-        let task_counts = panel.service.borrow().task_counts();
-        let settings = panel.service.borrow().settings_snapshot();
-        let save_dir = panel
-            .service
-            .borrow()
-            .effective_save_dir()
-            .to_string_lossy()
-            .to_string();
+        let job_summary = panel.job_summary.clone();
+        let task_counts = panel.task_counts.clone();
+        let settings = panel.settings_snapshot.clone();
+        let save_dir = panel.save_dir_snapshot.clone();
+        let stats = panel.stats_snapshot.clone();
         // Clone settings input entities for overlay
         let save_root_input = panel.save_root_input.clone();
         let concurrent_input = panel.concurrent_input.clone();
@@ -710,6 +739,7 @@ impl RenderOnce for DownloadManagerElement {
                         message,
                         &save_dir,
                         &settings,
+                        &stats,
                         Rc::clone(&self.panel),
                     ))
                     .child(if show_settings {
@@ -739,6 +769,15 @@ impl RenderOnce for DownloadManagerElement {
 struct DownloadJobSummary {
     active_count: usize,
     progress_by_id: HashMap<String, f64>,
+}
+
+impl Clone for DownloadJobSummary {
+    fn clone(&self) -> Self {
+        Self {
+            active_count: self.active_count,
+            progress_by_id: self.progress_by_id.clone(),
+        }
+    }
 }
 
 impl DownloadJobSummary {
@@ -946,7 +985,7 @@ fn filter_bar(
                         .id(("download-filter", tab as usize))
                         .on_click({
                             let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 panel.borrow_mut().set_filter(tab);
                                 window.refresh();
                             }
@@ -958,7 +997,7 @@ fn filter_bar(
                         .id("download-start-all")
                         .on_click({
                             let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 panel.borrow_mut().start_all();
                                 window.refresh();
                             }
@@ -969,7 +1008,7 @@ fn filter_bar(
                         .id("download-pause-all")
                         .on_click({
                             let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 panel.borrow_mut().pause_all();
                                 window.refresh();
                             }
@@ -980,7 +1019,7 @@ fn filter_bar(
                         .id("download-clear-done")
                         .on_click({
                             let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 panel.borrow_mut().clear_completed();
                                 window.refresh();
                             }
@@ -991,7 +1030,7 @@ fn filter_bar(
                         .id("download-clear-failed")
                         .on_click({
                             let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 panel.borrow_mut().clear_failed();
                                 window.refresh();
                             }
@@ -1017,7 +1056,7 @@ fn filter_bar(
                             .id(("download-cat-filter", tab as usize))
                             .on_click({
                                 let panel = Rc::clone(&panel);
-                                move |_, window, cx| {
+                                move |_, window, _cx| {
                                     panel.borrow_mut().set_filter(tab);
                                     window.refresh();
                                 }
@@ -1256,7 +1295,7 @@ fn task_row(
                         .id(("dl-pause", index))
                         .on_click({
                             let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 panel.borrow_mut().pause_task(&task_id);
                                 window.refresh();
                             }
@@ -1267,7 +1306,7 @@ fn task_row(
                         .id(("dl-resume", index))
                         .on_click({
                             let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 panel.borrow_mut().resume_task(&task_id2);
                                 window.refresh();
                             }
@@ -1278,7 +1317,7 @@ fn task_row(
                         .id(("dl-retry", index))
                         .on_click({
                             let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 panel.borrow_mut().retry_task(&task_id3);
                                 window.refresh();
                             }
@@ -1292,7 +1331,7 @@ fn task_row(
                         .id(("dl-cancel", index))
                         .on_click({
                             let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 panel.borrow_mut().cancel_task(&task_id4);
                                 window.refresh();
                             }
@@ -1304,7 +1343,7 @@ fn task_row(
                         .on_click({
                             let panel = Rc::clone(&panel);
                             let id = task.id.clone();
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 panel.borrow_mut().delete_task(&id);
                                 window.refresh();
                             }
@@ -1317,7 +1356,7 @@ fn task_row(
                         .on_click({
                             let panel = Rc::clone(&panel);
                             let task = task.clone();
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 panel.borrow_mut().open_file(&task);
                                 window.refresh();
                             }
@@ -1331,7 +1370,7 @@ fn task_row(
                         .id(("dl-reveal", index))
                         .on_click({
                             let task = task.clone();
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 if let Some(parent) = std::path::Path::new(&task.save_path).parent()
                                 {
                                     let _ = platform::shell::open_path(parent);
@@ -1425,6 +1464,7 @@ fn bottom_bar(
     message: String,
     save_dir: &str,
     settings: &super::model::DownloadSettings,
+    stats: &DownloadStats,
     panel: Rc<RefCell<DownloadManagerPanel>>,
 ) -> impl IntoElement {
     let speed_note = if settings.speed_limit_kbps > 0 {
@@ -1433,7 +1473,6 @@ fn bottom_bar(
         "  不限速".to_string()
     };
 
-    let stats = panel.borrow().service.borrow().stats();
     let summary = format!(
         "{} 个任务 · {} 已完成 · {} 进行中 · {} 失败 · 共 {}",
         stats.total,
@@ -1479,7 +1518,7 @@ fn bottom_bar(
                 .id("download-settings")
                 .on_click({
                     let panel = Rc::clone(&panel);
-                    move |_, window, cx| {
+                    move |_, window, _cx| {
                         panel.borrow_mut().toggle_settings();
                         window.refresh();
                     }
@@ -1490,7 +1529,7 @@ fn bottom_bar(
                 .id("download-open-dir")
                 .on_click({
                     let panel = Rc::clone(&panel);
-                    move |_, window, cx| {
+                    move |_, window, _cx| {
                         panel.borrow_mut().open_save_dir();
                         window.refresh();
                     }
@@ -1557,7 +1596,7 @@ fn settings_overlay(
                         }))
                         .child(secondary_btn("取消", dark).id("settings-cancel").on_click({
                             let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 panel.borrow_mut().show_settings = false;
                                 window.refresh();
                             }

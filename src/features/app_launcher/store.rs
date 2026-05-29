@@ -1,10 +1,78 @@
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{collections::HashMap, sync::Arc};
 
-use anyhow::{Context, Result};
-use rusqlite::{Connection, OptionalExtension, params};
+use anyhow::Result;
+use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
+use crate::core::database::{DatabaseService, SqlitePool};
 use crate::platform::apps::InstalledApp;
+
+pub const LOAD_LAST_SCAN: &str = "SELECT value FROM app_index_meta WHERE key = 'last_scan'";
+
+pub const LOAD_APPS: &str = "
+SELECT name, path, bundle_id, icon_path, aliases_json, icon_letter
+FROM app_index_entries
+ORDER BY sort_name ASC, name ASC
+";
+
+pub const DELETE_ENTRIES: &str = "DELETE FROM app_index_entries";
+
+pub const INSERT_ENTRY: &str = "
+INSERT INTO app_index_entries
+    (path, name, bundle_id, icon_path, aliases_json, icon_letter, sort_name, search_text)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+";
+
+pub const UPSERT_LAST_SCAN: &str = "
+INSERT INTO app_index_meta (key, value)
+VALUES ('last_scan', ?1)
+ON CONFLICT(key) DO UPDATE SET value = excluded.value
+";
+
+pub const DELETE_LAST_SCAN: &str = "DELETE FROM app_index_meta WHERE key = 'last_scan'";
+
+pub const RECORD_LAUNCH: &str = "
+INSERT INTO command_usage (command_key, use_count, last_used_at)
+VALUES (?1, 1, strftime('%s', 'now'))
+ON CONFLICT(command_key) DO UPDATE SET
+    use_count = use_count + 1,
+    last_used_at = excluded.last_used_at
+";
+
+pub const LOAD_USAGE: &str = "SELECT command_key, use_count, last_used_at FROM command_usage";
+
+pub const SCHEMA: &str = "
+CREATE TABLE IF NOT EXISTS app_index_entries (
+    path TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    bundle_id TEXT,
+    icon_path TEXT,
+    aliases_json TEXT NOT NULL DEFAULT '[]',
+    icon_letter TEXT NOT NULL DEFAULT 'A',
+    sort_name TEXT NOT NULL,
+    search_text TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_index_entries_sort
+    ON app_index_entries(sort_name, name);
+
+CREATE INDEX IF NOT EXISTS idx_app_index_entries_search
+    ON app_index_entries(search_text);
+
+CREATE TABLE IF NOT EXISTS app_index_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS command_usage (
+    command_key TEXT PRIMARY KEY,
+    use_count INTEGER NOT NULL DEFAULT 0,
+    last_used_at INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_command_usage_recent
+    ON command_usage(use_count DESC, last_used_at DESC);
+";
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppIndexCache {
@@ -20,47 +88,37 @@ pub struct AppLaunchUsage {
 
 #[derive(Clone, Debug)]
 pub struct AppIndexStore {
-    path: PathBuf,
+    pool: SqlitePool,
 }
 
 impl AppIndexStore {
-    pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
+    pub fn new(database: Arc<DatabaseService>, key: &str) -> Self {
+        Self {
+            pool: database.pool(key).expect("app index database should be registered"),
+        }
     }
 
     pub fn load(&self) -> Result<AppIndexCache> {
-        let conn = self.open_connection()?;
+        let conn = self.connection()?;
+        ensure_schema(&conn)?;
         let last_scan = self.load_last_scan(&conn)?;
-        let mut stmt = conn.prepare(
-            "
-            SELECT name, path, bundle_id, icon_path, aliases_json, icon_letter
-            FROM app_index_entries
-            ORDER BY sort_name ASC, name ASC
-            ",
-        )?;
+        let mut stmt = conn.prepare(LOAD_APPS)?;
         let rows = stmt.query_map([], map_app)?;
         let mut apps = Vec::new();
         for row in rows {
             apps.push(row?);
         }
-
         Ok(AppIndexCache { apps, last_scan })
     }
 
     pub fn save(&self, cache: &AppIndexCache) -> Result<()> {
-        let mut conn = self.open_connection()?;
-        let tx = conn.transaction()?;
-        tx.execute("DELETE FROM app_index_entries", [])?;
+        let conn = self.connection()?;
+        ensure_schema(&conn)?;
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(DELETE_ENTRIES, [])?;
 
         {
-            let mut stmt = tx.prepare(
-                "
-                INSERT INTO app_index_entries
-                    (path, name, bundle_id, icon_path, aliases_json, icon_letter, sort_name, search_text)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-                ",
-            )?;
-
+            let mut stmt = tx.prepare(INSERT_ENTRY)?;
             for app in &cache.apps {
                 stmt.execute(params![
                     app.path,
@@ -77,17 +135,10 @@ impl AppIndexStore {
 
         match cache.last_scan.as_ref() {
             Some(last_scan) => {
-                tx.execute(
-                    "
-                    INSERT INTO app_index_meta (key, value)
-                    VALUES ('last_scan', ?1)
-                    ON CONFLICT(key) DO UPDATE SET value = excluded.value
-                    ",
-                    params![last_scan],
-                )?;
+                tx.execute(UPSERT_LAST_SCAN, params![last_scan])?;
             }
             None => {
-                tx.execute("DELETE FROM app_index_meta WHERE key = 'last_scan'", [])?;
+                tx.execute(DELETE_LAST_SCAN, [])?;
             }
         }
 
@@ -102,13 +153,12 @@ impl AppIndexStore {
         offset: usize,
         limit: usize,
     ) -> Result<crate::core::page::Page<InstalledApp>> {
-        let conn = self.open_connection()?;
+        let conn = self.connection()?;
+        ensure_schema(&conn)?;
         let terms = query_terms(query);
         let (where_sql, params) = search_where_clause(&terms);
-
         let total = count_matches(&conn, &where_sql, &params)?;
         let rows = select_matches(&conn, &where_sql, &params, offset, limit, terms.is_empty())?;
-
         Ok(crate::core::page::Page {
             rows,
             total,
@@ -118,24 +168,16 @@ impl AppIndexStore {
     }
 
     pub fn record_launch(&self, app_path: &str) -> Result<()> {
-        let conn = self.open_connection()?;
-        conn.execute(
-            "
-            INSERT INTO command_usage (command_key, use_count, last_used_at)
-            VALUES (?1, 1, strftime('%s', 'now'))
-            ON CONFLICT(command_key) DO UPDATE SET
-                use_count = use_count + 1,
-                last_used_at = excluded.last_used_at
-            ",
-            params![format!("app:{app_path}")],
-        )?;
+        let conn = self.connection()?;
+        ensure_schema(&conn)?;
+        conn.execute(RECORD_LAUNCH, params![format!("app:{app_path}")])?;
         Ok(())
     }
 
     pub fn usage_map(&self) -> Result<HashMap<String, AppLaunchUsage>> {
-        let conn = self.open_connection()?;
-        let mut stmt =
-            conn.prepare("SELECT command_key, use_count, last_used_at FROM command_usage")?;
+        let conn = self.connection()?;
+        ensure_schema(&conn)?;
+        let mut stmt = conn.prepare(LOAD_USAGE)?;
         let rows = stmt.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -154,71 +196,24 @@ impl AppIndexStore {
         Ok(usage)
     }
 
-    fn open_connection(&self) -> Result<Connection> {
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("无法创建应用索引数据库目录 {}", parent.display()))?;
-        }
-
-        let conn = Connection::open(&self.path)
-            .with_context(|| format!("无法打开应用索引数据库 {}", self.path.display()))?;
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "synchronous", "NORMAL")?;
-        ensure_schema(&conn)?;
-        Ok(conn)
+    fn connection(&self) -> Result<crate::core::database::PooledConnection> {
+        self.pool.get().map_err(Into::into)
     }
 
-    fn load_last_scan(&self, conn: &Connection) -> Result<Option<String>> {
-        conn.query_row(
-            "SELECT value FROM app_index_meta WHERE key = 'last_scan'",
-            [],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(Into::into)
+    fn load_last_scan(&self, conn: &rusqlite::Connection) -> Result<Option<String>> {
+        conn.query_row(LOAD_LAST_SCAN, [], |row| row.get(0))
+            .optional()
+            .map_err(Into::into)
     }
 }
 
-fn ensure_schema(conn: &Connection) -> Result<()> {
-    conn.execute_batch(
-        "
-        CREATE TABLE IF NOT EXISTS app_index_entries (
-            path TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            bundle_id TEXT,
-            icon_path TEXT,
-            aliases_json TEXT NOT NULL DEFAULT '[]',
-            icon_letter TEXT NOT NULL DEFAULT 'A',
-            sort_name TEXT NOT NULL,
-            search_text TEXT NOT NULL
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_app_index_entries_sort
-            ON app_index_entries(sort_name, name);
-
-        CREATE INDEX IF NOT EXISTS idx_app_index_entries_search
-            ON app_index_entries(search_text);
-
-        CREATE TABLE IF NOT EXISTS app_index_meta (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS command_usage (
-            command_key TEXT PRIMARY KEY,
-            use_count INTEGER NOT NULL DEFAULT 0,
-            last_used_at INTEGER NOT NULL DEFAULT 0
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_app_command_usage_recent
-            ON command_usage(use_count DESC, last_used_at DESC);
-        ",
-    )?;
+fn ensure_schema(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(SCHEMA)?;
     Ok(())
 }
 
 #[cfg(test)]
-fn count_matches(conn: &Connection, where_sql: &str, values: &[String]) -> Result<usize> {
+fn count_matches(conn: &rusqlite::Connection, where_sql: &str, values: &[String]) -> Result<usize> {
     let sql = format!("SELECT COUNT(*) FROM app_index_entries {where_sql}");
     let total: i64 = conn.query_row(&sql, rusqlite::params_from_iter(values.iter()), |row| {
         row.get(0)
@@ -228,7 +223,7 @@ fn count_matches(conn: &Connection, where_sql: &str, values: &[String]) -> Resul
 
 #[cfg(test)]
 fn select_matches(
-    conn: &Connection,
+    conn: &rusqlite::Connection,
     where_sql: &str,
     values: &[String],
     offset: usize,
@@ -350,9 +345,15 @@ fn map_app(row: &rusqlite::Row<'_>) -> rusqlite::Result<InstalledApp> {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::{
+        fs,
+        path::PathBuf,
+        sync::Arc,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     use super::*;
+    use crate::core::{database::DatabaseService, storage::AppPaths};
 
     fn temp_file(name: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -362,6 +363,18 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("qingqi-app-index-{nanos}"));
         let _ = fs::create_dir_all(&dir);
         dir.join(name)
+    }
+
+    fn store_for_path(path: &PathBuf) -> AppIndexStore {
+        let paths = AppPaths::for_test(path.parent().unwrap().to_path_buf());
+        let database = Arc::new(DatabaseService::new(paths));
+        database
+            .register_database(crate::core::database::DatabaseSpec::path(
+                "app-launcher/index",
+                path.clone(),
+            ))
+            .unwrap();
+        AppIndexStore::new(database, "app-launcher/index")
     }
 
     fn sample_cache() -> AppIndexCache {
@@ -434,7 +447,7 @@ mod tests {
     #[test]
     fn load_missing_cache_as_default() {
         let path = temp_file("missing.db");
-        let store = AppIndexStore::new(&path);
+        let store = store_for_path(&path);
         let cache = store.load().expect("missing cache should load");
         assert!(cache.apps.is_empty());
         assert!(cache.last_scan.is_none());
@@ -443,7 +456,7 @@ mod tests {
     #[test]
     fn save_and_load_roundtrip() {
         let path = temp_file("index.db");
-        let store = AppIndexStore::new(&path);
+        let store = store_for_path(&path);
         let cache = sample_cache();
 
         store.save(&cache).expect("cache should save");
@@ -456,7 +469,7 @@ mod tests {
     #[test]
     fn search_page_matches_cached_database() {
         let path = temp_file("search.db");
-        let store = AppIndexStore::new(&path);
+        let store = store_for_path(&path);
         store.save(&sample_cache()).expect("cache should save");
 
         let page = store
@@ -480,26 +493,23 @@ mod tests {
     #[test]
     fn search_finds_expanded_aliases() {
         let path = temp_file("expanded.db");
-        let store = AppIndexStore::new(&path);
+        let store = store_for_path(&path);
         store
             .save(&cache_with_expanded_aliases())
             .expect("cache should save");
 
-        // Normalized bundle-id suffix should match
         let page = store
             .search_page("vscode", 0, 10)
             .expect("search should work");
         assert_eq!(page.total, 1);
         assert_eq!(page.rows[0].name, "Visual Studio Code");
 
-        // Normalized full bundle id should match
         let page = store
             .search_page("commicrosoftvscode", 0, 10)
             .expect("bundle id search should work");
         assert_eq!(page.total, 1);
         assert_eq!(page.rows[0].name, "Visual Studio Code");
 
-        // Normalized Safari bundle id should match
         let page = store
             .search_page("comapplesafari", 0, 10)
             .expect("safari bundle id search should work");

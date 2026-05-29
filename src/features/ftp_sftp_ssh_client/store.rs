@@ -1,43 +1,160 @@
-use std::{fs, path::Path};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{OptionalExtension, params};
 
-use crate::features::ftp_sftp_ssh_client::model::{
-    AuthMethod, RemoteProfile, RemoteProfileDraft, RemoteProtocol,
+use crate::{
+    core::database::{DatabaseService, PooledConnection, SqlitePool},
+    features::ftp_sftp_ssh_client::model::{
+        AuthMethod, RemoteProfile, RemoteProfileDraft, RemoteProtocol,
+    },
 };
 
+pub const LIST_PROFILES: &str = "
+SELECT id, name, protocol, host, port, username, auth_method, password,
+       private_key_path, private_key_passphrase, remote_dir, local_dir,
+       encoding, passive_mode, connect_timeout_secs, jump_enabled, jump_host,
+       jump_port, jump_username, jump_password, jump_private_key_path,
+       jump_private_key_passphrase, pinned, notes, last_used_at, created_at,
+       updated_at
+FROM remote_file_profiles
+ORDER BY pinned DESC, last_used_at DESC, id ASC
+";
+
+pub const GET_PROFILE: &str = "
+SELECT id, name, protocol, host, port, username, auth_method, password,
+       private_key_path, private_key_passphrase, remote_dir, local_dir,
+       encoding, passive_mode, connect_timeout_secs, jump_enabled, jump_host,
+       jump_port, jump_username, jump_password, jump_private_key_path,
+       jump_private_key_passphrase, pinned, notes, last_used_at, created_at,
+       updated_at
+FROM remote_file_profiles
+WHERE id = ?1
+";
+
+pub const INSERT_PROFILE: &str = "
+INSERT INTO remote_file_profiles
+    (name, protocol, host, port, username, auth_method, password,
+     private_key_path, private_key_passphrase, remote_dir, local_dir,
+     encoding, passive_mode, connect_timeout_secs, jump_enabled, jump_host,
+     jump_port, jump_username, jump_password, jump_private_key_path,
+     jump_private_key_passphrase, pinned, notes, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
+        ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23,
+        strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'),
+        strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
+";
+
+pub const UPDATE_PROFILE: &str = "
+UPDATE remote_file_profiles
+SET name = ?1,
+    protocol = ?2,
+    host = ?3,
+    port = ?4,
+    username = ?5,
+    auth_method = ?6,
+    password = ?7,
+    private_key_path = ?8,
+    private_key_passphrase = ?9,
+    remote_dir = ?10,
+    local_dir = ?11,
+    encoding = ?12,
+    passive_mode = ?13,
+    connect_timeout_secs = ?14,
+    jump_enabled = ?15,
+    jump_host = ?16,
+    jump_port = ?17,
+    jump_username = ?18,
+    jump_password = ?19,
+    jump_private_key_path = ?20,
+    jump_private_key_passphrase = ?21,
+    pinned = ?22,
+    notes = ?23,
+    updated_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')
+WHERE id = ?24
+";
+
+pub const UPDATE_LAST_USED: &str = "
+UPDATE remote_file_profiles
+SET last_used_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'),
+    updated_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')
+WHERE id = ?1
+";
+
+pub const SELECT_PINNED: &str = "SELECT pinned FROM remote_file_profiles WHERE id = ?1";
+
+pub const UPDATE_PINNED: &str = "
+UPDATE remote_file_profiles
+SET pinned = ?1,
+    updated_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')
+WHERE id = ?2
+";
+
+pub const DELETE_PROFILE: &str = "DELETE FROM remote_file_profiles WHERE id = ?1";
+pub const COUNT_PROFILES: &str = "SELECT COUNT(*) FROM remote_file_profiles";
+
+pub const SCHEMA: &str = "
+CREATE TABLE IF NOT EXISTS remote_file_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL DEFAULT '',
+    protocol TEXT NOT NULL DEFAULT 'sftp',
+    host TEXT NOT NULL DEFAULT '',
+    port INTEGER NOT NULL DEFAULT 22,
+    username TEXT NOT NULL DEFAULT '',
+    auth_method TEXT NOT NULL DEFAULT 'password',
+    password TEXT NOT NULL DEFAULT '',
+    private_key_path TEXT NOT NULL DEFAULT '',
+    private_key_passphrase TEXT NOT NULL DEFAULT '',
+    remote_dir TEXT NOT NULL DEFAULT '/',
+    local_dir TEXT NOT NULL DEFAULT '',
+    encoding TEXT NOT NULL DEFAULT 'utf-8',
+    passive_mode INTEGER NOT NULL DEFAULT 1,
+    connect_timeout_secs INTEGER NOT NULL DEFAULT 15,
+    jump_enabled INTEGER NOT NULL DEFAULT 0,
+    jump_host TEXT NOT NULL DEFAULT '',
+    jump_port INTEGER NOT NULL DEFAULT 22,
+    jump_username TEXT NOT NULL DEFAULT '',
+    jump_password TEXT NOT NULL DEFAULT '',
+    jump_private_key_path TEXT NOT NULL DEFAULT '',
+    jump_private_key_passphrase TEXT NOT NULL DEFAULT '',
+    pinned INTEGER NOT NULL DEFAULT 0,
+    notes TEXT NOT NULL DEFAULT '',
+    last_used_at TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_remote_file_profiles_order
+    ON remote_file_profiles(pinned DESC, last_used_at DESC, id ASC);
+";
+
+pub const MIGRATION_COLUMNS: &[&str] = &[
+    "ALTER TABLE remote_file_profiles ADD COLUMN private_key_passphrase TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE remote_file_profiles ADD COLUMN connect_timeout_secs INTEGER NOT NULL DEFAULT 15",
+    "ALTER TABLE remote_file_profiles ADD COLUMN jump_enabled INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE remote_file_profiles ADD COLUMN jump_host TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE remote_file_profiles ADD COLUMN jump_port INTEGER NOT NULL DEFAULT 22",
+    "ALTER TABLE remote_file_profiles ADD COLUMN jump_username TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE remote_file_profiles ADD COLUMN jump_password TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE remote_file_profiles ADD COLUMN jump_private_key_path TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE remote_file_profiles ADD COLUMN jump_private_key_passphrase TEXT NOT NULL DEFAULT ''",
+];
+
 pub struct RemoteProfileStore {
-    conn: Connection,
+    pool: SqlitePool,
 }
 
 impl RemoteProfileStore {
-    pub fn open(path: &Path) -> Result<Self> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("无法创建远程连接配置目录 {}", parent.display()))?;
-        }
-        let conn = Connection::open(path)?;
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "synchronous", "NORMAL")?;
-        let store = Self { conn };
+    pub fn open(database: Arc<DatabaseService>, key: &str) -> Result<Self> {
+        let pool = database.pool(key)?;
+        let store = Self { pool };
         store.ensure_schema()?;
         Ok(store)
     }
 
     pub fn list_profiles(&self) -> Result<Vec<RemoteProfile>> {
-        let mut stmt = self.conn.prepare(
-            "
-            SELECT id, name, protocol, host, port, username, auth_method, password,
-                   private_key_path, private_key_passphrase, remote_dir, local_dir,
-                   encoding, passive_mode, connect_timeout_secs, jump_enabled, jump_host,
-                   jump_port, jump_username, jump_password, jump_private_key_path,
-                   jump_private_key_passphrase, pinned, notes, last_used_at, created_at,
-                   updated_at
-            FROM remote_file_profiles
-            ORDER BY pinned DESC, last_used_at DESC, id ASC
-            ",
-        )?;
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(LIST_PROFILES)?;
         let rows = stmt.query_map([], map_profile)?;
         let mut profiles = Vec::new();
         for row in rows {
@@ -47,40 +164,17 @@ impl RemoteProfileStore {
     }
 
     pub fn get_profile(&self, id: i64) -> Result<Option<RemoteProfile>> {
-        self.conn
-            .query_row(
-                "
-                SELECT id, name, protocol, host, port, username, auth_method, password,
-                       private_key_path, private_key_passphrase, remote_dir, local_dir,
-                       encoding, passive_mode, connect_timeout_secs, jump_enabled, jump_host,
-                       jump_port, jump_username, jump_password, jump_private_key_path,
-                       jump_private_key_passphrase, pinned, notes, last_used_at, created_at,
-                       updated_at
-                FROM remote_file_profiles
-                WHERE id = ?1
-                ",
-                params![id],
-                map_profile,
-            )
+        let conn = self.connection()?;
+        conn.query_row(GET_PROFILE, params![id], map_profile)
             .optional()
             .map_err(Into::into)
     }
 
     pub fn create_profile(&self, draft: &RemoteProfileDraft) -> Result<RemoteProfile> {
         let draft = draft.clone().normalize();
-        self.conn.execute(
-            "
-            INSERT INTO remote_file_profiles
-                (name, protocol, host, port, username, auth_method, password,
-                 private_key_path, private_key_passphrase, remote_dir, local_dir,
-                 encoding, passive_mode, connect_timeout_secs, jump_enabled, jump_host,
-                 jump_port, jump_username, jump_password, jump_private_key_path,
-                 jump_private_key_passphrase, pinned, notes, created_at, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-                    ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23,
-                    strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'),
-                    strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
-            ",
+        let conn = self.connection()?;
+        conn.execute(
+            INSERT_PROFILE,
             params![
                 draft.name,
                 draft.protocol.as_str(),
@@ -107,7 +201,8 @@ impl RemoteProfileStore {
                 draft.notes,
             ],
         )?;
-        let id = self.conn.last_insert_rowid();
+        let id = conn.last_insert_rowid();
+        drop(conn);
         self.get_profile(id)?
             .context("创建连接配置后无法重新读取记录")
     }
@@ -118,35 +213,9 @@ impl RemoteProfileStore {
         draft: &RemoteProfileDraft,
     ) -> Result<Option<RemoteProfile>> {
         let draft = draft.clone().normalize();
-        let affected = self.conn.execute(
-            "
-            UPDATE remote_file_profiles
-            SET name = ?1,
-                protocol = ?2,
-                host = ?3,
-                port = ?4,
-                username = ?5,
-                auth_method = ?6,
-                password = ?7,
-                private_key_path = ?8,
-                private_key_passphrase = ?9,
-                remote_dir = ?10,
-                local_dir = ?11,
-                encoding = ?12,
-                passive_mode = ?13,
-                connect_timeout_secs = ?14,
-                jump_enabled = ?15,
-                jump_host = ?16,
-                jump_port = ?17,
-                jump_username = ?18,
-                jump_password = ?19,
-                jump_private_key_path = ?20,
-                jump_private_key_passphrase = ?21,
-                pinned = ?22,
-                notes = ?23,
-                updated_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')
-            WHERE id = ?24
-            ",
+        let conn = self.connection()?;
+        let affected = conn.execute(
+            UPDATE_PROFILE,
             params![
                 draft.name,
                 draft.protocol.as_str(),
@@ -181,56 +250,33 @@ impl RemoteProfileStore {
     }
 
     pub fn update_last_used(&self, id: i64) -> Result<()> {
-        self.conn.execute(
-            "
-            UPDATE remote_file_profiles
-            SET last_used_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'),
-                updated_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')
-            WHERE id = ?1
-            ",
-            params![id],
-        )?;
+        let conn = self.connection()?;
+        conn.execute(UPDATE_LAST_USED, params![id])?;
         Ok(())
     }
 
     pub fn toggle_pinned(&self, id: i64) -> Result<Option<bool>> {
-        let pinned = self
-            .conn
-            .query_row(
-                "SELECT pinned FROM remote_file_profiles WHERE id = ?1",
-                params![id],
-                |row| row.get::<_, i64>(0),
-            )
+        let conn = self.connection()?;
+        let pinned = conn
+            .query_row(SELECT_PINNED, params![id], |row| row.get::<_, i64>(0))
             .optional()?;
         let Some(pinned) = pinned else {
             return Ok(None);
         };
         let next = if pinned == 0 { 1 } else { 0 };
-        self.conn.execute(
-            "
-            UPDATE remote_file_profiles
-            SET pinned = ?1,
-                updated_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')
-            WHERE id = ?2
-            ",
-            params![next, id],
-        )?;
+        conn.execute(UPDATE_PINNED, params![next, id])?;
         Ok(Some(next == 1))
     }
 
     pub fn delete_profile(&self, id: i64) -> Result<bool> {
-        Ok(self.conn.execute(
-            "DELETE FROM remote_file_profiles WHERE id = ?1",
-            params![id],
-        )? > 0)
+        let conn = self.connection()?;
+        Ok(conn.execute(DELETE_PROFILE, params![id])? > 0)
     }
 
     pub fn seed_defaults(&self) -> Result<usize> {
-        let count =
-            self.conn
-                .query_row("SELECT COUNT(*) FROM remote_file_profiles", [], |row| {
-                    row.get::<_, i64>(0)
-                })?;
+        let conn = self.connection()?;
+        let count = conn.query_row(COUNT_PROFILES, [], |row| row.get::<_, i64>(0))?;
+        drop(conn);
         if count > 0 {
             return Ok(0);
         }
@@ -241,56 +287,18 @@ impl RemoteProfileStore {
     }
 
     fn ensure_schema(&self) -> Result<()> {
-        self.conn.execute_batch(
-            "
-            CREATE TABLE IF NOT EXISTS remote_file_profiles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL DEFAULT '',
-                protocol TEXT NOT NULL DEFAULT 'sftp',
-                host TEXT NOT NULL DEFAULT '',
-                port INTEGER NOT NULL DEFAULT 22,
-                username TEXT NOT NULL DEFAULT '',
-                auth_method TEXT NOT NULL DEFAULT 'password',
-                password TEXT NOT NULL DEFAULT '',
-                private_key_path TEXT NOT NULL DEFAULT '',
-                private_key_passphrase TEXT NOT NULL DEFAULT '',
-                remote_dir TEXT NOT NULL DEFAULT '/',
-                local_dir TEXT NOT NULL DEFAULT '',
-                encoding TEXT NOT NULL DEFAULT 'utf-8',
-                passive_mode INTEGER NOT NULL DEFAULT 1,
-                connect_timeout_secs INTEGER NOT NULL DEFAULT 15,
-                jump_enabled INTEGER NOT NULL DEFAULT 0,
-                jump_host TEXT NOT NULL DEFAULT '',
-                jump_port INTEGER NOT NULL DEFAULT 22,
-                jump_username TEXT NOT NULL DEFAULT '',
-                jump_password TEXT NOT NULL DEFAULT '',
-                jump_private_key_path TEXT NOT NULL DEFAULT '',
-                jump_private_key_passphrase TEXT NOT NULL DEFAULT '',
-                pinned INTEGER NOT NULL DEFAULT 0,
-                notes TEXT NOT NULL DEFAULT '',
-                last_used_at TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL DEFAULT '',
-                updated_at TEXT NOT NULL DEFAULT ''
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_remote_file_profiles_order
-                ON remote_file_profiles(pinned DESC, last_used_at DESC, id ASC);
-            ",
-        )?;
-        for sql in [
-            "ALTER TABLE remote_file_profiles ADD COLUMN private_key_passphrase TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE remote_file_profiles ADD COLUMN connect_timeout_secs INTEGER NOT NULL DEFAULT 15",
-            "ALTER TABLE remote_file_profiles ADD COLUMN jump_enabled INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE remote_file_profiles ADD COLUMN jump_host TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE remote_file_profiles ADD COLUMN jump_port INTEGER NOT NULL DEFAULT 22",
-            "ALTER TABLE remote_file_profiles ADD COLUMN jump_username TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE remote_file_profiles ADD COLUMN jump_password TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE remote_file_profiles ADD COLUMN jump_private_key_path TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE remote_file_profiles ADD COLUMN jump_private_key_passphrase TEXT NOT NULL DEFAULT ''",
-        ] {
-            let _ = self.conn.execute(sql, []);
+        let conn = self.connection()?;
+        conn.execute_batch(SCHEMA)?;
+        for statement in MIGRATION_COLUMNS {
+            let _ = conn.execute(statement, []);
         }
         Ok(())
+    }
+
+    fn connection(&self) -> Result<PooledConnection> {
+        self.pool
+            .get()
+            .context("cannot get remote profile pooled connection")
     }
 }
 

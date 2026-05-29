@@ -13,7 +13,7 @@ use gpui::{
 };
 
 use crate::{
-    app::{launcher::Launcher, text_input::TextInput},
+    app::{events::AppEventBus, launcher::Launcher, text_input::TextInput},
     core::{
         command::{CommandInvocation, CommandTarget},
         plugin::{PluginManager, PluginSession},
@@ -43,6 +43,7 @@ impl PluginOpenTrace {
 pub struct WindowController {
     plugin_manager: Rc<RefCell<PluginManager>>,
     clipboard_service: Arc<Mutex<ClipboardService>>,
+    events: AppEventBus,
     launcher_window: Option<AnyWindowHandle>,
     plugin_windows: HashMap<String, AnyWindowHandle>,
 }
@@ -51,10 +52,12 @@ impl WindowController {
     pub fn new(
         plugin_manager: Rc<RefCell<PluginManager>>,
         clipboard_service: Arc<Mutex<ClipboardService>>,
+        events: AppEventBus,
     ) -> Self {
         Self {
             plugin_manager,
             clipboard_service,
+            events,
             launcher_window: None,
             plugin_windows: HashMap::new(),
         }
@@ -114,6 +117,7 @@ impl WindowController {
     fn open_launcher(controller: WindowControllerHandle, cx: &mut App) {
         let plugin_manager = controller.borrow().plugin_manager();
         let clipboard_service = Arc::clone(&controller.borrow().clipboard_service);
+        let events = controller.borrow().events.clone();
         let initial_results = plugin_manager
             .borrow_mut()
             .commands_with_clipboard(Launcher::latest_clipboard_context_kinds(&clipboard_service))
@@ -161,7 +165,7 @@ impl WindowController {
                 launcher.attach_window_controller(Rc::clone(&controller_for_entity));
                 launcher.attach_query_input(query_input.clone());
                 launcher.observe_query_input(launcher_cx);
-                launcher.initialize_async(launcher_cx);
+                launcher.initialize_async(events, launcher_cx);
             });
             window.focus(&query_input.focus_handle(cx));
             launcher
@@ -330,7 +334,9 @@ impl WindowController {
         let stored_window_handle = { controller.borrow().plugin_windows.get(plugin_id).copied() };
         if let Some(window_handle) = stored_window_handle {
             if let Some(handle) = window_handle.downcast::<PluginWindow>() {
-                match handle.update(cx, |_, window, _| window.remove_window()) {
+                match handle.update(cx, |_, window, cx| {
+                    window.defer(cx, |window, _cx| window.remove_window());
+                }) {
                     Ok(_) => {
                         controller.borrow_mut().clear_plugin_window(plugin_id);
                         return true;
@@ -366,7 +372,9 @@ impl WindowController {
             }
 
             let closed = handle
-                .update(cx, |_, window, _| window.remove_window())
+                .update(cx, |_, window, cx| {
+                    window.defer(cx, |window, _cx| window.remove_window());
+                })
                 .is_ok();
             controller.borrow_mut().clear_plugin_window(plugin_id);
             if closed {
@@ -462,7 +470,7 @@ fn log_plugin_window_step(
 fn log_plugin_open_total(plugin_id: &str, trace: PluginOpenTrace) {
     let duration_ms = trace.started.elapsed().as_millis() as u64;
     if duration_ms < 50 {
-        tracing::info!(
+        tracing::debug!(
             plugin_id,
             trace_id = trace.id,
             duration_ms,
@@ -497,12 +505,14 @@ fn plugin_window_options(
     };
 
     let always_on_top = manifest.visual.window.always_on_top;
+    let client_drawn_window = manifest.id == "clipboard";
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         display_id: display.map(|display| display.id()),
         titlebar: Some(TitlebarOptions {
             title: Some(title.into()),
-            appears_transparent: false,
+            appears_transparent: client_drawn_window,
+            traffic_light_position: client_drawn_window.then_some(point(px(28.0), px(22.0))),
             ..Default::default()
         }),
         kind: if always_on_top {
@@ -514,6 +524,7 @@ fn plugin_window_options(
         is_minimizable: true,
         window_background: WindowBackgroundAppearance::Opaque,
         window_min_size: always_on_top.then_some(bounds.size),
+        window_decorations: client_drawn_window.then_some(WindowDecorations::Client),
         ..Default::default()
     }
 }

@@ -29,7 +29,7 @@ pub fn manifest() -> PluginManifest {
             category: PluginCategory::Tool,
             status: PluginStatus::Background,
             mode: PluginWindowMode::Window,
-            window: WindowSpec::fixed_topmost(870.0, 480.0),
+            window: WindowSpec::fixed_topmost(1024.0, 558.0),
         },
         stats: PluginStats {
             primary: "文本历史",

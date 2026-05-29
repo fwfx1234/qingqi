@@ -1,8 +1,13 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use gpui::{
-    AnyElement, App, AppContext, Component, Entity, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, StatefulInteractiveElement, Styled, Window, div, prelude::FluentBuilder, px,
+    AnyElement, App, AppContext, AsyncApp, Component, Entity, InteractiveElement, IntoElement,
+    ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window, div,
+    prelude::FluentBuilder, px,
 };
 
 use crate::{
@@ -49,6 +54,13 @@ pub struct JsonPanel {
     stats_text: String,
     error_loc_text: String,
     last_mode: JsonMode,
+    pending: Arc<Mutex<Option<JsonBackgroundResult>>>,
+}
+
+#[derive(Clone)]
+struct JsonBackgroundResult {
+    result: JsonResult,
+    mode: JsonMode,
 }
 
 impl JsonPanel {
@@ -62,6 +74,7 @@ impl JsonPanel {
             stats_text: String::new(),
             error_loc_text: String::new(),
             last_mode: JsonMode::Format,
+            pending: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -182,8 +195,47 @@ impl JsonPanel {
             return;
         }
 
-        let result = service::run(text, "", JsonMode::Format);
-        self.apply_result(result, JsonMode::Format, cx);
+        self.run_async(
+            text.to_string(),
+            String::new(),
+            JsonMode::Format,
+            cx.to_async(),
+        );
+    }
+
+    fn collect_pending_result(&mut self, cx: &mut App) {
+        let pending = self.pending.lock().ok().and_then(|mut slot| slot.take());
+        if let Some(background) = pending {
+            self.apply_result(background.result, background.mode, cx);
+        }
+    }
+
+    fn run_async(
+        &mut self,
+        input_text: String,
+        query_text: String,
+        mode: JsonMode,
+        async_cx: AsyncApp,
+    ) {
+        self.last_mode = mode;
+        self.status_text = String::from("处理中...");
+        self.status_tone = StatusTone::Neutral;
+        self.stats_text.clear();
+        self.error_loc_text.clear();
+
+        let pending = Arc::clone(&self.pending);
+        async_cx
+            .spawn(async move |async_cx| {
+                let result = async_cx
+                    .background_executor()
+                    .spawn(async move { service::run(&input_text, &query_text, mode) })
+                    .await;
+                if let Ok(mut slot) = pending.lock() {
+                    *slot = Some(JsonBackgroundResult { result, mode });
+                }
+                let _ = async_cx.refresh();
+            })
+            .detach();
     }
 }
 
@@ -201,7 +253,11 @@ impl IntoElement for JsonParserElement {
 
 impl RenderOnce for JsonParserElement {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        self.panel.borrow_mut().ensure_inputs(cx);
+        {
+            let mut panel = self.panel.borrow_mut();
+            panel.collect_pending_result(cx);
+            panel.ensure_inputs(cx);
+        }
         let panel = self.panel.borrow();
         let input = panel.input.clone();
         let query = panel.query.clone();
@@ -657,8 +713,9 @@ fn apply_mode(mode: JsonMode, panel: &Rc<RefCell<JsonPanel>>, cx: &mut App) {
         (input_text, query_text)
     };
 
-    let result = service::run(&input_text, &query_text, mode);
-    panel.borrow_mut().apply_result(result, mode, cx);
+    panel
+        .borrow_mut()
+        .run_async(input_text, query_text, mode, cx.to_async());
 }
 
 fn format_stats(stats: &JsonStats) -> String {

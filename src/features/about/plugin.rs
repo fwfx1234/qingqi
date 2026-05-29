@@ -1,47 +1,28 @@
-use gpui::{AnyElement, App, IntoElement, Window};
+use gpui::{App, IntoElement, Window};
 
 use crate::{
     app::events::AppEventBus,
-    core::plugin::{PluginManifest, PluginRuntime, PluginSession},
+    core::plugin::{
+        ConfiguredPluginRuntime, PanelPluginSession, PluginSession,
+    },
     features::about::{manifest, view::AboutPage},
 };
 
-pub struct AboutRuntime;
+pub type AboutRuntime = ConfiguredPluginRuntime<()>;
 
-impl AboutRuntime {
-    pub fn new() -> Self {
-        Self
-    }
+pub fn runtime() -> AboutRuntime {
+    ConfiguredPluginRuntime::new(manifest::manifest).with_session(open_session)
 }
 
-impl PluginRuntime for AboutRuntime {
-    fn manifest(&self) -> PluginManifest {
-        manifest::manifest()
-    }
-
-    fn open_session(
-        &mut self,
-        _: AppEventBus,
-        _: &mut App,
-    ) -> anyhow::Result<Box<dyn PluginSession>> {
-        Ok(Box::new(AboutSession))
-    }
-
-    fn close_idle(&mut self) {}
-}
-
-struct AboutSession;
-
-impl PluginSession for AboutSession {
-    fn plugin_id(&self) -> &'static str {
-        manifest::PLUGIN_ID
-    }
-
-    fn title(&self) -> &'static str {
-        "关于"
-    }
-
-    fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
-        AboutPage.into_any_element()
-    }
+fn open_session(
+    _: &mut (),
+    _: AppEventBus,
+    _: &mut App,
+) -> anyhow::Result<Box<dyn PluginSession>> {
+    Ok(Box::new(PanelPluginSession::new(
+        manifest::PLUGIN_ID,
+        "关于",
+        (),
+        |_, _window: &mut Window, _cx: &mut App| AboutPage.into_any_element(),
+    )))
 }

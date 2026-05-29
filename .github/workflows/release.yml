@@ -10,53 +10,32 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build ${{ matrix.os }}-${{ runner.arch }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            archive_ext: tar.gz
-            binary_name: qingqi
-          - os: macos-latest
-            archive_ext: tar.gz
-            binary_name: qingqi
-          - os: windows-latest
-            archive_ext: zip
-            binary_name: qingqi.exe
+  build-macos-app:
+    name: Build macOS App (${{ runner.arch }})
+    runs-on: macos-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build release
-        run: cargo build --release
+      - name: Install cargo-bundle
+        run: cargo install cargo-bundle --locked
 
-      - name: Package (Unix)
-        if: runner.os != 'Windows'
+      - name: Bundle macOS app
         run: |
+          cargo bundle --release
+          APP_PATH="$(ls -d target/release/bundle/osx/*.app | head -n 1)"
           mkdir -p dist
-          cp target/release/${{ matrix.binary_name }} dist/
-          tar -czf qingqi-${{ runner.os }}-${{ runner.arch }}.${{ matrix.archive_ext }} -C dist ${{ matrix.binary_name }}
-
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item "target/release/${{ matrix.binary_name }}" "dist/${{ matrix.binary_name }}"
-          Compress-Archive -Path "dist/${{ matrix.binary_name }}" -DestinationPath "qingqi-${{ runner.os }}-${{ runner.arch }}.${{ matrix.archive_ext }}" -Force
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "dist/Qingqi-macos-${{ runner.arch }}.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: qingqi-${{ runner.os }}-${{ runner.arch }}
-          path: qingqi-${{ runner.os }}-${{ runner.arch }}.${{ matrix.archive_ext }}
+          name: qingqi-macos-${{ runner.arch }}
+          path: dist/Qingqi-macos-${{ runner.arch }}.zip
 
       - name: Release upload
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: qingqi-${{ runner.os }}-${{ runner.arch }}.${{ matrix.archive_ext }}
+          files: dist/Qingqi-macos-${{ runner.arch }}.zip

@@ -8,9 +8,10 @@ use anyhow::{Context, Result};
 use gpui::App;
 
 use crate::{
+    core::database::DatabaseService,
+    features::clipboard::data_source::ClipboardDataSource,
     features::clipboard::history_store::{
-        self as history_store_mod, ClipboardConfig, ClipboardHistoryStore, ClipboardItemKind,
-        ClipboardRecord,
+        self as history_store_mod, ClipboardConfig, ClipboardItemKind, ClipboardRecord,
     },
     platform,
 };
@@ -63,45 +64,85 @@ impl ClipboardFilter {
 }
 
 pub struct ClipboardService {
-    db_path: PathBuf,
+    database: Arc<DatabaseService>,
     image_dir: PathBuf,
+    data_source: Mutex<Option<ClipboardDataSource>>,
     config: Arc<Mutex<ClipboardConfig>>,
     last_seen_text: Mutex<String>,
     last_seen_image_id: Mutex<u64>,
     last_seen_files: Mutex<String>,
+    last_change_count: Mutex<i64>,
 }
 
 impl ClipboardService {
-    pub fn new(db_path: PathBuf) -> Self {
+    pub fn new(database: Arc<DatabaseService>, db_path: PathBuf) -> Self {
         let image_dir = db_path
             .parent()
             .map(|dir| dir.join("clipboard-images"))
             .unwrap_or_else(|| PathBuf::from("clipboard-images"));
-        Self::with_image_dir(db_path, image_dir)
+        Self::with_image_dir(database, image_dir)
     }
 
-    pub fn with_image_dir(db_path: PathBuf, image_dir: PathBuf) -> Self {
-        let config = ClipboardHistoryStore::open(&db_path)
-            .and_then(|store| store.load_config())
+    pub fn with_image_dir(database: Arc<DatabaseService>, image_dir: PathBuf) -> Self {
+        let opened = ClipboardDataSource::open(Arc::clone(&database), "clipboard/history");
+        let config = opened
+            .as_ref()
+            .ok()
+            .and_then(|data_source| data_source.load_config().ok())
             .unwrap_or_default();
         Self {
-            db_path,
+            database,
             image_dir,
+            data_source: Mutex::new(opened.ok()),
             config: Arc::new(Mutex::new(config)),
             last_seen_text: Mutex::new(String::new()),
             last_seen_image_id: Mutex::new(0),
             last_seen_files: Mutex::new(String::new()),
+            last_change_count: Mutex::new(i64::MIN),
         }
     }
 
     pub fn start(&mut self) {}
 
     pub fn capture_current(&self, cx: &App) -> Result<bool> {
+        if self.claim_change_count(platform::clipboard::change_count())? == Some(false) {
+            return Ok(false);
+        }
+
+        let snapshot = platform::clipboard::read_snapshot(cx, self.last_seen_image_id());
+        self.capture_snapshot(snapshot)
+    }
+
+    pub fn current_change_count(&self) -> Result<Option<i64>> {
+        let current = platform::clipboard::change_count();
+        let _ = self.claim_change_count(current)?;
+        Ok(current)
+    }
+
+    pub fn claim_change_count(&self, change_count: Option<i64>) -> Result<Option<bool>> {
+        let Some(change_count) = change_count else {
+            return Ok(None);
+        };
+        let mut last = self
+            .last_change_count
+            .lock()
+            .map_err(|_| anyhow::anyhow!("clipboard change-count lock poisoned"))?;
+        if *last == change_count {
+            return Ok(Some(false));
+        }
+        *last = change_count;
+        Ok(Some(true))
+    }
+
+    pub fn capture_snapshot(
+        &self,
+        snapshot: platform::clipboard::ClipboardSnapshot,
+    ) -> Result<bool> {
         let config = self.config();
 
         // Check for file clipboard first (native macOS file URLs)
         if config.capture_files {
-            if let Some(paths) = platform::clipboard::read_file_list() {
+            if let Some(paths) = snapshot.files.clone() {
                 let signature = files_signature(&paths);
                 if let Ok(mut last_seen) = self.last_seen_files.lock() {
                     if *last_seen == signature {
@@ -116,7 +157,7 @@ impl ClipboardService {
         }
 
         if config.capture_text {
-            if let Some(text) = platform::clipboard::read_text(cx) {
+            if let Some(text) = snapshot.text {
                 // On macOS, when files are copied the text representation can
                 // contain paths. If we already captured via read_file_list()
                 // above, skip the text path. Otherwise, check if this looks
@@ -154,7 +195,7 @@ impl ClipboardService {
         }
 
         if config.capture_image {
-            if let Some(image) = platform::clipboard::read_image(cx) {
+            if let Some(image) = snapshot.image {
                 if let Ok(last_seen) = self.last_seen_image_id.lock() {
                     if *last_seen == image.id {
                         return Ok(false);
@@ -174,14 +215,20 @@ impl ClipboardService {
         Ok(false)
     }
 
+    pub fn last_seen_image_id(&self) -> Option<u64> {
+        self.last_seen_image_id
+            .lock()
+            .ok()
+            .and_then(|id| if *id == 0 { None } else { Some(*id) })
+    }
+
     pub fn capture_text(&self, text: &str) -> Result<bool> {
         let config = self.config();
         self.capture_text_with_config(text, &config)
     }
 
     fn capture_text_with_config(&self, text: &str, config: &ClipboardConfig) -> Result<bool> {
-        let store = self.open_store()?;
-        store.add_text(text, config)
+        self.with_data_source(|data_source| data_source.add_text(text, config))
     }
 
     fn capture_files_with_config(
@@ -189,8 +236,7 @@ impl ClipboardService {
         paths: &[String],
         config: &ClipboardConfig,
     ) -> Result<bool> {
-        let store = self.open_store()?;
-        store.add_files(paths, config)
+        self.with_data_source(|data_source| data_source.add_files(paths, config))
     }
 
     fn capture_image(
@@ -216,8 +262,9 @@ impl ClipboardService {
         let size_label = format_bytes(image.bytes.len());
         let format_label = platform::clipboard::image_format_label(image.format);
         let preview = format!("图片剪贴板 · {format_label} · {size_label}");
-        self.open_store()?
-            .add_image(&path.to_string_lossy(), &preview, format_label, config)
+        self.with_data_source(|data_source| {
+            data_source.add_image(&path.to_string_lossy(), &preview, format_label, config)
+        })
     }
 
     pub fn copy_record_to_clipboard(&self, record: &ClipboardRecord, cx: &mut App) -> Result<()> {
@@ -260,31 +307,31 @@ impl ClipboardService {
         offset: usize,
         limit: usize,
     ) -> Result<Vec<ClipboardRecord>> {
-        self.open_store()?.search(query, filter, offset, limit)
+        self.with_data_source(|data_source| data_source.search(query, filter, offset, limit))
     }
 
     pub fn search_all(&self, query: &str, filter: ClipboardFilter) -> Result<Vec<ClipboardRecord>> {
-        self.open_store()?.search_all(query, filter)
+        self.with_data_source(|data_source| data_source.search_all(query, filter))
     }
 
     pub fn latest_record(&self) -> Result<Option<ClipboardRecord>> {
-        self.open_store()?.latest()
+        self.with_data_source(|data_source| data_source.latest())
     }
 
     pub fn toggle_pin(&self, id: i64) -> Result<Option<bool>> {
-        self.open_store()?.toggle_pin(id)
+        self.with_data_source(|data_source| data_source.toggle_pin(id))
     }
 
     pub fn delete(&self, id: i64) -> Result<bool> {
-        self.open_store()?.delete(id)
+        self.with_data_source(|data_source| data_source.delete(id))
     }
 
     pub fn clear_all(&self) -> Result<usize> {
-        self.open_store()?.clear_all()
+        self.with_data_source(|data_source| data_source.clear_all())
     }
 
     pub fn clear_unpinned(&self) -> Result<usize> {
-        self.open_store()?.clear_unpinned()
+        self.with_data_source(|data_source| data_source.clear_unpinned())
     }
 
     pub fn config(&self) -> ClipboardConfig {
@@ -344,12 +391,27 @@ impl ClipboardService {
 
     pub fn close(&mut self) {}
 
-    fn open_store(&self) -> Result<ClipboardHistoryStore> {
-        ClipboardHistoryStore::open(&self.db_path)
+    /// Runs `f` against a lazily-opened, reused SQLite connection so each
+    /// capture/search/mutation no longer pays for opening the database and
+    /// re-running schema migrations every time.
+    fn with_data_source<T>(&self, f: impl FnOnce(&ClipboardDataSource) -> Result<T>) -> Result<T> {
+        let mut guard = self
+            .data_source
+            .lock()
+            .map_err(|_| anyhow::anyhow!("clipboard data source lock poisoned"))?;
+        if guard.is_none() {
+            *guard = Some(ClipboardDataSource::open(
+                Arc::clone(&self.database),
+                "clipboard/history",
+            )?);
+        }
+        f(guard
+            .as_ref()
+            .expect("clipboard data source just initialized"))
     }
 
     fn persist_config(&self, config: ClipboardConfig) -> Result<ClipboardConfig> {
-        self.open_store()?.save_config(&config)?;
+        self.with_data_source(|data_source| data_source.save_config(&config))?;
         if let Ok(mut current) = self.config.lock() {
             *current = config.clone();
         }
@@ -383,10 +445,12 @@ fn files_signature(paths: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::ClipboardService;
-    use crate::features::clipboard::history_store::ClipboardHistoryStore;
+    use crate::core::{database::DatabaseService, storage::AppPaths};
+    use crate::features::clipboard::data_source::ClipboardDataSource;
     use std::{
         fs,
         path::PathBuf,
+        sync::Arc,
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -424,7 +488,10 @@ mod tests {
     #[test]
     fn config_mutators_persist_and_refresh_cache() {
         let path = temp_db("config-service.db");
-        let service = ClipboardService::new(path.clone());
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(
+            path.parent().unwrap().to_path_buf(),
+        )));
+        let service = ClipboardService::new(database, path.clone());
 
         let config = service
             .set_capture_text(false)
@@ -467,8 +534,18 @@ mod tests {
         );
         assert_eq!(cached.hotkey, "Ctrl+Alt+V");
 
-        let store = ClipboardHistoryStore::open(&path).expect("store should reopen");
-        let loaded = store.load_config().expect("config should load");
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(
+            path.parent().unwrap().to_path_buf(),
+        )));
+        database
+            .register_database(crate::core::database::DatabaseSpec::path(
+                "clipboard/history",
+                path,
+            ))
+            .unwrap();
+        let data_source = ClipboardDataSource::open(database, "clipboard/history")
+            .expect("data source should reopen");
+        let loaded = data_source.load_config().expect("config should load");
         assert_eq!(loaded, cached);
     }
 

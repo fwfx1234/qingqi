@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 mod app;
 mod core;
 mod features;

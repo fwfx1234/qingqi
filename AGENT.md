@@ -4,11 +4,23 @@ This project is a Rust + GPUI desktop toolbox. Keep changes aligned with the
 current architecture instead of growing `app::runtime` into a catch-all entry
 point.
 
-Authoritative core rules live in `docs/core-architecture-spec.md`. Read that
-file before changing `src/app/`, `src/core/`, `src/platform/`, plugin runtime
-wiring, background loops, event dispatch, command caching, or job handling.
-`docs/architecture-adjustment-plan.md` records the expert review and staged
-roadmap; the spec is the day-to-day rulebook.
+The **target architecture** lives in `docs/architecture.md`: the launcher +
+plugin design Qingqi is converging toward (slim `Plugin` trait, `PluginView`
+enum for the three modes, owned `Manifest`, built-in App catalog, declarative
+`FeatureRegistry`, and a seam for future third-party plugins). Read it before
+changing `src/app/`, `src/core/`, `src/platform/`, plugin wiring, background
+loops, event dispatch, or command caching.
+
+Note: the current code has not fully migrated to that target yet (it still uses
+`PluginRuntime`/`PluginSession`/`CommandTarget` and a hand-written
+`register_builtin_plugins`). The rules below describe how to work safely in the
+**current** codebase; `docs/architecture.md` §13 is the migration map from here
+to the target.
+
+`docs/conventions.md` is the from-scratch coding rulebook (layering, file/type
+naming, async patterns, and the high-performance-UI rules). Follow it for new
+code and when migrating; it is the authority on **how** code is written, while
+`docs/architecture.md` is the authority on **what** the system looks like.
 
 ## Architecture Boundaries
 
@@ -94,8 +106,8 @@ roadmap; the spec is the day-to-day rulebook.
 
 ## Core Architecture Work
 
-- Treat `docs/core-architecture-spec.md` as the acceptance criteria for core
-  design changes.
+- Treat `docs/architecture.md` as the target design; check core changes against
+  it and move toward it rather than away.
 - Keep `PluginManager` free of window handles and platform IO.
 - Keep `WindowController` as the sole launcher/plugin window lifecycle owner.
 - Keep `AppEventBus` as revisioned notification only; do not store feature data

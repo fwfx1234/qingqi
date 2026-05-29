@@ -41,6 +41,7 @@ struct SharedBatchState {
     message: Option<String>,
     /// Set by the worker when all items have been processed (success or failure).
     batch_done: bool,
+    single_results: Vec<SingleActionResult>,
 }
 
 /// Thread-safe handle for the background worker to report results back to the UI.
@@ -48,6 +49,19 @@ struct SharedBatchState {
 struct SharedBatchResults {
     inner: Arc<Mutex<SharedBatchState>>,
     cancel_requested: Arc<AtomicBool>,
+}
+
+#[derive(Clone, Debug)]
+enum SingleActionKind {
+    Retry,
+    Overwrite,
+}
+
+#[derive(Clone, Debug)]
+struct SingleActionResult {
+    index: usize,
+    kind: SingleActionKind,
+    result: Result<Option<CompressionResult>, String>,
 }
 
 const THUMB_SIZE: f32 = 42.0;
@@ -257,14 +271,12 @@ impl ImageCompressPanel {
     }
 
     pub fn open_output_dir(&mut self) {
-        if let Err(error) = std::fs::create_dir_all(&self.output_dir) {
-            self.message = format!("创建目录失败: {error}");
-            return;
-        }
-        match platform::shell::open_path(&self.output_dir) {
-            Ok(_) => self.message = format!("已打开目录: {}", self.output_dir.display()),
-            Err(error) => self.message = format!("打开目录失败: {error}"),
-        }
+        let dir = self.output_dir.clone();
+        thread::spawn(move || {
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = platform::shell::open_path(&dir);
+        });
+        self.message = format!("正在打开目录: {}", self.output_dir.display());
     }
 
     pub fn clear_items(&mut self) {
@@ -287,38 +299,7 @@ impl ImageCompressPanel {
         }
     }
 
-    /// Copy the compressed output back to the original file.
-    /// Only allowed when the entry has a real source file (not clipboard-only).
-    pub fn overwrite_entry(&mut self, index: usize) -> anyhow::Result<()> {
-        let item = self
-            .items
-            .get(index)
-            .ok_or_else(|| anyhow::anyhow!("条目不存在"))?;
-        if item.from_clipboard || item.source.path.as_os_str().is_empty() {
-            return Err(anyhow::anyhow!("剪贴板图片没有源文件，无法覆盖"));
-        }
-        let output = item
-            .output_path
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("无输出文件"))?
-            .clone();
-        let source = item.source.path.clone();
-        let _ = item;
-        std::fs::copy(&output, &source)
-            .with_context(|| format!("无法覆盖原图 {}", source.display()))?;
-        // Update entry stats to reflect overwrite
-        if let Some(item) = self.items.get_mut(index) {
-            if let Ok(meta) = std::fs::metadata(&source) {
-                item.source.original_size = meta.len();
-                item.output_size = Some(meta.len());
-                item.reduction_ratio = Some(0.0);
-            }
-        }
-        Ok(())
-    }
-
-    /// Retry a failed entry by re-compressing.
-    pub fn retry_entry(&mut self, index: usize) {
+    pub fn retry_entry_background(&mut self, index: usize, async_cx: gpui::AsyncApp) {
         let (source_path, output_path_opt) = match self.items.get(index) {
             Some(item) if item.status == QueueStatus::Failed => {
                 (item.source.path.clone(), item.output_path.clone())
@@ -329,32 +310,100 @@ impl ImageCompressPanel {
             }
         };
 
-        // Clean up old output if any
-        if let Some(output_path) = &output_path_opt {
-            let _ = std::fs::remove_file(output_path);
+        if let Some(item) = self.items.get_mut(index) {
+            item.status = QueueStatus::Running;
+            item.error_message.clear();
         }
+        self.message = String::from("正在重试...");
 
-        match self.service.retry_entry(
-            &self.output_dir,
-            self.mode,
-            self.quality,
-            self.overwrite_original,
-            &source_path,
-        ) {
-            Ok(result) => {
-                if let Some(item) = self.items.get_mut(index) {
-                    apply_result(item, result);
+        let service = self.service.clone_for_background();
+        let output_dir = self.output_dir.clone();
+        let mode = self.mode;
+        let quality = self.quality;
+        let overwrite_original = self.overwrite_original;
+        let shared = self.shared.clone();
+
+        async_cx
+            .spawn(async move |async_cx| {
+                let result = async_cx
+                    .background_executor()
+                    .spawn(async move {
+                        if let Some(output_path) = &output_path_opt {
+                            let _ = std::fs::remove_file(output_path);
+                        }
+                        service
+                            .retry_entry(
+                                &output_dir,
+                                mode,
+                                quality,
+                                overwrite_original,
+                                &source_path,
+                            )
+                            .map(Some)
+                            .map_err(|error| error.to_string())
+                    })
+                    .await;
+
+                if let Ok(mut state) = shared.inner.lock() {
+                    state.single_results.push(SingleActionResult {
+                        index,
+                        kind: SingleActionKind::Retry,
+                        result,
+                    });
                 }
-                self.message = String::from("重试成功");
-            }
-            Err(error) => {
-                if let Some(item) = self.items.get_mut(index) {
-                    item.status = QueueStatus::Failed;
-                    item.error_message = error.to_string();
+                let _ = async_cx.refresh();
+            })
+            .detach();
+    }
+
+    pub fn overwrite_entry_background(&mut self, index: usize, async_cx: gpui::AsyncApp) {
+        let (output, source) = match self.items.get(index) {
+            Some(item) if !item.from_clipboard && !item.source.path.as_os_str().is_empty() => {
+                match item.output_path.as_ref() {
+                    Some(output) => (output.clone(), item.source.path.clone()),
+                    None => {
+                        self.message = String::from("无输出文件");
+                        return;
+                    }
                 }
-                self.message = format!("重试失败: {error}");
             }
-        }
+            _ => {
+                self.message = String::from("剪贴板图片没有源文件，无法覆盖");
+                return;
+            }
+        };
+
+        self.message = String::from("正在覆盖原图...");
+        let shared = self.shared.clone();
+
+        async_cx
+            .spawn(async move |async_cx| {
+                let result = async_cx
+                    .background_executor()
+                    .spawn(async move {
+                        std::fs::copy(&output, &source)
+                            .with_context(|| format!("无法覆盖原图 {}", source.display()))?;
+                        let meta = std::fs::metadata(&source)
+                            .with_context(|| format!("无法读取原图 {}", source.display()))?;
+                        Ok::<_, anyhow::Error>(Some(CompressionResult {
+                            output_path: output,
+                            output_size: meta.len(),
+                            reduction_ratio: 0.0,
+                        }))
+                    })
+                    .await
+                    .map_err(|error| error.to_string());
+
+                if let Ok(mut state) = shared.inner.lock() {
+                    state.single_results.push(SingleActionResult {
+                        index,
+                        kind: SingleActionKind::Overwrite,
+                        result,
+                    });
+                }
+                let _ = async_cx.refresh();
+            })
+            .detach();
     }
 
     /// Reveal the output file in Finder (macOS).
@@ -518,10 +567,14 @@ impl ImageCompressPanel {
     pub fn collect_results(&mut self) -> bool {
         let mut results = Vec::new();
         let mut batch_message = None;
+        let mut single_results = Vec::new();
 
         if let Ok(mut state) = self.shared.inner.lock() {
             if !state.results.is_empty() {
                 results = std::mem::take(&mut state.results);
+            }
+            if !state.single_results.is_empty() {
+                single_results = std::mem::take(&mut state.single_results);
             }
             if state.batch_done {
                 if let Some(ref msg) = state.message {
@@ -530,7 +583,7 @@ impl ImageCompressPanel {
             }
         }
 
-        if results.is_empty() && batch_message.is_none() {
+        if results.is_empty() && single_results.is_empty() && batch_message.is_none() {
             return false;
         }
 
@@ -546,6 +599,40 @@ impl ImageCompressPanel {
                         item.reduction_ratio = None;
                         item.error_message = error.clone();
                     }
+                }
+            }
+        }
+
+        for action in single_results {
+            if let Some(item) = self.items.get_mut(action.index) {
+                match action.kind {
+                    SingleActionKind::Retry => match action.result {
+                        Ok(Some(result)) => {
+                            apply_result(item, result);
+                            self.message = String::from("重试成功");
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            item.status = QueueStatus::Failed;
+                            item.output_size = None;
+                            item.output_path = None;
+                            item.reduction_ratio = None;
+                            item.error_message = error.clone();
+                            self.message = format!("重试失败: {error}");
+                        }
+                    },
+                    SingleActionKind::Overwrite => match action.result {
+                        Ok(Some(result)) => {
+                            item.source.original_size = result.output_size;
+                            item.output_size = Some(result.output_size);
+                            item.reduction_ratio = Some(result.reduction_ratio);
+                            self.message = String::from("已覆盖原图");
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            self.message = format!("覆盖失败: {error}");
+                        }
+                    },
                 }
             }
         }
@@ -730,7 +817,7 @@ impl RenderOnce for ImageCompressElement {
                                         .id("image-compress-mode-lossless")
                                         .on_click({
                                             let panel = Rc::clone(&self.panel);
-                                            move |_, window, cx| {
+                                            move |_, window, _cx| {
                                                 panel
                                                     .borrow_mut()
                                                     .set_mode(CompressionMode::VisuallyLossless);
@@ -747,7 +834,7 @@ impl RenderOnce for ImageCompressElement {
                                         .id("image-compress-mode-standard")
                                         .on_click({
                                             let panel = Rc::clone(&self.panel);
-                                            move |_, window, cx| {
+                                            move |_, window, _cx| {
                                                 panel
                                                     .borrow_mut()
                                                     .set_mode(CompressionMode::Standard);
@@ -767,7 +854,7 @@ impl RenderOnce for ImageCompressElement {
                                             .id("image-compress-quality-down")
                                             .on_click({
                                                 let panel = Rc::clone(&self.panel);
-                                                move |_, window, cx| {
+                                                move |_, window, _cx| {
                                                     panel.borrow_mut().adjust_quality(-5);
                                                     window.refresh();
                                                 }
@@ -778,7 +865,7 @@ impl RenderOnce for ImageCompressElement {
                                             .id("image-compress-quality-up")
                                             .on_click({
                                                 let panel = Rc::clone(&self.panel);
-                                                move |_, window, cx| {
+                                                move |_, window, _cx| {
                                                     panel.borrow_mut().adjust_quality(5);
                                                     window.refresh();
                                                 }
@@ -804,7 +891,7 @@ impl RenderOnce for ImageCompressElement {
                                     .id("image-compress-choose")
                                     .on_click({
                                         let panel = Rc::clone(&self.panel);
-                                        move |_, window, cx| {
+                                        move |_, window, _cx| {
                                             panel.borrow_mut().choose_images();
                                             window.refresh();
                                         }
@@ -1187,7 +1274,7 @@ fn image_row(
                                     .id(("image-compress-reveal", index))
                                     .on_click({
                                         let panel = Rc::clone(&panel);
-                                        move |_, window, cx| {
+                                        move |_, window, _cx| {
                                             panel.borrow_mut().reveal_entry(index);
                                             window.refresh();
                                         }
@@ -1204,12 +1291,9 @@ fn image_row(
                                     .on_click({
                                         let panel = Rc::clone(&panel);
                                         move |_, window, cx| {
-                                            let mut p = panel.borrow_mut();
-                                            match p.overwrite_entry(index) {
-                                                Ok(()) => p.message = String::from("已覆盖原图"),
-                                                Err(e) => p.message = format!("覆盖失败: {e}"),
-                                            }
-                                            drop(p);
+                                            panel
+                                                .borrow_mut()
+                                                .overwrite_entry_background(index, cx.to_async());
                                             window.refresh();
                                         }
                                     }),
@@ -1224,7 +1308,7 @@ fn image_row(
                                     .id(("image-compress-save-as", index))
                                     .on_click({
                                         let panel = Rc::clone(&panel);
-                                        move |_, window, cx| {
+                                        move |_, window, _cx| {
                                             let output_path = panel
                                                 .borrow()
                                                 .items
@@ -1269,7 +1353,9 @@ fn image_row(
                                     .on_click({
                                         let panel = Rc::clone(&panel);
                                         move |_, window, cx| {
-                                            panel.borrow_mut().retry_entry(index);
+                                            panel
+                                                .borrow_mut()
+                                                .retry_entry_background(index, cx.to_async());
                                             window.refresh();
                                         }
                                     }),
@@ -1289,7 +1375,7 @@ fn image_row(
                                     .child("✕")
                                     .on_click({
                                         let panel = Rc::clone(&panel);
-                                        move |_, window, cx| {
+                                        move |_, window, _cx| {
                                             panel.borrow_mut().remove_item(index);
                                             window.refresh();
                                         }
@@ -1447,7 +1533,7 @@ fn footer_bar(
                             .id("image-compress-cancel")
                             .on_click({
                                 let panel = Rc::clone(&panel);
-                                move |_, window, cx| {
+                                move |_, window, _cx| {
                                     panel.borrow_mut().request_cancel();
                                     window.refresh();
                                 }
@@ -1468,7 +1554,7 @@ fn footer_bar(
                     .id("image-compress-toggle-overwrite")
                     .on_click({
                         let panel = Rc::clone(&panel);
-                        move |_, window, cx| {
+                        move |_, window, _cx| {
                             panel.borrow_mut().toggle_overwrite();
                             window.refresh();
                         }
@@ -1479,7 +1565,7 @@ fn footer_bar(
                         .id("image-compress-output-dir")
                         .on_click({
                             let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 panel.borrow_mut().choose_output_dir();
                                 window.refresh();
                             }
@@ -1490,7 +1576,7 @@ fn footer_bar(
                         .id("image-compress-open-dir")
                         .on_click({
                             let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 panel.borrow_mut().open_output_dir();
                                 window.refresh();
                             }
@@ -1501,7 +1587,7 @@ fn footer_bar(
                         .id("image-compress-clear")
                         .on_click({
                             let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
+                            move |_, window, _cx| {
                                 panel.borrow_mut().clear_items();
                                 window.refresh();
                             }

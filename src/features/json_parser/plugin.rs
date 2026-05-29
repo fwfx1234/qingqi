@@ -1,86 +1,58 @@
 use std::{cell::RefCell, rc::Rc};
 
-use gpui::{AnyElement, App, IntoElement, Window};
+use gpui::{App, IntoElement, Window};
 
 use crate::{
     app::events::AppEventBus,
     core::{
         command::{CommandItem, ContextKind, ContextMatcher},
-        plugin::{PluginListItem, PluginManifest, PluginRuntime, PluginSession},
+        plugin::{
+            ConfiguredPluginRuntime, PanelPluginSession, PluginListItem, PluginManifest,
+            PluginSession, recommended_plugin_command,
+        },
     },
     features::json_parser::{manifest, view},
 };
 
-pub struct JsonParserRuntime;
+pub type JsonParserRuntime = ConfiguredPluginRuntime<()>;
 
-impl JsonParserRuntime {
-    pub fn new() -> Self {
-        Self
-    }
+pub fn runtime() -> JsonParserRuntime {
+    ConfiguredPluginRuntime::new(manifest::manifest)
+        .with_commands(commands)
+        .with_session(open_session)
 }
 
-impl PluginRuntime for JsonParserRuntime {
-    fn manifest(&self) -> PluginManifest {
-        manifest::manifest()
-    }
-
-    fn commands(&self) -> Vec<CommandItem> {
-        let manifest = self.manifest();
-        vec![
-            CommandItem::plugin_open(
-                manifest.id,
-                manifest.name,
-                manifest.description,
-                manifest.keywords.iter().copied(),
-                manifest.command_prefixes.iter().copied(),
-                manifest.visual.icon,
-            )
-            .with_recommend_matchers([
-                ContextMatcher::new(ContextKind::Json, 180),
-                ContextMatcher::clipboard(ContextKind::Json, 100),
-            ]),
-        ]
-    }
-
-    fn open_session(
-        &mut self,
-        _: AppEventBus,
-        _: &mut App,
-    ) -> anyhow::Result<Box<dyn PluginSession>> {
-        Ok(Box::new(JsonParserSession {
-            panel: Rc::new(RefCell::new(view::JsonPanel::new())),
-        }))
-    }
-
-    fn close_idle(&mut self) {}
+fn commands(manifest: PluginManifest) -> Vec<CommandItem> {
+    recommended_plugin_command(
+        manifest,
+        [
+            ContextMatcher::new(ContextKind::Json, 180),
+            ContextMatcher::clipboard(ContextKind::Json, 100),
+        ],
+    )
 }
 
-struct JsonParserSession {
-    panel: Rc<RefCell<view::JsonPanel>>,
-}
-
-impl PluginSession for JsonParserSession {
-    fn plugin_id(&self) -> &'static str {
-        manifest::PLUGIN_ID
-    }
-
-    fn title(&self) -> &'static str {
-        "JSON 解析"
-    }
-
-    fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
-        view::JsonParserElement {
-            panel: Rc::clone(&self.panel),
-        }
-        .into_any_element()
-    }
-
-    fn on_input_changed(&mut self, text: &str, cx: &mut App) -> Vec<PluginListItem> {
-        self.panel.borrow_mut().set_launch_input(text, cx);
-        Vec::new()
-    }
-
-    fn on_close(&mut self) {
-        self.panel.borrow_mut().clear();
-    }
+fn open_session(
+    _: &mut (),
+    _: AppEventBus,
+    _: &mut App,
+) -> anyhow::Result<Box<dyn PluginSession>> {
+    Ok(Box::new(
+        PanelPluginSession::new(
+            manifest::PLUGIN_ID,
+            "JSON 解析",
+            Rc::new(RefCell::new(view::JsonPanel::new())),
+            |panel, _window: &mut Window, _cx: &mut App| {
+                view::JsonParserElement {
+                    panel: Rc::clone(panel),
+                }
+                .into_any_element()
+            },
+        )
+        .with_input_changed(|panel, text, cx| {
+            panel.borrow_mut().set_launch_input(text, cx);
+            Vec::<PluginListItem>::new()
+        })
+        .with_close(|panel| panel.borrow_mut().clear()),
+    ))
 }

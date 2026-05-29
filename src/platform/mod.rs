@@ -3,5 +3,7 @@ pub mod clipboard;
 pub mod display;
 pub mod hotkey;
 pub mod macos;
+pub mod power;
 pub mod shell;
+pub mod svg_icon;
 pub mod tray;

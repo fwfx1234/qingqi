@@ -5,6 +5,7 @@ use gpui::{AnyElement, App, IntoElement, Window};
 use crate::{
     app::events::{AppEventBus, AppEventKind},
     core::{
+        database::{DatabaseService, DatabaseSpec},
         plugin::{PluginManifest, PluginRuntime, PluginSession},
         storage::AppPaths,
     },
@@ -12,25 +13,40 @@ use crate::{
 };
 
 pub struct FtpSftpSshRuntime {
-    service: Arc<FtpSftpSshService>,
+    database: Arc<DatabaseService>,
+    paths: AppPaths,
+    service: Option<Arc<FtpSftpSshService>>,
     watch_started: bool,
 }
 
 impl FtpSftpSshRuntime {
-    pub fn new(paths: AppPaths) -> anyhow::Result<Self> {
+    pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> anyhow::Result<Self> {
         Ok(Self {
-            service: Arc::new(FtpSftpSshService::new(paths)?),
+            database,
+            paths,
+            service: None,
             watch_started: false,
         })
     }
 
-    fn ensure_watcher(&mut self, events: AppEventBus, cx: &mut App) {
+    fn service(&mut self) -> anyhow::Result<Arc<FtpSftpSshService>> {
+        if let Some(service) = &self.service {
+            return Ok(Arc::clone(service));
+        }
+        let service = Arc::new(FtpSftpSshService::new(
+            Arc::clone(&self.database),
+            self.paths.clone(),
+        )?);
+        self.service = Some(Arc::clone(&service));
+        Ok(service)
+    }
+
+    fn ensure_watcher(&mut self, service: Arc<FtpSftpSshService>, events: AppEventBus, cx: &mut App) {
         if self.watch_started {
             return;
         }
         self.watch_started = true;
 
-        let service = Arc::clone(&self.service);
         cx.spawn(async move |async_cx| {
             let mut revision = service.revision();
             loop {
@@ -58,23 +74,36 @@ impl PluginRuntime for FtpSftpSshRuntime {
         manifest::manifest()
     }
 
+    fn database_specs(&self) -> Vec<DatabaseSpec> {
+        vec![DatabaseSpec::feature(
+            manifest::PLUGIN_ID,
+            "profiles",
+            "profiles.db",
+        )]
+    }
+
     fn open_session(
         &mut self,
         events: AppEventBus,
         cx: &mut App,
     ) -> anyhow::Result<Box<dyn PluginSession>> {
-        self.ensure_watcher(events, cx);
+        let service = self.service()?;
+        self.ensure_watcher(Arc::clone(&service), events, cx);
         Ok(Box::new(FtpSftpSshSession {
-            panel: Rc::new(RefCell::new(view::FtpSftpSshPanel::new(Arc::clone(
-                &self.service,
-            )))),
+            panel: Rc::new(RefCell::new(view::FtpSftpSshPanel::new(service))),
         }))
     }
 
-    fn close_idle(&mut self) {}
+    fn close_idle(&mut self) {
+        if !self.watch_started {
+            self.service = None;
+        }
+    }
 
     fn shutdown(&mut self) {
-        self.service.shutdown();
+        if let Some(service) = &self.service {
+            service.shutdown();
+        }
     }
 }
 

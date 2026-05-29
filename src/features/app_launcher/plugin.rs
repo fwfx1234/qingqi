@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc, time::Duration};
+use std::{collections::HashSet, rc::Rc, sync::Arc, time::Duration};
 
 use gpui::{
     AnyElement, App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
@@ -15,6 +15,7 @@ use crate::{
     },
     core::{
         command::{CommandInvocation, CommandItem, CommandOutcome, CommandTarget},
+        database::DatabaseService,
         page::Page,
         plugin::{PluginListItem, PluginRuntime, PluginSession},
         storage::AppPaths,
@@ -32,11 +33,19 @@ pub struct AppLauncherRuntime {
 
 const APP_PAGE_SIZE: usize = 120;
 const APP_PREFETCH_THRESHOLD: usize = 40;
+const LAUNCHER_APP_COMMAND_LIMIT: usize = 5_000;
 
 impl AppLauncherRuntime {
     pub fn new(paths: AppPaths) -> Self {
+        let database = Arc::new(DatabaseService::new(paths.clone()));
+        database
+            .register_database(crate::core::database::DatabaseSpec::app(
+                "app-launcher/index",
+                "app_index.db",
+            ))
+            .expect("app index database registration should succeed");
         Self {
-            service: Arc::new(AppIndexService::new(paths)),
+            service: Arc::new(AppIndexService::new(database)),
             watch_started: false,
         }
     }
@@ -77,20 +86,29 @@ impl PluginRuntime for AppLauncherRuntime {
     }
 
     fn commands(&self) -> Vec<CommandItem> {
-        if self.service.snapshot().apps.is_empty() {
+        let snapshot = self.service.snapshot();
+        if snapshot.apps.is_empty() {
             self.service.request_scan();
         } else {
             self.service.request_probe_scan();
         }
         let manifest = self.manifest();
-        vec![CommandItem::plugin_open(
+        let apps = self.service.search("", LAUNCHER_APP_COMMAND_LIMIT);
+        let mut commands = Vec::with_capacity(apps.len() + 1);
+
+        for app in apps {
+            commands.push(app_command(&manifest, app));
+        }
+
+        commands.push(CommandItem::plugin_open(
             manifest.id,
             manifest.name,
             manifest.description,
             manifest.keywords.iter().copied(),
             manifest.command_prefixes.iter().copied(),
             manifest.visual.icon,
-        )]
+        ));
+        commands
     }
 
     fn commands_for_query(&self, query: &str, limit: usize) -> Vec<CommandItem> {
@@ -106,7 +124,11 @@ impl PluginRuntime for AppLauncherRuntime {
             return self.commands();
         }
 
-        let max = if limit == 0 { 50 } else { limit.min(200) };
+        let max = if limit == 0 {
+            LAUNCHER_APP_COMMAND_LIMIT
+        } else {
+            limit.min(LAUNCHER_APP_COMMAND_LIMIT)
+        };
         self.service
             .search(trimmed, max)
             .into_iter()
@@ -235,18 +257,27 @@ impl PluginSession for AppLauncherSession {
         let Some(item) = self.list_items(cx).into_iter().find(|item| item.enabled) else {
             return false;
         };
-        self.service.record_launch(&item.id).unwrap_or_else(
-            |error| tracing::warn!(error = %error, "app launch usage record failed"),
-        );
+        let service = Arc::clone(&self.service);
+        let item_id = item.id.clone();
+        std::thread::spawn(move || {
+            service.record_launch(&item_id).unwrap_or_else(
+                |error| tracing::warn!(error = %error, "app launch usage record failed"),
+            );
+        });
         let _ = self.service.open_app(&item.id);
         true
     }
 
     fn on_list_item_selected(&mut self, item_id: &str, _cx: &mut App) {
-        self.service.record_launch(item_id).unwrap_or_else(
-            |error| tracing::warn!(error = %error, "app launch usage record failed"),
-        );
-        let _ = self.service.open_app(item_id);
+        let service = Arc::clone(&self.service);
+        let item_id = item_id.to_string();
+        let launch_id = item_id.clone();
+        std::thread::spawn(move || {
+            service.record_launch(&item_id).unwrap_or_else(
+                |error| tracing::warn!(error = %error, "app launch usage record failed"),
+            );
+        });
+        let _ = self.service.open_app(&launch_id);
     }
 }
 
@@ -445,8 +476,7 @@ impl AppLauncherView {
         if reset {
             self.rows = Rc::new(page.rows);
         } else {
-            let mut rows = self.rows.as_ref().clone();
-            rows.extend(page.rows);
+            let rows = merge_app_rows(self.rows.as_ref(), page.rows);
             self.rows = Rc::new(rows);
         }
         self.selected = self.selected.min(self.rows.len().saturating_sub(1));
@@ -829,6 +859,24 @@ fn app_icon_tile(app: &AppEntry, dark: bool) -> impl IntoElement {
     }
 }
 
+fn merge_app_rows(existing: &[AppEntry], next_rows: Vec<AppEntry>) -> Vec<AppEntry> {
+    let mut merged = existing.to_vec();
+    let mut seen = merged
+        .iter()
+        .map(|app| app.path.clone())
+        .collect::<HashSet<_>>();
+
+    for next_app in next_rows {
+        if let Some(existing_app) = merged.iter_mut().find(|app| app.path == next_app.path) {
+            *existing_app = next_app;
+        } else if seen.insert(next_app.path.clone()) {
+            merged.push(next_app);
+        }
+    }
+
+    merged
+}
+
 struct AppLauncherStatusMetrics {
     status_text: String,
     total_apps: usize,
@@ -963,6 +1011,15 @@ fn page_row_end(page: &Page<AppEntry>) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        core::{database::DatabaseService, storage::AppPaths},
+        features::app_launcher::{
+            service::AppIndexService,
+            store::{AppIndexCache, AppIndexStore},
+        },
+        platform::apps::InstalledApp,
+    };
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn match_count_is_hidden_without_query() {
@@ -974,5 +1031,86 @@ mod tests {
     fn match_count_is_reported_for_active_query() {
         assert_eq!(match_count_for_query("safari", 0), Some(0));
         assert_eq!(match_count_for_query("app", 7), Some(7));
+    }
+
+    #[test]
+    fn runtime_commands_include_all_cached_apps() {
+        let paths = temp_app_paths("runtime-commands");
+        let database = Arc::new(DatabaseService::new(paths.clone()));
+        database
+            .register_database(crate::core::database::DatabaseSpec::app(
+                "app-launcher/index",
+                "app_index.db",
+            ))
+            .unwrap();
+        let store = AppIndexStore::new(Arc::clone(&database), "app-launcher/index");
+        store
+            .save(&AppIndexCache {
+                apps: sample_apps(12),
+                last_scan: None,
+            })
+            .expect("cache should save");
+
+        let runtime = AppLauncherRuntime::with_service(Arc::new(AppIndexService::new(database)));
+        let commands = runtime.commands();
+        let app_commands = commands
+            .iter()
+            .filter(|command| matches!(command.target, CommandTarget::PluginAction { .. }))
+            .count();
+
+        assert_eq!(app_commands, 12);
+        assert!(
+            commands
+                .iter()
+                .any(|command| matches!(command.target, CommandTarget::PluginOpen { .. })),
+            "plugin open command should still be available"
+        );
+    }
+
+    #[test]
+    fn runtime_query_does_not_cap_results_at_fifty() {
+        let paths = temp_app_paths("runtime-query");
+        let database = Arc::new(DatabaseService::new(paths.clone()));
+        database
+            .register_database(crate::core::database::DatabaseSpec::app(
+                "app-launcher/index",
+                "app_index.db",
+            ))
+            .unwrap();
+        let store = AppIndexStore::new(Arc::clone(&database), "app-launcher/index");
+        store
+            .save(&AppIndexCache {
+                apps: sample_apps(80),
+                last_scan: None,
+            })
+            .expect("cache should save");
+
+        let runtime = AppLauncherRuntime::with_service(Arc::new(AppIndexService::new(database)));
+        let commands = runtime.commands_for_query("fixture", 0);
+
+        assert_eq!(commands.len(), 80);
+    }
+
+    fn sample_apps(count: usize) -> Vec<InstalledApp> {
+        (0..count)
+            .map(|index| InstalledApp {
+                name: format!("Fixture App {index:03}"),
+                path: format!("/Applications/Fixture App {index:03}.app"),
+                bundle_id: Some(format!("dev.fixture.app{index:03}")),
+                icon_path: None,
+                aliases: vec![String::from("fixture")],
+                icon_letter: String::from("F"),
+            })
+            .collect()
+    }
+
+    fn temp_app_paths(name: &str) -> AppPaths {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+        let dir = std::env::temp_dir().join(format!("qingqi-app-launcher-{name}-{nanos}"));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        AppPaths::for_test(dir)
     }
 }

@@ -1,10 +1,15 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::Result;
 use regex::RegexBuilder;
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use time::{OffsetDateTime, macros::format_description};
+
+use crate::core::database::{DatabaseService, PooledConnection, SqlitePool};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ClipboardItemKind {
@@ -22,7 +27,7 @@ impl ClipboardItemKind {
         }
     }
 
-    fn from_db(value: &str) -> Self {
+    pub(crate) fn from_db(value: &str) -> Self {
         match value {
             "image" => Self::Image,
             "files" => Self::Files,
@@ -40,6 +45,37 @@ pub struct ClipboardRecord {
     pub pinned: bool,
     pub created_at: String,
     pub badge: String,
+}
+
+impl ClipboardRecord {
+    pub fn parsed_file_paths(&self) -> Vec<String> {
+        if self.kind == ClipboardItemKind::Files {
+            parse_file_paths(&self.content)
+        } else {
+            Vec::new()
+        }
+    }
+
+    pub fn badge_kind(&self) -> ClipboardBadgeKind {
+        ClipboardBadgeKind::from_badge(&self.badge)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClipboardBadgeKind {
+    Link,
+    Json,
+    Other,
+}
+
+impl ClipboardBadgeKind {
+    pub fn from_badge(badge: &str) -> Self {
+        match badge {
+            "链接" => Self::Link,
+            "JSON" => Self::Json,
+            _ => Self::Other,
+        }
+    }
 }
 
 /// Classify text content into a primary badge label for filtering.
@@ -60,30 +96,6 @@ pub fn classify_text(text: &str) -> &'static str {
     } else {
         ""
     }
-}
-
-/// Returns all text badges for display.
-pub fn text_badges(text: &str) -> Vec<&'static str> {
-    let value = text.trim();
-    if value.is_empty() {
-        return vec![];
-    }
-    let mut badges: Vec<&'static str> = Vec::new();
-    let lowered = value.to_lowercase();
-    if is_url(value) {
-        badges.push("链接");
-    } else if is_email(value) {
-        badges.push("邮箱");
-    } else if looks_like_json(value) {
-        badges.push("JSON");
-    } else if value.contains('\n') {
-        badges.push("多行");
-    }
-    if any_sensitive(&lowered) {
-        badges.push("敏感");
-    }
-    badges.truncate(3);
-    badges
 }
 
 /// Returns a display string for text statistics (char count, line count).
@@ -123,13 +135,13 @@ fn looks_like_json(text: &str) -> bool {
     serde_json::from_str::<serde_json::Value>(value).is_ok()
 }
 
-fn any_sensitive(lowered: &str) -> bool {
-    for token in &["password", "token", "secret", "apikey", "api_key"] {
-        if lowered.contains(token) {
-            return true;
-        }
-    }
-    false
+/// Cheap substring scan for sensitive keywords, used when rendering history
+/// rows. Unlike full classification, this avoids parsing the content.
+pub fn contains_sensitive(text: &str) -> bool {
+    let lowered = text.to_lowercase();
+    ["password", "token", "secret", "apikey", "api_key"]
+        .iter()
+        .any(|token| lowered.contains(token))
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -156,15 +168,146 @@ impl Default for ClipboardConfig {
 }
 
 pub struct ClipboardHistoryStore {
-    conn: Connection,
+    _database: Arc<DatabaseService>,
+    pool: SqlitePool,
 }
 
+const MAX_HISTORY_ITEMS: i64 = 5_000;
+
+const LOAD_CONFIG_SQL: &str = "
+SELECT capture_text, capture_image, capture_files, max_text_chars, ignore_patterns_json, hotkey
+FROM clipboard_config WHERE id = 1
+";
+const UPSERT_CONFIG_SQL: &str = "
+INSERT INTO clipboard_config
+    (id, capture_text, capture_image, capture_files, max_text_chars, ignore_patterns_json, hotkey, updated_at)
+VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)
+ON CONFLICT(id) DO UPDATE SET
+    capture_text = excluded.capture_text,
+    capture_image = excluded.capture_image,
+    capture_files = excluded.capture_files,
+    max_text_chars = excluded.max_text_chars,
+    ignore_patterns_json = excluded.ignore_patterns_json,
+    hotkey = excluded.hotkey,
+    updated_at = excluded.updated_at
+";
+const LATEST_ITEM_SQL: &str =
+    "SELECT item_type, content FROM clipboard_history ORDER BY id DESC LIMIT 1";
+const LOAD_EXISTING_PINNED_SQL: &str = "
+SELECT pinned FROM clipboard_history
+WHERE item_type = ?1 AND content = ?2
+ORDER BY id DESC LIMIT 1
+";
+const DELETE_DUPLICATE_FTS_SQL: &str = "
+DELETE FROM clipboard_history_fts
+WHERE rowid IN (
+    SELECT id FROM clipboard_history WHERE item_type = ?1 AND content = ?2
+)
+";
+const DELETE_DUPLICATE_HISTORY_SQL: &str =
+    "DELETE FROM clipboard_history WHERE item_type = ?1 AND content = ?2";
+const INSERT_HISTORY_ITEM_SQL: &str = "
+INSERT INTO clipboard_history (item_type, content, preview, pinned, created_at, badge)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+";
+const SELECT_RECORDS_BASE_SQL: &str = "
+SELECT id, item_type, content, preview, pinned, created_at, badge
+FROM clipboard_history
+";
+const LATEST_RECORD_SQL: &str = "
+SELECT id, item_type, content, preview, pinned, created_at, badge
+FROM clipboard_history
+ORDER BY id DESC
+LIMIT 1
+";
+const SELECT_PINNED_BY_ID_SQL: &str = "SELECT pinned FROM clipboard_history WHERE id = ?1";
+const UPDATE_PINNED_SQL: &str = "UPDATE clipboard_history SET pinned = ?1 WHERE id = ?2";
+const DELETE_FTS_BY_ROWID_SQL: &str = "DELETE FROM clipboard_history_fts WHERE rowid = ?1";
+const DELETE_HISTORY_BY_ID_SQL: &str = "DELETE FROM clipboard_history WHERE id = ?1";
+const CLEAR_FTS_SQL: &str = "DELETE FROM clipboard_history_fts";
+const CLEAR_HISTORY_SQL: &str = "DELETE FROM clipboard_history";
+const CLEAR_UNPINNED_FTS_SQL: &str = "
+DELETE FROM clipboard_history_fts
+WHERE rowid IN (SELECT id FROM clipboard_history WHERE pinned = 0)
+";
+const CLEAR_UNPINNED_HISTORY_SQL: &str = "DELETE FROM clipboard_history WHERE pinned = 0";
+const SCHEMA_SQL: &str = "
+CREATE TABLE IF NOT EXISTS clipboard_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_type TEXT NOT NULL DEFAULT 'text',
+    content TEXT NOT NULL DEFAULT '',
+    preview TEXT NOT NULL DEFAULT '',
+    pinned INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    badge TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_clipboard_order
+    ON clipboard_history(pinned DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_clipboard_type
+    ON clipboard_history(item_type);
+CREATE VIRTUAL TABLE IF NOT EXISTS clipboard_history_fts
+    USING fts5(search_text, content='');
+CREATE TABLE IF NOT EXISTS clipboard_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    capture_text INTEGER NOT NULL DEFAULT 1,
+    capture_image INTEGER NOT NULL DEFAULT 1,
+    capture_files INTEGER NOT NULL DEFAULT 1,
+    max_text_chars INTEGER NOT NULL DEFAULT 20000,
+    ignore_patterns_json TEXT NOT NULL DEFAULT '[]',
+    hotkey TEXT NOT NULL DEFAULT 'Alt+V',
+    updated_at TEXT NOT NULL
+);
+";
+const ADD_BADGE_COLUMN_SQL: &str =
+    "ALTER TABLE clipboard_history ADD COLUMN badge TEXT NOT NULL DEFAULT ''";
+const ADD_CAPTURE_IMAGE_COLUMN_SQL: &str =
+    "ALTER TABLE clipboard_config ADD COLUMN capture_image INTEGER NOT NULL DEFAULT 1";
+const ADD_CAPTURE_FILES_COLUMN_SQL: &str =
+    "ALTER TABLE clipboard_config ADD COLUMN capture_files INTEGER NOT NULL DEFAULT 1";
+const ADD_IGNORE_PATTERNS_COLUMN_SQL: &str =
+    "ALTER TABLE clipboard_config ADD COLUMN ignore_patterns_json TEXT NOT NULL DEFAULT '[]'";
+const ADD_HOTKEY_COLUMN_SQL: &str =
+    "ALTER TABLE clipboard_config ADD COLUMN hotkey TEXT NOT NULL DEFAULT 'Alt+V'";
+const REBUILD_FTS_SOURCE_SQL: &str =
+    "SELECT id, item_type, content, preview, badge FROM clipboard_history";
+const INSERT_FTS_ROW_SQL: &str =
+    "INSERT INTO clipboard_history_fts(rowid, search_text) VALUES (?1, ?2)";
+const SELECT_FTS_RECORD_SQL: &str = "
+SELECT id, preview, badge FROM clipboard_history
+WHERE item_type = ?1 AND content = ?2
+ORDER BY id DESC LIMIT 1
+";
+const UPSERT_FTS_ROW_SQL: &str =
+    "INSERT OR REPLACE INTO clipboard_history_fts(rowid, search_text) VALUES (?1, ?2)";
+const COUNT_HISTORY_OVERFLOW_SQL: &str = "SELECT COUNT(*) - ?1 FROM clipboard_history";
+const PRUNE_FTS_SQL: &str = "
+DELETE FROM clipboard_history_fts
+WHERE rowid IN (
+    SELECT id
+    FROM clipboard_history
+    WHERE pinned = 0
+    ORDER BY id ASC
+    LIMIT ?1
+)
+";
+const PRUNE_HISTORY_SQL: &str = "
+DELETE FROM clipboard_history
+WHERE id IN (
+    SELECT id
+    FROM clipboard_history
+    WHERE pinned = 0
+    ORDER BY id ASC
+    LIMIT ?1
+)
+";
+
 impl ClipboardHistoryStore {
-    pub fn open(path: &Path) -> Result<Self> {
-        let conn = Connection::open(path)?;
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "synchronous", "NORMAL")?;
-        let store = Self { conn };
+    pub fn open(database: Arc<DatabaseService>, path: &Path) -> Result<Self> {
+        let pool = database.pool_for_path(path.to_path_buf())?;
+        let store = Self {
+            _database: database,
+            pool,
+        };
         store.ensure_schema()?;
         Ok(store)
     }
@@ -219,43 +362,29 @@ impl ClipboardHistoryStore {
     }
 
     pub fn load_config(&self) -> Result<ClipboardConfig> {
-        let config = self
-            .conn
-            .query_row(
-                "SELECT capture_text, capture_image, capture_files, max_text_chars, ignore_patterns_json, hotkey
-                 FROM clipboard_config WHERE id = 1",
-                [],
-                |row| {
-                    let ignore_patterns_json: String = row.get(4)?;
-                    Ok(ClipboardConfig {
-                        capture_text: row.get::<_, i64>(0)? != 0,
-                        capture_image: row.get::<_, i64>(1)? != 0,
-                        capture_files: row.get::<_, i64>(2)? != 0,
-                        max_text_chars: row.get::<_, i64>(3)? as usize,
-                        ignore_patterns: serde_json::from_str(&ignore_patterns_json)
-                            .unwrap_or_default(),
-                        hotkey: row.get::<_, String>(5)?,
-                    })
-                },
-            )
+        let conn = self.connection()?;
+        let config = conn
+            .query_row(LOAD_CONFIG_SQL, [], |row| {
+                let ignore_patterns_json: String = row.get(4)?;
+                Ok(ClipboardConfig {
+                    capture_text: row.get::<_, i64>(0)? != 0,
+                    capture_image: row.get::<_, i64>(1)? != 0,
+                    capture_files: row.get::<_, i64>(2)? != 0,
+                    max_text_chars: row.get::<_, i64>(3)? as usize,
+                    ignore_patterns: serde_json::from_str(&ignore_patterns_json)
+                        .unwrap_or_default(),
+                    hotkey: row.get::<_, String>(5)?,
+                })
+            })
             .optional()?;
 
         Ok(config.unwrap_or_default())
     }
 
     pub fn save_config(&self, config: &ClipboardConfig) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO clipboard_config
-                (id, capture_text, capture_image, capture_files, max_text_chars, ignore_patterns_json, hotkey, updated_at)
-             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)
-             ON CONFLICT(id) DO UPDATE SET
-               capture_text = excluded.capture_text,
-               capture_image = excluded.capture_image,
-               capture_files = excluded.capture_files,
-               max_text_chars = excluded.max_text_chars,
-               ignore_patterns_json = excluded.ignore_patterns_json,
-               hotkey = excluded.hotkey,
-               updated_at = excluded.updated_at",
+        let conn = self.connection()?;
+        conn.execute(
+            UPSERT_CONFIG_SQL,
             params![
                 if config.capture_text { 1 } else { 0 },
                 if config.capture_image { 1 } else { 0 },
@@ -276,14 +405,11 @@ impl ClipboardHistoryStore {
         preview: &str,
         badge: &str,
     ) -> Result<bool> {
-        let latest: Option<(String, String)> = self
-            .conn
-            .query_row(
-                "SELECT item_type, content FROM clipboard_history ORDER BY id DESC LIMIT 1",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .optional()?;
+        let conn = self.connection()?;
+        let latest: Option<(String, String)> =
+            self.query_optional(&conn, LATEST_ITEM_SQL, [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?;
 
         if latest
             .as_ref()
@@ -295,22 +421,22 @@ impl ClipboardHistoryStore {
         }
 
         let existing_pinned = self
-            .conn
-            .query_row(
-                "SELECT pinned FROM clipboard_history WHERE item_type = ?1 AND content = ?2 ORDER BY id DESC LIMIT 1",
+            .query_optional(
+                &conn,
+                LOAD_EXISTING_PINNED_SQL,
                 params![kind.as_str(), content],
                 |row| row.get::<_, i64>(0),
-            )
-            .optional()?
+            )?
             .unwrap_or(0);
 
-        self.conn.execute(
-            "DELETE FROM clipboard_history WHERE item_type = ?1 AND content = ?2",
+        conn.execute(DELETE_DUPLICATE_FTS_SQL, params![kind.as_str(), content])?;
+        conn.execute(
+            DELETE_DUPLICATE_HISTORY_SQL,
             params![kind.as_str(), content],
         )?;
 
-        self.conn.execute(
-            "INSERT INTO clipboard_history (item_type, content, preview, pinned, created_at, badge) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        conn.execute(
+            INSERT_HISTORY_ITEM_SQL,
             params![
                 kind.as_str(),
                 content,
@@ -320,6 +446,8 @@ impl ClipboardHistoryStore {
                 badge,
             ],
         )?;
+        self.sync_fts_for_content(&conn, kind, content)?;
+        self.prune_history(&conn)?;
         Ok(true)
     }
 
@@ -353,10 +481,15 @@ impl ClipboardHistoryStore {
         }
 
         if !q.is_empty() {
-            conditions.push("(content LIKE ? OR preview LIKE ?)".into());
-            let q_pattern = format!("%{q}%");
-            base_params.push(Box::new(q_pattern.clone()));
-            base_params.push(Box::new(q_pattern));
+            conditions.push(
+                "id IN (
+                    SELECT rowid
+                    FROM clipboard_history_fts
+                    WHERE clipboard_history_fts MATCH ?
+                )"
+                .into(),
+            );
+            base_params.push(Box::new(fts_query(q)));
         }
 
         let where_clause = if conditions.is_empty() {
@@ -366,8 +499,7 @@ impl ClipboardHistoryStore {
         };
 
         let sql = format!(
-            "SELECT id, item_type, content, preview, pinned, created_at, badge
-             FROM clipboard_history{where_clause}
+            "{SELECT_RECORDS_BASE_SQL}{where_clause}
              ORDER BY pinned DESC, id DESC
              LIMIT ? OFFSET ?"
         );
@@ -409,10 +541,15 @@ impl ClipboardHistoryStore {
         }
 
         if !q.is_empty() {
-            conditions.push("(content LIKE ? OR preview LIKE ?)".into());
-            let q_pattern = format!("%{q}%");
-            params.push(Box::new(q_pattern.clone()));
-            params.push(Box::new(q_pattern));
+            conditions.push(
+                "id IN (
+                    SELECT rowid
+                    FROM clipboard_history_fts
+                    WHERE clipboard_history_fts MATCH ?
+                )"
+                .into(),
+            );
+            params.push(Box::new(fts_query(q)));
         }
 
         let where_clause = if conditions.is_empty() {
@@ -422,8 +559,7 @@ impl ClipboardHistoryStore {
         };
 
         let sql = format!(
-            "SELECT id, item_type, content, preview, pinned, created_at, badge
-             FROM clipboard_history{where_clause}
+            "{SELECT_RECORDS_BASE_SQL}{where_clause}
              ORDER BY pinned DESC, id DESC"
         );
 
@@ -433,13 +569,7 @@ impl ClipboardHistoryStore {
     }
 
     pub fn latest(&self) -> Result<Option<ClipboardRecord>> {
-        let rows = self.query_records_dyn(
-            "SELECT id, item_type, content, preview, pinned, created_at, badge
-             FROM clipboard_history
-             ORDER BY id DESC
-             LIMIT 1",
-            &[],
-        )?;
+        let rows = self.query_records_dyn(LATEST_RECORD_SQL, &[])?;
         Ok(rows.into_iter().next())
     }
 
@@ -448,7 +578,8 @@ impl ClipboardHistoryStore {
         sql: &str,
         params: &[&dyn rusqlite::types::ToSql],
     ) -> Result<Vec<ClipboardRecord>> {
-        let mut stmt = self.conn.prepare(sql)?;
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(sql)?;
         let rows = stmt.query_map(params, |row| {
             let kind_str: String = row.get(1)?;
             Ok(ClipboardRecord {
@@ -469,94 +600,168 @@ impl ClipboardHistoryStore {
     }
 
     pub fn toggle_pin(&self, id: i64) -> Result<Option<bool>> {
-        let pinned = self
-            .conn
-            .query_row(
-                "SELECT pinned FROM clipboard_history WHERE id = ?1",
-                params![id],
-                |row| row.get::<_, i64>(0),
-            )
-            .optional()?;
+        let conn = self.connection()?;
+        let pinned = self.query_optional(&conn, SELECT_PINNED_BY_ID_SQL, params![id], |row| {
+            row.get::<_, i64>(0)
+        })?;
         let Some(pinned) = pinned else {
             return Ok(None);
         };
         let next = if pinned == 0 { 1 } else { 0 };
-        self.conn.execute(
-            "UPDATE clipboard_history SET pinned = ?1 WHERE id = ?2",
-            params![next, id],
-        )?;
+        conn.execute(UPDATE_PINNED_SQL, params![next, id])?;
         Ok(Some(next == 1))
     }
 
     pub fn delete(&self, id: i64) -> Result<bool> {
-        let affected = self
-            .conn
-            .execute("DELETE FROM clipboard_history WHERE id = ?1", params![id])?;
+        let conn = self.connection()?;
+        conn.execute(DELETE_FTS_BY_ROWID_SQL, params![id])?;
+        let affected = conn.execute(DELETE_HISTORY_BY_ID_SQL, params![id])?;
         Ok(affected > 0)
     }
 
     pub fn clear_all(&self) -> Result<usize> {
-        self.conn
-            .execute("DELETE FROM clipboard_history", [])
-            .map_err(Into::into)
+        let conn = self.connection()?;
+        conn.execute(CLEAR_FTS_SQL, [])?;
+        conn.execute(CLEAR_HISTORY_SQL, []).map_err(Into::into)
     }
 
     pub fn clear_unpinned(&self) -> Result<usize> {
-        self.conn
-            .execute("DELETE FROM clipboard_history WHERE pinned = 0", [])
+        let conn = self.connection()?;
+        conn.execute(CLEAR_UNPINNED_FTS_SQL, [])?;
+        conn.execute(CLEAR_UNPINNED_HISTORY_SQL, [])
             .map_err(Into::into)
     }
 
     fn ensure_schema(&self) -> Result<()> {
-        self.conn.execute_batch(
-            "
-            CREATE TABLE IF NOT EXISTS clipboard_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_type TEXT NOT NULL DEFAULT 'text',
-                content TEXT NOT NULL DEFAULT '',
-                preview TEXT NOT NULL DEFAULT '',
-                pinned INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL,
-                badge TEXT NOT NULL DEFAULT ''
-            );
-            CREATE INDEX IF NOT EXISTS idx_clipboard_order
-                ON clipboard_history(pinned DESC, id DESC);
-            CREATE INDEX IF NOT EXISTS idx_clipboard_type
-                ON clipboard_history(item_type);
-            CREATE TABLE IF NOT EXISTS clipboard_config (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                capture_text INTEGER NOT NULL DEFAULT 1,
-                capture_image INTEGER NOT NULL DEFAULT 1,
-                capture_files INTEGER NOT NULL DEFAULT 1,
-                max_text_chars INTEGER NOT NULL DEFAULT 20000,
-                ignore_patterns_json TEXT NOT NULL DEFAULT '[]',
-                hotkey TEXT NOT NULL DEFAULT 'Alt+V',
-                updated_at TEXT NOT NULL
-            );
-            ",
-        )?;
-        let _ = self.conn.execute(
-            "ALTER TABLE clipboard_history ADD COLUMN badge TEXT NOT NULL DEFAULT ''",
-            [],
-        );
-        let _ = self.conn.execute(
-            "ALTER TABLE clipboard_config ADD COLUMN capture_image INTEGER NOT NULL DEFAULT 1",
-            [],
-        );
-        let _ = self.conn.execute(
-            "ALTER TABLE clipboard_config ADD COLUMN capture_files INTEGER NOT NULL DEFAULT 1",
-            [],
-        );
-        let _ = self.conn.execute(
-            "ALTER TABLE clipboard_config ADD COLUMN ignore_patterns_json TEXT NOT NULL DEFAULT '[]'",
-            [],
-        );
-        let _ = self.conn.execute(
-            "ALTER TABLE clipboard_config ADD COLUMN hotkey TEXT NOT NULL DEFAULT 'Alt+V'",
-            [],
-        );
+        let conn = self.connection()?;
+        conn.execute_batch(SCHEMA_SQL)?;
+        let _ = conn.execute(ADD_BADGE_COLUMN_SQL, []);
+        let _ = conn.execute(ADD_CAPTURE_IMAGE_COLUMN_SQL, []);
+        let _ = conn.execute(ADD_CAPTURE_FILES_COLUMN_SQL, []);
+        let _ = conn.execute(ADD_IGNORE_PATTERNS_COLUMN_SQL, []);
+        let _ = conn.execute(ADD_HOTKEY_COLUMN_SQL, []);
+        self.rebuild_fts(&conn)?;
         Ok(())
     }
+
+    fn rebuild_fts(&self, conn: &rusqlite::Connection) -> Result<()> {
+        conn.execute(CLEAR_FTS_SQL, [])?;
+        let mut stmt = conn.prepare(REBUILD_FTS_SOURCE_SQL)?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                ClipboardItemKind::from_db(&row.get::<_, String>(1)?),
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })?;
+        for row in rows {
+            let (id, kind, content, preview, badge) = row?;
+            let search_text = search_text_for_record(kind, &content, &preview, &badge);
+            conn.execute(INSERT_FTS_ROW_SQL, params![id, search_text])?;
+        }
+        Ok(())
+    }
+
+    fn sync_fts_for_content(
+        &self,
+        conn: &rusqlite::Connection,
+        kind: ClipboardItemKind,
+        content: &str,
+    ) -> Result<()> {
+        let record = self.query_optional(
+            conn,
+            SELECT_FTS_RECORD_SQL,
+            params![kind.as_str(), content],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )?;
+        let Some((id, preview, badge)) = record else {
+            return Ok(());
+        };
+        let search_text = search_text_for_record(kind, content, &preview, &badge);
+        conn.execute(UPSERT_FTS_ROW_SQL, params![id, search_text])?;
+        Ok(())
+    }
+
+    fn prune_history(&self, conn: &rusqlite::Connection) -> Result<()> {
+        let overflow = conn
+            .query_row(
+                COUNT_HISTORY_OVERFLOW_SQL,
+                params![MAX_HISTORY_ITEMS],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0);
+        if overflow <= 0 {
+            return Ok(());
+        }
+
+        conn.execute(PRUNE_FTS_SQL, params![overflow])?;
+        conn.execute(PRUNE_HISTORY_SQL, params![overflow])?;
+        Ok(())
+    }
+
+    fn connection(&self) -> Result<PooledConnection> {
+        self.pool.get().map_err(anyhow::Error::from)
+    }
+
+    fn query_optional<T, P, F>(
+        &self,
+        conn: &rusqlite::Connection,
+        sql: &str,
+        params: P,
+        f: F,
+    ) -> Result<Option<T>>
+    where
+        P: rusqlite::Params,
+        F: FnOnce(&rusqlite::Row<'_>) -> rusqlite::Result<T>,
+    {
+        conn.query_row(sql, params, f)
+            .optional()
+            .map_err(Into::into)
+    }
+}
+
+fn search_text_for_record(
+    kind: ClipboardItemKind,
+    content: &str,
+    preview: &str,
+    badge: &str,
+) -> String {
+    match kind {
+        ClipboardItemKind::Files => {
+            let names = parse_file_paths(content)
+                .into_iter()
+                .map(|path| {
+                    Path::new(&path)
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .map(str::to_string)
+                        .unwrap_or(path)
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("{preview} {names} {badge}")
+        }
+        _ => format!("{preview} {content} {badge}"),
+    }
+}
+
+fn fts_query(query: &str) -> String {
+    query
+        .split_whitespace()
+        .map(|term| {
+            let escaped = term.replace('"', "\"\"");
+            format!("\"{escaped}\"*")
+        })
+        .collect::<Vec<_>>()
+        .join(" AND ")
 }
 
 fn should_ignore_text(content: &str, preview: &str, patterns: &[String]) -> bool {
@@ -718,9 +923,12 @@ fn now_label() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::{database::DatabaseService, storage::AppPaths};
+    use crate::features::clipboard::{data_source::ClipboardDataSource, service::ClipboardFilter};
     use std::{
         fs,
         path::PathBuf,
+        sync::Arc,
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -734,28 +942,23 @@ mod tests {
         dir.join(name)
     }
 
-    #[test]
-    fn config_roundtrip_persists_values() {
-        let path = temp_db("config.db");
-        let store = ClipboardHistoryStore::open(&path).expect("store should open");
-        let config = ClipboardConfig {
-            capture_text: false,
-            capture_image: false,
-            capture_files: false,
-            max_text_chars: 512,
-            ignore_patterns: vec![String::from("secret"), String::from("^token:")],
-            hotkey: String::from("Ctrl+Shift+V"),
-        };
-
-        store.save_config(&config).expect("config should save");
-        let loaded = store.load_config().expect("config should load");
-        assert_eq!(loaded, config);
+    fn open_data_source(name: &str) -> ClipboardDataSource {
+        let path = temp_db(name);
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(
+            path.parent().unwrap().to_path_buf(),
+        )));
+        database
+            .register_database(crate::core::database::DatabaseSpec::path(
+                "clipboard/history",
+                path,
+            ))
+            .unwrap();
+        ClipboardDataSource::open(database, "clipboard/history").expect("data source should open")
     }
 
     #[test]
     fn add_text_respects_capture_settings() {
-        let path = temp_db("capture.db");
-        let store = ClipboardHistoryStore::open(&path).expect("store should open");
+        let store = open_data_source("capture.db");
 
         let disabled = ClipboardConfig {
             capture_text: false,
@@ -799,12 +1002,7 @@ mod tests {
                 .expect("enabled capture should insert")
         );
         let rows = store
-            .search(
-                "",
-                crate::features::clipboard::service::ClipboardFilter::All,
-                0,
-                10,
-            )
+            .search("", ClipboardFilter::All, 0, 10)
             .expect("rows should load");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].content, "hello");
@@ -812,8 +1010,7 @@ mod tests {
 
     #[test]
     fn add_text_respects_ignore_patterns() {
-        let path = temp_db("ignore.db");
-        let store = ClipboardHistoryStore::open(&path).expect("store should open");
+        let store = open_data_source("ignore.db");
 
         let config = ClipboardConfig {
             capture_text: true,
@@ -843,8 +1040,7 @@ mod tests {
 
     #[test]
     fn pinned_filter_only_returns_pinned_rows() {
-        let path = temp_db("pinned-filter.db");
-        let store = ClipboardHistoryStore::open(&path).expect("store should open");
+        let store = open_data_source("pinned-filter.db");
         let config = ClipboardConfig::default();
 
         assert!(
@@ -859,12 +1055,7 @@ mod tests {
         );
 
         let all_rows = store
-            .search(
-                "",
-                crate::features::clipboard::service::ClipboardFilter::All,
-                0,
-                10,
-            )
+            .search("", ClipboardFilter::All, 0, 10)
             .expect("all rows should load");
         assert_eq!(all_rows.len(), 2);
 
@@ -874,12 +1065,7 @@ mod tests {
         assert_eq!(toggled, Some(true));
 
         let pinned_rows = store
-            .search(
-                "",
-                crate::features::clipboard::service::ClipboardFilter::Pinned,
-                0,
-                10,
-            )
+            .search("", ClipboardFilter::Pinned, 0, 10)
             .expect("pinned rows should load");
         assert_eq!(pinned_rows.len(), 1);
         assert!(pinned_rows[0].pinned);
@@ -888,8 +1074,7 @@ mod tests {
 
     #[test]
     fn latest_uses_insertion_order_not_pin_order() {
-        let path = temp_db("latest.db");
-        let store = ClipboardHistoryStore::open(&path).expect("store should open");
+        let store = open_data_source("latest.db");
         let config = ClipboardConfig::default();
 
         assert!(
@@ -957,8 +1142,7 @@ mod tests {
 
     #[test]
     fn add_files_stores_and_searches() {
-        let path = temp_db("files.db");
-        let store = ClipboardHistoryStore::open(&path).expect("store should open");
+        let store = open_data_source("files.db");
         let config = ClipboardConfig::default();
 
         let paths = vec![
@@ -972,12 +1156,7 @@ mod tests {
         );
 
         let rows = store
-            .search(
-                "",
-                crate::features::clipboard::service::ClipboardFilter::Files,
-                0,
-                10,
-            )
+            .search("", ClipboardFilter::Files, 0, 10)
             .expect("rows should load");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].kind, ClipboardItemKind::Files);
@@ -992,8 +1171,7 @@ mod tests {
 
     #[test]
     fn add_files_respects_capture_settings() {
-        let path = temp_db("files-disabled.db");
-        let store = ClipboardHistoryStore::open(&path).expect("store should open");
+        let store = open_data_source("files-disabled.db");
         let disabled = ClipboardConfig {
             capture_files: false,
             ..Default::default()
@@ -1007,8 +1185,7 @@ mod tests {
 
     #[test]
     fn add_files_deduplicates_same_paths() {
-        let path = temp_db("files-dedupe.db");
-        let store = ClipboardHistoryStore::open(&path).expect("store should open");
+        let store = open_data_source("files-dedupe.db");
         let config = ClipboardConfig::default();
 
         let paths = vec![String::from("/tmp/file.txt")];

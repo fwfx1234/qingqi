@@ -1,4 +1,10 @@
-use std::path::{Path, PathBuf};
+use std::{
+    borrow::Cow,
+    fs,
+    path::{Path, PathBuf},
+};
+
+use gpui::{AssetSource, Result, SharedString};
 
 const ASSETS_DIR: &str = "assets";
 
@@ -54,4 +60,33 @@ pub fn resolve_string(relative: &str) -> String {
     }
 
     resolve(relative).to_string_lossy().to_string()
+}
+
+pub struct ProjectAssets;
+
+impl AssetSource for ProjectAssets {
+    fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
+        for candidate in candidates(path) {
+            if let Ok(bytes) = fs::read(candidate) {
+                return Ok(Some(Cow::Owned(bytes)));
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn list(&self, path: &str) -> Result<Vec<SharedString>> {
+        let dir = resolve(path);
+        let mut entries = Vec::new();
+
+        if let Ok(read_dir) = fs::read_dir(dir) {
+            for entry in read_dir.flatten() {
+                if let Some(name) = entry.file_name().to_str() {
+                    entries.push(name.to_string().into());
+                }
+            }
+        }
+
+        Ok(entries)
+    }
 }

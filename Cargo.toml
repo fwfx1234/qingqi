@@ -16,6 +16,8 @@ image = { version = "0.25", default-features = false, features = ["bmp", "jpeg",
 libc = "0.2"
 plist = "1.7"
 quircs = "0.10"
+r2d2 = "0.8"
+r2d2_sqlite = { version = "0.31.0", features = ["bundled"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -34,6 +36,15 @@ suppaftp = { version = "6.0", features = ["secure"] }
 tokio = { version = "1", features = ["full"] }
 tray-icon = { version = "0.21", default-features = false }
 uuid = { version = "1.16", features = ["v4"] }
+resvg = "0.45"
+usvg = "0.45"
+tiny-skia = "0.11"
+
+[build-dependencies]
+resvg = "0.45"
+usvg = "0.45"
+tiny-skia = "0.11"
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [profile.release]
 codegen-units = 1
@@ -44,6 +55,7 @@ strip = "symbols"
 [package.metadata.bundle]
 name = "Qingqi"
 identifier = "com.fwfx1234.qingqi"
+# PNG 由 assets/app-icon.svg 在 cargo build 时生成
 icon = [
     "assets/app_icon_16.png",
     "assets/app_icon_32.png",

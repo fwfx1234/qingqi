@@ -6,8 +6,8 @@ use std::{
 };
 
 use crate::{
+    core::database::DatabaseService,
     core::page::Page,
-    core::storage::AppPaths,
     features::app_launcher::store::{
         AppIndexCache, AppIndexStore, AppLaunchUsage, query_terms, search_text,
     },
@@ -53,8 +53,8 @@ pub struct AppIndexService {
 impl AppIndexService {
     pub const DEFAULT_PAGE_LIMIT: usize = 40;
 
-    pub fn new(paths: AppPaths) -> Self {
-        let store = AppIndexStore::new(paths.database("app_index.db"));
+    pub fn new(database: Arc<DatabaseService>) -> Self {
+        let store = AppIndexStore::new(database, "app-launcher/index");
         let (mut cache, last_error) = match store.load() {
             Ok(cache) => (cache, None),
             Err(error) => (AppIndexCache::default(), Some(error.to_string())),
@@ -105,6 +105,25 @@ impl AppIndexService {
             apps.truncate(limit);
         }
         apps
+    }
+
+    pub fn top_apps(&self, limit: usize) -> Vec<AppEntry> {
+        let (apps, usage) = {
+            let state = self.state.lock().expect("app index lock poisoned");
+            (state.apps.clone(), state.usage.clone())
+        };
+        let mut sorted = apps;
+        sorted.sort_by(|left, right| {
+            let left_usage = app_usage(&usage, &left.path);
+            let right_usage = app_usage(&usage, &right.path);
+            right_usage
+                .use_count
+                .cmp(&left_usage.use_count)
+                .then_with(|| right_usage.last_used_at.cmp(&left_usage.last_used_at))
+                .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+        });
+        sorted.truncate(limit);
+        sorted
     }
 
     pub fn search_page(&self, query: &str, offset: usize, limit: usize) -> Page<AppEntry> {
@@ -386,9 +405,11 @@ fn now_label() -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::*;
+    use crate::core::{database::DatabaseService, storage::AppPaths};
 
     fn temp_db(name: &str) -> std::path::PathBuf {
         let nanos = SystemTime::now()
@@ -398,6 +419,20 @@ mod tests {
         std::env::temp_dir()
             .join(format!("qingqi-app-service-{nanos}"))
             .join(name)
+    }
+
+    fn test_store(name: &str) -> AppIndexStore {
+        let path = temp_db(name);
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(
+            path.parent().unwrap().to_path_buf(),
+        )));
+        database
+            .register_database(crate::core::database::DatabaseSpec::path(
+                "app-launcher/index",
+                path,
+            ))
+            .unwrap();
+        AppIndexStore::new(database, "app-launcher/index")
     }
 
     fn sample_apps() -> Vec<AppEntry> {
@@ -431,7 +466,7 @@ mod tests {
 
     #[test]
     fn search_page_returns_total_and_slice() {
-        let store = AppIndexStore::new(temp_db("index.db"));
+        let store = test_store("index.db");
         store
             .save(&AppIndexCache {
                 apps: sample_apps(),
@@ -448,6 +483,8 @@ mod tests {
                 last_scan: None,
                 last_error: None,
                 revision: 0,
+                probe_running: false,
+                last_probe_at: 0,
             }),
         };
 
@@ -462,7 +499,7 @@ mod tests {
     #[test]
     fn publish_metadata_pass_marks_icon_refresh_running() {
         let service = AppIndexService {
-            store: AppIndexStore::new(temp_db("metadata.db")),
+            store: test_store("metadata.db"),
             state: Mutex::new(AppIndexState {
                 apps: Vec::new(),
                 usage: HashMap::new(),
@@ -471,6 +508,8 @@ mod tests {
                 last_scan: None,
                 last_error: None,
                 revision: 7,
+                probe_running: false,
+                last_probe_at: 0,
             }),
         };
 
@@ -498,7 +537,7 @@ mod tests {
     #[test]
     fn empty_query_orders_by_launch_usage() {
         let service = AppIndexService {
-            store: AppIndexStore::new(temp_db("usage.db")),
+            store: test_store("usage.db"),
             state: Mutex::new(AppIndexState {
                 apps: sample_apps(),
                 usage: HashMap::from([
@@ -522,6 +561,8 @@ mod tests {
                 last_scan: None,
                 last_error: None,
                 revision: 0,
+                probe_running: false,
+                last_probe_at: 0,
             }),
         };
 

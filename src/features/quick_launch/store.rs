@@ -1,41 +1,142 @@
-use std::{collections::HashMap, fs, path::Path};
+use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{Context, Result};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{OptionalExtension, params};
 use time::{OffsetDateTime, macros::format_description};
 
+use crate::core::database::{DatabaseService, PooledConnection, SqlitePool};
 use crate::features::quick_launch::model::{
     ActionKind, FeedbackMode, QuickAction, QuickActionDraft, QuickRun, QuickRunDraft, RunStatus,
     ScriptSource, ScriptType,
 };
 
+pub const LIST_ACTIONS_ALL: &str =
+    "SELECT * FROM quick_launch_actions ORDER BY sort_order ASC, id ASC";
+pub const LIST_ACTIONS_ENABLED: &str =
+    "SELECT * FROM quick_launch_actions WHERE enabled = ?1 ORDER BY sort_order ASC, id ASC";
+pub const GET_ACTION: &str = "SELECT * FROM quick_launch_actions WHERE id = ?1";
+pub const INSERT_ACTION: &str = "
+INSERT INTO quick_launch_actions
+    (name, description, kind, script_type, script_source, script_body, interpreter,
+     path, url, args_json, cwd, env_json, keywords_json, prefixes_json, icon,
+     feedback_mode, timeout_sec, enabled, sort_order, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
+";
+pub const UPDATE_ACTION: &str = "
+UPDATE quick_launch_actions
+SET name = ?1,
+    description = ?2,
+    kind = ?3,
+    script_type = ?4,
+    script_source = ?5,
+    script_body = ?6,
+    interpreter = ?7,
+    path = ?8,
+    url = ?9,
+    args_json = ?10,
+    cwd = ?11,
+    env_json = ?12,
+    keywords_json = ?13,
+    prefixes_json = ?14,
+    icon = ?15,
+    feedback_mode = ?16,
+    timeout_sec = ?17,
+    enabled = ?18,
+    sort_order = COALESCE(?19, sort_order),
+    updated_at = ?20
+WHERE id = ?21
+";
+pub const DELETE_ACTION: &str = "DELETE FROM quick_launch_actions WHERE id = ?1";
+pub const INSERT_RUN: &str = "
+INSERT INTO quick_launch_runs
+    (action_id, status, exit_code, stdout, stderr, duration_ms,
+     started_at, finished_at, message)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+";
+pub const LIST_RUNS: &str = "
+SELECT * FROM quick_launch_runs
+WHERE action_id = ?1
+ORDER BY id DESC
+LIMIT ?2
+";
+pub const GET_RUN: &str = "SELECT * FROM quick_launch_runs WHERE id = ?1";
+pub const COUNT_ACTIONS: &str = "SELECT COUNT(*) FROM quick_launch_actions";
+pub const NEXT_SORT_ORDER: &str =
+    "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM quick_launch_actions";
+pub const ACTION_COLUMNS: &str = "PRAGMA table_info(quick_launch_actions)";
+pub const SCHEMA: &str = "
+CREATE TABLE IF NOT EXISTS quick_launch_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL DEFAULT 'script',
+    script_type TEXT NOT NULL DEFAULT 'shell',
+    script_source TEXT NOT NULL DEFAULT 'inline',
+    script_body TEXT NOT NULL DEFAULT '',
+    interpreter TEXT NOT NULL DEFAULT '',
+    path TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL DEFAULT '',
+    args_json TEXT NOT NULL DEFAULT '[]',
+    cwd TEXT NOT NULL DEFAULT '',
+    env_json TEXT NOT NULL DEFAULT '{}',
+    keywords_json TEXT NOT NULL DEFAULT '[]',
+    prefixes_json TEXT NOT NULL DEFAULT '[]',
+    icon TEXT NOT NULL DEFAULT '',
+    feedback_mode TEXT NOT NULL DEFAULT 'notification',
+    timeout_sec INTEGER NOT NULL DEFAULT 300,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_quick_launch_actions_enabled
+    ON quick_launch_actions(enabled, sort_order, id);
+
+CREATE TABLE IF NOT EXISTS quick_launch_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action_id INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    exit_code INTEGER,
+    stdout TEXT NOT NULL DEFAULT '',
+    stderr TEXT NOT NULL DEFAULT '',
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    started_at TEXT NOT NULL,
+    finished_at TEXT NOT NULL,
+    message TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_quick_launch_runs_action
+    ON quick_launch_runs(action_id, id DESC);
+";
+
+pub fn latest_runs_for_actions_sql(action_count: usize) -> String {
+    let placeholders = (0..action_count).map(|_| "?").collect::<Vec<_>>().join(",");
+    format!(
+        "SELECT * FROM quick_launch_runs WHERE id IN (\
+         SELECT MAX(id) FROM quick_launch_runs \
+         WHERE action_id IN ({}) GROUP BY action_id)",
+        placeholders
+    )
+}
+
 pub struct QuickLaunchStore {
-    conn: Connection,
+    pool: SqlitePool,
 }
 
 impl QuickLaunchStore {
-    pub fn open(path: &Path) -> Result<Self> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("无法创建快速启动目录 {}", parent.display()))?;
-        }
-
-        let conn = Connection::open(path)?;
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "synchronous", "NORMAL")?;
-        let store = Self { conn };
+    pub fn open(database: Arc<DatabaseService>, key: &str) -> Result<Self> {
+        let pool = database.pool(key)?;
+        let store = Self { pool };
         store.ensure_schema()?;
         Ok(store)
     }
 
     pub fn list_actions(&self, enabled: Option<bool>) -> Result<Vec<QuickAction>> {
+        let conn = self.connection()?;
         let sql = match enabled {
-            Some(_) => {
-                "SELECT * FROM quick_launch_actions WHERE enabled = ?1 ORDER BY sort_order ASC, id ASC"
-            }
-            None => "SELECT * FROM quick_launch_actions ORDER BY sort_order ASC, id ASC",
+            Some(_) => LIST_ACTIONS_ENABLED,
+            None => LIST_ACTIONS_ALL,
         };
-        let mut stmt = self.conn.prepare(sql)?;
+        let mut stmt = conn.prepare(sql)?;
         let rows = match enabled {
             Some(enabled) => stmt.query_map(params![if enabled { 1 } else { 0 }], map_action)?,
             None => stmt.query_map([], map_action)?,
@@ -48,12 +149,8 @@ impl QuickLaunchStore {
     }
 
     pub fn get_action(&self, action_id: i64) -> Result<Option<QuickAction>> {
-        self.conn
-            .query_row(
-                "SELECT * FROM quick_launch_actions WHERE id = ?1",
-                params![action_id],
-                map_action,
-            )
+        let conn = self.connection()?;
+        conn.query_row(GET_ACTION, params![action_id], map_action)
             .optional()
             .map_err(Into::into)
     }
@@ -64,14 +161,9 @@ impl QuickLaunchStore {
             .sort_order
             .unwrap_or_else(|| self.next_sort_order().unwrap_or(0));
 
-        self.conn.execute(
-            "
-            INSERT INTO quick_launch_actions
-                (name, description, kind, script_type, script_source, script_body, interpreter,
-                 path, url, args_json, cwd, env_json, keywords_json, prefixes_json, icon,
-                 feedback_mode, timeout_sec, enabled, sort_order, created_at, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
-            ",
+        let conn = self.connection()?;
+        conn.execute(
+            INSERT_ACTION,
             params![
                 draft.name.trim(),
                 draft.description,
@@ -96,38 +188,17 @@ impl QuickLaunchStore {
                 now,
             ],
         )?;
-        let action_id = self.conn.last_insert_rowid();
+        let action_id = conn.last_insert_rowid();
+        drop(conn);
         self.get_action(action_id)?
             .context("新建动作后无法重新读取记录")
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn update_action(&self, action_id: i64, draft: &QuickActionDraft) -> Result<bool> {
-        let updated = self.conn.execute(
-            "
-            UPDATE quick_launch_actions
-            SET name = ?1,
-                description = ?2,
-                kind = ?3,
-                script_type = ?4,
-                script_source = ?5,
-                script_body = ?6,
-                interpreter = ?7,
-                path = ?8,
-                url = ?9,
-                args_json = ?10,
-                cwd = ?11,
-                env_json = ?12,
-                keywords_json = ?13,
-                prefixes_json = ?14,
-                icon = ?15,
-                feedback_mode = ?16,
-                timeout_sec = ?17,
-                enabled = ?18,
-                sort_order = COALESCE(?19, sort_order),
-                updated_at = ?20
-            WHERE id = ?21
-            ",
+        let conn = self.connection()?;
+        let updated = conn.execute(
+            UPDATE_ACTION,
             params![
                 draft.name.trim(),
                 draft.description,
@@ -157,10 +228,8 @@ impl QuickLaunchStore {
 
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn delete_action(&self, action_id: i64) -> Result<bool> {
-        let deleted = self.conn.execute(
-            "DELETE FROM quick_launch_actions WHERE id = ?1",
-            params![action_id],
-        )?;
+        let conn = self.connection()?;
+        let deleted = conn.execute(DELETE_ACTION, params![action_id])?;
         Ok(deleted > 0)
     }
 
@@ -178,13 +247,9 @@ impl QuickLaunchStore {
     }
 
     pub fn record_run(&self, draft: &QuickRunDraft) -> Result<QuickRun> {
-        self.conn.execute(
-            "
-            INSERT INTO quick_launch_runs
-                (action_id, status, exit_code, stdout, stderr, duration_ms,
-                 started_at, finished_at, message)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-            ",
+        let conn = self.connection()?;
+        conn.execute(
+            INSERT_RUN,
             params![
                 draft.action_id,
                 draft.status.as_str(),
@@ -197,20 +262,15 @@ impl QuickLaunchStore {
                 draft.message,
             ],
         )?;
-        let run_id = self.conn.last_insert_rowid();
+        let run_id = conn.last_insert_rowid();
+        drop(conn);
         self.get_run(run_id)?
             .context("写入运行记录后无法重新读取记录")
     }
 
     pub fn list_runs(&self, action_id: i64, limit: usize) -> Result<Vec<QuickRun>> {
-        let mut stmt = self.conn.prepare(
-            "
-            SELECT * FROM quick_launch_runs
-            WHERE action_id = ?1
-            ORDER BY id DESC
-            LIMIT ?2
-            ",
-        )?;
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(LIST_RUNS)?;
         let rows = stmt.query_map(params![action_id, limit as i64], map_run)?;
         let mut runs = Vec::new();
         for row in rows {
@@ -223,14 +283,9 @@ impl QuickLaunchStore {
         if action_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let placeholders = action_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-        let sql = format!(
-            "SELECT * FROM quick_launch_runs WHERE id IN (\
-             SELECT MAX(id) FROM quick_launch_runs \
-             WHERE action_id IN ({}) GROUP BY action_id)",
-            placeholders
-        );
-        let mut stmt = self.conn.prepare(&sql)?;
+        let conn = self.connection()?;
+        let sql = latest_runs_for_actions_sql(action_ids.len());
+        let mut stmt = conn.prepare(&sql)?;
         let rows = stmt.query_map(
             rusqlite::params_from_iter(action_ids.iter().copied()),
             map_run,
@@ -244,102 +299,53 @@ impl QuickLaunchStore {
     }
 
     fn get_run(&self, run_id: i64) -> Result<Option<QuickRun>> {
-        self.conn
-            .query_row(
-                "SELECT * FROM quick_launch_runs WHERE id = ?1",
-                params![run_id],
-                map_run,
-            )
+        let conn = self.connection()?;
+        conn.query_row(GET_RUN, params![run_id], map_run)
             .optional()
             .map_err(Into::into)
     }
 
     fn count_actions(&self) -> Result<i64> {
-        self.conn
-            .query_row("SELECT COUNT(*) FROM quick_launch_actions", [], |row| {
-                row.get(0)
-            })
+        let conn = self.connection()?;
+        conn.query_row(COUNT_ACTIONS, [], |row| row.get(0))
             .map_err(Into::into)
     }
 
     fn next_sort_order(&self) -> Result<i64> {
-        self.conn
-            .query_row(
-                "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM quick_launch_actions",
-                [],
-                |row| row.get(0),
-            )
+        let conn = self.connection()?;
+        conn.query_row(NEXT_SORT_ORDER, [], |row| row.get(0))
             .map_err(Into::into)
     }
 
     fn ensure_schema(&self) -> Result<()> {
-        self.conn.execute_batch(
-            "
-            CREATE TABLE IF NOT EXISTS quick_launch_actions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                description TEXT NOT NULL DEFAULT '',
-                kind TEXT NOT NULL DEFAULT 'script',
-                script_type TEXT NOT NULL DEFAULT 'shell',
-                script_source TEXT NOT NULL DEFAULT 'inline',
-                script_body TEXT NOT NULL DEFAULT '',
-                interpreter TEXT NOT NULL DEFAULT '',
-                path TEXT NOT NULL DEFAULT '',
-                url TEXT NOT NULL DEFAULT '',
-                args_json TEXT NOT NULL DEFAULT '[]',
-                cwd TEXT NOT NULL DEFAULT '',
-                env_json TEXT NOT NULL DEFAULT '{}',
-                keywords_json TEXT NOT NULL DEFAULT '[]',
-                prefixes_json TEXT NOT NULL DEFAULT '[]',
-                icon TEXT NOT NULL DEFAULT '',
-                feedback_mode TEXT NOT NULL DEFAULT 'notification',
-                timeout_sec INTEGER NOT NULL DEFAULT 300,
-                enabled INTEGER NOT NULL DEFAULT 1,
-                sort_order INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_quick_launch_actions_enabled
-                ON quick_launch_actions(enabled, sort_order, id);
-
-            CREATE TABLE IF NOT EXISTS quick_launch_runs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                action_id INTEGER NOT NULL,
-                status TEXT NOT NULL,
-                exit_code INTEGER,
-                stdout TEXT NOT NULL DEFAULT '',
-                stderr TEXT NOT NULL DEFAULT '',
-                duration_ms INTEGER NOT NULL DEFAULT 0,
-                started_at TEXT NOT NULL,
-                finished_at TEXT NOT NULL,
-                message TEXT NOT NULL DEFAULT ''
-            );
-            CREATE INDEX IF NOT EXISTS idx_quick_launch_runs_action
-                ON quick_launch_runs(action_id, id DESC);
-            ",
-        )?;
-        self.ensure_action_columns()?;
+        let conn = self.connection()?;
+        conn.execute_batch(SCHEMA)?;
+        self.ensure_action_columns(&conn)?;
         Ok(())
     }
 
-    fn ensure_action_columns(&self) -> Result<()> {
-        let columns = self.action_columns()?;
+    fn ensure_action_columns(&self, conn: &rusqlite::Connection) -> Result<()> {
+        let columns = self.action_columns(conn)?;
         self.ensure_action_column(
+            conn,
             &columns,
             "script_type",
             "ALTER TABLE quick_launch_actions ADD COLUMN script_type TEXT NOT NULL DEFAULT 'shell'",
         )?;
         self.ensure_action_column(
+            conn,
             &columns,
             "script_source",
             "ALTER TABLE quick_launch_actions ADD COLUMN script_source TEXT NOT NULL DEFAULT 'inline'",
         )?;
         self.ensure_action_column(
+            conn,
             &columns,
             "interpreter",
             "ALTER TABLE quick_launch_actions ADD COLUMN interpreter TEXT NOT NULL DEFAULT ''",
         )?;
         self.ensure_action_column(
+            conn,
             &columns,
             "env_json",
             "ALTER TABLE quick_launch_actions ADD COLUMN env_json TEXT NOT NULL DEFAULT '{}'",
@@ -347,23 +353,33 @@ impl QuickLaunchStore {
         Ok(())
     }
 
-    fn ensure_action_column(&self, columns: &[String], name: &str, sql: &str) -> Result<()> {
+    fn ensure_action_column(
+        &self,
+        conn: &rusqlite::Connection,
+        columns: &[String],
+        name: &str,
+        sql: &str,
+    ) -> Result<()> {
         if !columns.iter().any(|column| column == name) {
-            self.conn.execute(sql, [])?;
+            conn.execute(sql, [])?;
         }
         Ok(())
     }
 
-    fn action_columns(&self) -> Result<Vec<String>> {
-        let mut stmt = self
-            .conn
-            .prepare("PRAGMA table_info(quick_launch_actions)")?;
+    fn action_columns(&self, conn: &rusqlite::Connection) -> Result<Vec<String>> {
+        let mut stmt = conn.prepare(ACTION_COLUMNS)?;
         let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
         let mut columns = Vec::new();
         for row in rows {
             columns.push(row?);
         }
         Ok(columns)
+    }
+
+    fn connection(&self) -> Result<PooledConnection> {
+        self.pool
+            .get()
+            .context("cannot get quick launch pooled connection")
     }
 }
 
@@ -431,11 +447,15 @@ fn now_label() -> String {
 mod tests {
     use std::{
         fs,
+        path::Path,
         path::PathBuf,
+        sync::Arc,
         time::{SystemTime, UNIX_EPOCH},
     };
 
     use super::*;
+    use crate::core::{database::DatabaseService, storage::AppPaths};
+    use rusqlite::Connection;
 
     fn temp_db(name: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -445,6 +465,22 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("qingqi-quick-launch-{nanos}"));
         let _ = fs::create_dir_all(&dir);
         dir.join(name)
+    }
+
+    fn store_for_path(path: &Path) -> QuickLaunchStore {
+        let root = path.parent().unwrap().to_path_buf();
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(root)));
+        database
+            .register_database(crate::core::database::DatabaseSpec::path(
+                crate::core::database::feature_database_key("quick-launch", "actions"),
+                path.to_path_buf(),
+            ))
+            .unwrap();
+        QuickLaunchStore::open(
+            database,
+            &crate::core::database::feature_database_key("quick-launch", "actions"),
+        )
+        .expect("store should open")
     }
 
     fn sample_draft(name: &str) -> QuickActionDraft {
@@ -458,7 +494,7 @@ mod tests {
     #[test]
     fn seed_defaults_only_once() {
         let path = temp_db("seed.db");
-        let store = QuickLaunchStore::open(&path).expect("store should open");
+        let store = store_for_path(&path);
         let defaults = vec![sample_draft("动作一"), sample_draft("动作二")];
 
         assert_eq!(store.seed_defaults(&defaults).expect("first seed"), 2);
@@ -469,7 +505,7 @@ mod tests {
     #[test]
     fn create_update_delete_action() {
         let path = temp_db("crud.db");
-        let store = QuickLaunchStore::open(&path).expect("store should open");
+        let store = store_for_path(&path);
         let created = store
             .create_action(&sample_draft("原始动作"))
             .expect("create should work");
@@ -512,7 +548,7 @@ mod tests {
     #[test]
     fn records_run_history() {
         let path = temp_db("runs.db");
-        let store = QuickLaunchStore::open(&path).expect("store should open");
+        let store = store_for_path(&path);
         let action = store
             .create_action(&sample_draft("运行动作"))
             .expect("action should create");
@@ -582,7 +618,7 @@ mod tests {
         .expect("legacy row should insert");
         drop(conn);
 
-        let store = QuickLaunchStore::open(&path).expect("store should migrate");
+        let store = store_for_path(&path);
         let action = store
             .list_actions(None)
             .expect("actions should load")
@@ -599,7 +635,7 @@ mod tests {
     #[test]
     fn latest_run_for_actions_returns_most_recent_per_action() {
         let path = temp_db("latest_runs.db");
-        let store = QuickLaunchStore::open(&path).expect("store should open");
+        let store = store_for_path(&path);
         let a1 = store
             .create_action(&sample_draft("动作一"))
             .expect("action 1 should create");
@@ -607,7 +643,6 @@ mod tests {
             .create_action(&sample_draft("动作二"))
             .expect("action 2 should create");
 
-        // Record two runs for action 1, one for action 2
         store
             .record_run(&QuickRunDraft {
                 action_id: a1.id,
@@ -663,7 +698,7 @@ mod tests {
     #[test]
     fn latest_run_for_actions_empty_input() {
         let path = temp_db("latest_empty.db");
-        let store = QuickLaunchStore::open(&path).expect("store should open");
+        let store = store_for_path(&path);
         let result = store
             .latest_run_for_actions(&[])
             .expect("empty input should work");
@@ -673,7 +708,7 @@ mod tests {
     #[test]
     fn latest_run_for_actions_skips_actions_without_runs() {
         let path = temp_db("latest_partial.db");
-        let store = QuickLaunchStore::open(&path).expect("store should open");
+        let store = store_for_path(&path);
         let a1 = store
             .create_action(&sample_draft("有运行记录"))
             .expect("action should create");
