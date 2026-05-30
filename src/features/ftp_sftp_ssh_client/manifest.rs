@@ -33,7 +33,7 @@ pub fn manifest() -> PluginManifest {
             secondary: "文件与终端".into(),
             tertiary: "文本回传".into(),
         }),
-        command_hint: "多连接切换、远程文件区、SSH 终端与 FTP 命令日志".into(),
+        command_hint: Some("多连接切换、远程文件区、SSH 终端与 FTP 命令日志".into()),
         command_prefixes: ["ftp", "sftp", "ssh"].into_iter().map(Into::into).collect(),
     }
 }

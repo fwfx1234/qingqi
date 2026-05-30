@@ -35,7 +35,7 @@ pub fn manifest() -> PluginManifest {
             secondary: "运行记录".into(),
             tertiary: "seed data 已接入".into(),
         }),
-        command_hint: "系统命令与常用动作快速执行".into(),
+        command_hint: Some("系统命令与常用动作快速执行".into()),
         command_prefixes: ["ql", "quick"].into_iter().map(Into::into).collect(),
     }
 }

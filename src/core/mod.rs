@@ -2,6 +2,7 @@ pub mod command;
 pub mod command_usage;
 pub mod database;
 pub mod dict_store;
+pub mod events;
 pub mod icon;
 pub mod job;
 pub mod keymap;

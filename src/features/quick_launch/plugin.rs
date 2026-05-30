@@ -48,7 +48,7 @@ impl Plugin for QuickLaunchRuntime {
         })))
     }
 
-    fn commands(&self) -> Vec<CommandItem> {
+    fn commands(&self, _query: &str) -> Vec<CommandItem> {
         let manifest = self.manifest();
         let mut commands = vec![CommandItem::plugin_open(
             manifest.id.as_ref(),

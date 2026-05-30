@@ -13,7 +13,7 @@ use gpui::{
 use crate::{
     app::{
         text_input::{TextInput, TextInputStyle},
-        theme,
+        theme, ui,
     },
     core::shortcut::ShortcutService,
     features::clipboard::{

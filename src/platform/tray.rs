@@ -40,7 +40,7 @@ pub fn install_tray(mode: PreventSleepMode) -> Result<(), String> {
     {
         let menu = build_menu(mode)?;
         let icon = default_icon()?;
-        let mut builder = TrayIconBuilder::new()
+        let builder = TrayIconBuilder::new()
             .with_menu(Box::new(menu))
             .with_menu_on_left_click(false)
             .with_tooltip("Qingqi");
@@ -58,7 +58,7 @@ pub fn install_tray(mode: PreventSleepMode) -> Result<(), String> {
         // Drop the previous tray icon (replaces it in the system menu bar).
         replace_tray(tray);
         TRAY_INSTALLED.store(true, Ordering::SeqCst);
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -111,7 +111,7 @@ pub fn poll_actions() -> Vec<TrayAction> {
             actions.push(action);
         }
 
-        return actions;
+        actions
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]

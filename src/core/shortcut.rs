@@ -36,7 +36,7 @@ impl ShortcutScope {
 pub enum ShortcutTarget {
     Command(Activation),
     CoreAction(CoreShortcutAction),
-    SessionAction {
+    PluginAction {
         plugin_id: String,
         action_id: String,
     },
@@ -612,8 +612,8 @@ pub fn dispatch_target(
         ShortcutTarget::Command(target) => {
             WindowController::run_command(window_controller, target.clone(), cx);
         }
-        ShortcutTarget::SessionAction { .. } => {
-            tracing::warn!("session shortcut dispatch is not implemented yet");
+        ShortcutTarget::PluginAction { .. } => {
+            tracing::warn!("plugin action shortcut dispatch is not implemented yet");
         }
     }
 }

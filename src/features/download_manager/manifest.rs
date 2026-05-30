@@ -33,7 +33,7 @@ pub fn manifest() -> PluginManifest {
             secondary: "断点续传".into(),
             tertiary: "reqwest".into(),
         }),
-        command_hint: "输入 URL 或粘贴链接开始下载".into(),
+        command_hint: Some("输入 URL 或粘贴链接开始下载".into()),
         command_prefixes: ["down", "download"].into_iter().map(Into::into).collect(),
     }
 }

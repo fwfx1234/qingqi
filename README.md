@@ -32,6 +32,13 @@
 - `src/platform`：系统相关能力（应用扫描、剪贴板、shell、tray 等）。
 - `assets`：图标与静态资源（`app-icon.svg` / `tray-icon.svg` 为源文件，构建时由 `build.rs` 生成 bundle 所需 PNG）。
 
+## 设计与优化文档
+
+- [架构设计](docs/architecture.md)
+- [工程约定](docs/conventions.md)
+- [插件界面问题清单与优化方案](docs/plugin-ui-optimization-plan.md)
+- [gpui-component 使用指南](docs/gpui-component-guide.md)
+
 ## 本地开发
 
 ```bash

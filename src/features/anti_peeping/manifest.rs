@@ -33,7 +33,7 @@ pub fn manifest() -> PluginManifest {
             secondary: "自定义图片".into(),
             tertiary: "一键关闭".into(),
         }),
-        command_hint: "全屏遮盖屏幕内容，按 Esc 退出".into(),
+        command_hint: Some("全屏遮盖屏幕内容，按 Esc 退出".into()),
         command_prefixes: ["privacy", "peeping", "防窥", "遮盖"]
             .into_iter()
             .map(Into::into)

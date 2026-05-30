@@ -1,20 +1,18 @@
-use std::{
-    collections::HashSet,
-    io::Cursor,
-    path::{Path, PathBuf},
-    process::Command as ProcessCommand,
-};
+use std::path::{Path, PathBuf};
 
 use image::{DynamicImage, ImageReader};
-use plist::Value;
 use serde::{Deserialize, Serialize};
 
-const SCAN_DIRS: &[&str] = &[
-    "/Applications",
-    "/System/Applications",
-    "/System/Library/CoreServices/Applications",
-];
-const APP_SCAN_MAX_DEPTH: usize = 4;
+#[cfg(target_os = "macos")]
+#[path = "apps/macos.rs"]
+mod platform_impl;
+#[cfg(target_os = "windows")]
+#[path = "apps/windows.rs"]
+mod platform_impl;
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[path = "apps/unsupported.rs"]
+mod platform_impl;
+
 const ICON_SIZE_PX: u32 = 64;
 const ICON_CACHE_VERSION: u8 = 2;
 const ICON_TRIM_ALPHA_THRESHOLD: u8 = 8;
@@ -31,67 +29,29 @@ pub struct InstalledApp {
 }
 
 pub fn scan_application_metadata() -> Vec<InstalledApp> {
-    let mut apps = Vec::new();
-    let mut seen_names = HashSet::new();
-
-    for directory in SCAN_DIRS {
-        collect_apps(
-            Path::new(directory),
-            0,
-            APP_SCAN_MAX_DEPTH,
-            &mut seen_names,
-            &mut apps,
-        );
-    }
-
-    if let Ok(home) = std::env::var("HOME") {
-        collect_apps(
-            Path::new(&home).join("Applications").as_path(),
-            0,
-            APP_SCAN_MAX_DEPTH,
-            &mut seen_names,
-            &mut apps,
-        );
-    }
-
-    apps.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
-    apps
+    platform_impl::scan_application_metadata()
 }
 
 pub fn scan_application_paths() -> Vec<String> {
-    let mut paths = HashSet::new();
-    for directory in SCAN_DIRS {
-        collect_app_paths(Path::new(directory), 0, APP_SCAN_MAX_DEPTH, &mut paths);
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        collect_app_paths(
-            Path::new(&home).join("Applications").as_path(),
-            0,
-            APP_SCAN_MAX_DEPTH,
-            &mut paths,
-        );
-    }
-    let mut list = paths.into_iter().collect::<Vec<_>>();
-    list.sort();
-    list
+    platform_impl::scan_application_paths()
 }
 
 pub fn populate_application_icons(apps: &mut [InstalledApp]) {
-    for app in apps {
-        if app.icon_path.is_none() {
-            app.icon_path = extract_icon_for_application(Path::new(&app.path));
-        }
-    }
+    platform_impl::populate_application_icons(apps);
+}
+
+pub fn open_application(path: &str) -> Result<(), String> {
+    platform_impl::open_application(path)
 }
 
 /// Clear icon_path for entries whose cached file is missing, zero-byte, or corrupt.
 /// Call this after loading from cache to avoid handing broken paths to the UI.
 pub fn clear_broken_icon_paths(apps: &mut [InstalledApp]) {
     for app in apps {
-        if let Some(ref path) = app.icon_path {
-            if validate_cached_icon(Path::new(path)).is_none() {
-                app.icon_path = None;
-            }
+        if let Some(ref path) = app.icon_path
+            && validate_cached_icon(Path::new(path)).is_none()
+        {
+            app.icon_path = None;
         }
     }
 }
@@ -124,371 +84,6 @@ fn clear_dir_files(dir: &Path) -> Result<usize, String> {
     Ok(count)
 }
 
-pub fn open_application(path: &str) -> Result<(), String> {
-    ProcessCommand::new("open")
-        .arg(path)
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| format!("启动失败: {error}"))
-}
-
-fn collect_apps(
-    directory: &Path,
-    depth: usize,
-    max_depth: usize,
-    seen_names: &mut HashSet<String>,
-    apps: &mut Vec<InstalledApp>,
-) {
-    let Ok(entries) = std::fs::read_dir(directory) else {
-        return;
-    };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) == Some("app") {
-            if is_nested_helper_app(&path) {
-                continue;
-            }
-
-            collect_apps(
-                path.join("Contents").join("Applications").as_path(),
-                depth + 1,
-                max_depth,
-                seen_names,
-                apps,
-            );
-            push_app_metadata(path, seen_names, apps);
-            continue;
-        }
-
-        if depth < max_depth && path.is_dir() && should_descend_app_scan_dir(&path) {
-            collect_apps(&path, depth + 1, max_depth, seen_names, apps);
-        }
-    }
-}
-
-fn push_app_metadata(
-    path: PathBuf,
-    seen_names: &mut HashSet<String>,
-    apps: &mut Vec<InstalledApp>,
-) {
-    let Some(stem) = path
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .map(ToOwned::to_owned)
-    else {
-        return;
-    };
-
-    let info = read_info_dictionary(&path);
-    let bundle_id = bundle_id_from_info(&info);
-    let name = display_name_from_info(&info, &stem);
-    let dedupe_key = bundle_id
-        .clone()
-        .unwrap_or_else(|| name.clone())
-        .to_lowercase();
-    if stem.is_empty() || dedupe_key.is_empty() || !seen_names.insert(dedupe_key) {
-        return;
-    }
-
-    let aliases = app_aliases(&info, &stem, bundle_id.as_deref(), &name);
-    apps.push(InstalledApp {
-        icon_letter: name
-            .chars()
-            .next()
-            .map(|ch| ch.to_string())
-            .unwrap_or_else(|| String::from("A")),
-        aliases,
-        bundle_id,
-        icon_path: None,
-        name,
-        path: path.to_string_lossy().to_string(),
-    });
-}
-
-fn collect_app_paths(
-    directory: &Path,
-    depth: usize,
-    max_depth: usize,
-    paths: &mut HashSet<String>,
-) {
-    let Ok(entries) = std::fs::read_dir(directory) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) == Some("app") {
-            if !is_nested_helper_app(&path) {
-                collect_app_paths(
-                    path.join("Contents").join("Applications").as_path(),
-                    depth + 1,
-                    max_depth,
-                    paths,
-                );
-                paths.insert(path.to_string_lossy().to_string());
-            }
-            continue;
-        }
-
-        if depth < max_depth && path.is_dir() && should_descend_app_scan_dir(&path) {
-            collect_app_paths(&path, depth + 1, max_depth, paths);
-        }
-    }
-}
-
-fn should_descend_app_scan_dir(path: &Path) -> bool {
-    !path
-        .components()
-        .any(|component| os_str_eq_ignore_ascii_case(component.as_os_str(), "Contents"))
-}
-
-fn is_nested_helper_app(path: &Path) -> bool {
-    path.components()
-        .any(|component| os_str_eq_ignore_ascii_case(component.as_os_str(), "Contents"))
-        && !has_component_pair(path, "Contents", "Applications")
-}
-
-fn has_component_pair(path: &Path, left: &str, right: &str) -> bool {
-    let mut saw_left = false;
-    for component in path.components() {
-        let value = component.as_os_str();
-        if saw_left && os_str_eq_ignore_ascii_case(value, right) {
-            return true;
-        }
-        saw_left = os_str_eq_ignore_ascii_case(value, left);
-    }
-    false
-}
-
-fn os_str_eq_ignore_ascii_case(value: &std::ffi::OsStr, expected: &str) -> bool {
-    value.to_string_lossy().eq_ignore_ascii_case(expected)
-}
-
-fn bundle_id_from_info(info: &plist::Dictionary) -> Option<String> {
-    info.get("CFBundleIdentifier")
-        .cloned()
-        .and_then(|value| value.as_string().map(ToOwned::to_owned))
-        .filter(|bundle_id| !bundle_id.is_empty())
-}
-
-fn extract_icon_for_application(path: &Path) -> Option<String> {
-    let info = read_info_dictionary(path);
-    extract_icon(path, &info)
-}
-
-fn extract_icon(path: &Path, info: &plist::Dictionary) -> Option<String> {
-    let icon_source = find_icon_source(path, info)?;
-    convert_icon_to_png(&icon_source, &icon_cache_path(path)).ok()
-}
-
-fn read_info_dictionary(path: &Path) -> plist::Dictionary {
-    read_info_plist(path)
-        .and_then(|plist| plist.as_dictionary().cloned())
-        .unwrap_or_default()
-}
-
-fn read_info_plist(path: &Path) -> Option<Value> {
-    let plist = path.join("Contents").join("Info.plist");
-    let bytes = std::fs::read(plist).ok()?;
-    Value::from_reader_xml(bytes.as_slice())
-        .or_else(|_| Value::from_reader(Cursor::new(bytes)))
-        .ok()
-}
-
-fn display_name_from_info(info: &plist::Dictionary, stem: &str) -> String {
-    unique_nonempty_strings([
-        info.get("CFBundleDisplayName").and_then(Value::as_string),
-        info.get("CFBundleName").and_then(Value::as_string),
-        Some(stem),
-    ])
-    .into_iter()
-    .next()
-    .unwrap_or_else(|| stem.to_string())
-}
-
-fn app_aliases(
-    info: &plist::Dictionary,
-    stem: &str,
-    bundle_id: Option<&str>,
-    display_name: &str,
-) -> Vec<String> {
-    let raw = unique_nonempty_strings([
-        Some(stem),
-        info.get("CFBundleDisplayName").and_then(Value::as_string),
-        info.get("CFBundleName").and_then(Value::as_string),
-        info.get("CFBundleExecutable").and_then(Value::as_string),
-        bundle_id,
-        bundle_id.and_then(bundle_id_suffix),
-    ]);
-
-    // Expand with normalized and CamelCase-split variants
-    let mut expanded: Vec<String> = Vec::new();
-    for alias in &raw {
-        expanded.push(alias.clone());
-        let normalized = normalize_search_text(alias);
-        if !normalized.is_empty() && normalized != *alias.to_lowercase() {
-            expanded.push(normalized);
-        }
-        let split = camel_case_split(alias);
-        if !split.is_empty() && !raw.iter().any(|r| r.eq_ignore_ascii_case(&split)) {
-            expanded.push(split);
-        }
-    }
-
-    // Add normalized bundle-id variants
-    if let Some(bid) = bundle_id {
-        let normalized_bid = normalize_search_text(bid);
-        if !normalized_bid.is_empty() {
-            expanded.push(normalized_bid);
-        }
-    }
-
-    let mut aliases = unique_nonempty_strings(expanded.iter().map(|s| Some(s.as_str())));
-    aliases.retain(|alias| !alias.eq_ignore_ascii_case(display_name));
-    aliases
-}
-
-/// Split CamelCase/PascalCase into space-separated lowercase words.
-/// "Visual Studio Code" stays as-is (already has spaces).
-/// "VSCode" -> "vs code", "MicrosoftWord" -> "microsoft word".
-fn camel_case_split(value: &str) -> String {
-    if value.contains(' ') || value.contains('-') || value.contains('_') {
-        return String::new();
-    }
-    if !value.chars().any(|ch| ch.is_uppercase()) {
-        return String::new();
-    }
-
-    let mut words: Vec<String> = Vec::new();
-    let chars: Vec<char> = value.chars().collect();
-    let mut start = 0;
-
-    while start < chars.len() {
-        let mut end = start + 1;
-
-        if chars[start].is_uppercase() {
-            // Collect consecutive uppercase (acronym)
-            while end < chars.len() && chars[end].is_uppercase() {
-                end += 1;
-            }
-            // If multiple uppercase followed by lowercase, keep last uppercase for next word
-            // e.g. "VSCode": collected "VSC", next is 'o' (lowercase) → back up to "VS"
-            if end - start > 1 && end < chars.len() && chars[end].is_lowercase() {
-                end -= 1;
-            }
-            // If single uppercase followed by lowercase, consume the lowercase run too
-            // e.g. "Code": start='C', end already past 'C', next is 'o' → consume "ode"
-            if end - start == 1 && end < chars.len() && chars[end].is_lowercase() {
-                while end < chars.len() && chars[end].is_lowercase() {
-                    end += 1;
-                }
-            }
-        } else {
-            // Lowercase or digit: collect until uppercase
-            while end < chars.len() && !chars[end].is_uppercase() {
-                end += 1;
-            }
-        }
-
-        let word: String = chars[start..end].iter().collect();
-        words.push(word.to_lowercase());
-        start = end;
-    }
-
-    let result = words.join(" ");
-    if result == value.to_lowercase() {
-        String::new()
-    } else {
-        result
-    }
-}
-
-/// Normalize text for search: strip spaces, hyphens, underscores, dots, slashes.
-fn normalize_search_text(value: &str) -> String {
-    value
-        .chars()
-        .filter(|ch| !matches!(ch, ' ' | '-' | '_' | '.' | '/' | '\\'))
-        .flat_map(char::to_lowercase)
-        .collect()
-}
-
-fn bundle_id_suffix(bundle_id: &str) -> Option<&str> {
-    bundle_id
-        .split('.')
-        .next_back()
-        .filter(|suffix| !suffix.is_empty())
-}
-
-fn unique_nonempty_strings<'a>(values: impl IntoIterator<Item = Option<&'a str>>) -> Vec<String> {
-    let mut seen = HashSet::new();
-    let mut out = Vec::new();
-    for value in values.into_iter().flatten() {
-        let trimmed = value.trim();
-        let key = trimmed.to_lowercase();
-        if !trimmed.is_empty() && seen.insert(key) {
-            out.push(trimmed.to_string());
-        }
-    }
-    out
-}
-
-fn find_icon_source(app_path: &Path, info: &plist::Dictionary) -> Option<PathBuf> {
-    let resources = app_path.join("Contents").join("Resources");
-    let mut candidates = Vec::new();
-
-    if let Some(icon_file) = info.get("CFBundleIconFile").and_then(Value::as_string) {
-        candidates.push(icon_file.to_string());
-    }
-    if let Some(icon_name) = info.get("CFBundleIconName").and_then(Value::as_string) {
-        candidates.push(icon_name.to_string());
-    }
-    if let Some(Value::Dictionary(bundle_icons)) = info.get("CFBundleIcons")
-        && let Some(Value::Dictionary(primary_icon)) = bundle_icons.get("CFBundlePrimaryIcon")
-        && let Some(Value::Array(icon_files)) = primary_icon.get("CFBundleIconFiles")
-    {
-        for entry in icon_files {
-            if let Some(name) = entry.as_string() {
-                candidates.push(name.to_string());
-            }
-        }
-    }
-
-    for candidate in candidates {
-        if let Some(icon) = resolve_resource_icon(&resources, &candidate) {
-            return Some(icon);
-        }
-    }
-
-    std::fs::read_dir(&resources)
-        .ok()?
-        .flatten()
-        .map(|entry| entry.path())
-        .find(|path| path.extension().and_then(|ext| ext.to_str()) == Some("icns"))
-}
-
-fn resolve_resource_icon(resources: &Path, value: &str) -> Option<PathBuf> {
-    let raw = value.trim();
-    if raw.is_empty() {
-        return None;
-    }
-
-    let raw_path = Path::new(raw);
-    if raw_path.is_absolute() && raw_path.is_file() {
-        return Some(raw_path.to_path_buf());
-    }
-
-    let mut names = vec![raw.to_string()];
-    if raw_path.extension().is_none() {
-        names.push(format!("{raw}.icns"));
-        names.push(format!("{raw}.png"));
-    }
-
-    names
-        .into_iter()
-        .map(|name| resources.join(name))
-        .find(|candidate| candidate.is_file())
-}
-
 fn icon_cache_path(app_path: &Path) -> PathBuf {
     let digest = std::collections::hash_map::DefaultHasher::new();
     let mut hasher = digest;
@@ -496,27 +91,9 @@ fn icon_cache_path(app_path: &Path) -> PathBuf {
     app_path.to_string_lossy().hash(&mut hasher);
     let key = format!("{:016x}", hasher.finish());
 
-    let base = dirs::data_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("qingqi")
-        .join("cache")
-        .join("app_icons");
+    let base = icon_cache_dir();
     let _ = std::fs::create_dir_all(&base);
     base.join(format!("{key}-v{ICON_CACHE_VERSION}.png"))
-}
-
-fn convert_icon_to_png(icon_path: &Path, out_path: &Path) -> Result<String, String> {
-    if let Some(valid) = validate_cached_icon(out_path) {
-        return Ok(valid);
-    }
-
-    if icon_path.extension().and_then(|ext| ext.to_str()) == Some("icns")
-        && let Ok(path) = convert_icns_with_iconutil(icon_path, out_path)
-    {
-        return Ok(path);
-    }
-
-    convert_icon_with_image(icon_path, out_path)
 }
 
 /// Validate a cached icon file: must exist, be non-zero, and decode as a valid image.
@@ -545,56 +122,15 @@ fn validate_cached_icon(path: &Path) -> Option<String> {
     Some(path.to_string_lossy().to_string())
 }
 
-fn convert_icns_with_iconutil(icon_path: &Path, out_path: &Path) -> Result<String, String> {
-    let iconutil = std::process::Command::new("which")
-        .arg("iconutil")
-        .output()
-        .map_err(|error| error.to_string())?;
-    if !iconutil.status.success() {
-        return Err(String::from("iconutil unavailable"));
+fn save_icon_image(image: DynamicImage, out_path: &Path) -> Result<String, String> {
+    if let Some(valid) = validate_cached_icon(out_path) {
+        return Ok(valid);
     }
 
-    let temp_dir = std::env::temp_dir().join(format!("qingqi-app-icon-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&temp_dir);
-    std::fs::create_dir_all(&temp_dir).map_err(|error| error.to_string())?;
-    let iconset_dir = temp_dir.join("icon.iconset");
-
-    let output = ProcessCommand::new("iconutil")
-        .arg("-c")
-        .arg("iconset")
-        .arg(icon_path)
-        .arg("-o")
-        .arg(&iconset_dir)
-        .output()
-        .map_err(|error| error.to_string())?;
-    if !output.status.success() {
-        let _ = std::fs::remove_dir_all(&temp_dir);
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
-
-    let mut pngs = std::fs::read_dir(&iconset_dir)
-        .map_err(|error| error.to_string())?
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("png"))
-        .collect::<Vec<_>>();
-    pngs.sort();
-
-    let best = pngs
-        .into_iter()
-        .max_by_key(|path| {
-            ImageReader::open(path)
-                .ok()
-                .and_then(|reader| reader.with_guessed_format().ok())
-                .and_then(|reader| reader.decode().ok())
-                .map(|image| image.width() * image.height())
-                .unwrap_or(0)
-        })
-        .ok_or_else(|| String::from("no png extracted from icns"))?;
-
-    let result = convert_icon_with_image(&best, out_path);
-    let _ = std::fs::remove_dir_all(&temp_dir);
-    result
+    let trimmed = trim_transparent_padding(&image).unwrap_or(image);
+    let resized = trimmed.thumbnail(ICON_SIZE_PX, ICON_SIZE_PX);
+    resized.save(out_path).map_err(|error| error.to_string())?;
+    Ok(out_path.to_string_lossy().to_string())
 }
 
 fn convert_icon_with_image(icon_path: &Path, out_path: &Path) -> Result<String, String> {
@@ -604,10 +140,7 @@ fn convert_icon_with_image(icon_path: &Path, out_path: &Path) -> Result<String, 
         .map_err(|error| error.to_string())?
         .decode()
         .map_err(|error| error.to_string())?;
-    let trimmed = trim_transparent_padding(&image).unwrap_or(image);
-    let resized = trimmed.thumbnail(ICON_SIZE_PX, ICON_SIZE_PX);
-    resized.save(out_path).map_err(|error| error.to_string())?;
-    Ok(out_path.to_string_lossy().to_string())
+    save_icon_image(image, out_path)
 }
 
 fn trim_transparent_padding(image: &DynamicImage) -> Option<DynamicImage> {
@@ -647,15 +180,123 @@ fn trim_transparent_padding(image: &DynamicImage) -> Option<DynamicImage> {
     Some(image.crop_imm(min_x, min_y, crop_width, crop_height))
 }
 
+fn app_aliases<'a>(
+    values: impl IntoIterator<Item = Option<&'a str>>,
+    display_name: &str,
+) -> Vec<String> {
+    let raw = unique_nonempty_strings(values);
+
+    // Expand with normalized and CamelCase-split variants.
+    let mut expanded: Vec<String> = Vec::new();
+    for alias in &raw {
+        expanded.push(alias.clone());
+        let normalized = normalize_search_text(alias);
+        if !normalized.is_empty() && normalized != *alias.to_lowercase() {
+            expanded.push(normalized);
+        }
+        let split = camel_case_split(alias);
+        if !split.is_empty() && !raw.iter().any(|r| r.eq_ignore_ascii_case(&split)) {
+            expanded.push(split);
+        }
+    }
+
+    let mut aliases = unique_nonempty_strings(expanded.iter().map(|s| Some(s.as_str())));
+    aliases.retain(|alias| !alias.eq_ignore_ascii_case(display_name));
+    aliases
+}
+
+/// Split CamelCase/PascalCase into space-separated lowercase words.
+/// "Visual Studio Code" stays as-is (already has spaces).
+/// "VSCode" -> "vs code", "MicrosoftWord" -> "microsoft word".
+fn camel_case_split(value: &str) -> String {
+    if value.contains(' ') || value.contains('-') || value.contains('_') {
+        return String::new();
+    }
+    if !value.chars().any(|ch| ch.is_uppercase()) {
+        return String::new();
+    }
+
+    let mut words: Vec<String> = Vec::new();
+    let chars: Vec<char> = value.chars().collect();
+    let mut start = 0;
+
+    while start < chars.len() {
+        let mut end = start + 1;
+
+        if chars[start].is_uppercase() {
+            // Collect consecutive uppercase (acronym).
+            while end < chars.len() && chars[end].is_uppercase() {
+                end += 1;
+            }
+            // If multiple uppercase followed by lowercase, keep last uppercase for next word.
+            // e.g. "VSCode": collected "VSC", next is 'o' (lowercase) → back up to "VS".
+            if end - start > 1 && end < chars.len() && chars[end].is_lowercase() {
+                end -= 1;
+            }
+            // If single uppercase followed by lowercase, consume the lowercase run too.
+            // e.g. "Code": start='C', end already past 'C', next is 'o' → consume "ode".
+            if end - start == 1 && end < chars.len() && chars[end].is_lowercase() {
+                while end < chars.len() && chars[end].is_lowercase() {
+                    end += 1;
+                }
+            }
+        } else {
+            // Lowercase or digit: collect until uppercase.
+            while end < chars.len() && !chars[end].is_uppercase() {
+                end += 1;
+            }
+        }
+
+        let word: String = chars[start..end].iter().collect();
+        words.push(word.to_lowercase());
+        start = end;
+    }
+
+    let result = words.join(" ");
+    if result == value.to_lowercase() {
+        String::new()
+    } else {
+        result
+    }
+}
+
+/// Normalize text for search: strip spaces, hyphens, underscores, dots, slashes.
+fn normalize_search_text(value: &str) -> String {
+    value
+        .chars()
+        .filter(|ch| !matches!(ch, ' ' | '-' | '_' | '.' | '/' | '\\'))
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn bundle_id_suffix(bundle_id: &str) -> Option<&str> {
+    bundle_id
+        .split('.')
+        .next_back()
+        .filter(|suffix| !suffix.is_empty())
+}
+
+fn unique_nonempty_strings<'a>(values: impl IntoIterator<Item = Option<&'a str>>) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for value in values.into_iter().flatten() {
+        let trimmed = value.trim();
+        let key = trimmed.to_lowercase();
+        if !trimmed.is_empty() && seen.insert(key) {
+            out.push(trimmed.to_string());
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         InstalledApp, app_aliases, bundle_id_suffix, camel_case_split, clear_broken_icon_paths,
-        clear_dir_files, collect_app_paths, collect_apps, icon_cache_dir, normalize_search_text,
-        resolve_resource_icon, trim_transparent_padding, validate_cached_icon,
+        clear_dir_files, icon_cache_dir, normalize_search_text, trim_transparent_padding,
+        validate_cached_icon,
     };
     use image::{DynamicImage, ImageBuffer, Rgba};
-    use plist::Value;
     use std::{
         fs,
         path::PathBuf,
@@ -673,26 +314,6 @@ mod tests {
     }
 
     #[test]
-    fn resolve_resource_icon_prefers_existing_named_files() {
-        let resources = temp_dir("resources");
-        let icon = resources.join("AppIcon.icns");
-        fs::write(&icon, b"test").expect("icon file");
-
-        let resolved = resolve_resource_icon(&resources, "AppIcon");
-        assert_eq!(resolved.as_deref(), Some(icon.as_path()));
-    }
-
-    #[test]
-    fn resolve_resource_icon_accepts_png_with_extension() {
-        let resources = temp_dir("resources-png");
-        let icon = resources.join("AppIcon.png");
-        fs::write(&icon, b"test").expect("icon file");
-
-        let resolved = resolve_resource_icon(&resources, "AppIcon.png");
-        assert_eq!(resolved.as_deref(), Some(icon.as_path()));
-    }
-
-    #[test]
     fn bundle_id_suffix_uses_last_component() {
         assert_eq!(bundle_id_suffix("com.microsoft.VSCode"), Some("VSCode"));
         assert_eq!(bundle_id_suffix("safari"), Some("safari"));
@@ -700,25 +321,15 @@ mod tests {
     }
 
     #[test]
-    fn aliases_merge_bundle_and_display_variants_without_duplicates() {
-        let mut info = plist::Dictionary::new();
-        info.insert(
-            String::from("CFBundleDisplayName"),
-            Value::String(String::from("Visual Studio Code")),
-        );
-        info.insert(
-            String::from("CFBundleName"),
-            Value::String(String::from("Visual Studio Code")),
-        );
-        info.insert(
-            String::from("CFBundleExecutable"),
-            Value::String(String::from("Electron")),
-        );
-
+    fn aliases_merge_variants_without_duplicates() {
         let aliases = app_aliases(
-            &info,
-            "Visual Studio Code",
-            Some("com.microsoft.VSCode"),
+            [
+                Some("Visual Studio Code"),
+                Some("VSCode"),
+                Some("Electron"),
+                Some("com.microsoft.VSCode"),
+                bundle_id_suffix("com.microsoft.VSCode"),
+            ],
             "Visual Studio Code",
         );
 
@@ -730,18 +341,16 @@ mod tests {
 
     #[test]
     fn aliases_include_normalized_bundle_id() {
-        let mut info = plist::Dictionary::new();
-        info.insert(
-            String::from("CFBundleName"),
-            Value::String(String::from("Safari")),
+        let aliases = app_aliases(
+            [
+                Some("Safari"),
+                Some("com.apple.Safari"),
+                bundle_id_suffix("com.apple.Safari"),
+            ],
+            "Safari",
         );
 
-        let aliases = app_aliases(&info, "Safari", Some("com.apple.Safari"), "Safari");
-
-        // Normalized bundle id should be present: "com.apple.Safari" -> "comapplesafari"
         assert!(aliases.iter().any(|alias| alias == "comapplesafari"));
-        // Bundle suffix "Safari" is filtered out since it matches display_name,
-        // but the full bundle id itself should be present
         assert!(aliases.iter().any(|alias| alias == "com.apple.Safari"));
     }
 
@@ -785,46 +394,6 @@ mod tests {
 
         assert!(app.icon_path.is_none());
         assert_eq!(app.icon_letter, "S");
-    }
-
-    #[test]
-    fn recursive_scan_includes_public_nested_apps_and_skips_helpers() {
-        let root = temp_dir("recursive-scan");
-        let visible = root.join("Utilities").join("Visible.app");
-        let bundled_visible = root
-            .join("Xcode.app")
-            .join("Contents")
-            .join("Applications")
-            .join("Instruments.app");
-        let helper = root
-            .join("Code.app")
-            .join("Contents")
-            .join("Frameworks")
-            .join("Code Helper.app");
-
-        fs::create_dir_all(visible.join("Contents")).expect("visible app");
-        fs::create_dir_all(bundled_visible.join("Contents")).expect("bundled app");
-        fs::create_dir_all(helper.join("Contents")).expect("helper app");
-
-        let mut apps = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-        collect_apps(&root, 0, 4, &mut seen, &mut apps);
-
-        assert!(apps.iter().any(|app| app.path == visible.to_string_lossy()));
-        assert!(
-            apps.iter()
-                .any(|app| app.path == bundled_visible.to_string_lossy())
-        );
-        assert!(
-            !apps.iter().any(|app| app.path == helper.to_string_lossy()),
-            "helper apps inside Contents should stay hidden"
-        );
-
-        let mut paths = std::collections::HashSet::new();
-        collect_app_paths(&root, 0, 4, &mut paths);
-        assert!(paths.contains(&visible.to_string_lossy().to_string()));
-        assert!(paths.contains(&bundled_visible.to_string_lossy().to_string()));
-        assert!(!paths.contains(&helper.to_string_lossy().to_string()));
     }
 
     #[test]

@@ -1,19 +1,22 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::Command,
 };
+
+#[cfg(target_os = "macos")]
+use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
 /// Theme mode preference
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub enum ThemeMode {
     #[serde(rename = "light", alias = "Light")]
     Light,
     #[serde(rename = "dark", alias = "Dark")]
     Dark,
     #[serde(rename = "system", alias = "System", alias = "auto", alias = "Auto")]
+    #[default]
     System,
 }
 
@@ -32,12 +35,6 @@ impl ThemeMode {
             Self::Dark => "dark",
             Self::System => "system",
         }
-    }
-}
-
-impl Default for ThemeMode {
-    fn default() -> Self {
-        Self::System
     }
 }
 

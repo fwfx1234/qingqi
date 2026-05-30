@@ -83,7 +83,7 @@ impl Plugin for ApiDebuggerRuntime {
         vec![DatabaseSpec::app("api_debugger/main", "api_debugger.db")]
     }
 
-    fn commands(&self) -> Vec<CommandItem> {
+    fn commands(&self, _query: &str) -> Vec<CommandItem> {
         let manifest = self.manifest();
         vec![
             CommandItem::plugin_open(

@@ -6,7 +6,7 @@ use gpui::{
 };
 
 use crate::{
-    app::{app_index::AppIndexSnapshot, text_input::TextInput, theme, theme_store::ThemeMode},
+    app::{app_index::AppIndexSnapshot, text_input::TextInput, theme, ui::{self, components}, theme_store::ThemeMode},
     core::shortcut::{CORE_PLUGIN_ID, ShortcutScope, ShortcutView},
     features::system_settings::plugin::SettingsPanel,
     platform::macos::PermissionStatus,

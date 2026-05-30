@@ -8,8 +8,7 @@ use gpui::{
 use crate::{
     app::{
         text_input::{TextInput, TextInputStyle},
-        theme,
-        ui::{self, components},
+        theme, ui::{self, components},
     },
     core::{
         job::{JobId, JobProvider},

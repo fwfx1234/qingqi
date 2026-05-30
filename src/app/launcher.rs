@@ -27,15 +27,14 @@ use crate::{
     },
     core::{
         command::{
-            Activation, CommandItem, CommandKind, ContextKind,
-            build_launcher_context_with_clipboard_kinds, detect_text_context_kinds,
-            push_context_kind, unique_context_kinds,
+            Activation, ClipboardPayload, Command, CommandKind, LauncherContext,
+            build_launcher_context,
         },
         plugin::{InlineView, ListView, PluginListItem, PluginManager},
-        plugin_spec::{PluginStatus, PluginVisualSpec, PluginWindowMode},
+        plugin_spec::{PluginStatus, ViewMode},
     },
     features::clipboard::{
-        history_store::{ClipboardItemKind, ClipboardRecord},
+        history_store::{ClipboardItemKind, ClipboardRecord, parse_file_paths},
         service::ClipboardService,
     },
 };
@@ -62,23 +61,29 @@ static PLUGIN_OPEN_TRACE_ID: AtomicU64 = AtomicU64::new(1);
 enum LauncherMode {
     Search,
     InlinePlugin {
-        session: Box<dyn InlineView>,
+        view: Box<dyn InlineView>,
     },
     ListPlugin {
-        session: Box<dyn ListView>,
+        view: Box<dyn ListView>,
         items: Rc<Vec<PluginListItem>>,
         selected: usize,
     },
+}
+
+#[derive(Clone, Copy)]
+struct PluginVisual {
+    mode: ViewMode,
+    status: PluginStatus,
 }
 
 pub struct Launcher {
     plugin_manager: Rc<RefCell<PluginManager>>,
     app_catalog: Arc<AppCatalog>,
     clipboard_service: Arc<Mutex<ClipboardService>>,
-    plugin_visuals: HashMap<String, PluginVisualSpec>,
+    plugin_visuals: HashMap<String, PluginVisual>,
     query_input: Option<Entity<TextInput>>,
-    all_commands: Vec<CommandItem>,
-    results: Rc<Vec<CommandItem>>,
+    all_commands: Vec<Command>,
+    results: Rc<Vec<Command>>,
     selected: usize,
     results_visible_start: usize,
     message: String,
@@ -87,12 +92,11 @@ pub struct Launcher {
     last_query: String,
     pending_query: String,
     search_generation: u64,
-    last_commands_revision: u64,
-    plugin_list_revision: u64,
     last_window_height: f32,
     results_scroll: UniformListScrollHandle,
     plugin_list_scroll: UniformListScrollHandle,
     plugin_list_visible_start: usize,
+    clipboard_boost_map: HashMap<String, i32>,
     search_task: Option<Task<()>>,
     event_task: Option<Task<()>>,
     mode: LauncherMode,
@@ -118,18 +122,25 @@ impl Launcher {
         clipboard_service: Arc<Mutex<ClipboardService>>,
         _cx: &App,
     ) -> Self {
-        let (all_commands, plugin_visuals, last_commands_revision) = {
+        let (all_commands, plugin_visuals, boost_map) = {
             let mut manager = plugin_manager.borrow_mut();
-            let clipboard_kinds = Self::latest_clipboard_context_kinds(&clipboard_service);
+            let boost_map = Self::latest_boost_map(&clipboard_service, &*manager);
             let mut all_commands = app_catalog.search("", COMMAND_SEARCH_LIMIT);
-            all_commands.extend(manager.commands_with_clipboard(clipboard_kinds));
-            let last_commands_revision = manager.command_cache_revision();
+            all_commands.extend(manager.commands_with_clipboard(&boost_map));
             let plugin_visuals = manager
                 .manifests()
                 .into_iter()
-                .map(|manifest| (manifest.id.to_string(), manifest.visual))
+                .map(|manifest| {
+                    (
+                        manifest.id.to_string(),
+                        PluginVisual {
+                            mode: manifest.mode,
+                            status: manifest.status,
+                        },
+                    )
+                })
                 .collect();
-            (all_commands, plugin_visuals, last_commands_revision)
+            (all_commands, plugin_visuals, boost_map)
         };
         let results = Self::default_results(&all_commands, &plugin_visuals);
         Self {
@@ -141,6 +152,7 @@ impl Launcher {
             all_commands,
             results,
             selected: 0,
+            clipboard_boost_map: boost_map,
             results_visible_start: 0,
             message: String::from("搜索功能或打开应用..."),
             self_handle: None,
@@ -148,8 +160,6 @@ impl Launcher {
             last_query: String::new(),
             pending_query: String::new(),
             search_generation: 0,
-            last_commands_revision,
-            plugin_list_revision: last_commands_revision,
             last_window_height: 0.0,
             results_scroll: UniformListScrollHandle::new(),
             plugin_list_scroll: UniformListScrollHandle::new(),
@@ -184,7 +194,9 @@ impl Launcher {
                 };
                 if event.kind == AppEventKind::CommandsChanged {
                     let _ = launcher.update(async_cx, |launcher, cx| {
-                        launcher.plugin_manager.borrow_mut().invalidate_commands();
+                        if event.source.as_ref() != "app-catalog" {
+                            launcher.plugin_manager.borrow_mut().invalidate_commands();
+                        }
                         launcher.refresh_results_after_commands_changed(cx);
                         cx.notify();
                     });
@@ -194,9 +206,9 @@ impl Launcher {
     }
 
     fn refresh_results_after_commands_changed(&mut self, cx: &mut Context<Self>) {
-        let clipboard_kinds = self.current_cached_clipboard_context_kinds();
-        self.last_commands_revision = self.plugin_manager.borrow_mut().command_cache_revision();
-        self.all_commands = self.default_commands_with_clipboard(clipboard_kinds.clone());
+        self.clipboard_boost_map =
+            Self::latest_boost_map(&self.clipboard_service, &*self.plugin_manager.borrow());
+        self.all_commands = self.default_commands_with_clipboard();
 
         let query = self.query(cx);
         if matches!(self.mode, LauncherMode::Search) {
@@ -205,46 +217,27 @@ impl Launcher {
             if query.trim().is_empty() {
                 self.results = Self::default_results(&self.all_commands, &self.plugin_visuals);
             } else {
-                self.results = Rc::new(self.commands_for_query(&query, clipboard_kinds));
+                self.results = Rc::new(self.query_commands(&query));
             }
             self.selected = self.selected.min(self.results.len().saturating_sub(1));
-            self.results_visible_start = visible_start_for_selection(self.selected);
-            if !self.results.is_empty() {
-                self.results_scroll
-                    .scroll_to_item(self.selected, ScrollStrategy::Top);
-            }
+            // Preserve the current scroll offset: this runs on every background
+            // `CommandsChanged` event, and forcing `scroll_to_item` here would snap the
+            // list back to the top mid-wheel-scroll. Keyboard navigation re-aligns the
+            // viewport on demand via `scroll_selection_into_view`.
             self.update_message();
         }
 
-        if matches!(self.mode, LauncherMode::ListPlugin { .. }) {
-            self.plugin_list_revision = 0;
+        if let LauncherMode::ListPlugin {
+            view,
+            items,
+            selected,
+        } = &mut self.mode
+        {
+            let next_items = view.on_input_changed(&query, cx);
+            merge_plugin_list_items(items, next_items);
+            *selected = (*selected).min(items.len().saturating_sub(1));
+            self.plugin_list_visible_start = visible_start_for_selection(*selected);
         }
-    }
-
-    pub fn clipboard_context_kinds(
-        service: &Arc<Mutex<ClipboardService>>,
-        cx: &App,
-    ) -> Vec<ContextKind> {
-        service
-            .lock()
-            .ok()
-            .and_then(|service| {
-                let _ = service.capture_current(cx);
-                service.latest_record().ok().flatten()
-            })
-            .map(|record| clipboard_record_context_kinds(&record))
-            .unwrap_or_default()
-    }
-
-    pub(crate) fn latest_clipboard_context_kinds(
-        service: &Arc<Mutex<ClipboardService>>,
-    ) -> Vec<ContextKind> {
-        service
-            .lock()
-            .ok()
-            .and_then(|service| service.latest_record().ok().flatten())
-            .map(|record| clipboard_record_context_kinds(&record))
-            .unwrap_or_default()
     }
 
     pub fn attach_handle(&mut self, handle: Entity<Launcher>) {
@@ -277,9 +270,9 @@ impl Launcher {
     }
 
     fn default_results(
-        commands: &[CommandItem],
-        visuals: &HashMap<String, PluginVisualSpec>,
-    ) -> Rc<Vec<CommandItem>> {
+        commands: &[Command],
+        visuals: &HashMap<String, PluginVisual>,
+    ) -> Rc<Vec<Command>> {
         Rc::new(
             commands
                 .iter()
@@ -289,7 +282,7 @@ impl Launcher {
         )
     }
 
-    fn is_default_command(item: &CommandItem, visuals: &HashMap<String, PluginVisualSpec>) -> bool {
+    fn is_default_command(item: &Command, visuals: &HashMap<String, PluginVisual>) -> bool {
         match item.kind {
             CommandKind::App => true,
             CommandKind::DynamicAction => true,
@@ -321,7 +314,6 @@ impl Launcher {
         self.last_query = query.clone();
         self.pending_query = query.clone();
         let query_empty = query.trim().is_empty();
-        self.refresh_commands_if_needed(cx);
 
         if query_empty {
             self.results = Self::default_results(&self.all_commands, &self.plugin_visuals);
@@ -332,8 +324,7 @@ impl Launcher {
             return;
         }
 
-        let query_commands =
-            self.commands_for_query(&query, self.current_clipboard_context_kinds(cx));
+        let query_commands = self.query_commands(&query);
         self.results = Rc::new(query_commands);
         self.selected = self.selected.min(self.results.len().saturating_sub(1));
         self.results_visible_start = visible_start_for_selection(self.selected);
@@ -341,41 +332,37 @@ impl Launcher {
             .scroll_to_item(self.selected, ScrollStrategy::Top);
     }
 
-    fn current_clipboard_context_kinds(&self, cx: &App) -> Vec<ContextKind> {
-        Self::clipboard_context_kinds(&self.clipboard_service, cx)
+    fn latest_boost_map(
+        clipboard_service: &Arc<Mutex<ClipboardService>>,
+        plugin_manager: &PluginManager,
+    ) -> HashMap<String, i32> {
+        let payload = clipboard_service
+            .lock()
+            .ok()
+            .and_then(|s| s.latest_record().ok().flatten())
+            .and_then(|r| clipboard_payload_from_record(&r));
+        match payload {
+            Some(p) => plugin_manager.build_clipboard_boost_map(&p),
+            None => HashMap::new(),
+        }
     }
 
-    fn current_cached_clipboard_context_kinds(&self) -> Vec<ContextKind> {
-        Self::latest_clipboard_context_kinds(&self.clipboard_service)
-    }
-
-    fn default_commands_with_clipboard(
-        &mut self,
-        clipboard_kinds: Vec<ContextKind>,
-    ) -> Vec<CommandItem> {
+    fn default_commands_with_clipboard(&mut self) -> Vec<Command> {
         let mut commands = self.app_catalog.search("", COMMAND_SEARCH_LIMIT);
         commands.extend(
             self.plugin_manager
                 .borrow_mut()
-                .commands_with_clipboard(clipboard_kinds),
+                .commands_with_clipboard(&self.clipboard_boost_map),
         );
         commands
     }
 
-    fn commands_for_query(
-        &mut self,
-        query: &str,
-        clipboard_kinds: Vec<ContextKind>,
-    ) -> Vec<CommandItem> {
+    fn query_commands(&mut self, query: &str) -> Vec<Command> {
         let mut commands = self.app_catalog.search(query, COMMAND_SEARCH_LIMIT);
         commands.extend(
             self.plugin_manager
                 .borrow_mut()
-                .commands_for_query_with_clipboard(
-                    query,
-                    COMMAND_SEARCH_LIMIT,
-                    clipboard_kinds.clone(),
-                ),
+                .query_commands_with_clipboard(query, COMMAND_SEARCH_LIMIT, &self.clipboard_boost_map),
         );
 
         let mut seen = HashSet::new();
@@ -387,8 +374,7 @@ impl Launcher {
             .iter()
             .flat_map(|command| command.prefixes.iter().cloned())
             .collect::<Vec<_>>();
-        let context =
-            build_launcher_context_with_clipboard_kinds(query, &known_prefixes, clipboard_kinds);
+        let context = build_launcher_context(query, &known_prefixes);
         let mut scored = commands
             .into_iter()
             .filter_map(|command| {
@@ -407,28 +393,26 @@ impl Launcher {
 
     fn refresh_clipboard_context_async(&mut self, cx: &mut Context<Self>) {
         let service = Arc::clone(&self.clipboard_service);
+        let plugin_manager = self.plugin_manager.clone();
         self.search_task = Some(cx.spawn(async move |launcher, async_cx| {
-            let clipboard_kinds = async_cx
+            let boost_map = async_cx
                 .background_executor()
-                .spawn(async move { Launcher::latest_clipboard_context_kinds(&service) });
-
-            let clipboard_kinds = clipboard_kinds.await;
+                .spawn(async move {
+                    let plugin = plugin_manager.borrow();
+                    Launcher::latest_boost_map(&service, &*plugin)
+                })
+                .await;
 
             let _ = launcher.update(async_cx, |launcher, cx| {
                 let current_query = launcher.query(cx);
-                launcher.last_commands_revision = launcher
-                    .plugin_manager
-                    .borrow_mut()
-                    .command_cache_revision();
-                launcher.all_commands =
-                    launcher.default_commands_with_clipboard(clipboard_kinds.clone());
+                launcher.clipboard_boost_map = boost_map;
+                launcher.all_commands = launcher.default_commands_with_clipboard();
 
                 if current_query.trim().is_empty() {
                     launcher.results =
                         Self::default_results(&launcher.all_commands, &launcher.plugin_visuals);
                 } else {
-                    launcher.results =
-                        Rc::new(launcher.commands_for_query(&current_query, clipboard_kinds));
+                    launcher.results = Rc::new(launcher.query_commands(&current_query));
                 }
 
                 launcher.selected = launcher
@@ -461,17 +445,17 @@ impl Launcher {
         let query = self.query(cx);
         match &mut self.mode {
             LauncherMode::Search => self.schedule_search(cx),
-            LauncherMode::InlinePlugin { session, .. } => {
-                session.on_input_changed(&query, cx);
+            LauncherMode::InlinePlugin { view, .. } => {
+                view.on_input_changed(&query, cx);
                 cx.notify();
             }
             LauncherMode::ListPlugin {
-                session,
+                view,
                 items,
                 selected,
                 ..
             } => {
-                *items = Rc::new(session.on_input_changed(&query, cx));
+                *items = Rc::new(view.on_input_changed(&query, cx));
                 *selected = (*selected).min(items.len().saturating_sub(1));
                 self.plugin_list_visible_start = visible_start_for_selection(*selected);
                 cx.notify();
@@ -510,40 +494,7 @@ impl Launcher {
         };
     }
 
-    fn refresh_plugin_list_if_needed(&mut self, cx: &mut Context<Self>) {
-        let revision = self.plugin_manager.borrow_mut().command_cache_revision();
-        if revision == self.plugin_list_revision {
-            return;
-        }
-        self.plugin_list_revision = revision;
-
-        let query = self.query(cx);
-        if let LauncherMode::ListPlugin {
-            session,
-            items,
-            selected,
-        } = &mut self.mode
-        {
-            let next_items = session.on_input_changed(&query, cx);
-            merge_plugin_list_items(items, next_items);
-            *selected = (*selected).min(items.len().saturating_sub(1));
-            self.plugin_list_visible_start = visible_start_for_selection(*selected);
-        }
-    }
-
-    fn refresh_commands_if_needed(&mut self, cx: &App) -> bool {
-        let revision = self.plugin_manager.borrow_mut().command_cache_revision();
-        if revision == self.last_commands_revision {
-            return false;
-        }
-
-        self.last_commands_revision = revision;
-        self.all_commands =
-            self.default_commands_with_clipboard(self.current_clipboard_context_kinds(cx));
-        true
-    }
-
-    fn selected_item(&self) -> Option<&CommandItem> {
+    fn selected_item(&self) -> Option<&Command> {
         self.results.get(self.selected)
     }
 
@@ -573,21 +524,21 @@ impl Launcher {
                 );
                 self.open_command(item, window, cx, trace);
             }
-            LauncherMode::InlinePlugin { session, .. } => {
-                log_launcher_enter_started(session.plugin_id(), trace, "inline plugin", None);
+            LauncherMode::InlinePlugin { view, .. } => {
+                log_launcher_enter_started(view.plugin_id(), trace, "inline plugin", None);
                 let enter_started = Instant::now();
-                if session.on_enter(cx) {
+                if view.on_enter(cx) {
                     log_launcher_step(
-                        session.plugin_id(),
+                        view.plugin_id(),
                         "inline plugin enter",
                         enter_started,
                         Some(trace),
                     );
-                    log_launcher_total(session.plugin_id(), trace);
+                    log_launcher_total(view.plugin_id(), trace);
                     self.close_window_app(window, cx);
                 } else {
                     log_launcher_step(
-                        session.plugin_id(),
+                        view.plugin_id(),
                         "inline plugin enter",
                         enter_started,
                         Some(trace),
@@ -595,7 +546,7 @@ impl Launcher {
                 }
             }
             LauncherMode::ListPlugin {
-                session,
+                view,
                 items,
                 selected,
                 ..
@@ -605,7 +556,7 @@ impl Launcher {
                 };
                 if item.enabled {
                     log_launcher_enter_started(
-                        session.plugin_id(),
+                        view.plugin_id(),
                         trace,
                         "list plugin item",
                         Some(item.title.as_str()),
@@ -614,14 +565,14 @@ impl Launcher {
                     self.plugin_manager
                         .borrow()
                         .record_usage_key_background(plugin_list_usage_key(&item).to_string(), cx);
-                    session.on_list_item_selected(&item.id, cx);
+                    view.on_list_item_selected(&item.id, cx);
                     log_launcher_step(
-                        session.plugin_id(),
+                        view.plugin_id(),
                         "list item selected",
                         select_started,
                         Some(trace),
                     );
-                    log_launcher_total(session.plugin_id(), trace);
+                    log_launcher_total(view.plugin_id(), trace);
                     self.close_window_app(window, cx);
                 }
             }
@@ -630,7 +581,7 @@ impl Launcher {
 
     fn open_command(
         &mut self,
-        item: CommandItem,
+        item: Command,
         window: &mut Window,
         cx: &mut App,
         trace: PluginOpenTrace,
@@ -654,12 +605,20 @@ impl Launcher {
         };
 
         let visual = self.plugin_visuals.get(plugin_id).cloned();
-        let launch_input = item.launch_input(&self.query(cx));
-        match visual
-            .map(|visual| visual.mode)
-            .unwrap_or(PluginWindowMode::Window)
-        {
-            PluginWindowMode::Window => {
+        let query = self.query(cx);
+        let mut context = build_launcher_context(&query, &item.prefixes);
+        if query.trim().is_empty() {
+            context.clipboard_payload = self
+                .clipboard_service
+                .lock()
+                .ok()
+                .and_then(|s| s.latest_record().ok().flatten())
+                .and_then(|r| clipboard_payload_from_record(&r));
+        }
+        let launch_input =
+            item.launch_input_with_context(&query, &context, &self.clipboard_boost_map);
+        match visual.map(|visual| visual.mode).unwrap_or(ViewMode::Window) {
+            ViewMode::Window => {
                 if let Some(window_controller) = self.window_controller.clone() {
                     let _ = crate::app::runtime::run_command_with_trace(
                         window_controller,
@@ -676,29 +635,24 @@ impl Launcher {
                 );
                 self.close_window_app(window, cx);
             }
-            PluginWindowMode::Inline => {
-                let session_started = Instant::now();
-                let session_result = self
+            ViewMode::Inline => {
+                let view_started = Instant::now();
+                let view_result = self
                     .plugin_manager
                     .borrow_mut()
                     .open_inline_view(plugin_id, cx);
-                log_launcher_step(
-                    plugin_id,
-                    "open inline session",
-                    session_started,
-                    Some(trace),
-                );
-                match session_result {
-                    Ok(mut session) => {
+                log_launcher_step(plugin_id, "open inline view", view_started, Some(trace));
+                match view_result {
+                    Ok(mut view) => {
                         let input_started = Instant::now();
-                        session.on_input_changed(&launch_input, cx);
+                        view.on_input_changed(&launch_input, cx);
                         log_launcher_step(
                             plugin_id,
                             "inline initial input",
                             input_started,
                             Some(trace),
                         );
-                        self.mode = LauncherMode::InlinePlugin { session };
+                        self.mode = LauncherMode::InlinePlugin { view };
                         self.enter_plugin_mode_input(&launch_input, cx);
                     }
                     Err(error) => {
@@ -715,17 +669,17 @@ impl Launcher {
                 log_launcher_step(plugin_id, "launcher open command", started, Some(trace));
                 log_launcher_total(plugin_id, trace);
             }
-            PluginWindowMode::List => {
-                let session_started = Instant::now();
-                let session_result = self
+            ViewMode::List => {
+                let view_started = Instant::now();
+                let view_result = self
                     .plugin_manager
                     .borrow_mut()
                     .open_list_view(plugin_id, cx);
-                log_launcher_step(plugin_id, "open list session", session_started, Some(trace));
-                match session_result {
-                    Ok(mut session) => {
+                log_launcher_step(plugin_id, "open list view", view_started, Some(trace));
+                match view_result {
+                    Ok(mut view) => {
                         let list_started = Instant::now();
-                        let items = session.on_input_changed(&launch_input, cx);
+                        let items = view.on_input_changed(&launch_input, cx);
                         log_launcher_step(
                             plugin_id,
                             "list initial input",
@@ -733,7 +687,7 @@ impl Launcher {
                             Some(trace),
                         );
                         self.mode = LauncherMode::ListPlugin {
-                            session,
+                            view,
                             items: Rc::new(items),
                             selected: 0,
                         };
@@ -826,13 +780,13 @@ impl Launcher {
 
     fn maybe_prefetch_plugin_items(&mut self, visible_end: usize, cx: &mut Context<Self>) {
         let query = self.query(cx);
-        if let LauncherMode::ListPlugin { session, items, .. } = &mut self.mode {
+        if let LauncherMode::ListPlugin { view, items, .. } = &mut self.mode {
             let remaining = items.len().saturating_sub(visible_end);
             if remaining > PLUGIN_LIST_PREFETCH_THRESHOLD {
                 return;
             }
 
-            let more_items = session.on_input_changed(&query, cx);
+            let more_items = view.on_input_changed(&query, cx);
             if more_items.len() > items.len() {
                 merge_plugin_list_items(items, more_items);
             }
@@ -889,33 +843,32 @@ impl Launcher {
             self.close_plugin_mode(window, cx);
             return;
         }
-        if let Some(input) = self.query_input.clone() {
-            if !input.read(cx).text().is_empty() {
-                input.update(cx, |input, cx| input.clear(cx));
-                return;
-            }
+        if let Some(input) = self.query_input.clone()
+            && !input.read(cx).text().is_empty()
+        {
+            input.update(cx, |input, cx| input.clear(cx));
+            return;
         }
         self.close_window(window, cx);
     }
 
     fn close_plugin_mode(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         match std::mem::replace(&mut self.mode, LauncherMode::Search) {
-            LauncherMode::InlinePlugin { mut session, .. } => session.on_close(),
-            LauncherMode::ListPlugin { mut session, .. } => session.on_close(),
+            LauncherMode::InlinePlugin { mut view, .. } => view.on_close(),
+            LauncherMode::ListPlugin { mut view, .. } => view.on_close(),
             LauncherMode::Search => {}
         }
         self.results_scroll.scroll_to_item(0, ScrollStrategy::Top);
         self.results_visible_start = 0;
         self.plugin_list_visible_start = 0;
-        let clipboard_kinds = self.current_cached_clipboard_context_kinds();
         let query = self.query(cx);
-        self.all_commands = self.default_commands_with_clipboard(clipboard_kinds.clone());
+        self.all_commands = self.default_commands_with_clipboard();
         if query.trim().is_empty() {
             self.results = Self::default_results(&self.all_commands, &self.plugin_visuals);
             self.selected = self.selected.min(self.results.len().saturating_sub(1));
             self.results_visible_start = visible_start_for_selection(self.selected);
         } else {
-            self.results = Rc::new(self.commands_for_query(&query, clipboard_kinds));
+            self.results = Rc::new(self.query_commands(&query));
             self.selected = self.selected.min(self.results.len().saturating_sub(1));
             self.results_visible_start = visible_start_for_selection(self.selected);
         }
@@ -944,9 +897,6 @@ impl Launcher {
 impl Render for Launcher {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let render_started = Instant::now();
-        if matches!(self.mode, LauncherMode::ListPlugin { .. }) {
-            self.refresh_plugin_list_if_needed(cx);
-        }
         let desired_height = match &self.mode {
             LauncherMode::Search => Self::window_height_for_results(self.results.len()),
             LauncherMode::InlinePlugin { .. } => HEADER_HEIGHT + RESULTS_MAX_HEIGHT,
@@ -987,7 +937,7 @@ impl Render for Launcher {
         div()
             .size_full()
             .bg(theme::launcher_glass(dark))
-            .font_family("Inter, PingFang SC")
+            .font_family(ui::font_ui())
             .text_color(title_color)
             .relative()
             .flex()
@@ -1141,7 +1091,7 @@ impl Render for Launcher {
             })
             .when(inline_mode, |launcher| {
                 let content = match &mut self.mode {
-                    LauncherMode::InlinePlugin { session, .. } => session.render(window, cx),
+                    LauncherMode::InlinePlugin { view, .. } => view.render(window, cx),
                     _ => div().into_any_element(),
                 };
                 launcher.child(
@@ -1190,7 +1140,7 @@ fn launcher_quick_tab(
             let Some(handle) = handle.clone() else {
                 return;
             };
-            let _ = cx.update_entity(&handle, |launcher, entity_cx| {
+            cx.update_entity(&handle, |launcher, entity_cx| {
                 if let Some(item) = launcher
                     .all_commands
                     .iter()
@@ -1284,7 +1234,7 @@ fn plugin_list(
         .max_h(px(RESULTS_MAX_HEIGHT))
         .child(
             uniform_list("launcher-plugin-list", count, move |range, _window, cx| {
-                let _ = cx.update_entity(&list_handle, |launcher, cx| {
+                cx.update_entity(&list_handle, |launcher, cx| {
                     launcher.maybe_prefetch_plugin_items(range.end, cx);
                 });
                 range
@@ -1381,9 +1331,9 @@ fn plugin_list_row(
             let Some(handle) = handle.clone() else {
                 return;
             };
-            let _ = cx.update_entity(&handle, |launcher: &mut Launcher, entity_cx| {
+            cx.update_entity(&handle, |launcher: &mut Launcher, entity_cx| {
                 if let LauncherMode::ListPlugin {
-                    session,
+                    view,
                     items,
                     selected,
                     ..
@@ -1400,7 +1350,7 @@ fn plugin_list_row(
                                 plugin_list_usage_key(&item_for_click).to_string(),
                                 entity_cx,
                             );
-                        session.on_list_item_selected(&item_for_click.id, entity_cx);
+                        view.on_list_item_selected(&item_for_click.id, entity_cx);
                         launcher.close_window(window, entity_cx);
                     }
                 }
@@ -1457,63 +1407,37 @@ fn plugin_list_row(
         )
 }
 
-fn clipboard_record_context_kinds(record: &ClipboardRecord) -> Vec<ContextKind> {
-    let mut kinds = vec![ContextKind::Clipboard];
+/// Build a [`ClipboardPayload`] from the latest clipboard record.
+/// Returns `None` when there is no meaningful content.
+fn clipboard_payload_from_record(record: &ClipboardRecord) -> Option<ClipboardPayload> {
     match record.kind {
         ClipboardItemKind::Text => {
-            kinds.extend(detect_text_context_kinds(
-                non_empty_str(&record.content).unwrap_or(&record.preview),
-            ));
+            let text = record.content.clone();
+            if text.trim().is_empty() {
+                None
+            } else {
+                Some(ClipboardPayload {
+                    text: Some(text),
+                    ..Default::default()
+                })
+            }
         }
-        ClipboardItemKind::Image => {
-            push_context_kind(&mut kinds, ContextKind::Image);
-        }
+        ClipboardItemKind::Image => Some(ClipboardPayload {
+            image_path: Some(record.content.clone()),
+            ..Default::default()
+        }),
         ClipboardItemKind::Files => {
-            push_context_kind(&mut kinds, ContextKind::File);
-            for path in clipboard_file_candidates(record) {
-                if detect_text_context_kinds(&path).contains(&ContextKind::ImageFile) {
-                    push_context_kind(&mut kinds, ContextKind::ImageFile);
-                }
+            let paths = parse_file_paths(&record.content);
+            if paths.is_empty() {
+                None
+            } else {
+                Some(ClipboardPayload {
+                    file_paths: Some(paths),
+                    ..Default::default()
+                })
             }
         }
     }
-    unique_context_kinds(kinds)
-}
-
-fn non_empty_str(value: &str) -> Option<&str> {
-    let trimmed = value.trim();
-    (!trimmed.is_empty()).then_some(trimmed)
-}
-
-fn clipboard_file_candidates(record: &ClipboardRecord) -> Vec<String> {
-    let raw = record
-        .content
-        .lines()
-        .chain(record.preview.lines())
-        .flat_map(|line| line.split(['\r', '\t']))
-        .map(|part| part.trim().trim_matches('"').trim_matches('\''))
-        .filter(|part| !part.is_empty())
-        .map(ToOwned::to_owned)
-        .collect::<Vec<_>>();
-
-    let mut candidates = Vec::new();
-    for value in raw {
-        candidates.push(value.clone());
-        if value.starts_with('[')
-            && let Ok(paths) = serde_json::from_str::<Vec<String>>(&value)
-        {
-            candidates.extend(paths);
-        } else {
-            candidates.extend(
-                value
-                    .split(',')
-                    .map(str::trim)
-                    .filter(|part| !part.is_empty())
-                    .map(ToOwned::to_owned),
-            );
-        }
-    }
-    candidates
 }
 
 fn plugin_list_usage_key(item: &PluginListItem) -> &str {
@@ -1546,7 +1470,7 @@ fn scroll_selection_into_view(
 
 fn result_row(
     handle: Option<Entity<Launcher>>,
-    item: CommandItem,
+    item: Command,
     selected: bool,
     index: usize,
     dark: bool,
@@ -1630,7 +1554,7 @@ fn result_row(
             let Some(handle) = handle.clone() else {
                 return;
             };
-            let _ = cx.update_entity(&handle, |launcher, entity_cx| {
+            cx.update_entity(&handle, |launcher, entity_cx| {
                 if let Some(index) = launcher
                     .results
                     .iter()
@@ -1694,7 +1618,7 @@ fn result_row(
 }
 
 fn launcher_icon(
-    item: &CommandItem,
+    item: &Command,
     surface: gpui::Hsla,
     border: gpui::Hsla,
     tint: gpui::Rgba,
@@ -1750,7 +1674,7 @@ fn launcher_icon_tint(plugin_id: &str, dark: bool) -> gpui::Rgba {
     }
 }
 
-fn launcher_icon_label(item: &CommandItem) -> &'static str {
+fn launcher_icon_label(item: &Command) -> &'static str {
     match item.plugin_id.as_str() {
         "api-debugger" => "API",
         "app-launcher" => "↗",
@@ -1836,7 +1760,7 @@ fn log_slow_launcher_interaction(step: &'static str, started: Instant, fields: &
     }
 }
 
-fn result_badge(item: &CommandItem, dark: bool) -> (String, gpui::Hsla, gpui::Rgba) {
+fn result_badge(item: &Command, dark: bool) -> (String, gpui::Hsla, gpui::Rgba) {
     let tag_bg = if dark {
         hsla(0.0, 0.0, 1.0, 0.03)
     } else {

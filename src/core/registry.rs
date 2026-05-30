@@ -1,14 +1,12 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::Result;
 
-use crate::{
-    app::{events::AppEventBus, theme_store::ThemeStore},
-    core::{
-        database::{DatabaseService, DatabaseSpec},
-        plugin::{Plugin, PluginManager, PluginManifest},
-        storage::AppPaths,
-    },
+use crate::core::{
+    database::{DatabaseService, DatabaseSpec},
+    events::AppEventBus,
+    plugin::{Manifest, Plugin, PluginManager},
+    storage::AppPaths,
 };
 
 #[derive(Clone, Debug)]
@@ -19,13 +17,13 @@ pub enum PluginSource {
 
 #[derive(Clone, Debug)]
 pub struct PluginDescriptor {
-    pub manifest: PluginManifest,
+    pub manifest: Manifest,
     pub databases: Vec<DatabaseSpec>,
     pub source: PluginSource,
 }
 
 impl PluginDescriptor {
-    pub fn builtin(manifest: PluginManifest) -> Self {
+    pub fn builtin(manifest: Manifest) -> Self {
         Self {
             manifest,
             databases: Vec::new(),
@@ -42,21 +40,14 @@ impl PluginDescriptor {
 pub struct BuildCx {
     pub database: Arc<DatabaseService>,
     pub paths: AppPaths,
-    pub theme_store: Arc<Mutex<ThemeStore>>,
     pub events: AppEventBus,
 }
 
 impl BuildCx {
-    pub fn new(
-        database: Arc<DatabaseService>,
-        paths: AppPaths,
-        theme_store: Arc<Mutex<ThemeStore>>,
-        events: AppEventBus,
-    ) -> Self {
+    pub fn new(database: Arc<DatabaseService>, paths: AppPaths, events: AppEventBus) -> Self {
         Self {
             database,
             paths,
-            theme_store,
             events,
         }
     }

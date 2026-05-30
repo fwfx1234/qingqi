@@ -35,7 +35,7 @@ pub fn manifest() -> PluginManifest {
             secondary: "目录导出".into(),
             tertiary: "image crate".into(),
         }),
-        command_hint: "拖入图片后批量压缩导出".into(),
+        command_hint: Some("拖入图片后批量压缩导出".into()),
         command_prefixes: ["img", "image", "compress"]
             .into_iter()
             .map(Into::into)

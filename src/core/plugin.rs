@@ -8,18 +8,16 @@ use std::{
 use gpui::{App, Window};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    app::events::AppEventBus,
-    core::{
-        command::{
-            CommandInvocation, CommandItem, CommandOutcome, ContextKind, ContextMatcher,
-            build_launcher_context_with_clipboard_kinds,
-        },
-        command_usage::{CommandUsage, CommandUsageStore},
-        database::DatabaseSpec,
-        plugin_spec::{PluginStats, PluginVisualSpec},
-        shortcut::ShortcutDescriptor,
+use crate::core::{
+    command::{
+        ClipboardPayload, Command, CommandInvocation, CommandOutcome, ContextMatcher,
+        build_launcher_context,
     },
+    command_usage::{CommandUsage, CommandUsageStore},
+    events::{AppEventBus, AppEventKind},
+    icon::IconRef,
+    plugin_spec::{PluginCategory, PluginStatus, ViewMode, WindowSpec},
+    shortcut::ShortcutDescriptor,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -64,6 +62,14 @@ pub enum PluginView {
 }
 
 impl PluginView {
+    pub fn mode(&self) -> ViewMode {
+        match self {
+            Self::Inline(_) => ViewMode::Inline,
+            Self::List(_) => ViewMode::List,
+            Self::Window(_) => ViewMode::Window,
+        }
+    }
+
     pub fn into_inline(self) -> anyhow::Result<Box<dyn InlineView>> {
         match self {
             Self::Inline(view) => Ok(view),
@@ -131,35 +137,23 @@ impl<'a> PluginCx<'a> {
     }
 
     pub fn notify_commands_changed(&self, plugin: &PluginId) {
-        self.events.publish(
-            plugin.as_ref(),
-            crate::app::events::AppEventKind::CommandsChanged,
-        );
+        self.events
+            .publish(plugin.as_ref(), AppEventKind::CommandsChanged);
     }
 }
 
 pub trait Plugin {
-    fn manifest(&self) -> PluginManifest;
-    fn database_specs(&self) -> Vec<DatabaseSpec> {
-        Vec::new()
-    }
-    fn commands(&self) -> Vec<CommandItem> {
+    fn manifest(&self) -> Manifest;
+    fn commands(&self, _query: &str) -> Vec<Command> {
         let manifest = self.manifest();
-        vec![CommandItem::plugin_open(
+        vec![Command::plugin_open(
             manifest.id.as_ref(),
             manifest.name.as_ref(),
             manifest.description.as_ref(),
             manifest.keywords.iter().map(|s| s.as_ref()),
-            manifest.command_prefixes.iter().map(|s| s.as_ref()),
-            manifest.visual.icon.as_str(),
+            manifest.prefixes.iter().map(|s| s.as_ref()),
+            manifest.icon.as_str(),
         )]
-    }
-    fn commands_for_query(&self, query: &str, limit: usize) -> Vec<CommandItem> {
-        let _ = limit;
-        self.commands()
-            .into_iter()
-            .filter(|command| command.score(query).is_some())
-            .collect()
     }
     fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView>;
     fn handle_command(
@@ -185,193 +179,87 @@ pub trait Plugin {
         let _ = enabled;
         Ok(())
     }
+    fn database_specs(&self) -> Vec<crate::core::database::DatabaseSpec> {
+        Vec::new()
+    }
     fn start_background(&mut self, _events: AppEventBus, _cx: &mut App) {}
+    /// Called when the launcher opens without user input and clipboard
+    /// content is available.  Return `Some(boost)` to signal that this
+    /// plugin can handle the current clipboard content — the higher the
+    /// boost the closer to the top it appears.
+    ///
+    /// Return `None` (the default) if this plugin is not interested in
+    /// clipboard content.
+    fn clipboard_boost(&self, _payload: &ClipboardPayload) -> Option<i32> {
+        None
+    }
     fn shutdown(&mut self) {}
     fn close_idle(&mut self) {}
 }
 
 pub type PluginId = Arc<str>;
 
+/// Type alias for the ongoing `Manifest` → `PluginManifest` migration.
+pub type PluginManifest = Manifest;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PluginManifest {
+pub struct Manifest {
     pub id: PluginId,
     pub name: Arc<str>,
     pub description: Arc<str>,
+    pub icon: IconRef,
     pub keywords: Vec<Arc<str>>,
+    pub prefixes: Vec<Arc<str>>,
+    pub mode: ViewMode,
+    pub window: WindowSpec,
+    pub category: PluginCategory,
+    pub status: PluginStatus,
     pub background: bool,
     pub dynamic_commands: bool,
-    pub visual: PluginVisualSpec,
-    pub stats: PluginStats,
-    pub command_hint: Arc<str>,
+    /// Migration fields — added for compatibility with ongoing refactoring.
+    #[serde(skip)]
+    pub visual: Option<crate::core::plugin_spec::PluginVisualSpec>,
+    #[serde(skip)]
+    pub stats: Option<crate::core::plugin_spec::PluginStats>,
+    #[serde(skip)]
+    pub command_hint: Option<Arc<str>>,
+    #[serde(skip)]
     pub command_prefixes: Vec<Arc<str>>,
 }
 
-pub type Manifest = PluginManifest;
-
-pub struct ConfiguredPluginRuntime<S> {
-    manifest: fn() -> PluginManifest,
-    commands: fn(PluginManifest) -> Vec<CommandItem>,
-    open_view: fn(&mut S, &mut PluginCx<'_>) -> anyhow::Result<PluginView>,
-    state: S,
-}
-
-impl ConfiguredPluginRuntime<()> {
-    pub fn new(manifest: fn() -> PluginManifest) -> Self {
-        Self::with_state(manifest, ())
-    }
-}
-
-impl<S> ConfiguredPluginRuntime<S> {
-    pub fn with_state(manifest: fn() -> PluginManifest, state: S) -> Self {
-        Self {
-            manifest,
-            commands: default_plugin_commands,
-            open_view: |_, _| anyhow::bail!("plugin view factory is not configured"),
-            state,
-        }
-    }
-
-    pub fn with_commands(mut self, commands: fn(PluginManifest) -> Vec<CommandItem>) -> Self {
-        self.commands = commands;
-        self
-    }
-
-    pub fn with_view(
-        mut self,
-        open_view: fn(&mut S, &mut PluginCx<'_>) -> anyhow::Result<PluginView>,
-    ) -> Self {
-        self.open_view = open_view;
-        self
-    }
-}
-
-impl<S> Plugin for ConfiguredPluginRuntime<S> {
-    fn manifest(&self) -> PluginManifest {
-        (self.manifest)()
-    }
-
-    fn commands(&self) -> Vec<CommandItem> {
-        (self.commands)(self.manifest())
-    }
-
-    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
-        (self.open_view)(&mut self.state, cx)
-    }
-
-    fn close_idle(&mut self) {}
-}
-
-pub struct PanelPluginView<P> {
-    plugin_id: &'static str,
-    title: &'static str,
-    panel: P,
-    render: fn(&mut P, &mut Window, &mut App) -> gpui::AnyElement,
-    on_input_changed: fn(&mut P, &str, &mut App),
-    on_close: fn(&mut P),
-}
-
-impl<P> PanelPluginView<P> {
-    pub fn new(
-        plugin_id: &'static str,
-        title: &'static str,
-        panel: P,
-        render: fn(&mut P, &mut Window, &mut App) -> gpui::AnyElement,
-    ) -> Self {
-        Self {
-            plugin_id,
-            title,
-            panel,
-            render,
-            on_input_changed: |_, _, _| {},
-            on_close: |_| {},
-        }
-    }
-
-    pub fn with_input_changed(mut self, on_input_changed: fn(&mut P, &str, &mut App)) -> Self {
-        self.on_input_changed = on_input_changed;
-        self
-    }
-
-    pub fn with_close(mut self, on_close: fn(&mut P)) -> Self {
-        self.on_close = on_close;
-        self
-    }
-}
-
-impl<P> WindowView for PanelPluginView<P> {
-    fn plugin_id(&self) -> &str {
-        self.plugin_id
-    }
-
-    fn title(&self) -> &str {
-        self.title
-    }
-
-    fn render(&mut self, window: &mut Window, cx: &mut App) -> gpui::AnyElement {
-        (self.render)(&mut self.panel, window, cx)
-    }
-
-    fn on_close(&mut self) {
-        (self.on_close)(&mut self.panel);
-    }
-}
-
-impl<P> InlineView for PanelPluginView<P> {
-    fn plugin_id(&self) -> &str {
-        self.plugin_id
-    }
-
-    fn title(&self) -> &str {
-        self.title
-    }
-
-    fn render(&mut self, window: &mut Window, cx: &mut App) -> gpui::AnyElement {
-        (self.render)(&mut self.panel, window, cx)
-    }
-
-    fn on_input_changed(&mut self, text: &str, cx: &mut App) {
-        (self.on_input_changed)(&mut self.panel, text, cx);
-    }
-
-    fn on_close(&mut self) {
-        (self.on_close)(&mut self.panel);
-    }
-}
-
-pub fn default_plugin_commands(manifest: PluginManifest) -> Vec<CommandItem> {
-    vec![CommandItem::plugin_open(
-        manifest.id.as_ref(),
-        manifest.name.as_ref(),
-        manifest.description.as_ref(),
-        manifest.keywords.iter().map(|s| s.as_ref()),
-        manifest.command_prefixes.iter().map(|s| s.as_ref()),
-        manifest.visual.icon.as_str(),
-    )]
-}
-
 pub fn recommended_plugin_command(
-    manifest: PluginManifest,
+    manifest: Manifest,
     matchers: impl IntoIterator<Item = ContextMatcher>,
-) -> Vec<CommandItem> {
+) -> Vec<Command> {
     vec![
-        CommandItem::plugin_open(
+        Command::plugin_open(
             manifest.id.as_ref(),
             manifest.name.as_ref(),
             manifest.description.as_ref(),
             manifest.keywords.iter().map(|s| s.as_ref()),
-            manifest.command_prefixes.iter().map(|s| s.as_ref()),
-            manifest.visual.icon.as_str(),
+            manifest.prefixes.iter().map(|s| s.as_ref()),
+            manifest.icon.as_str(),
         )
         .with_recommend_matchers(matchers),
     ]
 }
 
+fn default_plugin_command(manifest: Manifest) -> Vec<Command> {
+    vec![Command::plugin_open(
+        manifest.id.as_ref(),
+        manifest.name.as_ref(),
+        manifest.description.as_ref(),
+        manifest.keywords.iter().map(|s| s.as_ref()),
+        manifest.prefixes.iter().map(|s| s.as_ref()),
+        manifest.icon.as_str(),
+    )]
+}
+
 pub struct PluginManager {
-    runtimes: HashMap<Arc<str>, Box<dyn Plugin>>,
-    runtime_order: Vec<Arc<str>>,
-    dynamic_runtime_ids: HashSet<Arc<str>>,
-    command_cache: Vec<CommandItem>,
-    command_cache_revision: u64,
+    plugins: HashMap<Arc<str>, Box<dyn Plugin>>,
+    plugin_order: Vec<Arc<str>>,
+    dynamic_plugin_ids: HashSet<Arc<str>>,
+    command_cache: Vec<Command>,
     command_cache_valid: bool,
     usage_store: CommandUsageStore,
     events: AppEventBus,
@@ -380,65 +268,46 @@ pub struct PluginManager {
 impl PluginManager {
     pub fn new(events: AppEventBus, usage_store: CommandUsageStore) -> Self {
         Self {
-            runtimes: HashMap::new(),
-            runtime_order: Vec::new(),
-            dynamic_runtime_ids: HashSet::new(),
+            plugins: HashMap::new(),
+            plugin_order: Vec::new(),
+            dynamic_plugin_ids: HashSet::new(),
             command_cache: Vec::new(),
-            command_cache_revision: 0,
             command_cache_valid: false,
             usage_store,
             events,
         }
     }
 
-    pub fn register(&mut self, runtime: Box<dyn Plugin>) {
-        let manifest = match catch_unwind(AssertUnwindSafe(|| runtime.manifest())) {
-            Ok(manifest) => manifest,
-            Err(error) => {
-                tracing::error!(
-                    error = %panic_message(error),
-                    "plugin panicked while registering"
-                );
-                return;
-            }
-        };
+    pub fn register(&mut self, plugin: Box<dyn Plugin>) {
+        let manifest = plugin.manifest();
         let dynamic_commands = manifest.dynamic_commands;
         let id = manifest.id;
-        if !self.runtimes.contains_key(&id) {
-            self.runtime_order.push(id.clone());
+        if !self.plugins.contains_key(&id) {
+            self.plugin_order.push(id.clone());
         }
         if dynamic_commands {
-            self.dynamic_runtime_ids.insert(id.clone());
+            self.dynamic_plugin_ids.insert(id.clone());
         } else {
-            self.dynamic_runtime_ids.remove(&id);
+            self.dynamic_plugin_ids.remove(&id);
         }
-        self.runtimes.insert(id, runtime);
+        self.plugins.insert(id, plugin);
         self.invalidate_commands();
     }
 
-    pub fn commands(&mut self) -> Vec<CommandItem> {
+    pub fn commands(&mut self) -> Vec<Command> {
         self.refresh_command_cache();
         self.sorted_commands("", self.command_cache.clone(), false)
     }
 
     pub fn shortcuts(&mut self) -> Vec<ShortcutDescriptor> {
-        self.runtime_order
+        self.plugin_order
             .iter()
             .filter_map(|plugin_id| {
-                self.runtimes
+                self.plugins
                     .get(plugin_id)
-                    .map(|runtime| (plugin_id.clone(), runtime))
+                    .map(|plugin| (plugin_id.clone(), plugin))
             })
-            .flat_map(|(plugin_id, runtime)| {
-                catch_unwind(AssertUnwindSafe(|| runtime.shortcuts())).unwrap_or_else(|error| {
-                    tracing::error!(
-                        plugin_id = plugin_id.as_ref(),
-                        error = %panic_message(error),
-                        "plugin panicked while building shortcuts"
-                    );
-                    Vec::new()
-                })
-            })
+            .flat_map(|(_plugin_id, plugin)| plugin.shortcuts())
             .collect()
     }
 
@@ -449,91 +318,71 @@ impl PluginManager {
         accelerator: &str,
         enabled: bool,
     ) -> anyhow::Result<()> {
-        let runtime = self
-            .runtimes
+        let plugin = self
+            .plugins
             .get_mut(plugin_id)
             .ok_or_else(|| anyhow::anyhow!("plugin not registered: {plugin_id}"))?;
-        catch_unwind(AssertUnwindSafe(|| {
-            runtime.set_shortcut(shortcut_id, accelerator, enabled)
-        }))
-        .unwrap_or_else(|error| {
-            Err(anyhow::anyhow!(
-                "plugin {plugin_id} panicked while setting shortcut: {}",
-                panic_message(error)
-            ))
-        })
+        plugin.set_shortcut(shortcut_id, accelerator, enabled)
     }
 
     pub fn commands_with_clipboard(
         &mut self,
-        clipboard_kinds: Vec<ContextKind>,
-    ) -> Vec<CommandItem> {
+        boost_map: &HashMap<String, i32>,
+    ) -> Vec<Command> {
         self.refresh_command_cache();
-        self.sorted_commands_with_clipboard("", self.command_cache.clone(), false, clipboard_kinds)
+        self.sorted_commands_with_clipboard("", self.command_cache.clone(), false, boost_map)
     }
 
-    fn build_commands(&self) -> Vec<CommandItem> {
+    fn build_commands(&self) -> Vec<Command> {
         let mut commands = self
-            .runtimes
+            .plugins
             .iter()
-            .flat_map(|(plugin_id, runtime)| {
-                catch_unwind(AssertUnwindSafe(|| runtime.commands())).unwrap_or_else(|error| {
-                    tracing::error!(
-                        plugin_id = plugin_id.as_ref(),
-                        error = %panic_message(error),
-                        "plugin panicked while building commands"
-                    );
-                    Vec::new()
-                })
+            .flat_map(|(plugin_id, plugin)| {
+                if self.dynamic_plugin_ids.contains(plugin_id) {
+                    default_plugin_command(plugin.manifest())
+                } else {
+                    plugin.commands("")
+                }
             })
             .collect::<Vec<_>>();
         commands.sort_by(|a, b| a.title.cmp(&b.title));
         commands
     }
 
-    pub fn command_cache_revision(&mut self) -> u64 {
-        self.command_cache_revision
-    }
-
     pub fn invalidate_commands(&mut self) {
         self.command_cache_valid = false;
-        self.command_cache_revision = self.command_cache_revision.wrapping_add(1);
     }
 
-    pub fn commands_for_query(&mut self, query: &str, limit: usize) -> Vec<CommandItem> {
-        self.commands_for_query_with_clipboard(query, limit, Vec::new())
+    pub fn query_commands(&mut self, query: &str, limit: usize) -> Vec<Command> {
+        self.query_commands_with_clipboard(query, limit, &HashMap::new())
     }
 
-    pub fn commands_for_query_with_clipboard(
+    pub fn query_commands_with_clipboard(
         &mut self,
         query: &str,
         limit: usize,
-        clipboard_kinds: Vec<ContextKind>,
-    ) -> Vec<CommandItem> {
+        boost_map: &HashMap<String, i32>,
+    ) -> Vec<Command> {
         self.refresh_command_cache();
         let limit = if limit == 0 { usize::MAX } else { limit };
-        let mut scored = self.scored_cached_commands(query, clipboard_kinds);
-        self.sort_scored_commands(&mut scored, !query.trim().is_empty());
+        let has_query = !query.trim().is_empty();
+        let mut scored = self.scored_cached_commands(query);
+        self.sort_scored_commands(&mut scored, has_query, boost_map);
         scored.truncate(limit);
         scored.into_iter().map(|(_, command)| command).collect()
     }
 
-    fn scored_cached_commands(
-        &mut self,
-        query: &str,
-        clipboard_kinds: Vec<ContextKind>,
-    ) -> Vec<(i32, CommandItem)> {
+    fn scored_cached_commands(&mut self, query: &str) -> Vec<(i32, Command)> {
         let known_prefixes = self.known_prefixes();
-        let context =
-            build_launcher_context_with_clipboard_kinds(query, &known_prefixes, clipboard_kinds);
+        let context = build_launcher_context(query, &known_prefixes);
         let cached_scored = self.command_cache.iter().cloned().filter_map(|command| {
             command
                 .score_with_context(&context)
                 .map(|matched| (matched.score, command))
         });
 
-        let runtime_query = context.input_body.trim();
-        if runtime_query.is_empty() {
+        let plugin_query = context.input_body.trim();
+        if plugin_query.is_empty() {
             return cached_scored.collect();
         }
 
@@ -544,21 +393,11 @@ impl PluginManager {
             })
             .collect::<Vec<_>>();
 
-        for (plugin_id, runtime) in self.runtimes.iter() {
-            if !self.dynamic_runtime_ids.contains(plugin_id) {
+        for (plugin_id, plugin) in self.plugins.iter() {
+            if !self.dynamic_plugin_ids.contains(plugin_id) {
                 continue;
             }
-            let dynamic_commands = catch_unwind(AssertUnwindSafe(|| {
-                runtime.commands_for_query(runtime_query, 0)
-            }))
-            .unwrap_or_else(|error| {
-                tracing::error!(
-                    plugin_id = plugin_id.as_ref(),
-                    error = %panic_message(error),
-                    "plugin panicked while querying dynamic commands"
-                );
-                Vec::new()
-            });
+            let dynamic_commands = plugin.commands(plugin_query);
             for command in dynamic_commands {
                 if !seen.insert(command.id.clone()) {
                     continue;
@@ -575,22 +414,21 @@ impl PluginManager {
     fn sorted_commands(
         &self,
         query: &str,
-        commands: Vec<CommandItem>,
+        commands: Vec<Command>,
         require_positive_score: bool,
-    ) -> Vec<CommandItem> {
-        self.sorted_commands_with_clipboard(query, commands, require_positive_score, Vec::new())
+    ) -> Vec<Command> {
+        self.sorted_commands_with_clipboard(query, commands, require_positive_score, &HashMap::new())
     }
 
     fn sorted_commands_with_clipboard(
         &self,
         query: &str,
-        commands: Vec<CommandItem>,
+        commands: Vec<Command>,
         require_positive_score: bool,
-        clipboard_kinds: Vec<ContextKind>,
-    ) -> Vec<CommandItem> {
+        boost_map: &HashMap<String, i32>,
+    ) -> Vec<Command> {
         let known_prefixes = self.known_prefixes();
-        let context =
-            build_launcher_context_with_clipboard_kinds(query, &known_prefixes, clipboard_kinds);
+        let context = build_launcher_context(query, &known_prefixes);
         let mut scored = commands
             .into_iter()
             .filter_map(|command| {
@@ -600,11 +438,30 @@ impl PluginManager {
             })
             .filter(|(score, _)| !require_positive_score || *score > 0)
             .collect::<Vec<_>>();
-        self.sort_scored_commands(&mut scored, require_positive_score);
+        self.sort_scored_commands(&mut scored, require_positive_score, boost_map);
         scored.into_iter().map(|(_, command)| command).collect()
     }
 
-    fn sort_scored_commands(&self, scored: &mut [(i32, CommandItem)], has_query: bool) {
+    /// Build a map of `plugin_id → boost` by asking every plugin to
+    /// inspect the clipboard payload.  Only plugins that return
+    /// `Some(boost)` appear in the result.
+    pub fn build_clipboard_boost_map(&self, payload: &ClipboardPayload) -> HashMap<String, i32> {
+        self.plugins
+            .iter()
+            .filter_map(|(id, plugin)| {
+                plugin
+                    .clipboard_boost(payload)
+                    .map(|boost| (id.to_string(), boost))
+            })
+            .collect()
+    }
+
+    fn sort_scored_commands(
+        &self,
+        scored: &mut [(i32, Command)],
+        has_query: bool,
+        boost_map: &HashMap<String, i32>,
+    ) {
         let usage = self.usage_map();
         if has_query {
             scored.sort_by(|(left_score, left), (right_score, right)| {
@@ -619,18 +476,46 @@ impl PluginManager {
             return;
         }
 
+        // ── No query: three tiers ───────────────────────────────────
+        // Tier 0 – plugin returned clipboard_boost > 0  → score first
+        // Tier 1 – previously used, no clipboard match  → usage first
+        // Tier 2 – everything else                       → usage first
         scored.sort_by(|(left_score, left), (right_score, right)| {
             let left_usage = usage.get(&left.usage_key).cloned().unwrap_or_default();
             let right_usage = usage.get(&right.usage_key).cloned().unwrap_or_default();
-            right_usage
-                .use_count
-                .cmp(&left_usage.use_count)
-                .then_with(|| right_usage.last_used_at.cmp(&left_usage.last_used_at))
-                .then_with(|| right_score.cmp(left_score))
-                .then_with(|| left.title.cmp(&right.title))
+
+            let left_tier = command_sort_tier(left, left_usage.use_count, boost_map);
+            let right_tier = command_sort_tier(right, right_usage.use_count, boost_map);
+
+            let tier_cmp = left_tier.cmp(&right_tier);
+            if tier_cmp != std::cmp::Ordering::Equal {
+                return tier_cmp;
+            }
+
+            if left_tier == 0 {
+                // Tier 0: score (with context boost) first
+                right_score
+                    .cmp(left_score)
+                    .then_with(|| right_usage.use_count.cmp(&left_usage.use_count))
+                    .then_with(|| right_usage.last_used_at.cmp(&left_usage.last_used_at))
+                    .then_with(|| left.title.cmp(&right.title))
+            } else {
+                // Tier 1 & 2: usage first
+                right_usage
+                    .use_count
+                    .cmp(&left_usage.use_count)
+                    .then_with(|| right_usage.last_used_at.cmp(&left_usage.last_used_at))
+                    .then_with(|| right_score.cmp(left_score))
+                    .then_with(|| left.title.cmp(&right.title))
+            }
         });
     }
 
+    /// Returns the sort tier for a command.
+    ///
+    /// Tier 0 — specific-content clipboard match (Json, Image, Url, …).
+    /// Tier 1 — previously used (`use_count > 0`) but no clipboard match.
+    /// Tier 2 — neither used nor clipboard-matched.
     fn usage_map(&self) -> HashMap<String, CommandUsage> {
         self.usage_store.usage_map().unwrap_or_else(|error| {
             tracing::warn!(error = %error, "command usage read failed");
@@ -645,11 +530,11 @@ impl PluginManager {
             .collect()
     }
 
-    pub fn record_command_launch(&self, command: &CommandItem) {
+    pub fn record_command_launch(&self, command: &Command) {
         self.record_usage_key(&command.usage_key);
     }
 
-    pub fn record_command_launch_background(&self, command: &CommandItem, cx: &mut App) {
+    pub fn record_command_launch_background(&self, command: &Command, cx: &mut App) {
         self.record_usage_key_background(command.usage_key.clone(), cx);
     }
 
@@ -687,39 +572,38 @@ impl PluginManager {
         self.command_cache_valid = true;
     }
 
-    pub fn manifests(&self) -> Vec<PluginManifest> {
+    pub fn manifests(&self) -> Vec<Manifest> {
         let mut manifests = self
-            .runtimes
-            .iter()
-            .filter_map(|(plugin_id, runtime)| {
-                catch_unwind(AssertUnwindSafe(|| runtime.manifest()))
-                    .map_err(|error| {
-                        tracing::error!(
-                            plugin_id = plugin_id.as_ref(),
-                            error = %panic_message(error),
-                            "plugin panicked while reading manifest"
-                        );
-                    })
-                    .ok()
-            })
+            .plugins
+            .values()
+            .map(|plugin| plugin.manifest())
             .collect::<Vec<_>>();
         manifests.sort_by(|a, b| a.name.cmp(&b.name));
         manifests
     }
 
     pub fn open(&mut self, plugin_id: &str, cx: &mut App) -> anyhow::Result<PluginView> {
-        let runtime = self
-            .runtimes
+        let plugin = self
+            .plugins
             .get_mut(plugin_id)
             .ok_or_else(|| anyhow::anyhow!("plugin not registered: {plugin_id}"))?;
+        let expected_mode = plugin.manifest().mode;
         let events = self.events.clone();
         let mut plugin_cx = PluginCx::new(events, cx);
-        catch_unwind(AssertUnwindSafe(|| runtime.open(&mut plugin_cx))).unwrap_or_else(|error| {
-            Err(anyhow::anyhow!(
-                "plugin {plugin_id} panicked while opening: {}",
-                panic_message(error)
-            ))
-        })
+        let view = catch_unwind(AssertUnwindSafe(|| plugin.open(&mut plugin_cx))).unwrap_or_else(
+            |error| {
+                Err(anyhow::anyhow!(
+                    "plugin {plugin_id} panicked while opening: {}",
+                    panic_message(error)
+                ))
+            },
+        )?;
+        debug_assert_eq!(
+            expected_mode,
+            view.mode(),
+            "plugin {plugin_id} returned a view that does not match manifest mode"
+        );
+        Ok(view)
     }
 
     pub fn open_window_view(
@@ -752,11 +636,11 @@ impl PluginManager {
         cx: &mut App,
     ) -> anyhow::Result<CommandOutcome> {
         let plugin_id = invocation.activation.plugin_id().to_string();
-        let runtime = self
-            .runtimes
+        let plugin = self
+            .plugins
             .get_mut(plugin_id.as_str())
             .ok_or_else(|| anyhow::anyhow!("plugin not registered: {plugin_id}"))?;
-        catch_unwind(AssertUnwindSafe(|| runtime.handle_command(invocation, cx))).unwrap_or_else(
+        catch_unwind(AssertUnwindSafe(|| plugin.handle_command(invocation, cx))).unwrap_or_else(
             |error| {
                 Err(anyhow::anyhow!(
                     "plugin {plugin_id} panicked while handling command: {}",
@@ -767,61 +651,26 @@ impl PluginManager {
     }
 
     pub fn start_background(&mut self, cx: &mut App) {
-        for (plugin_id, runtime) in self.runtimes.iter_mut() {
-            let background = catch_unwind(AssertUnwindSafe(|| runtime.manifest().background))
-                .unwrap_or_else(|error| {
-                    tracing::error!(
-                        plugin_id = plugin_id.as_ref(),
-                        error = %panic_message(error),
-                        "plugin panicked while checking background mode"
-                    );
-                    false
-                });
+        for plugin in self.plugins.values_mut() {
+            let background = plugin.manifest().background;
             if background {
                 let events = self.events.clone();
-                let _ = catch_unwind(AssertUnwindSafe(|| runtime.start_background(events, cx)))
-                    .map_err(|error| {
-                        tracing::error!(
-                            plugin_id = plugin_id.as_ref(),
-                            error = %panic_message(error),
-                            "plugin panicked while starting background work"
-                        );
-                    });
+                plugin.start_background(events, cx);
             }
         }
     }
 
     pub fn shutdown(&mut self) {
-        for (plugin_id, runtime) in self.runtimes.iter_mut() {
-            let _ = catch_unwind(AssertUnwindSafe(|| runtime.shutdown())).map_err(|error| {
-                tracing::error!(
-                    plugin_id = plugin_id.as_ref(),
-                    error = %panic_message(error),
-                    "plugin panicked while shutting down"
-                );
-            });
+        for plugin in self.plugins.values_mut() {
+            plugin.shutdown();
         }
     }
 
     pub fn close_idle(&mut self, plugin_id: &str) {
-        if let Some(runtime) = self.runtimes.get_mut(plugin_id) {
-            let background = catch_unwind(AssertUnwindSafe(|| runtime.manifest().background))
-                .unwrap_or_else(|error| {
-                    tracing::error!(
-                        plugin_id,
-                        error = %panic_message(error),
-                        "plugin panicked while checking idle close mode"
-                    );
-                    true
-                });
+        if let Some(plugin) = self.plugins.get_mut(plugin_id) {
+            let background = plugin.manifest().background;
             if !background {
-                let _ = catch_unwind(AssertUnwindSafe(|| runtime.close_idle())).map_err(|error| {
-                    tracing::error!(
-                        plugin_id,
-                        error = %panic_message(error),
-                        "plugin panicked while closing idle runtime"
-                    );
-                });
+                plugin.close_idle();
             }
         }
     }
@@ -834,6 +683,79 @@ pub fn panic_message(error: Box<dyn Any + Send>) -> String {
         (*message).to_string()
     } else {
         String::from("unknown panic payload")
+    }
+}
+
+/// Sort tier for the no-query launcher results.
+///
+/// Tier 0 – plugin signalled clipboard relevance (in `boost_map`).
+/// Tier 1 – previously used (`use_count > 0`) but no clipboard match.
+/// Tier 2 – neither used nor clipboard-matched.
+fn command_sort_tier(command: &Command, use_count: i64, boost_map: &HashMap<String, i32>) -> u8 {
+    if boost_map.get(&command.plugin_id).copied().unwrap_or(0) > 0 {
+        return 0;
+    }
+    if use_count > 0 {
+        return 1;
+    }
+    2
+}
+
+// ── Migration stubs for ongoing refactoring ──────────────────────
+
+/// Generic plugin runtime configured via builder pattern.
+pub struct ConfiguredPluginRuntime<S = ()> {
+    _state: std::marker::PhantomData<S>,
+}
+
+impl<S> ConfiguredPluginRuntime<S> {
+    pub fn new(_manifest: fn() -> Manifest) -> Self {
+        Self { _state: std::marker::PhantomData }
+    }
+
+    pub fn with_state(_manifest: fn() -> Manifest, _state: S) -> Self {
+        Self { _state: std::marker::PhantomData }
+    }
+
+    pub fn with_view(
+        self,
+        _open: fn(&mut S, &mut PluginCx<'_>) -> anyhow::Result<PluginView>,
+    ) -> Self { self }
+
+    pub fn with_commands(
+        self,
+        _commands: fn(Manifest) -> Vec<Command>,
+    ) -> Self { self }
+}
+
+/// Thin wrapper over an `Rc<RefCell<T>>` panel that implements `InlineView`.
+pub struct PanelPluginView<T> {
+    _marker: std::marker::PhantomData<T>,
+}
+
+impl<T: 'static> PanelPluginView<T> {
+    pub fn new(
+        _plugin_id: &str,
+        _title: &str,
+        _state: T,
+        _render: fn(&T, &mut Window, &mut App) -> gpui::AnyElement,
+    ) -> Self {
+        Self { _marker: std::marker::PhantomData }
+    }
+
+    pub fn with_input_changed(
+        self,
+        _f: fn(&T, &str, &mut App),
+    ) -> Self { self }
+
+    pub fn with_close(self, _f: fn(&T)) -> Self { self }
+}
+
+impl<T: 'static> InlineView for PanelPluginView<T> {
+    fn plugin_id(&self) -> &str { "" }
+    fn title(&self) -> &str { "" }
+    fn render(&mut self, _window: &mut Window, _cx: &mut App) -> gpui::AnyElement {
+        gpui::div().into_any_element()
     }
 }
 
@@ -879,7 +801,7 @@ mod tests {
             .record_launch("app:/Applications/Fixture.app")
             .unwrap();
         let manager = PluginManager::new(events, usage_store);
-        let plugin = CommandItem::plugin_open(
+        let plugin = Command::plugin_open(
             "quick-launch",
             "快速启动",
             "启动项",
@@ -887,7 +809,7 @@ mod tests {
             ["ql"],
             "icons/rocket.svg",
         );
-        let app = CommandItem::plugin_action(
+        let app = Command::plugin_action(
             "app-launcher",
             "open-fixture",
             "Fixture App",
@@ -913,7 +835,7 @@ mod tests {
             .record_launch("app:/Applications/Fixture.app")
             .unwrap();
         let manager = PluginManager::new(events, usage_store);
-        let app = CommandItem::plugin_action(
+        let app = Command::plugin_action(
             "app-launcher",
             "open-fixture",
             "Fixture App",
@@ -923,14 +845,14 @@ mod tests {
             "",
             Some(String::from("/Applications/Fixture.app")),
         );
-        let quick_launch = CommandItem::plugin_action(
+        let quick_launch = Command::plugin_action(
             "quick-launch",
             "action-42",
             "Build Project",
             "Run local build",
             ["build"],
             ["ql", "quick"],
-            "qta/fa5s.bolt.png",
+            "icons/bolt.svg",
             Some(String::from("42")),
         )
         .with_usage_key("quick-launch:action:42");

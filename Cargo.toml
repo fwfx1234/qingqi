@@ -27,7 +27,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "std"] 
 unicode-segmentation = "1.12"
 qrcode = "0.14"
 regex = "1.12"
-hudsucker = { version = "0.24", features = ["full"] }
+hudsucker = { version = "0.24", default-features = false, features = ["rcgen-ca", "rustls-client"] }
 rcgen = { version = "0.13", features = ["crypto"] }
 reqwest = { version = "0.12", features = ["blocking", "stream"] }
 rfd = "0.15"
@@ -39,6 +39,18 @@ uuid = { version = "1.16", features = ["v4"] }
 resvg = "0.45"
 usvg = "0.45"
 tiny-skia = "0.11"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [build-dependencies]
 resvg = "0.45"

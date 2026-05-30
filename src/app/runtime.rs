@@ -28,10 +28,7 @@ use crate::{
         shortcut::{ShortcutAction, ShortcutService},
         storage::AppPaths,
     },
-    features::{
-        clipboard::{plugin::ClipboardRuntime, service::ClipboardService},
-        registry::register_builtin_plugins,
-    },
+    features::registry::register_builtin_plugins,
     platform::power::PowerManager,
 };
 
@@ -52,11 +49,6 @@ pub fn run() -> Result<()> {
         "command-usage",
         "command_usage.db",
     ))?;
-    database.register_database(crate::core::database::DatabaseSpec::feature(
-        "clipboard",
-        "history",
-        "clipboard.db",
-    ))?;
     database.register_database(crate::core::database::DatabaseSpec::app(
         "app-launcher/index",
         "app_index.db",
@@ -71,18 +63,7 @@ pub fn run() -> Result<()> {
         CommandUsageStore::new(Arc::clone(&database), "command-usage"),
     );
 
-    let clipboard_runtime = ClipboardRuntime::new(ClipboardService::new(
-        Arc::clone(&database),
-        paths.database("clipboard.db"),
-    ));
-    let clipboard_service = clipboard_runtime.service();
-    clipboard_runtime
-        .service()
-        .lock()
-        .map(|mut service| service.start())
-        .ok();
-    plugins.register(Box::new(clipboard_runtime));
-    register_builtin_plugins(
+    let builtin_services = register_builtin_plugins(
         &mut plugins,
         paths.clone(),
         Arc::clone(&theme_store),
@@ -90,6 +71,7 @@ pub fn run() -> Result<()> {
         events.clone(),
         Arc::clone(&app_index_service),
     )?;
+    let clipboard_service = builtin_services.clipboard_service;
 
     let plugins = Rc::new(RefCell::new(plugins));
     let window_controller = Rc::new(RefCell::new(WindowController::new(
@@ -123,6 +105,9 @@ pub fn run() -> Result<()> {
             }
         });
         cx.on_action(|_: &Quit, cx| cx.quit());
+
+        #[cfg(target_os = "windows")]
+        window_controller.borrow_mut().ensure_keep_alive_window(cx);
 
         set_menus(cx);
         app_catalog.start_background();

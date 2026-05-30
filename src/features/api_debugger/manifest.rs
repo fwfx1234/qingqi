@@ -33,7 +33,7 @@ pub fn manifest() -> PluginManifest {
             secondary: "环境变量".into(),
             tertiary: "请求编排".into(),
         }),
-        command_hint: "集合树、环境切换、请求编辑与响应调试".into(),
+        command_hint: Some("集合树、环境切换、请求编辑与响应调试".into()),
         command_prefixes: ["api", "http"].into_iter().map(Into::into).collect(),
     }
 }

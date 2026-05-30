@@ -33,7 +33,7 @@ pub fn manifest() -> PluginManifest {
             secondary: "项目概览".into(),
             tertiary: "Rust + GPUI".into(),
         }),
-        command_hint: "桌面工具箱版本、技术栈与模块概览".into(),
+        command_hint: Some("桌面工具箱版本、技术栈与模块概览".into()),
         command_prefixes: ["about"].into_iter().map(Into::into).collect(),
     }
 }

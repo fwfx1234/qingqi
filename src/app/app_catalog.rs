@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     app::app_index::{AppEntry, AppIndexService},
-    core::command::CommandItem,
+    core::command::Command,
 };
 
 const APP_SEARCH_LIMIT: usize = 5_000;
@@ -16,9 +16,9 @@ impl AppCatalog {
         Self { service }
     }
 
-    pub fn search(&self, query: &str, limit: usize) -> Vec<CommandItem> {
+    pub fn search(&self, query: &str, limit: usize) -> Vec<Command> {
         let snapshot = self.service.snapshot();
-        if snapshot.apps.is_empty() {
+        if snapshot.apps.is_empty() && !snapshot.scan_completed_once {
             self.service.request_scan();
         } else {
             self.service.request_probe_scan();
@@ -46,7 +46,7 @@ impl AppCatalog {
     }
 }
 
-fn app_command(app: AppEntry) -> CommandItem {
+fn app_command(app: AppEntry) -> Command {
     let path = app.path.clone();
     let mut keywords = vec![
         app.name.clone(),
@@ -54,7 +54,7 @@ fn app_command(app: AppEntry) -> CommandItem {
         path.clone(),
     ];
     keywords.extend(app.aliases.clone());
-    CommandItem::app_launch(
+    Command::app_launch(
         path,
         app.name,
         app.bundle_id.unwrap_or_else(|| app.path.clone()),

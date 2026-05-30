@@ -33,7 +33,7 @@ pub fn manifest() -> PluginManifest {
             secondary: "剪贴板导入".into(),
             tertiary: "qrcode crate".into(),
         }),
-        command_hint: "输入文本生成二维码".into(),
+        command_hint: Some("输入文本生成二维码".into()),
         command_prefixes: ["qr", "qrcode"].into_iter().map(Into::into).collect(),
     }
 }

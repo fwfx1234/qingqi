@@ -48,8 +48,11 @@ impl fmt::Display for CommandKind {
     }
 }
 
+/// Type alias for the ongoing `Command` → `CommandItem` migration.
+pub type CommandItem = Command;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CommandItem {
+pub struct Command {
     pub id: String,
     pub plugin_id: String,
     pub title: String,
@@ -63,8 +66,6 @@ pub struct CommandItem {
     pub recommend_matchers: Vec<ContextMatcher>,
 }
 
-pub type Command = CommandItem;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommandMatch {
     pub score: i32,
@@ -73,33 +74,14 @@ pub struct CommandMatch {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContextMatcher {
-    pub source: ContextSource,
     pub kind: ContextKind,
     pub boost: i32,
 }
 
 impl ContextMatcher {
     pub fn new(kind: ContextKind, boost: i32) -> Self {
-        Self {
-            source: ContextSource::Input,
-            kind,
-            boost,
-        }
+        Self { kind, boost }
     }
-
-    pub fn clipboard(kind: ContextKind, boost: i32) -> Self {
-        Self {
-            source: ContextSource::Clipboard,
-            kind,
-            boost,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ContextSource {
-    Input,
-    Clipboard,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -113,15 +95,39 @@ pub enum ContextKind {
     ImageFile,
 }
 
+/// Lightweight clipboard snapshot passed to plugins so they can decide
+/// whether the current clipboard content is relevant to them.
+///
+/// This is the payload that [`crate::core::plugin::Plugin::clipboard_boost`]
+/// receives — each plugin performs its own matching logic.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ClipboardPayload {
+    pub text: Option<String>,
+    pub image_path: Option<String>,
+    pub file_paths: Option<Vec<String>>,
+}
+
+impl ClipboardPayload {
+    pub fn is_empty(&self) -> bool {
+        self.text.as_deref().map_or(true, |t| t.trim().is_empty())
+            && self.image_path.is_none()
+            && self.file_paths.as_ref().map_or(true, |p| p.is_empty())
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LauncherContext {
     pub prefix: Option<String>,
     pub input_body: String,
     pub input_kinds: Vec<ContextKind>,
-    pub clipboard_kinds: Vec<ContextKind>,
+    /// Clipboard content payload — set when the launcher opens and the
+    /// latest clipboard record is available.  Plugins that implement
+    /// [`crate::core::plugin::Plugin::clipboard_boost`] receive this to
+    /// perform their own content matching.
+    pub clipboard_payload: Option<ClipboardPayload>,
 }
 
-impl CommandItem {
+impl Command {
     pub fn app_launch(
         path: impl Into<String>,
         title: impl Into<String>,
@@ -272,18 +278,8 @@ impl CommandItem {
             recommended = true;
         }
 
-        let has_explicit_text = !context.input_body.trim().is_empty();
         for matcher in &self.recommend_matchers {
-            let kinds = match matcher.source {
-                ContextSource::Input => &context.input_kinds,
-                ContextSource::Clipboard => {
-                    if has_explicit_text && base_match.score <= 0 && !prefix_hit {
-                        continue;
-                    }
-                    &context.clipboard_kinds
-                }
-            };
-            if kinds.contains(&matcher.kind) {
+            if context.input_kinds.contains(&matcher.kind) {
                 matched.score += matcher.boost;
                 matched.reason = "context";
                 recommended = true;
@@ -313,7 +309,7 @@ impl CommandItem {
             .map(|matched| matched.score)
             .unwrap_or(0);
         let input_context_match = self.recommend_matchers.iter().any(|matcher| {
-            matcher.source == ContextSource::Input && context.input_kinds.contains(&matcher.kind)
+            context.input_kinds.contains(&matcher.kind)
         });
 
         if input_context_match && base_score <= 0 {
@@ -321,6 +317,49 @@ impl CommandItem {
         } else {
             String::new()
         }
+    }
+
+    /// Like [`launch_input`], but when the query is empty and `boost_map`
+    /// contains this command's plugin (i.e. the plugin opted into clipboard
+    /// content via [`crate::core::plugin::Plugin::clipboard_boost`]), the
+    /// matching clipboard payload is returned so the plugin receives it on
+    /// open.
+    ///
+    /// When the query is **non-empty** this delegates straight to
+    /// [`launch_input`] — clipboard content is never leaked while the user
+    /// is actively typing.
+    pub fn launch_input_with_context(
+        &self,
+        query: &str,
+        context: &LauncherContext,
+        boost_map: &std::collections::HashMap<String, i32>,
+    ) -> String {
+        if !query.trim().is_empty() {
+            return self.launch_input(query);
+        }
+
+        if boost_map.get(&self.plugin_id).copied().unwrap_or(0) <= 0 {
+            return String::new();
+        }
+
+        let payload = match &context.clipboard_payload {
+            Some(p) => p,
+            None => return String::new(),
+        };
+
+        if let Some(text) = &payload.text {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+        if let Some(path) = &payload.image_path {
+            return path.clone();
+        }
+        if let Some(paths) = &payload.file_paths {
+            return paths.join("\n");
+        }
+        String::new()
     }
 
     fn with_default_usage_key(mut self) -> Self {
@@ -392,20 +431,12 @@ impl CommandItem {
 }
 
 pub fn build_launcher_context(query: &str, known_prefixes: &[String]) -> LauncherContext {
-    build_launcher_context_with_clipboard_kinds(query, known_prefixes, Vec::new())
-}
-
-pub fn build_launcher_context_with_clipboard_kinds(
-    query: &str,
-    known_prefixes: &[String],
-    clipboard_kinds: Vec<ContextKind>,
-) -> LauncherContext {
     let (prefix, input_body) = parse_prefix(query, known_prefixes);
     LauncherContext {
         input_kinds: detect_text_context_kinds(&input_body),
-        clipboard_kinds: unique_context_kinds(clipboard_kinds),
         prefix,
         input_body,
+        ..Default::default()
     }
 }
 
@@ -553,9 +584,8 @@ mod tests {
 
     #[test]
     fn context_matcher_boosts_matching_content() {
-        let command =
-            CommandItem::plugin_open("json-parser", "JSON 解析", "", ["json"], ["json"], "")
-                .with_recommend_matchers([ContextMatcher::new(ContextKind::Json, 180)]);
+        let command = Command::plugin_open("json-parser", "JSON 解析", "", ["json"], ["json"], "")
+            .with_recommend_matchers([ContextMatcher::new(ContextKind::Json, 180)]);
         let context = build_launcher_context("{\"a\":1}", &[]);
 
         let matched = command.score_with_context(&context).unwrap();
@@ -564,31 +594,8 @@ mod tests {
     }
 
     #[test]
-    fn clipboard_matcher_boosts_empty_query() {
-        let command =
-            CommandItem::plugin_open("json-parser", "JSON 解析", "", ["json"], ["json"], "")
-                .with_recommend_matchers([ContextMatcher::clipboard(ContextKind::Json, 100)]);
-        let context = build_launcher_context_with_clipboard_kinds("", &[], vec![ContextKind::Json]);
-
-        let matched = command.score_with_context(&context).unwrap();
-
-        assert!(matched.score >= 100);
-    }
-
-    #[test]
-    fn clipboard_matcher_skips_unrelated_explicit_query() {
-        let command =
-            CommandItem::plugin_open("json-parser", "JSON 解析", "", ["json"], ["json"], "")
-                .with_recommend_matchers([ContextMatcher::clipboard(ContextKind::Json, 100)]);
-        let context =
-            build_launcher_context_with_clipboard_kinds("calculator", &[], vec![ContextKind::Json]);
-
-        assert!(command.score_with_context(&context).is_none());
-    }
-
-    #[test]
     fn app_actions_use_launch_path_as_usage_key() {
-        let command = CommandItem::plugin_action(
+        let command = Command::plugin_action(
             "app-launcher",
             "open-safari",
             "Safari",
@@ -604,15 +611,14 @@ mod tests {
 
     #[test]
     fn launch_input_strips_matching_command_prefix() {
-        let command =
-            CommandItem::plugin_open("qr-code", "二维码", "", ["qr"], ["qr", "qrcode"], "");
+        let command = Command::plugin_open("qr-code", "二维码", "", ["qr"], ["qr", "qrcode"], "");
 
         assert_eq!(command.launch_input("qr hello world"), "hello world");
     }
 
     #[test]
     fn launch_input_keeps_context_content_when_command_is_recommended() {
-        let command = CommandItem::plugin_open(
+        let command = Command::plugin_open(
             "qr-code",
             "二维码",
             "",
@@ -630,7 +636,7 @@ mod tests {
 
     #[test]
     fn launch_input_ignores_plain_command_search() {
-        let command = CommandItem::plugin_open(
+        let command = Command::plugin_open(
             "qr-code",
             "二维码",
             "",
@@ -641,5 +647,78 @@ mod tests {
         .with_recommend_matchers([ContextMatcher::new(ContextKind::Url, 120)]);
 
         assert_eq!(command.launch_input("二维码"), "");
+    }
+
+    // ── launch_input_with_context ─────────────────────────────────
+
+    #[test]
+    fn launch_input_with_context_returns_text_when_boosted() {
+        let command = Command::plugin_open("json-parser", "JSON 解析", "", ["json"], ["json"], "");
+
+        let mut context = LauncherContext::default();
+        context.clipboard_payload = Some(ClipboardPayload {
+            text: Some(r#"{"key": "value"}"#.to_string()),
+            ..Default::default()
+        });
+
+        let mut boost_map = std::collections::HashMap::new();
+        boost_map.insert("json-parser".to_string(), 100);
+
+        assert_eq!(
+            command.launch_input_with_context("", &context, &boost_map),
+            r#"{"key": "value"}"#
+        );
+    }
+
+    #[test]
+    fn launch_input_with_context_ignores_clipboard_when_query_non_empty() {
+        let command = Command::plugin_open("json-parser", "JSON 解析", "", ["json"], ["json"], "");
+
+        let mut context = LauncherContext::default();
+        context.clipboard_payload = Some(ClipboardPayload {
+            text: Some("secret".to_string()),
+            ..Default::default()
+        });
+
+        let mut boost_map = std::collections::HashMap::new();
+        boost_map.insert("json-parser".to_string(), 100);
+
+        // User typed "计算" — clipboard must not leak
+        assert_eq!(
+            command.launch_input_with_context("计算", &context, &boost_map),
+            ""
+        );
+    }
+
+    #[test]
+    fn launch_input_with_context_returns_image_path_when_boosted() {
+        let command = Command::plugin_open("image-compress", "图片压缩", "", ["img"], ["img"], "");
+
+        let mut context = LauncherContext::default();
+        context.clipboard_payload = Some(ClipboardPayload {
+            image_path: Some("/tmp/clipboard-42.png".to_string()),
+            ..Default::default()
+        });
+
+        let mut boost_map = std::collections::HashMap::new();
+        boost_map.insert("image-compress".to_string(), 160);
+
+        assert_eq!(
+            command.launch_input_with_context("", &context, &boost_map),
+            "/tmp/clipboard-42.png"
+        );
+    }
+
+    #[test]
+    fn launch_input_with_context_empty_when_not_boosted() {
+        let command = Command::plugin_open("json-parser", "JSON 解析", "", ["json"], ["json"], "");
+
+        let context = LauncherContext::default();
+        let boost_map = std::collections::HashMap::new(); // empty
+
+        assert_eq!(
+            command.launch_input_with_context("", &context, &boost_map),
+            ""
+        );
     }
 }

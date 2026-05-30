@@ -33,7 +33,7 @@ pub fn manifest() -> PluginManifest {
             secondary: "请求筛选".into(),
             tertiary: "HTTPS MITM".into(),
         }),
-        command_hint: "启动代理、观察流量、按方法/域名/状态过滤".into(),
+        command_hint: Some("启动代理、观察流量、按方法/域名/状态过滤".into()),
         command_prefixes: ["cap", "capture", "httpcap"]
             .into_iter()
             .map(Into::into)

@@ -33,7 +33,7 @@ pub fn manifest() -> PluginManifest {
             secondary: "JSONPath".into(),
             tertiary: "serde_json".into(),
         }),
-        command_hint: "双栏输入/输出与 JSONPath 查询".into(),
+        command_hint: Some("双栏输入/输出与 JSONPath 查询".into()),
         command_prefixes: ["json", "jq"].into_iter().map(Into::into).collect(),
     }
 }

@@ -7,7 +7,6 @@ use global_hotkey::{
     GlobalHotKeyEvent, GlobalHotKeyEventReceiver, GlobalHotKeyManager, hotkey::HotKey,
 };
 
-static MANAGER: OnceLock<Result<Mutex<GlobalHotKeyManager>, String>> = OnceLock::new();
 static REGISTERED: OnceLock<Mutex<Vec<HotKey>>> = OnceLock::new();
 
 pub struct HotkeyRegistrationResult {
@@ -20,11 +19,11 @@ pub fn register_global_hotkeys(registrations: &[(String, HotKey)]) -> HotkeyRegi
         registered: HashMap::new(),
         errors: HashMap::new(),
     };
-    let manager = match manager() {
+    let manager = match GlobalHotKeyManager::new() {
         Ok(manager) => manager,
         Err(error) => {
             for (shortcut_id, _) in registrations {
-                result.errors.insert(shortcut_id.clone(), error.clone());
+                result.errors.insert(shortcut_id.clone(), error.to_string());
             }
             return result;
         }
@@ -33,24 +32,15 @@ pub fn register_global_hotkeys(registrations: &[(String, HotKey)]) -> HotkeyRegi
     if let Ok(mut registered) = registered_hotkeys().lock() {
         if !registered.is_empty()
             && let Err(error) = manager
-                .lock()
-                .map_err(|_| String::from("global hotkey manager lock poisoned"))
-                .and_then(|manager| {
-                    manager
-                        .unregister_all(&registered)
-                        .map_err(|error| error.to_string())
-                })
+                .unregister_all(&registered)
+                .map_err(|error| error.to_string())
         {
             tracing::warn!(error, "global hotkey unregister failed");
         }
         registered.clear();
 
         for (shortcut_id, hotkey) in registrations {
-            match manager
-                .lock()
-                .map_err(|_| String::from("global hotkey manager lock poisoned"))
-                .and_then(|manager| manager.register(*hotkey).map_err(|error| error.to_string()))
-            {
+            match manager.register(*hotkey).map_err(|error| error.to_string()) {
                 Ok(()) => {
                     registered.push(*hotkey);
                     result.registered.insert(shortcut_id.clone(), hotkey.id());
@@ -74,16 +64,6 @@ pub fn register_global_hotkeys(registrations: &[(String, HotKey)]) -> HotkeyRegi
 
 pub fn event_receiver() -> GlobalHotKeyEventReceiver {
     GlobalHotKeyEvent::receiver().clone()
-}
-
-fn manager() -> Result<&'static Mutex<GlobalHotKeyManager>, &'static String> {
-    MANAGER
-        .get_or_init(|| {
-            GlobalHotKeyManager::new()
-                .map(Mutex::new)
-                .map_err(|error| error.to_string())
-        })
-        .as_ref()
 }
 
 fn registered_hotkeys() -> &'static Mutex<Vec<HotKey>> {

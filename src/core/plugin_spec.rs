@@ -1,9 +1,4 @@
-use std::sync::Arc;
-
-use gpui::SharedString;
 use serde::{Deserialize, Serialize};
-
-use crate::core::icon::IconRef;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PluginCategory {
@@ -51,13 +46,13 @@ pub enum PluginAccent {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PluginWindowMode {
+pub enum ViewMode {
     Inline,
     Window,
     List,
 }
 
-impl PluginWindowMode {
+impl ViewMode {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Inline => "内嵌",
@@ -79,6 +74,44 @@ pub struct WindowSpec {
     pub always_on_top: bool,
 }
 
+// ── Compatibility aliases for ongoing Manifest → PluginManifest migration ──
+
+pub type PluginWindowMode = ViewMode;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PluginVisualSpec {
+    pub icon: crate::core::icon::IconRef,
+    pub accent: PluginAccent,
+    pub category: PluginCategory,
+    pub status: PluginStatus,
+    pub mode: PluginWindowMode,
+    pub window: WindowSpec,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PluginStats {
+    pub primary: std::sync::Arc<str>,
+    pub secondary: std::sync::Arc<str>,
+    pub tertiary: std::sync::Arc<str>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PluginOverviewSection {
+    pub title: std::sync::Arc<str>,
+    pub body: std::sync::Arc<str>,
+    pub items: Vec<std::sync::Arc<str>>,
+}
+
+impl PluginOverviewSection {
+    pub fn new(title: impl Into<std::sync::Arc<str>>, body: impl Into<std::sync::Arc<str>>) -> Self {
+        Self {
+            title: title.into(),
+            body: body.into(),
+            items: Vec::new(),
+        }
+    }
+}
+
 impl WindowSpec {
     pub const fn fixed(width: f32, height: f32) -> Self {
         Self {
@@ -98,38 +131,6 @@ impl WindowSpec {
         Self {
             size: WindowSize::Ratio { width, height },
             always_on_top: false,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PluginVisualSpec {
-    pub icon: IconRef,
-    pub accent: PluginAccent,
-    pub category: PluginCategory,
-    pub status: PluginStatus,
-    pub mode: PluginWindowMode,
-    pub window: WindowSpec,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PluginStats {
-    pub primary: Arc<str>,
-    pub secondary: Arc<str>,
-    pub tertiary: Arc<str>,
-}
-
-#[derive(Clone, Debug)]
-pub struct PluginOverviewSection {
-    pub title: SharedString,
-    pub body: SharedString,
-}
-
-impl PluginOverviewSection {
-    pub fn new(title: impl Into<SharedString>, body: impl Into<SharedString>) -> Self {
-        Self {
-            title: title.into(),
-            body: body.into(),
         }
     }
 }

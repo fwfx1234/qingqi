@@ -42,7 +42,7 @@ impl Plugin for HttpCaptureRuntime {
         )]
     }
 
-    fn commands(&self) -> Vec<CommandItem> {
+    fn commands(&self, _query: &str) -> Vec<CommandItem> {
         let manifest = self.manifest();
         vec![
             CommandItem::plugin_open(

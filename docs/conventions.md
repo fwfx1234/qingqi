@@ -242,23 +242,23 @@ cx.spawn(async move |view, acx| {
 ## 7. UI 组件与 gpui-component
 
 项目依赖 `gpui-component`（高层控件库，`gpui_component::init(cx)` 已在 `app/runtime.rs` 初始化一次）。
-UI 由三层组成，**按"低层够用就不用高层"的顺序选**：
+UI 由三层组成，**交互控件优先 gpui-component，布局容器才用原生 `div()`**：
 
 ```text
-1. 原生 GPUI div()          布局、容器、一次性简单元素
-2. 项目 ui:: 原语 (app/ui.rs) 应用专属、需视觉一致的控件（按钮/卡片/pill/空态/分隔…）
-3. gpui-component           复杂/有状态/大数据控件（table、虚拟 list、编辑器、tab、form、overlay）
+1. gpui-component           首选：button、tab、form、badge/tag、switch、checkbox、slider、progress、table、编辑器、overlay 等交互控件
+2. 项目 ui:: adapter/origin  当默认效果不满足项目视觉时，包 adapter/wrapper，统一 token、圆角、间距、hover/disabled/loading
+3. 原生 GPUI div()          布局、容器、一次性简单元素；禁止用 div 手写库已提供的复杂控件
 ```
 
 ### 7.1 选型铁规则
+- **先查 gpui-component**：button、tab/segmented、switch/checkbox、slider/progress、badge/tag、form 行、table、编辑器、overlay，默认优先使用组件库。
+- **效果不满足就改造，不绕开**：通过主题覆盖、本地 adapter、项目级 wrapper 让组件服从项目 token；禁止因为默认样式不完全匹配就在插件 view 里重新手写一套按钮/chip/form。
 - **大列表/表格必须虚拟化**：`gpui_component::table` 或虚拟 list（或 GPUI `uniform_list`）。行数可能
   上百、或单行渲染昂贵 → 一律虚拟化（呼应 §4 铁律 3）。**禁止 `div().children(全量)`。**
 - **编辑器类输入**（脚本 / JSON / 日志 / 大文本）→ `gpui_component::input::InputState`（code 模式）。
-  普通单行/简单字段 → 项目 `app::text_input::TextInput`。**禁止给普通字段套 InputState。**
-- **tab/segmented、switch/checkbox/slider/progress、badge/tag、form 行** → 优先 gpui-component，别再手写。
-- **简单按钮**：邻近已是组件风格就用 `gpui_component::button::Button`，否则用 `ui::ui_button`。
-  **同一界面禁止混用多种按钮风格。**
-- 不为"用上库"把 `div` 能做的换成组件；也不为省事手写库已提供的复杂控件。
+  普通单行/简单字段可用项目 `app::text_input::TextInput` adapter。**禁止给普通字段套重型 code editor。**
+- **简单按钮**：优先 `gpui_component::button::Button` 或项目对它的 adapter。**同一界面禁止混用多种按钮风格。**
+- `div()` 只负责布局、容器、一次性简单元素；不为“用上库”把纯布局换成组件，也不为省事手写库已提供的复杂控件。
 
 ### 7.2 Root 规则（错用会 panic）
 - overlay 类 API——`open_sheet` / `open_dialog` / 通知 / `InputState` 焦点管理——**要求窗口根是
@@ -275,8 +275,13 @@ UI 由三层组成，**按"低层够用就不用高层"的顺序选**：
 - **禁止把 `InputState`/`Button`/`Tab` 等组件 UI 实体存进 service/store**（属 view 层）。
 
 ### 7.4 样式归属
-gpui-component 必须服从项目主题 token（§8）。组件默认配色/圆角/间距与目标不符时**本地覆盖**或包
-adapter；**≥2 个插件复用同一改造组件后**才抽公共 wrapper，别提前抽象。
+gpui-component 必须服从项目主题 token（§8）。组件默认配色/圆角/间距与目标不符时，优先顺序是：
+
+1. 配置组件自带样式参数；
+2. 包本地 adapter 验证效果；
+3. 两个及以上插件复用同一改造后，抽到项目公共 wrapper（`app::ui` 或 `app::ui::components`）。
+
+禁止因为默认效果不完全满足目标，就在 feature view 中长期保留第三套手写控件。
 
 > 操作细节（Root 迁移步骤、内存 RSS 测量、组件选型表）见 [gpui-component-guide.md](gpui-component-guide.md)。
 > 本节是规范（rules），该指南是操作手册（how-to）。

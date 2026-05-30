@@ -31,6 +31,7 @@ pub struct AppIndexSnapshot {
     pub icon_refresh_running: bool,
     pub last_scan: Option<String>,
     pub last_error: Option<String>,
+    pub scan_completed_once: bool,
 }
 
 #[derive(Debug)]
@@ -44,6 +45,7 @@ struct AppIndexState {
     revision: u64,
     probe_running: bool,
     last_probe_at: u64,
+    scan_completed_once: bool,
 }
 
 pub struct AppIndexService {
@@ -69,6 +71,7 @@ impl AppIndexService {
             Ok(cache) => (cache, None),
             Err(error) => (AppIndexCache::default(), Some(error.to_string())),
         };
+        let scan_completed_once = cache.last_scan.is_some();
         let usage = store.usage_map().unwrap_or_else(|error| {
             tracing::warn!(error = %error, "app launch usage cache load failed");
             HashMap::new()
@@ -88,6 +91,7 @@ impl AppIndexService {
                 revision: 0,
                 probe_running: false,
                 last_probe_at: 0,
+                scan_completed_once,
             }),
             events,
         }
@@ -101,6 +105,7 @@ impl AppIndexService {
             icon_refresh_running: state.icon_refresh_running,
             last_scan: state.last_scan.clone(),
             last_error: state.last_error.clone(),
+            scan_completed_once: state.scan_completed_once,
         }
     }
 
@@ -291,6 +296,7 @@ impl AppIndexService {
         state.icon_refresh_running = false;
         state.last_scan = Some(timestamp);
         state.last_error = cache_error;
+        state.scan_completed_once = true;
         state.revision += 1;
         drop(state);
         self.publish_commands_changed();
@@ -508,6 +514,7 @@ mod tests {
                 revision: 0,
                 probe_running: false,
                 last_probe_at: 0,
+                scan_completed_once: true,
             }),
             events: None,
         };
@@ -534,6 +541,7 @@ mod tests {
                 revision: 7,
                 probe_running: false,
                 last_probe_at: 0,
+                scan_completed_once: true,
             }),
             events: None,
         };
@@ -588,6 +596,7 @@ mod tests {
                 revision: 0,
                 probe_running: false,
                 last_probe_at: 0,
+                scan_completed_once: true,
             }),
             events: None,
         };

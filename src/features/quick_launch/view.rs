@@ -9,7 +9,7 @@ use gpui::{
 use crate::{
     app::{
         text_input::{TextInput, TextInputStyle},
-        theme,
+        theme, ui::{self, components},
     },
     features::quick_launch::{
         model::{
