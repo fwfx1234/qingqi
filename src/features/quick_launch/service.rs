@@ -1083,6 +1083,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(target_os = "windows", ignore = "requires Unix shell (/bin/zsh)")]
     fn start_action_updates_running_state_and_records_run() {
         let service = test_service("async.db");
         let draft = QuickActionDraft::script("异步动作", "sleep then echo", "sleep 0.1; echo done");
@@ -1133,6 +1134,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(target_os = "windows", ignore = "requires Unix shell (/bin/zsh)")]
     fn stop_action_records_stopped_status() {
         let service = test_service("stop.db");
         let draft = QuickActionDraft::script("可停止动作", "sleep long", "sleep 2; echo done");
@@ -1168,6 +1170,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(target_os = "windows", ignore = "requires Unix shell (/bin/zsh)")]
     fn timeout_records_timeout_status() {
         let service = test_service("timeout.db");
         let mut draft =

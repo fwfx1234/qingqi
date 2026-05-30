@@ -16,13 +16,13 @@ impl IntoElement for AboutPage {
 
 impl RenderOnce for AboutPage {
     fn render(self, _window: &mut Window, _cx: &mut gpui::App) -> impl IntoElement {
-        let dark = crate::app::theme_mode::is_dark();
+        let _dark = crate::app::theme_mode::is_dark();
 
         div()
             .size_full()
-            .bg(theme::semantic(dark).bg_page)
+            .bg(theme::semantic().bg_page)
             .font_family(ui::font_ui())
-            .text_color(theme::semantic(dark).text_primary)
+            .text_color(theme::semantic().text_primary)
             .flex()
             .items_center()
             .justify_center()
@@ -54,14 +54,14 @@ impl RenderOnce for AboutPage {
                     .child(
                         div()
                             .text_size(px(13.0))
-                            .text_color(theme::semantic(dark).text_regular)
+                            .text_color(theme::semantic().text_regular)
                             .child(format!("版本 {APP_VERSION}")),
                     )
                     // ── Tech stack ────────────────────────────────────────
                     .child(
                         div()
                             .text_size(px(12.0))
-                            .text_color(theme::semantic(dark).text_secondary)
+                            .text_color(theme::semantic().text_secondary)
                             .font_family("SF Mono")
                             .child("Rust + GPUI"),
                     )
@@ -71,16 +71,16 @@ impl RenderOnce for AboutPage {
                             .w(px(420.0))
                             .h(px(44.0))
                             .rounded(px(10.0))
-                            .bg(theme::semantic(dark).bg_surface)
+                            .bg(theme::semantic().bg_surface)
                             .border_1()
-                            .border_color(theme::semantic(dark).border_default)
+                            .border_color(theme::semantic().border_default)
                             .flex()
                             .items_center()
                             .justify_center()
                             .child(
                                 div()
                                     .text_size(px(12.0))
-                                    .text_color(theme::semantic(dark).text_regular)
+                                    .text_color(theme::semantic().text_regular)
                                     .child("基于 Rust + GPUI 的桌面工具箱"),
                             ),
                     )
@@ -121,7 +121,7 @@ impl RenderOnce for AboutPage {
                     // ── Status bar ─────────────────────────────────────────
                     .child(ui::status_bar(
                         format!("Qingqi v{APP_VERSION} · Rust + GPUI"),
-                        theme::semantic(dark).text_secondary,
+                        theme::semantic().text_secondary,
                     )),
             )
     }
@@ -129,13 +129,13 @@ impl RenderOnce for AboutPage {
 
 fn section_card(title: &'static str, children: impl IntoElement) -> impl IntoElement {
     let _dark = theme_mode::is_dark();
-    let dark = theme_mode::is_dark();
+    let _dark = theme_mode::is_dark();
     div()
         .w(px(420.0))
         .rounded(px(10.0))
-        .bg(theme::semantic(dark).bg_surface)
+        .bg(theme::semantic().bg_surface)
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
+        .border_color(theme::semantic().border_default)
         .p_4()
         .flex()
         .flex_col()
@@ -151,7 +151,7 @@ fn section_card(title: &'static str, children: impl IntoElement) -> impl IntoEle
 }
 
 fn tech_row(label: &'static str, value: &'static str) -> impl IntoElement {
-    let dark = theme_mode::is_dark();
+    let _dark = theme_mode::is_dark();
     div()
         .flex()
         .items_center()
@@ -159,20 +159,20 @@ fn tech_row(label: &'static str, value: &'static str) -> impl IntoElement {
         .child(
             div()
                 .text_size(px(13.0))
-                .text_color(theme::semantic(dark).text_regular)
+                .text_color(theme::semantic().text_regular)
                 .child(label),
         )
         .child(
             div()
                 .text_size(px(13.0))
                 .font_family("SF Mono")
-                .text_color(theme::semantic(dark).text_primary)
+                .text_color(theme::semantic().text_primary)
                 .child(value),
         )
 }
 
 fn desc_row(label: &'static str, desc: &'static str) -> impl IntoElement {
-    let dark = theme_mode::is_dark();
+    let _dark = theme_mode::is_dark();
     div()
         .flex()
         .flex_col()
@@ -181,13 +181,13 @@ fn desc_row(label: &'static str, desc: &'static str) -> impl IntoElement {
             div()
                 .text_size(px(13.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic(dark).text_primary)
+                .text_color(theme::semantic().text_primary)
                 .child(label),
         )
         .child(
             div()
                 .text_size(px(12.0))
-                .text_color(theme::semantic(dark).text_regular)
+                .text_color(theme::semantic().text_regular)
                 .child(desc),
         )
 }

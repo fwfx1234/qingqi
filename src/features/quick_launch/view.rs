@@ -1112,8 +1112,8 @@ impl Render for QuickLaunchView {
 
         div()
             .size_full()
-            .bg(theme::semantic(dark).bg_page)
-            .text_color(theme::semantic(dark).text_primary)
+            .bg(theme::semantic().bg_page)
+            .text_color(theme::semantic().text_primary)
             .font_family(ui::font_ui())
             .p_4()
             .flex()
@@ -1177,7 +1177,7 @@ impl Render for QuickLaunchView {
                     .child(
                         div()
                             .text_size(px(12.0))
-                            .text_color(theme::semantic(dark).text_secondary)
+                            .text_color(theme::semantic().text_secondary)
                             .child(message),
                     ),
             )
@@ -1198,8 +1198,8 @@ impl Render for QuickLaunchView {
                     .flex_1()
                     .rounded(px(8.0))
                     .border_1()
-                    .border_color(theme::semantic(dark).border_default)
-                    .bg(theme::semantic(dark).bg_surface);
+                    .border_color(theme::semantic().border_default)
+                    .bg(theme::semantic().bg_surface);
                 if actions.is_empty() {
                     list_container
                         .overflow_y_scroll()
@@ -1330,8 +1330,8 @@ fn search_row(
                 .h(px(36.0))
                 .rounded(px(6.0))
                 .border_1()
-                .border_color(theme::semantic(dark).border_default)
-                .bg(theme::semantic(dark).bg_surface)
+                .border_color(theme::semantic().border_default)
+                .bg(theme::semantic().bg_surface)
                 .child(query_input),
         )
         .child(if selected_running {
@@ -1384,8 +1384,8 @@ fn management_row(
     div()
         .rounded(px(8.0))
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_surface)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_surface)
         .px_3()
         .py_2()
         .flex()
@@ -1416,16 +1416,16 @@ fn management_row(
                             div().into_any_element()
                         })
                         .child(if action.enabled {
-                            status_chip(String::from("已启用"), theme::semantic(dark).success, dark)
+                            status_chip(String::from("已启用"), theme::semantic().success, dark)
                                 .into_any_element()
                         } else {
-                            status_chip(String::from("已停用"), theme::semantic(dark).warning, dark)
+                            status_chip(String::from("已停用"), theme::semantic().warning, dark)
                                 .into_any_element()
                         })
                         .child(
                             div()
                                 .text_size(px(11.0))
-                                .text_color(theme::semantic(dark).text_secondary)
+                                .text_color(theme::semantic().text_secondary)
                                 .child(subtitle_for(&action)),
                         ),
                 ),
@@ -1453,7 +1453,7 @@ fn management_row(
         }))
 }
 
-fn empty_state(has_query: bool, dark: bool) -> impl IntoElement {
+fn empty_state(has_query: bool, _dark: bool) -> impl IntoElement {
     let (title, subtitle) = if has_query {
         ("没有匹配的动作", "换个关键词，或者清空当前搜索")
     } else {
@@ -1475,7 +1475,7 @@ fn empty_state(has_query: bool, dark: bool) -> impl IntoElement {
             div()
                 .size(px(44.0))
                 .rounded(px(12.0))
-                .bg(theme::semantic(dark).bg_subtle)
+                .bg(theme::semantic().bg_subtle)
                 .flex()
                 .items_center()
                 .justify_center()
@@ -1494,7 +1494,7 @@ fn empty_state(has_query: bool, dark: bool) -> impl IntoElement {
         .child(
             div()
                 .text_size(px(12.0))
-                .text_color(theme::semantic(dark).text_secondary)
+                .text_color(theme::semantic().text_secondary)
                 .child(subtitle),
         )
 }
@@ -1511,7 +1511,7 @@ fn action_row(
     let row_bg = if selected {
         ui::row_hover(dark)
     } else {
-        theme::semantic(dark).bg_surface
+        theme::semantic().bg_surface
     };
     let parameter_count = action.parameter_specs().len();
     let action_for_run = action.clone();
@@ -1526,7 +1526,7 @@ fn action_row(
         .h(px(64.0))
         .px_3()
         .border_b_1()
-        .border_color(theme::semantic(dark).border_default)
+        .border_color(theme::semantic().border_default)
         .bg(row_bg)
         .hover(move |style| style.bg(ui::row_hover(dark)).cursor_pointer())
         .on_click({
@@ -1542,7 +1542,7 @@ fn action_row(
             div()
                 .size(px(36.0))
                 .rounded(px(8.0))
-                .bg(theme::semantic(dark).bg_subtle)
+                .bg(theme::semantic().bg_subtle)
                 .flex()
                 .items_center()
                 .justify_center()
@@ -1577,7 +1577,7 @@ fn action_row(
                             div().into_any_element()
                         })
                         .child(if running {
-                            status_chip(String::from("运行中"), theme::semantic(dark).success, dark)
+                            status_chip(String::from("运行中"), theme::semantic().success, dark)
                                 .into_any_element()
                         } else {
                             div().into_any_element()
@@ -1591,7 +1591,7 @@ fn action_row(
                         .child(if action.enabled {
                             div().into_any_element()
                         } else {
-                            status_chip("已停用".to_string(), theme::semantic(dark).warning, dark)
+                            status_chip("已停用".to_string(), theme::semantic().warning, dark)
                                 .into_any_element()
                         }),
                 )
@@ -1599,7 +1599,7 @@ fn action_row(
                     div()
                         .text_size(px(11.0))
                         .font_family("SF Mono")
-                        .text_color(theme::semantic(dark).text_regular)
+                        .text_color(theme::semantic().text_regular)
                         .child(subtitle_for(&action)),
                 ),
         )
@@ -1668,8 +1668,8 @@ fn action_editor_sheet(
         .w(px(560.0))
         .rounded(theme::radius_sheet())
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_elevated)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_elevated)
         .shadow_lg()
         .flex()
         .flex_col()
@@ -1678,7 +1678,7 @@ fn action_editor_sheet(
                 .px_4()
                 .py_3()
                 .border_b_1()
-                .border_color(theme::semantic(dark).border_default)
+                .border_color(theme::semantic().border_default)
                 .flex()
                 .items_center()
                 .justify_between()
@@ -1712,7 +1712,7 @@ fn action_editor_sheet(
                             .child(
                                 div()
                                     .text_size(px(12.0))
-                                    .text_color(theme::semantic(dark).text_secondary)
+                                    .text_color(theme::semantic().text_secondary)
                                     .child("类型"),
                             )
                             .child(
@@ -1768,7 +1768,7 @@ fn action_editor_sheet(
                             .child(
                                 div()
                                     .text_size(px(12.0))
-                                    .text_color(theme::semantic(dark).text_secondary)
+                                    .text_color(theme::semantic().text_secondary)
                                     .child("脚本类型"),
                             )
                             .child(
@@ -1852,7 +1852,7 @@ fn action_editor_sheet(
                             .child(
                                 div()
                                     .text_size(px(12.0))
-                                    .text_color(theme::semantic(dark).text_secondary)
+                                    .text_color(theme::semantic().text_secondary)
                                     .child("脚本来源"),
                             )
                             .child(
@@ -1921,7 +1921,7 @@ fn action_editor_sheet(
                     .child(
                         div()
                             .text_size(px(11.0))
-                            .text_color(theme::semantic(dark).text_secondary)
+                            .text_color(theme::semantic().text_secondary)
                             .child(target_hint),
                     )
                     .child(if editor.kind != ActionKind::OpenUrl {
@@ -1961,7 +1961,7 @@ fn action_editor_sheet(
                             .child(
                                 div()
                                     .text_size(px(12.0))
-                                    .text_color(theme::semantic(dark).text_secondary)
+                                    .text_color(theme::semantic().text_secondary)
                                     .child("反馈方式"),
                             )
                             .child(
@@ -2037,8 +2037,8 @@ fn action_editor_sheet(
                             .justify_between()
                             .rounded(px(8.0))
                             .border_1()
-                            .border_color(theme::semantic(dark).border_default)
-                            .bg(theme::semantic(dark).bg_surface)
+                            .border_color(theme::semantic().border_default)
+                            .bg(theme::semantic().bg_surface)
                             .px_3()
                             .py_2()
                             .child(
@@ -2050,7 +2050,7 @@ fn action_editor_sheet(
                                     .child(
                                         div()
                                             .text_size(px(11.0))
-                                            .text_color(theme::semantic(dark).text_secondary)
+                                            .text_color(theme::semantic().text_secondary)
                                             .child(if editor.enabled {
                                                 "创建后会注册到启动器"
                                             } else {
@@ -2078,7 +2078,7 @@ fn action_editor_sheet(
                     .child(
                         div()
                             .text_size(px(11.0))
-                            .text_color(theme::semantic(dark).text_secondary)
+                            .text_color(theme::semantic().text_secondary)
                             .child(
                                 "提示：在脚本、解释器、路径、参数、cwd、env 中使用 ${name} 可声明运行时参数。",
                             ),
@@ -2090,7 +2090,7 @@ fn action_editor_sheet(
                 .px_4()
                 .py_3()
                 .border_t_1()
-                .border_color(theme::semantic(dark).border_default)
+                .border_color(theme::semantic().border_default)
                 .flex()
                 .justify_end()
                 .gap_2()
@@ -2117,7 +2117,7 @@ fn editor_target_placeholder(kind: ActionKind, script_source: ScriptSource) -> &
     }
 }
 
-fn editor_field(label: &'static str, input: Entity<TextInput>, dark: bool) -> impl IntoElement {
+fn editor_field(label: &'static str, input: Entity<TextInput>, _dark: bool) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -2125,15 +2125,15 @@ fn editor_field(label: &'static str, input: Entity<TextInput>, dark: bool) -> im
         .child(
             div()
                 .text_size(px(12.0))
-                .text_color(theme::semantic(dark).text_secondary)
+                .text_color(theme::semantic().text_secondary)
                 .child(label),
         )
         .child(
             div()
                 .rounded(px(8.0))
                 .border_1()
-                .border_color(theme::semantic(dark).border_default)
-                .bg(theme::semantic(dark).bg_surface)
+                .border_color(theme::semantic().border_default)
+                .bg(theme::semantic().bg_surface)
                 .child(input),
         )
 }
@@ -2153,7 +2153,7 @@ fn editor_picker_field(
         .child(
             div()
                 .text_size(px(12.0))
-                .text_color(theme::semantic(dark).text_secondary)
+                .text_color(theme::semantic().text_secondary)
                 .child(label),
         )
         .child(
@@ -2166,8 +2166,8 @@ fn editor_picker_field(
                         .flex_1()
                         .rounded(px(8.0))
                         .border_1()
-                        .border_color(theme::semantic(dark).border_default)
-                        .bg(theme::semantic(dark).bg_surface)
+                        .border_color(theme::semantic().border_default)
+                        .bg(theme::semantic().bg_surface)
                         .child(input),
                 )
                 .child(action_button(button_label, dark, move |_, cx| {
@@ -2185,8 +2185,8 @@ fn pending_sheet(
         .w(px(520.0))
         .rounded(theme::radius_sheet())
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_elevated)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_elevated)
         .shadow_lg()
         .flex()
         .flex_col()
@@ -2195,7 +2195,7 @@ fn pending_sheet(
                 .px_4()
                 .py_3()
                 .border_b_1()
-                .border_color(theme::semantic(dark).border_default)
+                .border_color(theme::semantic().border_default)
                 .flex()
                 .items_center()
                 .justify_between()
@@ -2213,7 +2213,7 @@ fn pending_sheet(
                         .child(
                             div()
                                 .text_size(px(12.0))
-                                .text_color(theme::semantic(dark).text_secondary)
+                                .text_color(theme::semantic().text_secondary)
                                 .child("该动作包含参数占位符，先填写再执行"),
                         ),
                 )
@@ -2238,7 +2238,7 @@ fn pending_sheet(
                 .px_4()
                 .py_3()
                 .border_t_1()
-                .border_color(theme::semantic(dark).border_default)
+                .border_color(theme::semantic().border_default)
                 .flex()
                 .justify_end()
                 .gap_2()
@@ -2254,7 +2254,7 @@ fn pending_sheet(
         )
 }
 
-fn parameter_row(field: PendingParameterField, index: usize, dark: bool) -> impl IntoElement {
+fn parameter_row(field: PendingParameterField, index: usize, _dark: bool) -> impl IntoElement {
     div()
         .id(("quick-launch-parameter", index))
         .flex()
@@ -2263,15 +2263,15 @@ fn parameter_row(field: PendingParameterField, index: usize, dark: bool) -> impl
         .child(
             div()
                 .text_size(px(12.0))
-                .text_color(theme::semantic(dark).text_secondary)
+                .text_color(theme::semantic().text_secondary)
                 .child(field.name),
         )
         .child(
             div()
                 .rounded(px(8.0))
                 .border_1()
-                .border_color(theme::semantic(dark).border_default)
-                .bg(theme::semantic(dark).bg_surface)
+                .border_color(theme::semantic().border_default)
+                .bg(theme::semantic().bg_surface)
                 .child(field.input),
         )
 }
@@ -2285,8 +2285,8 @@ fn history_sheet(
         .w(px(680.0))
         .rounded(theme::radius_sheet())
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_elevated)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_elevated)
         .shadow_lg()
         .flex()
         .flex_col()
@@ -2295,7 +2295,7 @@ fn history_sheet(
                 .px_4()
                 .py_3()
                 .border_b_1()
-                .border_color(theme::semantic(dark).border_default)
+                .border_color(theme::semantic().border_default)
                 .flex()
                 .items_center()
                 .justify_between()
@@ -2313,7 +2313,7 @@ fn history_sheet(
                         .child(
                             div()
                                 .text_size(px(12.0))
-                                .text_color(theme::semantic(dark).text_secondary)
+                                .text_color(theme::semantic().text_secondary)
                                 .child(format!("最近 {} 条记录", history.runs.len())),
                         ),
                 )
@@ -2346,7 +2346,7 @@ fn history_sheet(
                 .items_center()
                 .justify_center()
                 .text_size(px(12.0))
-                .text_color(theme::semantic(dark).text_secondary)
+                .text_color(theme::semantic().text_secondary)
                 .child("还没有运行记录")
                 .into_any_element()
         } else {
@@ -2392,8 +2392,8 @@ fn history_row(
         .id(("quick-launch-history-row", index))
         .rounded(px(10.0))
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_surface)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_surface)
         .px_3()
         .py_3()
         .flex()
@@ -2412,14 +2412,14 @@ fn history_row(
                 .child(
                     div()
                         .text_size(px(11.0))
-                        .text_color(theme::semantic(dark).text_secondary)
+                        .text_color(theme::semantic().text_secondary)
                         .child(run.started_at.clone()),
                 )
                 .child(div().flex_1())
                 .child(
                     div()
                         .text_size(px(11.0))
-                        .text_color(theme::semantic(dark).text_secondary)
+                        .text_color(theme::semantic().text_secondary)
                         .child(format!("{} ms", run.duration_ms)),
                 )
                 .child(if let Some(code) = run.exit_code {
@@ -2440,7 +2440,7 @@ fn history_row(
                         .text_size(px(11.0))
                         .font_family("SF Mono")
                         .text_color(if run.stderr.trim().is_empty() {
-                            theme::semantic(dark).text_regular
+                            theme::semantic().text_regular
                         } else {
                             tone
                         })
@@ -2470,7 +2470,7 @@ fn result_sheet(
     let ok = result.run.status == RunStatus::Success;
     let status_line = result_meta_text(&result.run);
     let stderr_color = if result.run.stderr.trim().is_empty() {
-        theme::semantic(dark).text_regular
+        theme::semantic().text_regular
     } else {
         tone
     };
@@ -2481,8 +2481,8 @@ fn result_sheet(
         .w(px(600.0))
         .rounded(theme::radius_sheet())
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_elevated)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_elevated)
         .shadow_lg()
         .flex()
         .flex_col()
@@ -2491,7 +2491,7 @@ fn result_sheet(
                 .px_4()
                 .py_3()
                 .border_b_1()
-                .border_color(theme::semantic(dark).border_default)
+                .border_color(theme::semantic().border_default)
                 .flex()
                 .items_center()
                 .justify_between()
@@ -2553,7 +2553,7 @@ fn result_sheet(
                                     .child(
                                         div()
                                             .text_size(px(11.0))
-                                            .text_color(theme::semantic(dark).text_secondary)
+                                            .text_color(theme::semantic().text_secondary)
                                             .child(status_line),
                                     ),
                             ),
@@ -2561,14 +2561,14 @@ fn result_sheet(
                     .child(
                         div()
                             .text_size(px(11.0))
-                            .text_color(theme::semantic(dark).text_secondary)
+                            .text_color(theme::semantic().text_secondary)
                             .child(result.run.message.clone()),
                     )
                     .child(result_block(
                         handle.clone(),
                         "stdout",
                         result.run.stdout,
-                        theme::semantic(dark).text_primary,
+                        theme::semantic().text_primary,
                         "复制 stdout",
                         QuickLaunchView::copy_result_stdout,
                         dark,
@@ -2589,7 +2589,7 @@ fn result_sheet(
                 .px_4()
                 .py_3()
                 .border_t_1()
-                .border_color(theme::semantic(dark).border_default)
+                .border_color(theme::semantic().border_default)
                 .flex()
                 .justify_between()
                 .child(action_button("重新运行", dark, move |_, cx| {
@@ -2624,7 +2624,7 @@ fn result_block(
                 .child(
                     div()
                         .text_size(px(11.0))
-                        .text_color(theme::semantic(dark).text_secondary)
+                        .text_color(theme::semantic().text_secondary)
                         .child(title),
                 )
                 .child(action_button(copy_label, dark, move |_, cx| {
@@ -2635,8 +2635,8 @@ fn result_block(
             div()
                 .rounded(px(8.0))
                 .border_1()
-                .border_color(theme::semantic(dark).border_default)
-                .bg(theme::semantic(dark).bg_surface)
+                .border_color(theme::semantic().border_default)
+                .bg(theme::semantic().bg_surface)
                 .max_h(px(180.0))
                 .child(
                     div()
@@ -2700,8 +2700,8 @@ fn menu_overlay_shell(
                 .w(px(180.0))
                 .rounded(px(10.0))
                 .border_1()
-                .border_color(theme::semantic(dark).border_default)
-                .bg(theme::semantic(dark).bg_elevated)
+                .border_color(theme::semantic().border_default)
+                .bg(theme::semantic().bg_elevated)
                 .shadow_lg()
                 .p_1()
                 .flex()
@@ -2713,7 +2713,7 @@ fn menu_overlay_shell(
 
 fn primary_action_button(
     label: &'static str,
-    dark: bool,
+    _dark: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement {
     div()
@@ -2722,12 +2722,8 @@ fn primary_action_button(
         .min_w(px(82.0))
         .px_3()
         .rounded(px(6.0))
-        .bg(theme::semantic(dark).primary)
-        .hover(move |style| {
-            style
-                .bg(theme::semantic(dark).primary_active)
-                .cursor_pointer()
-        })
+        .bg(theme::semantic().primary)
+        .hover(move |style| style.bg(theme::semantic().primary_active).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
@@ -2749,14 +2745,14 @@ fn action_button(
         .px_3()
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_surface)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_surface)
         .hover(move |style| style.bg(ui::row_hover(dark)).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(12.0))
-        .text_color(theme::semantic(dark).text_primary)
+        .text_color(theme::semantic().text_primary)
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
@@ -2771,14 +2767,14 @@ fn icon_action_button(
         .size(px(30.0))
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_surface)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_surface)
         .hover(move |style| style.bg(ui::row_hover(dark)).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(14.0))
-        .text_color(theme::semantic(dark).text_primary)
+        .text_color(theme::semantic().text_primary)
         .child(label)
         .on_click(move |event, window, cx| on_click(event, window, cx))
 }
@@ -2883,20 +2879,20 @@ fn action_menu_item(
         .items_center()
         .text_size(px(12.0))
         .text_color(if destructive {
-            theme::semantic(dark).danger
+            theme::semantic().danger
         } else {
-            theme::semantic(dark).text_primary
+            theme::semantic().text_primary
         })
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
-fn action_menu_separator(dark: bool) -> impl IntoElement {
+fn action_menu_separator(_dark: bool) -> impl IntoElement {
     div()
         .w_full()
         .h(px(1.0))
         .my(px(2.0))
-        .bg(theme::semantic(dark).border_default)
+        .bg(theme::semantic().border_default)
 }
 
 fn menu_position(click: Point<Pixels>, window: &Window) -> Point<Pixels> {
@@ -2921,8 +2917,8 @@ fn delete_confirm_sheet(
         .w(px(420.0))
         .rounded(theme::radius_sheet())
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_elevated)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_elevated)
         .shadow_lg()
         .flex()
         .flex_col()
@@ -2943,7 +2939,7 @@ fn delete_confirm_sheet(
                     div()
                         .text_size(px(12.0))
                         .line_height(px(18.0))
-                        .text_color(theme::semantic(dark).text_secondary)
+                        .text_color(theme::semantic().text_secondary)
                         .child(format!(
                             "确定要删除动作 “{}” 吗？此操作不可撤销。",
                             delete_confirm.action_name
@@ -2955,7 +2951,7 @@ fn delete_confirm_sheet(
                 .px_4()
                 .py_3()
                 .border_t_1()
-                .border_color(theme::semantic(dark).border_default)
+                .border_color(theme::semantic().border_default)
                 .flex()
                 .justify_end()
                 .gap_2()
@@ -2987,11 +2983,11 @@ fn destructive_action_button(
         .min_w(px(68.0))
         .px_3()
         .rounded(px(6.0))
-        .bg(theme::semantic(dark).danger)
+        .bg(theme::semantic().danger)
         .hover(move |style| {
             style
                 .bg(theme::rgba_with_alpha(
-                    theme::semantic(dark).danger,
+                    theme::semantic().danger,
                     if dark { 0.88 } else { 0.92 },
                 ))
                 .cursor_pointer()
@@ -3005,12 +3001,12 @@ fn destructive_action_button(
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
-fn kind_chip(label: String, dark: bool) -> impl IntoElement {
+fn kind_chip(label: String, _dark: bool) -> impl IntoElement {
     div()
         .h(px(20.0))
         .px(px(8.0))
         .rounded(px(4.0))
-        .bg(theme::semantic(dark).primary_bg)
+        .bg(theme::semantic().primary_bg)
         .flex()
         .items_center()
         .justify_center()
@@ -3021,17 +3017,17 @@ fn kind_chip(label: String, dark: bool) -> impl IntoElement {
         .child(label)
 }
 
-fn subtle_chip(label: String, dark: bool) -> impl IntoElement {
+fn subtle_chip(label: String, _dark: bool) -> impl IntoElement {
     div()
         .h(px(20.0))
         .px(px(8.0))
         .rounded(px(4.0))
-        .bg(theme::semantic(dark).bg_page)
+        .bg(theme::semantic().bg_page)
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(10.0))
-        .text_color(theme::semantic(dark).text_secondary)
+        .text_color(theme::semantic().text_secondary)
         .child(label)
 }
 
@@ -3089,19 +3085,19 @@ fn segment_button(
         .rounded(px(6.0))
         .border_1()
         .border_color(if active {
-            theme::semantic(dark).primary
+            theme::semantic().primary
         } else {
-            theme::semantic(dark).border_default
+            theme::semantic().border_default
         })
         .bg(if active {
-            theme::semantic(dark).primary_bg
+            theme::semantic().primary_bg
         } else {
-            theme::semantic(dark).bg_surface
+            theme::semantic().bg_surface
         })
         .hover(move |style| {
             style
                 .bg(if active {
-                    theme::semantic(dark).primary_bg
+                    theme::semantic().primary_bg
                 } else {
                     ui::row_hover(dark)
                 })
@@ -3114,7 +3110,7 @@ fn segment_button(
         .text_color(if active {
             ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue)
         } else {
-            theme::semantic(dark).text_primary
+            theme::semantic().text_primary
         })
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
@@ -3432,11 +3428,11 @@ fn result_meta_text(run: &QuickRun) -> String {
     parts.join("  ·  ")
 }
 
-fn run_status_color(status: RunStatus, dark: bool) -> gpui::Rgba {
+fn run_status_color(status: RunStatus, _dark: bool) -> gpui::Rgba {
     match status {
-        RunStatus::Success => theme::semantic(dark).success,
-        RunStatus::Timeout => theme::semantic(dark).warning,
-        RunStatus::Stopped => theme::semantic(dark).text_secondary,
-        RunStatus::Failed | RunStatus::Error => theme::semantic(dark).danger,
+        RunStatus::Success => theme::semantic().success,
+        RunStatus::Timeout => theme::semantic().warning,
+        RunStatus::Stopped => theme::semantic().text_secondary,
+        RunStatus::Failed | RunStatus::Error => theme::semantic().danger,
     }
 }

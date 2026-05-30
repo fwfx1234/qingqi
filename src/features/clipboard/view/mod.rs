@@ -1091,7 +1091,7 @@ impl ClipboardPanel {
 fn render_tab_bar(
     handle: Entity<ClipboardPanel>,
     active: ClipboardTab,
-    dark: bool,
+    _dark: bool,
 ) -> impl IntoElement {
     let tabs = [
         (ClipboardTab::History, "历史记录"),
@@ -1102,8 +1102,8 @@ fn render_tab_bar(
         .h(px(36.0))
         .px(px(16.0))
         .border_b_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_page)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_page)
         .flex()
         .items_center()
         .gap(px(4.0))
@@ -1116,14 +1116,14 @@ fn render_tab_bar(
                 .px(px(12.0))
                 .rounded(px(6.0))
                 .bg(if is_active {
-                    theme::semantic(dark).bg_surface.into()
+                    theme::semantic().bg_surface.into()
                 } else {
                     hsla(0.0, 0.0, 0.0, 0.0)
                 })
                 .text_color(if is_active {
-                    theme::semantic(dark).text_primary
+                    theme::semantic().text_primary
                 } else {
-                    theme::semantic(dark).text_secondary
+                    theme::semantic().text_secondary
                 })
                 .font_weight(if is_active {
                     gpui::FontWeight::SEMIBOLD
@@ -1134,7 +1134,7 @@ fn render_tab_bar(
                 .cursor_pointer()
                 .hover(move |style| {
                     style.bg(if !is_active {
-                        theme::semantic(dark).row_hover.into()
+                        theme::semantic().row_hover.into()
                     } else {
                         hsla(0.0, 0.0, 0.0, 0.0)
                     })
@@ -1194,8 +1194,8 @@ impl Render for ClipboardPanel {
             .size_full()
             .flex()
             .flex_col()
-            .bg(theme::semantic(dark).bg_page)
-            .text_color(theme::semantic(dark).text_primary)
+            .bg(theme::semantic().bg_page)
+            .text_color(theme::semantic().text_primary)
             .font_family(ui::font_ui())
             .track_focus(
                 self.focus_handle

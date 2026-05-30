@@ -758,7 +758,7 @@ impl RenderOnce for QrCodeElement {
                                         div()
                                             .rounded(px(12.0))
                                             .bg(theme::rgba_with_alpha(
-                                                theme::semantic(dark).bg_surface,
+                                                theme::semantic().bg_surface,
                                                 0.82,
                                             ))
                                             .border_1()
@@ -886,10 +886,7 @@ fn preview_panel(dark: bool, qr_matrix: Vec<bool>, qr_size: usize) -> impl IntoE
             div()
                 .size(px(220.0))
                 .rounded(px(14.0))
-                .bg(theme::rgba_with_alpha(
-                    theme::semantic(dark).bg_surface,
-                    0.88,
-                ))
+                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.88))
                 .border_1()
                 .border_color(ui::border_light())
                 .flex()
@@ -959,20 +956,20 @@ fn scan_panel(
         String::from("扫描结果将显示在这里")
     };
     let result_tone = if !scan_error.is_empty() {
-        theme::semantic(dark).danger
+        theme::semantic().danger
     } else if !scan_result.is_empty() {
-        theme::semantic(dark).text_primary
+        theme::semantic().text_primary
     } else {
-        theme::semantic(dark).text_secondary
+        theme::semantic().text_secondary
     };
 
     div()
         .w(px(520.0))
         .rounded(px(10.0))
         .shadow_lg()
-        .bg(theme::semantic(dark).bg_surface)
+        .bg(theme::semantic().bg_surface)
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
+        .border_color(theme::semantic().border_default)
         .flex()
         .flex_col()
         .child(
@@ -980,7 +977,7 @@ fn scan_panel(
                 .h(px(42.0))
                 .px_3()
                 .border_b_1()
-                .border_color(theme::semantic(dark).border_default)
+                .border_color(theme::semantic().border_default)
                 .flex()
                 .items_center()
                 .justify_between()
@@ -1026,14 +1023,14 @@ fn scan_panel(
                 .px_3()
                 .py_2()
                 .border_b_1()
-                .border_color(theme::semantic(dark).border_default)
+                .border_color(theme::semantic().border_default)
                 .child(
                     div()
                         .id("qr-scan-drop-zone")
                         .rounded(px(8.0))
-                        .bg(theme::semantic(dark).bg_page)
+                        .bg(theme::semantic().bg_page)
                         .border_1()
-                        .border_color(theme::semantic(dark).border_default)
+                        .border_color(theme::semantic().border_default)
                         .drag_over::<ExternalPaths>(move |style, _, _, _| {
                             style.bg(theme::rgba_with_alpha(
                                 theme::accent_color(theme::ThemeAccent::Cyan),
@@ -1115,9 +1112,9 @@ fn history_panel(
         .w(px(560.0))
         .rounded(px(10.0))
         .shadow_lg()
-        .bg(theme::semantic(dark).bg_surface)
+        .bg(theme::semantic().bg_surface)
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
+        .border_color(theme::semantic().border_default)
         .flex()
         .flex_col()
         .child(
@@ -1125,7 +1122,7 @@ fn history_panel(
                 .h(px(42.0))
                 .px_3()
                 .border_b_1()
-                .border_color(theme::semantic(dark).border_default)
+                .border_color(theme::semantic().border_default)
                 .flex()
                 .items_center()
                 .justify_between()
@@ -1145,9 +1142,9 @@ fn history_panel(
                                 .h(px(20.0))
                                 .px_2()
                                 .rounded(px(999.0))
-                                .bg(theme::semantic(dark).bg_subtle)
+                                .bg(theme::semantic().bg_subtle)
                                 .text_size(px(11.0))
-                                .text_color(theme::semantic(dark).text_secondary)
+                                .text_color(theme::semantic().text_secondary)
                                 .flex()
                                 .items_center()
                                 .child(format!("{count} 条")),
@@ -1197,7 +1194,7 @@ fn history_panel(
                 .px_3()
                 .py_2()
                 .border_b_1()
-                .border_color(theme::semantic(dark).border_default)
+                .border_color(theme::semantic().border_default)
                 .child(
                     div()
                         .flex()
@@ -1207,9 +1204,9 @@ fn history_panel(
                             div()
                                 .flex_1()
                                 .rounded(px(8.0))
-                                .bg(theme::semantic(dark).bg_page)
+                                .bg(theme::semantic().bg_page)
                                 .border_1()
-                                .border_color(theme::semantic(dark).border_default)
+                                .border_color(theme::semantic().border_default)
                                 .child(history_query),
                         )
                         .child(
@@ -1232,7 +1229,7 @@ fn history_panel(
                 .items_center()
                 .justify_center()
                 .text_size(px(12.0))
-                .text_color(theme::semantic(dark).text_secondary)
+                .text_color(theme::semantic().text_secondary)
                 .child("暂无历史记录")
                 .into_any_element()
         } else {
@@ -1296,16 +1293,16 @@ fn history_row(
     dark: bool,
 ) -> impl IntoElement {
     let tone = match item.kind {
-        QrHistoryKind::Save => theme::semantic(dark).success,
-        QrHistoryKind::Copy => theme::semantic(dark).primary_active,
-        QrHistoryKind::Scan => theme::semantic(dark).info,
+        QrHistoryKind::Save => theme::semantic().success,
+        QrHistoryKind::Copy => theme::semantic().primary_active,
+        QrHistoryKind::Scan => theme::semantic().info,
     };
 
     div()
         .h(px(44.0))
         .px_3()
         .border_b_1()
-        .border_color(theme::semantic(dark).border_default)
+        .border_color(theme::semantic().border_default)
         .flex()
         .items_center()
         .gap_2()
@@ -1321,14 +1318,14 @@ fn history_row(
                 .flex_1()
                 .text_size(px(12.0))
                 .font_family("SF Mono")
-                .text_color(theme::semantic(dark).text_primary)
+                .text_color(theme::semantic().text_primary)
                 .child(item.content.clone()),
         )
         .child(
             div()
                 .w(px(76.0))
                 .text_size(px(11.0))
-                .text_color(theme::semantic(dark).text_secondary)
+                .text_color(theme::semantic().text_secondary)
                 .child(item.created_at.split(' ').last().unwrap_or("").to_string()),
         )
         .child(
@@ -1371,14 +1368,11 @@ fn history_row(
         )
 }
 
-fn status_bar(message: String, tone: StatusTone, dark: bool) -> impl IntoElement {
+fn status_bar(message: String, tone: StatusTone, _dark: bool) -> impl IntoElement {
     div()
         .h(px(32.0))
         .rounded(px(10.0))
-        .bg(theme::rgba_with_alpha(
-            theme::semantic(dark).bg_surface,
-            0.7,
-        ))
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
         .border_1()
         .border_color(ui::border_light())
         .px_3()
@@ -1391,8 +1385,8 @@ fn status_bar(message: String, tone: StatusTone, dark: bool) -> impl IntoElement
                 .text_size(px(11.0))
                 .text_color(match tone {
                     StatusTone::Neutral => ui::text_secondary(),
-                    StatusTone::Success => theme::semantic(dark).success,
-                    StatusTone::Error => theme::semantic(dark).danger,
+                    StatusTone::Success => theme::semantic().success,
+                    StatusTone::Error => theme::semantic().danger,
                 })
                 .child(message),
         )
@@ -1423,7 +1417,7 @@ fn action_button(label: &str, dark: bool) -> gpui::Div {
     )
 }
 
-fn utility_button(label: &str, active: bool, dark: bool) -> gpui::Div {
+fn utility_button(label: &str, active: bool, _dark: bool) -> gpui::Div {
     div()
         .h(px(28.0))
         .px_2()
@@ -1434,7 +1428,7 @@ fn utility_button(label: &str, active: bool, dark: bool) -> gpui::Div {
                 0.18,
             )
         } else {
-            theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 0.8)
+            theme::rgba_with_alpha(theme::semantic().bg_surface, 0.8)
         })
         .border_1()
         .border_color(ui::border_light())
@@ -1446,12 +1440,12 @@ fn utility_button(label: &str, active: bool, dark: bool) -> gpui::Div {
         .text_color(if active {
             ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue)
         } else {
-            theme::semantic(dark).text_primary
+            theme::semantic().text_primary
         })
         .child(label.to_string())
 }
 
-fn icon_button(active: bool, dark: bool, count: usize) -> gpui::Div {
+fn icon_button(active: bool, _dark: bool, count: usize) -> gpui::Div {
     div()
         .h(px(28.0))
         .px_2()
@@ -1462,7 +1456,7 @@ fn icon_button(active: bool, dark: bool, count: usize) -> gpui::Div {
                 0.18,
             )
         } else {
-            theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 0.8)
+            theme::rgba_with_alpha(theme::semantic().bg_surface, 0.8)
         })
         .border_1()
         .border_color(ui::border_light())
@@ -1476,7 +1470,7 @@ fn icon_button(active: bool, dark: bool, count: usize) -> gpui::Div {
             if active {
                 ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue)
             } else {
-                theme::semantic(dark).text_primary
+                theme::semantic().text_primary
             },
             13.0,
         ))
@@ -1486,13 +1480,13 @@ fn icon_button(active: bool, dark: bool, count: usize) -> gpui::Div {
                 .text_color(if active {
                     ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue)
                 } else {
-                    theme::semantic(dark).text_primary
+                    theme::semantic().text_primary
                 })
                 .child(count.to_string()),
         )
 }
 
-fn module_title(title: &str, tag: &str, dark: bool) -> impl IntoElement {
+fn module_title(title: &str, tag: &str, _dark: bool) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -1501,7 +1495,7 @@ fn module_title(title: &str, tag: &str, dark: bool) -> impl IntoElement {
             div()
                 .text_size(px(16.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic(dark).text_primary)
+                .text_color(theme::semantic().text_primary)
                 .child(title.to_string()),
         )
         .child(

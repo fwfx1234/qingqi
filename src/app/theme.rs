@@ -182,7 +182,7 @@ pub fn font_size_caption() -> Pixels {
 // ── Semantic Color Tokens (compile-time safe, replaces string-based lookup) ──
 
 /// All semantic UI colors for one theme mode.
-/// Access via `theme::semantic(dark).field` for compile-time safety;
+/// Access via `theme::semantic().field` for compile-time safety;
 /// legacy code can still use `theme::token("key", dark)` which delegates internally.
 pub struct SemanticColors {
     pub bg_page: Rgba,
@@ -319,17 +319,20 @@ fn build_dark() -> SemanticColors {
     }
 }
 
-/// Get the semantic color set for the given mode (compile-time safe).
-/// Prefer this over `token()` in new code — `semantic(dark).text_primary` instead of `token("color-text-primary", dark)`.
+/// Get the semantic color set for the current theme mode.
 #[inline(always)]
-pub fn semantic(dark: bool) -> SemanticColors {
-    if dark { build_dark() } else { build_light() }
+pub fn semantic() -> SemanticColors {
+    if crate::app::theme_mode::is_dark() {
+        build_dark()
+    } else {
+        build_light()
+    }
 }
 
-/// Legacy string-based lookup. Kept for backward compatibility with plugin views;
-/// new code should use `semantic(dark).field` directly.
-pub fn token(name: &str, dark: bool) -> Rgba {
-    let s = semantic(dark);
+/// Legacy string-based lookup.
+pub fn token(name: &str) -> Rgba {
+    let _dark = crate::app::theme_mode::is_dark();
+    let s = semantic();
     match name {
         "color-bg-page" => s.bg_page,
         "color-bg-surface" => s.bg_surface,

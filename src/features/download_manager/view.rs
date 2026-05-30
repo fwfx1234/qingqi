@@ -795,7 +795,7 @@ impl DownloadJobSummary {
     }
 }
 
-fn header_bar(dark: bool, active_count: usize) -> impl IntoElement {
+fn header_bar(_dark: bool, active_count: usize) -> impl IntoElement {
     div()
         .flex()
         .items_center()
@@ -814,7 +814,7 @@ fn header_bar(dark: bool, active_count: usize) -> impl IntoElement {
                             div()
                                 .text_size(px(16.0))
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(theme::semantic(dark).text_primary)
+                                .text_color(theme::semantic().text_primary)
                                 .child("下载管理器"),
                         )
                         .child(
@@ -849,7 +849,7 @@ fn header_bar(dark: bool, active_count: usize) -> impl IntoElement {
                     .bg(if active_count > 0 {
                         theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.12)
                     } else {
-                        theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 0.82)
+                        theme::rgba_with_alpha(theme::semantic().bg_surface, 0.82)
                     })
                     .border_1()
                     .border_color(if active_count > 0 {
@@ -910,10 +910,7 @@ fn url_input_bar(
                 .flex_1()
                 .h(px(32.0))
                 .rounded(px(8.0))
-                .bg(theme::rgba_with_alpha(
-                    theme::semantic(dark).bg_surface,
-                    0.88,
-                ))
+                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.88))
                 .border_1()
                 .border_color(ui::border_light())
                 .flex()
@@ -1070,7 +1067,7 @@ fn filter_bar(
         )
 }
 
-fn filter_chip(label: &str, count: usize, active: bool, dark: bool) -> gpui::Div {
+fn filter_chip(label: &str, count: usize, active: bool, _dark: bool) -> gpui::Div {
     div()
         .h(px(28.0))
         .px_3()
@@ -1078,7 +1075,7 @@ fn filter_chip(label: &str, count: usize, active: bool, dark: bool) -> gpui::Div
         .bg(if active {
             theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.12)
         } else {
-            theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 0.82)
+            theme::rgba_with_alpha(theme::semantic().bg_surface, 0.82)
         })
         .border_1()
         .border_color(if active {
@@ -1120,10 +1117,7 @@ fn task_list(
         return div()
             .flex_1()
             .rounded(px(12.0))
-            .bg(theme::rgba_with_alpha(
-                theme::semantic(dark).bg_surface,
-                0.74,
-            ))
+            .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.74))
             .border_1()
             .border_color(ui::border_light())
             .child(ui::ui_empty_state("还没有下载任务", dark))
@@ -1133,10 +1127,7 @@ fn task_list(
     div()
         .flex_1()
         .rounded(px(12.0))
-        .bg(theme::rgba_with_alpha(
-            theme::semantic(dark).bg_surface,
-            0.78,
-        ))
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.78))
         .border_1()
         .border_color(ui::border_light())
         .overflow_hidden()
@@ -1146,10 +1137,7 @@ fn task_list(
             div()
                 .h(px(34.0))
                 .px_3()
-                .bg(theme::rgba_with_alpha(
-                    theme::semantic(dark).bg_subtle,
-                    0.65,
-                ))
+                .bg(theme::rgba_with_alpha(theme::semantic().bg_subtle, 0.65))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .flex()
@@ -1222,7 +1210,7 @@ fn task_row(
                 .child(
                     div()
                         .text_size(px(11.0))
-                        .text_color(theme::semantic(dark).text_primary)
+                        .text_color(theme::semantic().text_primary)
                         .child(task.file_name.clone()),
                 )
                 .child(
@@ -1387,7 +1375,7 @@ fn task_row(
 }
 
 fn progress_bar(
-    dark: bool,
+    _dark: bool,
     job_progress: Option<f64>,
     percent: f64,
     is_active: bool,
@@ -1405,7 +1393,7 @@ fn progress_bar(
         .w_full()
         .h(px(6.0))
         .rounded(px(3.0))
-        .bg(theme::rgba_with_alpha(theme::semantic(dark).bg_subtle, 0.8))
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_subtle, 0.8))
         .overflow_hidden()
         .child(
             div()
@@ -1416,27 +1404,27 @@ fn progress_bar(
         )
 }
 
-fn status_tag(status: TaskStatus, dark: bool) -> impl IntoElement {
+fn status_tag(status: TaskStatus, _dark: bool) -> impl IntoElement {
     let (bg, text) = match status {
         TaskStatus::Completed => (
-            theme::rgba_with_alpha(theme::semantic(dark).success, 0.1),
-            theme::semantic(dark).success,
+            theme::rgba_with_alpha(theme::semantic().success, 0.1),
+            theme::semantic().success,
         ),
         TaskStatus::Downloading => (
             theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.1),
             ui::accent_color(PluginAccent::Green),
         ),
         TaskStatus::Pending => (
-            theme::rgba_with_alpha(theme::semantic(dark).warning, 0.1),
-            theme::semantic(dark).warning,
+            theme::rgba_with_alpha(theme::semantic().warning, 0.1),
+            theme::semantic().warning,
         ),
         TaskStatus::Paused => (
-            theme::rgba_with_alpha(theme::semantic(dark).warning, 0.1),
-            theme::semantic(dark).warning,
+            theme::rgba_with_alpha(theme::semantic().warning, 0.1),
+            theme::semantic().warning,
         ),
         TaskStatus::Failed => (
-            theme::rgba_with_alpha(theme::semantic(dark).danger, 0.1),
-            theme::semantic(dark).danger,
+            theme::rgba_with_alpha(theme::semantic().danger, 0.1),
+            theme::semantic().danger,
         ),
         TaskStatus::Cancelled => (
             theme::rgba_with_alpha(ui::text_secondary(), 0.1),
@@ -1482,10 +1470,7 @@ fn bottom_bar(
 
     div()
         .rounded(px(10.0))
-        .bg(theme::rgba_with_alpha(
-            theme::semantic(dark).bg_surface,
-            0.7,
-        ))
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
         .border_1()
         .border_color(ui::border_light())
         .p_3()
@@ -1496,7 +1481,7 @@ fn bottom_bar(
             div()
                 .flex_1()
                 .text_size(px(11.0))
-                .text_color(theme::semantic(dark).text_regular)
+                .text_color(theme::semantic().text_regular)
                 .child(message),
         )
         .child(
@@ -1558,10 +1543,7 @@ fn settings_overlay(
     div()
         .absolute()
         .inset_0()
-        .bg(theme::rgba_with_alpha(
-            theme::semantic(dark).bg_surface,
-            0.92,
-        ))
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.92))
         .rounded(px(12.0))
         .flex()
         .flex_col()
@@ -1577,7 +1559,7 @@ fn settings_overlay(
                     div()
                         .text_size(px(14.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(theme::semantic(dark).text_primary)
+                        .text_color(theme::semantic().text_primary)
                         .child("下载设置"),
                 )
                 .child(
@@ -1646,7 +1628,7 @@ fn settings_overlay(
         )
 }
 
-fn settings_field(dark: bool, label: &str, input: Option<Entity<TextInput>>) -> gpui::Div {
+fn settings_field(_dark: bool, label: &str, input: Option<Entity<TextInput>>) -> gpui::Div {
     div()
         .flex_1()
         .flex()
@@ -1662,10 +1644,7 @@ fn settings_field(dark: bool, label: &str, input: Option<Entity<TextInput>>) -> 
             div()
                 .h(px(28.0))
                 .rounded(px(6.0))
-                .bg(theme::rgba_with_alpha(
-                    theme::semantic(dark).bg_subtle,
-                    0.65,
-                ))
+                .bg(theme::rgba_with_alpha(theme::semantic().bg_subtle, 0.65))
                 .border_1()
                 .border_color(ui::border_light())
                 .flex()
@@ -1691,15 +1670,12 @@ fn primary_btn(label: &str, accent: PluginAccent, _dark: bool) -> gpui::Div {
         .child(label.to_string())
 }
 
-fn secondary_btn(label: &str, dark: bool) -> gpui::Div {
+fn secondary_btn(label: &str, _dark: bool) -> gpui::Div {
     div()
         .h(px(32.0))
         .px_3()
         .rounded(px(8.0))
-        .bg(theme::rgba_with_alpha(
-            theme::semantic(dark).bg_surface,
-            0.88,
-        ))
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.88))
         .border_1()
         .border_color(ui::border_light())
         .hover(|style| style.cursor_pointer())
@@ -1707,19 +1683,16 @@ fn secondary_btn(label: &str, dark: bool) -> gpui::Div {
         .items_center()
         .justify_center()
         .text_size(px(11.0))
-        .text_color(theme::semantic(dark).text_primary)
+        .text_color(theme::semantic().text_primary)
         .child(label.to_string())
 }
 
-fn action_button(label: &str, dark: bool) -> gpui::Div {
+fn action_button(label: &str, _dark: bool) -> gpui::Div {
     div()
         .h(px(28.0))
         .px_2()
         .rounded(px(6.0))
-        .bg(theme::rgba_with_alpha(
-            theme::semantic(dark).bg_surface,
-            0.88,
-        ))
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.88))
         .border_1()
         .border_color(ui::border_light())
         .hover(|style| style.cursor_pointer())
@@ -1727,7 +1700,7 @@ fn action_button(label: &str, dark: bool) -> gpui::Div {
         .items_center()
         .justify_center()
         .text_size(px(10.0))
-        .text_color(theme::semantic(dark).text_primary)
+        .text_color(theme::semantic().text_primary)
         .child(label.to_string())
 }
 

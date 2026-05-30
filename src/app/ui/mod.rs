@@ -13,78 +13,74 @@ use crate::{
 // ── Background Colors (compile-time safe via theme::semantic) ────────────
 
 pub fn bg_canvas() -> gpui::Rgba {
-    theme::semantic(crate::app::theme_mode::is_dark()).bg_page
+    theme::semantic().bg_page
 }
 
 pub fn bg_surface() -> gpui::Rgba {
-    theme::semantic(crate::app::theme_mode::is_dark()).bg_surface
+    theme::semantic().bg_surface
 }
 
 pub fn bg_subtle() -> gpui::Rgba {
-    theme::semantic(crate::app::theme_mode::is_dark()).bg_subtle
+    theme::semantic().bg_subtle
 }
 
 pub fn bg_hover() -> gpui::Rgba {
-    theme::semantic(crate::app::theme_mode::is_dark()).bg_subtle
+    theme::semantic().bg_subtle
 }
 
 // ── Text Colors ─────────────────────────────────────────────────────────
 
 pub fn text_primary() -> gpui::Rgba {
-    theme::semantic(crate::app::theme_mode::is_dark()).text_primary
+    theme::semantic().text_primary
 }
 
 pub fn text_secondary() -> gpui::Rgba {
-    theme::semantic(crate::app::theme_mode::is_dark()).text_regular
+    theme::semantic().text_regular
 }
 
 pub fn text_tertiary() -> gpui::Rgba {
-    theme::semantic(crate::app::theme_mode::is_dark()).text_secondary
+    theme::semantic().text_secondary
 }
 
 // ── Border Colors ───────────────────────────────────────────────────────
 
 pub fn border_light() -> gpui::Hsla {
-    theme::semantic(crate::app::theme_mode::is_dark())
-        .border_default
-        .into()
+    theme::semantic().border_default.into()
 }
 
 pub fn border_strong() -> gpui::Hsla {
-    theme::semantic(crate::app::theme_mode::is_dark())
-        .border_strong
-        .into()
+    theme::semantic().border_strong.into()
 }
 
 pub fn success() -> gpui::Rgba {
-    theme::semantic(crate::app::theme_mode::is_dark()).success
+    theme::semantic().success
 }
 
 pub fn warning() -> gpui::Rgba {
-    theme::semantic(crate::app::theme_mode::is_dark()).warning
+    theme::semantic().warning
 }
 
 pub fn danger() -> gpui::Rgba {
-    theme::semantic(crate::app::theme_mode::is_dark()).danger
+    theme::semantic().danger
 }
 
 pub fn info() -> gpui::Rgba {
-    theme::semantic(crate::app::theme_mode::is_dark()).info
+    theme::semantic().info
 }
 
 /// Backdrop color for overlay/modal遮罩 (replaces individual hsla in overlay_shell)
-pub fn overlay_backdrop(dark: bool) -> gpui::Hsla {
-    theme::semantic(dark).overlay_backdrop
+pub fn overlay_backdrop(_dark: bool) -> gpui::Hsla {
+    theme::semantic().overlay_backdrop
 }
 
 /// Keycap / subtle chip background (replaces launcher_keycap)
-pub fn bg_keycap(dark: bool) -> gpui::Hsla {
-    theme::semantic(dark).keycap_bg
+pub fn bg_keycap(_dark: bool) -> gpui::Hsla {
+    theme::semantic().keycap_bg
 }
 
 /// Row hover background (replaces launcher_row_selected in plugin views)
-pub fn row_hover(dark: bool) -> gpui::Rgba {
-    theme::semantic(dark).row_hover
+pub fn row_hover(_dark: bool) -> gpui::Rgba {
+    theme::semantic().row_hover
 }
 
 pub fn white() -> gpui::Rgba {
@@ -93,7 +89,7 @@ pub fn white() -> gpui::Rgba {
 
 pub fn panel_heading_text(dark: bool) -> gpui::Rgba {
     if dark {
-        theme::semantic(dark).text_primary
+        theme::semantic().text_primary
     } else {
         rgb(0x444458)
     }
@@ -480,12 +476,12 @@ pub fn row_card(selected: bool) -> gpui::Div {
         })
 }
 
-pub fn plugin_surface(dark: bool) -> gpui::Div {
+pub fn plugin_surface(_dark: bool) -> gpui::Div {
     div()
         .size_full()
-        .bg(theme::semantic(dark).bg_page)
+        .bg(theme::semantic().bg_page)
         .font_family(font_ui())
-        .text_color(theme::semantic(dark).text_primary)
+        .text_color(theme::semantic().text_primary)
 }
 
 pub fn plugin_content() -> gpui::Div {
@@ -516,13 +512,13 @@ pub fn ui_button(
     let (bg_idle, text_col, border_col) = if is_primary {
         if danger {
             (
-                theme::semantic(dark).danger,
+                theme::semantic().danger,
                 theme::white(),
-                theme::semantic(dark).border_default,
+                theme::semantic().border_default,
             )
         } else {
             (
-                theme::semantic(dark).primary,
+                theme::semantic().primary,
                 theme::white(),
                 if dark { rgb(0x1a1a1a) } else { rgb(0x00000010) },
             )
@@ -530,19 +526,19 @@ pub fn ui_button(
     } else if danger {
         (
             theme::white(),
-            theme::semantic(dark).danger,
-            theme::semantic(dark).danger,
+            theme::semantic().danger,
+            theme::semantic().danger,
         )
     } else {
         let idle = if dark {
-            theme::semantic(true).bg_elevated
+            theme::semantic().bg_elevated
         } else {
             theme::white()
         };
         (
             idle,
-            theme::semantic(dark).text_primary,
-            theme::semantic(dark).border_default,
+            theme::semantic().text_primary,
+            theme::semantic().border_default,
         )
     };
 
@@ -622,7 +618,7 @@ pub fn ui_badge(label: impl Into<SharedString>, color: Option<gpui::Rgba>) -> im
 }
 
 /// Empty state display (matching suishou UiEmptyState)
-pub fn ui_empty_state(message: impl Into<SharedString>, dark: bool) -> impl IntoElement {
+pub fn ui_empty_state(message: impl Into<SharedString>, _dark: bool) -> impl IntoElement {
     let message = message.into();
     div()
         .w_full()
@@ -635,7 +631,7 @@ pub fn ui_empty_state(message: impl Into<SharedString>, dark: bool) -> impl Into
         .child(
             div()
                 .text_size(px(14.0))
-                .text_color(theme::semantic(dark).text_regular)
+                .text_color(theme::semantic().text_regular)
                 .child(message),
         )
 }

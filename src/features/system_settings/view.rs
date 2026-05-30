@@ -73,9 +73,9 @@ impl RenderOnce for SettingsElement {
             message
         };
 
-        let page_bg = theme::semantic(dark).bg_page;
-        let text_primary = theme::semantic(dark).text_primary;
-        let text_secondary = theme::semantic(dark).text_secondary;
+        let page_bg = theme::semantic().bg_page;
+        let text_primary = theme::semantic().text_primary;
+        let text_secondary = theme::semantic().text_secondary;
 
         div()
             .size_full()
@@ -133,7 +133,7 @@ impl RenderOnce for SettingsElement {
                             .h(px(24.0))
                             .px_2()
                             .rounded(px(999.0))
-                            .bg(theme::semantic(dark).bg_subtle)
+                            .bg(theme::semantic().bg_subtle)
                             .flex()
                             .items_center()
                             .text_size(theme::font_size_caption())
@@ -296,10 +296,10 @@ fn retention_control(
     panel: Rc<RefCell<SettingsPanel>>,
     seconds: u64,
     message: String,
-    dark: bool,
+    _dark: bool,
 ) -> impl IntoElement {
-    let text_primary = theme::semantic(dark).text_primary;
-    let text_secondary = theme::semantic(dark).text_secondary;
+    let text_primary = theme::semantic().text_primary;
+    let text_secondary = theme::semantic().text_secondary;
 
     div()
         .flex()
@@ -313,9 +313,9 @@ fn retention_control(
                 .w(px(28.0))
                 .rounded(theme::radius_sm())
                 .border_1()
-                .border_color(theme::semantic(dark).border_default)
-                .bg(theme::semantic(dark).bg_surface)
-                .hover(|style| style.bg(theme::semantic(dark).bg_subtle).cursor_pointer())
+                .border_color(theme::semantic().border_default)
+                .bg(theme::semantic().bg_surface)
+                .hover(|style| style.bg(theme::semantic().bg_subtle).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -336,9 +336,9 @@ fn retention_control(
                 .h(px(28.0))
                 .min_w(px(56.0))
                 .rounded(theme::radius_sm())
-                .bg(theme::semantic(dark).bg_subtle)
+                .bg(theme::semantic().bg_subtle)
                 .border_1()
-                .border_color(theme::semantic(dark).border_default)
+                .border_color(theme::semantic().border_default)
                 .flex()
                 .items_center()
                 .justify_center()
@@ -354,9 +354,9 @@ fn retention_control(
                 .w(px(28.0))
                 .rounded(theme::radius_sm())
                 .border_1()
-                .border_color(theme::semantic(dark).border_default)
-                .bg(theme::semantic(dark).bg_surface)
-                .hover(|style| style.bg(theme::semantic(dark).bg_subtle).cursor_pointer())
+                .border_color(theme::semantic().border_default)
+                .bg(theme::semantic().bg_surface)
+                .hover(|style| style.bg(theme::semantic().bg_subtle).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -379,12 +379,8 @@ fn retention_control(
                 .px_2()
                 .ml(px(4.0))
                 .rounded(theme::radius_sm())
-                .bg(theme::semantic(dark).primary)
-                .hover(|style| {
-                    style
-                        .bg(theme::semantic(dark).primary_hover)
-                        .cursor_pointer()
-                })
+                .bg(theme::semantic().primary)
+                .hover(|style| style.bg(theme::semantic().primary_hover).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -407,9 +403,9 @@ fn retention_control(
                 .px_2()
                 .rounded(theme::radius_sm())
                 .border_1()
-                .border_color(theme::semantic(dark).border_default)
-                .bg(theme::semantic(dark).bg_surface)
-                .hover(|style| style.bg(theme::semantic(dark).bg_subtle).cursor_pointer())
+                .border_color(theme::semantic().border_default)
+                .bg(theme::semantic().bg_surface)
+                .hover(|style| style.bg(theme::semantic().bg_subtle).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -443,8 +439,8 @@ fn app_index_row(
     has_snapshot: bool,
     snapshot: Option<AppIndexSnapshot>,
 ) -> impl IntoElement {
-    let text_secondary = theme::semantic(dark).text_secondary;
-    let text_primary = theme::semantic(dark).text_primary;
+    let text_secondary = theme::semantic().text_secondary;
+    let text_primary = theme::semantic().text_primary;
 
     let (status_line, show_rescan) = if !has_snapshot {
         (String::from("应用索引服务不可用"), false)
@@ -494,7 +490,7 @@ fn app_index_row(
         .px(theme::space_4())
         .py(theme::space_2())
         .border_b_1()
-        .border_color(theme::semantic(dark).border_default)
+        .border_color(theme::semantic().border_default)
         .flex()
         .items_center()
         .justify_between()
@@ -544,7 +540,7 @@ fn app_index_action_button(
 
 fn plugin_dir_button(
     panel: Rc<RefCell<SettingsPanel>>,
-    dark: bool,
+    _dark: bool,
     _root_path: &str,
 ) -> impl IntoElement {
     div()
@@ -553,14 +549,14 @@ fn plugin_dir_button(
         .px_3()
         .rounded(theme::radius_md())
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_surface)
-        .hover(|style| style.bg(theme::semantic(dark).bg_subtle).cursor_pointer())
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_surface)
+        .hover(|style| style.bg(theme::semantic().bg_subtle).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
         .text_size(theme::font_size_caption())
-        .text_color(theme::semantic(dark).text_primary)
+        .text_color(theme::semantic().text_primary)
         .child("打开目录")
         .on_click(move |_, window, _cx| {
             panel.borrow_mut().open_plugin_dir();
@@ -570,10 +566,10 @@ fn plugin_dir_button(
 
 fn icon_cache_clear_button(
     panel: Rc<RefCell<SettingsPanel>>,
-    dark: bool,
+    _dark: bool,
     message: String,
 ) -> impl IntoElement {
-    let text_secondary = theme::semantic(dark).text_secondary;
+    let text_secondary = theme::semantic().text_secondary;
 
     div()
         .flex()
@@ -585,12 +581,8 @@ fn icon_cache_clear_button(
                 .h(px(28.0))
                 .px_3()
                 .rounded(theme::radius_md())
-                .bg(theme::semantic(dark).primary)
-                .hover(|style| {
-                    style
-                        .bg(theme::semantic(dark).primary_hover)
-                        .cursor_pointer()
-                })
+                .bg(theme::semantic().primary)
+                .hover(|style| style.bg(theme::semantic().primary_hover).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -620,7 +612,7 @@ fn shortcuts_section(
     message: String,
     dark: bool,
 ) -> impl IntoElement {
-    let text_secondary = theme::semantic(dark).text_secondary;
+    let text_secondary = theme::semantic().text_secondary;
 
     div()
         .flex()
@@ -631,7 +623,7 @@ fn shortcuts_section(
                     .px(theme::space_4())
                     .py(theme::space_2())
                     .border_b_1()
-                    .border_color(theme::semantic(dark).border_default)
+                    .border_color(theme::semantic().border_default)
                     .text_size(theme::font_size_caption())
                     .text_color(text_secondary)
                     .child(message),
@@ -659,8 +651,8 @@ fn shortcut_row(
     input: Entity<TextInput>,
     dark: bool,
 ) -> impl IntoElement {
-    let text_primary = theme::semantic(dark).text_primary;
-    let text_secondary = theme::semantic(dark).text_secondary;
+    let text_primary = theme::semantic().text_primary;
+    let text_secondary = theme::semantic().text_secondary;
     let descriptor = view.descriptor.clone();
     let scope_label = descriptor.scope.label();
     let owner_label = if descriptor.owner_plugin_id == CORE_PLUGIN_ID {
@@ -689,7 +681,7 @@ fn shortcut_row(
         .px(theme::space_4())
         .py(theme::space_2())
         .border_b_1()
-        .border_color(theme::semantic(dark).border_default)
+        .border_color(theme::semantic().border_default)
         .flex()
         .items_center()
         .justify_between()
@@ -775,40 +767,40 @@ fn shortcut_row(
         )
 }
 
-fn shortcut_input_shell(input: Entity<TextInput>, dark: bool, editable: bool) -> impl IntoElement {
+fn shortcut_input_shell(input: Entity<TextInput>, _dark: bool, editable: bool) -> impl IntoElement {
     div()
         .w(px(160.0))
         .rounded(theme::radius_sm())
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
+        .border_color(theme::semantic().border_default)
         .bg(if editable {
-            theme::semantic(dark).bg_surface
+            theme::semantic().bg_surface
         } else {
-            theme::semantic(dark).bg_subtle
+            theme::semantic().bg_subtle
         })
         .child(input.into_any_element())
 }
 
 fn shortcut_action_button(
-    dark: bool,
+    _dark: bool,
     label: &'static str,
     primary: bool,
     enabled: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
     let bg = if !enabled {
-        theme::semantic(dark).bg_subtle
+        theme::semantic().bg_subtle
     } else if primary {
-        theme::semantic(dark).primary
+        theme::semantic().primary
     } else {
-        theme::semantic(dark).bg_surface
+        theme::semantic().bg_surface
     };
     let text = if !enabled {
-        theme::semantic(dark).text_secondary
+        theme::semantic().text_secondary
     } else if primary {
         theme::white()
     } else {
-        theme::semantic(dark).text_primary
+        theme::semantic().text_primary
     };
 
     div()
@@ -818,14 +810,14 @@ fn shortcut_action_button(
         .rounded(theme::radius_md())
         .bg(bg)
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
+        .border_color(theme::semantic().border_default)
         .hover(move |style| {
             if enabled {
                 style
                     .bg(if primary {
-                        theme::semantic(dark).primary_hover
+                        theme::semantic().primary_hover
                     } else {
-                        theme::semantic(dark).bg_subtle
+                        theme::semantic().bg_subtle
                     })
                     .cursor_pointer()
             } else {
@@ -860,35 +852,35 @@ fn shortcut_status(view: &ShortcutView) -> String {
     }
 }
 
-fn shortcut_status_style(view: &ShortcutView, dark: bool) -> (gpui::Rgba, gpui::Rgba) {
+fn shortcut_status_style(view: &ShortcutView, _dark: bool) -> (gpui::Rgba, gpui::Rgba) {
     if view.error.is_some() || view.overridden_by.is_some() {
         return (
-            theme::semantic(dark).warning,
-            theme::rgba_with_alpha(theme::semantic(dark).warning, 0.1).into(),
+            theme::semantic().warning,
+            theme::rgba_with_alpha(theme::semantic().warning, 0.1).into(),
         );
     }
     if !view.descriptor.enabled {
         return (
-            theme::semantic(dark).text_secondary,
-            theme::rgba_with_alpha(theme::semantic(dark).text_secondary, 0.08).into(),
+            theme::semantic().text_secondary,
+            theme::rgba_with_alpha(theme::semantic().text_secondary, 0.08).into(),
         );
     }
     if view.active {
         return (
-            theme::semantic(dark).success,
-            theme::rgba_with_alpha(theme::semantic(dark).success, 0.1).into(),
+            theme::semantic().success,
+            theme::rgba_with_alpha(theme::semantic().success, 0.1).into(),
         );
     }
     (
-        theme::semantic(dark).text_secondary,
-        theme::rgba_with_alpha(theme::semantic(dark).text_secondary, 0.08).into(),
+        theme::semantic().text_secondary,
+        theme::rgba_with_alpha(theme::semantic().text_secondary, 0.08).into(),
     )
 }
 
-fn scope_badge(dark: bool, text: &'static str, scope: ShortcutScope) -> impl IntoElement {
+fn scope_badge(_dark: bool, text: &'static str, scope: ShortcutScope) -> impl IntoElement {
     let color = match scope {
         ShortcutScope::Global => ui::accent_color(crate::core::plugin_spec::PluginAccent::Slate),
-        ShortcutScope::App => theme::semantic(dark).text_secondary,
+        ShortcutScope::App => theme::semantic().text_secondary,
     };
     div()
         .h(px(20.0))
@@ -923,7 +915,7 @@ fn status_badge(text: String, style: (gpui::Rgba, gpui::Rgba)) -> impl IntoEleme
 // ── Shared Layout Helpers ──
 
 fn settings_card(
-    dark: bool,
+    _dark: bool,
     title: &'static str,
     subtitle: Option<&'static str>,
     content: impl IntoElement,
@@ -931,8 +923,8 @@ fn settings_card(
     div()
         .rounded(theme::radius_lg())
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_surface)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_surface)
         .flex()
         .flex_col()
         .child(
@@ -940,8 +932,8 @@ fn settings_card(
                 .px(theme::space_4())
                 .py(theme::space_3())
                 .border_b_1()
-                .border_color(theme::semantic(dark).border_default)
-                .bg(theme::semantic(dark).bg_subtle_2)
+                .border_color(theme::semantic().border_default)
+                .bg(theme::semantic().bg_subtle_2)
                 .flex()
                 .items_center()
                 .justify_between()
@@ -954,14 +946,14 @@ fn settings_card(
                             div()
                                 .text_size(theme::font_size_body())
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(theme::semantic(dark).text_primary)
+                                .text_color(theme::semantic().text_primary)
                                 .child(title),
                         )
                         .when(subtitle.is_some(), |el| {
                             el.child(
                                 div()
                                     .text_size(theme::font_size_caption())
-                                    .text_color(theme::semantic(dark).text_secondary)
+                                    .text_color(theme::semantic().text_secondary)
                                     .child(subtitle.unwrap_or("")),
                             )
                         }),
@@ -971,7 +963,7 @@ fn settings_card(
 }
 
 fn settings_row(
-    dark: bool,
+    _dark: bool,
     label: &'static str,
     description: &str,
     control: impl IntoElement,
@@ -981,7 +973,7 @@ fn settings_row(
         .px(theme::space_4())
         .py(theme::space_2())
         .border_b_1()
-        .border_color(theme::semantic(dark).border_default)
+        .border_color(theme::semantic().border_default)
         .flex()
         .items_center()
         .justify_between()
@@ -997,13 +989,13 @@ fn settings_row(
                     div()
                         .text_size(theme::font_size_body())
                         .font_weight(gpui::FontWeight::MEDIUM)
-                        .text_color(theme::semantic(dark).text_primary)
+                        .text_color(theme::semantic().text_primary)
                         .child(label),
                 )
                 .child(
                     div()
                         .text_size(theme::font_size_caption())
-                        .text_color(theme::semantic(dark).text_secondary)
+                        .text_color(theme::semantic().text_secondary)
                         .line_height(px(16.0))
                         .child(description.to_string()),
                 ),
@@ -1012,7 +1004,7 @@ fn settings_row(
 }
 
 fn permission_row(
-    dark: bool,
+    _dark: bool,
     label: &'static str,
     description: &'static str,
     status: PermissionStatus,
@@ -1020,18 +1012,18 @@ fn permission_row(
     let (status_text, status_color, status_bg) = match status {
         PermissionStatus::Authorized => (
             "已授权",
-            theme::semantic(dark).success,
-            theme::rgba_with_alpha(theme::semantic(dark).success, 0.1),
+            theme::semantic().success,
+            theme::rgba_with_alpha(theme::semantic().success, 0.1),
         ),
         PermissionStatus::NotAuthorized => (
             "未授权",
-            theme::semantic(dark).warning,
-            theme::rgba_with_alpha(theme::semantic(dark).warning, 0.1),
+            theme::semantic().warning,
+            theme::rgba_with_alpha(theme::semantic().warning, 0.1),
         ),
         PermissionStatus::Unknown => (
             "尚未实现",
-            theme::semantic(dark).text_secondary,
-            theme::rgba_with_alpha(theme::semantic(dark).text_secondary, 0.08),
+            theme::semantic().text_secondary,
+            theme::rgba_with_alpha(theme::semantic().text_secondary, 0.08),
         ),
     };
 
@@ -1040,7 +1032,7 @@ fn permission_row(
         .px(theme::space_4())
         .py(theme::space_2())
         .border_b_1()
-        .border_color(theme::semantic(dark).border_default)
+        .border_color(theme::semantic().border_default)
         .flex()
         .items_center()
         .justify_between()
@@ -1056,13 +1048,13 @@ fn permission_row(
                     div()
                         .text_size(theme::font_size_body())
                         .font_weight(gpui::FontWeight::MEDIUM)
-                        .text_color(theme::semantic(dark).text_primary)
+                        .text_color(theme::semantic().text_primary)
                         .child(label),
                 )
                 .child(
                     div()
                         .text_size(theme::font_size_caption())
-                        .text_color(theme::semantic(dark).text_secondary)
+                        .text_color(theme::semantic().text_secondary)
                         .line_height(px(16.0))
                         .child(description),
                 ),
@@ -1087,25 +1079,25 @@ fn permission_row(
 
 fn accessibility_row(
     panel: Rc<RefCell<SettingsPanel>>,
-    dark: bool,
+    _dark: bool,
     status: PermissionStatus,
     text: &str,
 ) -> impl IntoElement {
-    let text_secondary = theme::semantic(dark).text_secondary;
-    let text_primary = theme::semantic(dark).text_primary;
+    let text_secondary = theme::semantic().text_secondary;
+    let text_primary = theme::semantic().text_primary;
 
     let (status_color, status_bg) = match status {
         PermissionStatus::Authorized => (
-            theme::semantic(dark).success,
-            theme::rgba_with_alpha(theme::semantic(dark).success, 0.1),
+            theme::semantic().success,
+            theme::rgba_with_alpha(theme::semantic().success, 0.1),
         ),
         PermissionStatus::NotAuthorized => (
-            theme::semantic(dark).warning,
-            theme::rgba_with_alpha(theme::semantic(dark).warning, 0.1),
+            theme::semantic().warning,
+            theme::rgba_with_alpha(theme::semantic().warning, 0.1),
         ),
         PermissionStatus::Unknown => (
-            theme::semantic(dark).text_secondary,
-            theme::rgba_with_alpha(theme::semantic(dark).text_secondary, 0.08),
+            theme::semantic().text_secondary,
+            theme::rgba_with_alpha(theme::semantic().text_secondary, 0.08),
         ),
     };
 
@@ -1114,7 +1106,7 @@ fn accessibility_row(
         .px(theme::space_4())
         .py(theme::space_2())
         .border_b_1()
-        .border_color(theme::semantic(dark).border_default)
+        .border_color(theme::semantic().border_default)
         .flex()
         .items_center()
         .justify_between()
@@ -1166,12 +1158,8 @@ fn accessibility_row(
                         .h(px(28.0))
                         .px_3()
                         .rounded(theme::radius_md())
-                        .bg(theme::semantic(dark).primary)
-                        .hover(|style| {
-                            style
-                                .bg(theme::semantic(dark).primary_hover)
-                                .cursor_pointer()
-                        })
+                        .bg(theme::semantic().primary)
+                        .hover(|style| style.bg(theme::semantic().primary_hover).cursor_pointer())
                         .flex()
                         .items_center()
                         .justify_center()
@@ -1214,7 +1202,7 @@ fn diag_path_row(
         .px(theme::space_4())
         .py(theme::space_2())
         .border_b_1()
-        .border_color(theme::semantic(dark).border_default)
+        .border_color(theme::semantic().border_default)
         .flex()
         .items_center()
         .justify_between()
@@ -1230,7 +1218,7 @@ fn diag_path_row(
                     div()
                         .text_size(theme::font_size_body())
                         .font_weight(gpui::FontWeight::MEDIUM)
-                        .text_color(theme::semantic(dark).text_primary)
+                        .text_color(theme::semantic().text_primary)
                         .child(label),
                 )
                 .child(path_badge(dark, path)),
@@ -1242,14 +1230,14 @@ fn diag_path_row(
                 .px_3()
                 .rounded(theme::radius_md())
                 .border_1()
-                .border_color(theme::semantic(dark).border_default)
-                .bg(theme::semantic(dark).bg_surface)
-                .hover(|style| style.bg(theme::semantic(dark).bg_subtle).cursor_pointer())
+                .border_color(theme::semantic().border_default)
+                .bg(theme::semantic().bg_surface)
+                .hover(|style| style.bg(theme::semantic().bg_subtle).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
                 .text_size(theme::font_size_caption())
-                .text_color(theme::semantic(dark).text_primary)
+                .text_color(theme::semantic().text_primary)
                 .child("打开")
                 .on_click(move |_, window, _cx| {
                     match action {
@@ -1262,9 +1250,9 @@ fn diag_path_row(
         )
 }
 
-fn disabled_badge(dark: bool, text: &'static str) -> impl IntoElement {
-    let status_color = theme::semantic(dark).text_secondary;
-    let status_bg = theme::rgba_with_alpha(theme::semantic(dark).text_secondary, 0.08);
+fn disabled_badge(_dark: bool, text: &'static str) -> impl IntoElement {
+    let status_color = theme::semantic().text_secondary;
+    let status_bg = theme::rgba_with_alpha(theme::semantic().text_secondary, 0.08);
 
     div()
         .h(px(28.0))
@@ -1280,24 +1268,24 @@ fn disabled_badge(dark: bool, text: &'static str) -> impl IntoElement {
         .child(text)
 }
 
-fn path_badge(dark: bool, path: &str) -> impl IntoElement {
+fn path_badge(_dark: bool, path: &str) -> impl IntoElement {
     div()
         .h(px(28.0))
         .px_2()
         .rounded(theme::radius_sm())
-        .bg(theme::semantic(dark).bg_subtle)
+        .bg(theme::semantic().bg_subtle)
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
+        .border_color(theme::semantic().border_default)
         .flex()
         .items_center()
         .font_family("SF Mono")
         .text_size(theme::font_size_caption())
-        .text_color(theme::semantic(dark).text_secondary)
+        .text_color(theme::semantic().text_secondary)
         .child(path.to_string())
 }
 
 fn action_button(
-    dark: bool,
+    _dark: bool,
     label: &'static str,
     primary: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
@@ -1308,12 +1296,8 @@ fn action_button(
             .h(px(28.0))
             .px_3()
             .rounded(theme::radius_md())
-            .bg(theme::semantic(dark).primary)
-            .hover(|style| {
-                style
-                    .bg(theme::semantic(dark).primary_hover)
-                    .cursor_pointer()
-            })
+            .bg(theme::semantic().primary)
+            .hover(|style| style.bg(theme::semantic().primary_hover).cursor_pointer())
             .flex()
             .items_center()
             .justify_center()
@@ -1327,15 +1311,15 @@ fn action_button(
             .h(px(28.0))
             .px_3()
             .rounded(theme::radius_md())
-            .bg(theme::semantic(dark).bg_surface)
+            .bg(theme::semantic().bg_surface)
             .border_1()
-            .border_color(theme::semantic(dark).border_default)
-            .hover(|style| style.bg(theme::semantic(dark).bg_subtle).cursor_pointer())
+            .border_color(theme::semantic().border_default)
+            .hover(|style| style.bg(theme::semantic().bg_subtle).cursor_pointer())
             .flex()
             .items_center()
             .justify_center()
             .text_size(theme::font_size_caption())
-            .text_color(theme::semantic(dark).text_primary)
+            .text_color(theme::semantic().text_primary)
             .child(label)
             .on_click(move |event, window, cx| on_click(event, window, cx))
     }
@@ -1354,8 +1338,8 @@ fn mode_segment(
         .p(px(2.0))
         .rounded(theme::radius_md())
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_subtle)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_subtle)
         .child(seg_button(
             Rc::clone(&panel),
             ThemeMode::Light,
@@ -1380,13 +1364,13 @@ fn seg_button(
     panel: Rc<RefCell<SettingsPanel>>,
     mode: ThemeMode,
     current_mode: ThemeMode,
-    dark: bool,
+    _dark: bool,
 ) -> impl IntoElement {
     let active = current_mode == mode;
     let text_color = if active {
-        theme::semantic(dark).primary
+        theme::semantic().primary
     } else {
-        theme::semantic(dark).text_secondary
+        theme::semantic().text_secondary
     };
 
     let mut btn = div()
@@ -1401,7 +1385,7 @@ fn seg_button(
         .font_weight(gpui::FontWeight::MEDIUM)
         .text_color(text_color)
         .child(mode_short_label(mode))
-        .hover(move |style| style.bg(theme::semantic(dark).bg_surface).cursor_pointer())
+        .hover(move |style| style.bg(theme::semantic().bg_surface).cursor_pointer())
         .on_click(move |_, window, _cx| {
             panel.borrow_mut().set_theme_mode(mode);
             window.refresh();
@@ -1409,11 +1393,11 @@ fn seg_button(
 
     if active {
         btn = btn
-            .bg(theme::semantic(dark).bg_surface)
+            .bg(theme::semantic().bg_surface)
             .border_1()
-            .border_color(theme::semantic(dark).primary_soft)
+            .border_color(theme::semantic().primary_soft)
             .shadow(vec![gpui::BoxShadow {
-                color: theme::rgba_with_alpha(theme::semantic(dark).shadow, 0.06),
+                color: theme::rgba_with_alpha(theme::semantic().shadow, 0.06),
                 offset: gpui::point(px(0.0), px(2.0)),
                 blur_radius: px(6.0),
                 spread_radius: px(0.0),

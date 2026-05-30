@@ -295,28 +295,28 @@ impl CapturePanel {
         }
     }
 
-    fn method_color(dark: bool, method: &str) -> gpui::Rgba {
+    fn method_color(_dark: bool, method: &str) -> gpui::Rgba {
         match method.to_uppercase().as_str() {
-            "GET" => theme::semantic(dark).success,
-            "POST" => theme::semantic(dark).info,
-            "PUT" => theme::semantic(dark).warning,
-            "DELETE" => theme::semantic(dark).danger,
-            "PATCH" => theme::semantic(dark).warning,
-            _ => theme::semantic(dark).text_secondary,
+            "GET" => theme::semantic().success,
+            "POST" => theme::semantic().info,
+            "PUT" => theme::semantic().warning,
+            "DELETE" => theme::semantic().danger,
+            "PATCH" => theme::semantic().warning,
+            _ => theme::semantic().text_secondary,
         }
     }
 
-    fn status_color(dark: bool, status: i64) -> gpui::Rgba {
+    fn status_color(_dark: bool, status: i64) -> gpui::Rgba {
         if status >= 500 {
-            theme::semantic(dark).danger
+            theme::semantic().danger
         } else if status >= 400 {
-            theme::semantic(dark).warning
+            theme::semantic().warning
         } else if status >= 300 {
-            theme::semantic(dark).info
+            theme::semantic().info
         } else if status >= 200 {
-            theme::semantic(dark).success
+            theme::semantic().success
         } else {
-            theme::semantic(dark).text_secondary
+            theme::semantic().text_secondary
         }
     }
 }
@@ -357,8 +357,8 @@ impl Render for CapturePanel {
 
         div()
             .size_full()
-            .bg(theme::semantic(dark).bg_page)
-            .text_color(theme::semantic(dark).text_primary)
+            .bg(theme::semantic().bg_page)
+            .text_color(theme::semantic().text_primary)
             .font_family(ui::font_ui())
             .flex()
             .flex_col()
@@ -369,9 +369,9 @@ impl Render for CapturePanel {
                 div()
                     .h(px(54.0))
                     .rounded(theme::radius_lg())
-                    .bg(theme::semantic(dark).bg_surface)
+                    .bg(theme::semantic().bg_surface)
                     .border_1()
-                    .border_color(theme::semantic(dark).border_default)
+                    .border_color(theme::semantic().border_default)
                     .px_4()
                     .flex()
                     .items_center()
@@ -383,12 +383,12 @@ impl Render for CapturePanel {
                             .rounded(theme::radius_md())
                             .bg(if engine_running {
                                 if dark {
-                                    theme::semantic(dark).success
+                                    theme::semantic().success
                                 } else {
-                                    theme::semantic(dark).success
+                                    theme::semantic().success
                                 }
                             } else {
-                                theme::semantic(dark).bg_subtle
+                                theme::semantic().bg_subtle
                             })
                             .flex()
                             .items_center()
@@ -409,7 +409,7 @@ impl Render for CapturePanel {
                             .child(
                                 div()
                                     .text_size(px(11.0))
-                                    .text_color(theme::semantic(dark).text_secondary)
+                                    .text_color(theme::semantic().text_secondary)
                                     .child(if engine_running {
                                         "代理引擎运行中"
                                     } else {
@@ -456,9 +456,9 @@ impl Render for CapturePanel {
                         div()
                             .w(px(220.0))
                             .rounded(theme::radius_lg())
-                            .bg(theme::semantic(dark).bg_surface)
+                            .bg(theme::semantic().bg_surface)
                             .border_1()
-                            .border_color(theme::semantic(dark).border_default)
+                            .border_color(theme::semantic().border_default)
                             .p_3()
                             .flex()
                             .flex_col()
@@ -467,23 +467,23 @@ impl Render for CapturePanel {
                                 div()
                                     .text_size(px(11.0))
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .text_color(theme::semantic(dark).text_secondary)
+                                    .text_color(theme::semantic().text_secondary)
                                     .child("过滤器"),
                             )
                             .child(
                                 div()
                                     .rounded(theme::radius_md())
-                                    .bg(theme::semantic(dark).bg_subtle)
+                                    .bg(theme::semantic().bg_subtle)
                                     .border_1()
-                                    .border_color(theme::semantic(dark).border_default)
+                                    .border_color(theme::semantic().border_default)
                                     .child(search_input.clone()),
                             )
                             .child(
                                 div()
                                     .rounded(theme::radius_md())
-                                    .bg(theme::semantic(dark).bg_subtle)
+                                    .bg(theme::semantic().bg_subtle)
                                     .border_1()
-                                    .border_color(theme::semantic(dark).border_default)
+                                    .border_color(theme::semantic().border_default)
                                     .child(host_input.clone()),
                             )
                             // Method filter chips
@@ -494,7 +494,7 @@ impl Render for CapturePanel {
                                     let chip_bg: gpui::Hsla = if active {
                                         theme::rgba_with_alpha(color, 0.18)
                                     } else {
-                                        theme::rgba_with_alpha(theme::semantic(dark).bg_subtle, 1.0)
+                                        theme::rgba_with_alpha(theme::semantic().bg_subtle, 1.0)
                                     };
                                     div()
                                         .id(SharedString::from(format!("method-chip-{m}")))
@@ -506,7 +506,7 @@ impl Render for CapturePanel {
                                         .border_color(if active {
                                             color
                                         } else {
-                                            theme::semantic(dark).border_default
+                                            theme::semantic().border_default
                                         })
                                         .flex()
                                         .items_center()
@@ -515,7 +515,7 @@ impl Render for CapturePanel {
                                         .text_color(if active {
                                             color
                                         } else {
-                                            theme::semantic(dark).text_secondary
+                                            theme::semantic().text_secondary
                                         })
                                         .font_weight(if active {
                                             gpui::FontWeight::SEMIBOLD
@@ -536,14 +536,11 @@ impl Render for CapturePanel {
                                     .gap_1()
                                     .child({
                                         let active = filter_error_only;
-                                        let color = theme::semantic(dark).danger;
+                                        let color = theme::semantic().danger;
                                         let chip_bg: gpui::Hsla = if active {
                                             theme::rgba_with_alpha(color, 0.18)
                                         } else {
-                                            theme::rgba_with_alpha(
-                                                theme::semantic(dark).bg_subtle,
-                                                1.0,
-                                            )
+                                            theme::rgba_with_alpha(theme::semantic().bg_subtle, 1.0)
                                         };
                                         div()
                                             .id("error-toggle")
@@ -555,7 +552,7 @@ impl Render for CapturePanel {
                                             .border_color(if active {
                                                 color
                                             } else {
-                                                theme::semantic(dark).border_default
+                                                theme::semantic().border_default
                                             })
                                             .flex()
                                             .items_center()
@@ -564,7 +561,7 @@ impl Render for CapturePanel {
                                             .text_color(if active {
                                                 color
                                             } else {
-                                                theme::semantic(dark).text_secondary
+                                                theme::semantic().text_secondary
                                             })
                                             .cursor_pointer()
                                             .on_click(cx.listener(|panel, _, _, cx| {
@@ -574,14 +571,11 @@ impl Render for CapturePanel {
                                     })
                                     .child({
                                         let active = filter_https_only;
-                                        let color = theme::semantic(dark).success;
+                                        let color = theme::semantic().success;
                                         let chip_bg: gpui::Hsla = if active {
                                             theme::rgba_with_alpha(color, 0.18)
                                         } else {
-                                            theme::rgba_with_alpha(
-                                                theme::semantic(dark).bg_subtle,
-                                                1.0,
-                                            )
+                                            theme::rgba_with_alpha(theme::semantic().bg_subtle, 1.0)
                                         };
                                         div()
                                             .id("https-toggle")
@@ -593,7 +587,7 @@ impl Render for CapturePanel {
                                             .border_color(if active {
                                                 color
                                             } else {
-                                                theme::semantic(dark).border_default
+                                                theme::semantic().border_default
                                             })
                                             .flex()
                                             .items_center()
@@ -602,7 +596,7 @@ impl Render for CapturePanel {
                                             .text_color(if active {
                                                 color
                                             } else {
-                                                theme::semantic(dark).text_secondary
+                                                theme::semantic().text_secondary
                                             })
                                             .cursor_pointer()
                                             .on_click(cx.listener(|panel, _, _, cx| {
@@ -612,14 +606,11 @@ impl Render for CapturePanel {
                                     })
                                     .child({
                                         let active = filter_hide_static;
-                                        let color = theme::semantic(dark).warning;
+                                        let color = theme::semantic().warning;
                                         let chip_bg: gpui::Hsla = if active {
                                             theme::rgba_with_alpha(color, 0.18)
                                         } else {
-                                            theme::rgba_with_alpha(
-                                                theme::semantic(dark).bg_subtle,
-                                                1.0,
-                                            )
+                                            theme::rgba_with_alpha(theme::semantic().bg_subtle, 1.0)
                                         };
                                         div()
                                             .id("hide-static-toggle")
@@ -631,7 +622,7 @@ impl Render for CapturePanel {
                                             .border_color(if active {
                                                 color
                                             } else {
-                                                theme::semantic(dark).border_default
+                                                theme::semantic().border_default
                                             })
                                             .flex()
                                             .items_center()
@@ -640,7 +631,7 @@ impl Render for CapturePanel {
                                             .text_color(if active {
                                                 color
                                             } else {
-                                                theme::semantic(dark).text_secondary
+                                                theme::semantic().text_secondary
                                             })
                                             .cursor_pointer()
                                             .on_click(cx.listener(|panel, _, _, cx| {
@@ -655,7 +646,7 @@ impl Render for CapturePanel {
                                 div()
                                     .text_size(px(11.0))
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .text_color(theme::semantic(dark).text_secondary)
+                                    .text_color(theme::semantic().text_secondary)
                                     .child("统计"),
                             )
                             .child(ui::metric_pill(
@@ -674,9 +665,9 @@ impl Render for CapturePanel {
                         div()
                             .flex_1()
                             .rounded(theme::radius_lg())
-                            .bg(theme::semantic(dark).bg_surface)
+                            .bg(theme::semantic().bg_surface)
                             .border_1()
-                            .border_color(theme::semantic(dark).border_default)
+                            .border_color(theme::semantic().border_default)
                             .flex()
                             .flex_col()
                             // Table header
@@ -684,13 +675,13 @@ impl Render for CapturePanel {
                                 div()
                                     .h(px(30.0))
                                     .px_3()
-                                    .bg(theme::semantic(dark).table_header)
+                                    .bg(theme::semantic().table_header)
                                     .rounded_t(theme::radius_lg())
                                     .flex()
                                     .items_center()
                                     .gap_2()
                                     .text_size(px(11.0))
-                                    .text_color(theme::semantic(dark).text_secondary)
+                                    .text_color(theme::semantic().text_secondary)
                                     .child(div().w(px(58.0)).child("时间"))
                                     .child(div().w(px(54.0)).child("方法"))
                                     .child(div().w(px(130.0)).child("Host"))
@@ -755,15 +746,14 @@ impl Render for CapturePanel {
                                             .h(px(32.0))
                                             .px_3()
                                             .bg(if selected {
-                                                theme::semantic(dark).primary_bg
+                                                theme::semantic().primary_bg
                                             } else if i % 2 == 0 {
-                                                theme::semantic(dark).bg_surface
+                                                theme::semantic().bg_surface
                                             } else {
-                                                theme::semantic(dark).bg_subtle_2
+                                                theme::semantic().bg_subtle_2
                                             })
                                             .hover(|s| {
-                                                s.bg(theme::semantic(dark).row_hover)
-                                                    .cursor_pointer()
+                                                s.bg(theme::semantic().row_hover).cursor_pointer()
                                             })
                                             .flex()
                                             .items_center()
@@ -777,9 +767,7 @@ impl Render for CapturePanel {
                                             .child(
                                                 div()
                                                     .w(px(58.0))
-                                                    .text_color(
-                                                        theme::semantic(dark).text_secondary,
-                                                    )
+                                                    .text_color(theme::semantic().text_secondary)
                                                     .child(if timestamp.len() >= 16 {
                                                         timestamp[11..16].to_string()
                                                     } else {
@@ -796,7 +784,7 @@ impl Render for CapturePanel {
                                             .child(
                                                 div()
                                                     .w(px(130.0))
-                                                    .text_color(theme::semantic(dark).text_primary)
+                                                    .text_color(theme::semantic().text_primary)
                                                     .overflow_hidden()
                                                     .text_ellipsis()
                                                     .child(host),
@@ -804,7 +792,7 @@ impl Render for CapturePanel {
                                             .child(
                                                 div()
                                                     .flex_1()
-                                                    .text_color(theme::semantic(dark).text_primary)
+                                                    .text_color(theme::semantic().text_primary)
                                                     .overflow_hidden()
                                                     .text_ellipsis()
                                                     .child(url),
@@ -816,7 +804,7 @@ impl Render for CapturePanel {
                                                     .text_color(if status > 0 {
                                                         status_color
                                                     } else {
-                                                        theme::semantic(dark).text_secondary
+                                                        theme::semantic().text_secondary
                                                     })
                                                     .font_weight(if status >= 400 {
                                                         gpui::FontWeight::SEMIBOLD
@@ -833,18 +821,14 @@ impl Render for CapturePanel {
                                                 div()
                                                     .w(px(70.0))
                                                     .text_align(gpui::TextAlign::Right)
-                                                    .text_color(
-                                                        theme::semantic(dark).text_secondary,
-                                                    )
+                                                    .text_color(theme::semantic().text_secondary)
                                                     .child(size),
                                             )
                                             .child(
                                                 div()
                                                     .w(px(62.0))
                                                     .text_align(gpui::TextAlign::Right)
-                                                    .text_color(
-                                                        theme::semantic(dark).text_secondary,
-                                                    )
+                                                    .text_color(theme::semantic().text_secondary)
                                                     .child(duration),
                                             )
                                     }))
@@ -858,13 +842,13 @@ impl Render for CapturePanel {
                                             .justify_center()
                                             .gap_3()
                                             .border_t_1()
-                                            .border_color(theme::semantic(dark).border_default)
+                                            .border_color(theme::semantic().border_default)
                                             .text_size(px(11.0))
                                             .child({
                                                 let prev_link = div()
                                                     .id("prev-page")
                                                     .text_color(if has_prev {
-                                                        theme::semantic(dark).primary
+                                                        theme::semantic().primary
                                                     } else {
                                                         ui::text_tertiary()
                                                     })
@@ -881,9 +865,7 @@ impl Render for CapturePanel {
                                             })
                                             .child(
                                                 div()
-                                                    .text_color(
-                                                        theme::semantic(dark).text_secondary,
-                                                    )
+                                                    .text_color(theme::semantic().text_secondary)
                                                     .child(format!(
                                                         "{}–{} / {}",
                                                         offset + 1,
@@ -895,7 +877,7 @@ impl Render for CapturePanel {
                                                 let next_link = div()
                                                     .id("next-page")
                                                     .text_color(if has_next {
-                                                        theme::semantic(dark).primary
+                                                        theme::semantic().primary
                                                     } else {
                                                         ui::text_tertiary()
                                                     })
@@ -919,9 +901,9 @@ impl Render for CapturePanel {
                         div()
                             .w(px(340.0))
                             .rounded(theme::radius_lg())
-                            .bg(theme::semantic(dark).bg_surface)
+                            .bg(theme::semantic().bg_surface)
                             .border_1()
-                            .border_color(theme::semantic(dark).border_default)
+                            .border_color(theme::semantic().border_default)
                             .p_3()
                             .flex()
                             .flex_col()
@@ -948,7 +930,7 @@ impl Render for CapturePanel {
                                             .flex_1()
                                             .text_size(px(11.0))
                                             .font_family("SF Mono")
-                                            .text_color(theme::semantic(dark).text_primary)
+                                            .text_color(theme::semantic().text_primary)
                                             .overflow_hidden()
                                             .text_ellipsis()
                                             .child(detail.url.clone()),
@@ -963,9 +945,9 @@ impl Render for CapturePanel {
                             .child(match selected_detail {
                                 Some(ref detail) => div()
                                     .rounded(theme::radius_md())
-                                    .bg(theme::semantic(dark).bg_subtle_2)
+                                    .bg(theme::semantic().bg_subtle_2)
                                     .border_1()
-                                    .border_color(theme::semantic(dark).border_default)
+                                    .border_color(theme::semantic().border_default)
                                     .p_2()
                                     .flex()
                                     .gap_3()
@@ -983,21 +965,21 @@ impl Render for CapturePanel {
                                         detail_mini(
                                             "耗时",
                                             &detail.formatted_duration(),
-                                            theme::semantic(dark).text_primary,
+                                            theme::semantic().text_primary,
                                         ),
                                         detail_mini(
                                             "请求",
                                             &crate::features::http_capture::model::format_bytes(
                                                 detail.request_size,
                                             ),
-                                            theme::semantic(dark).text_primary,
+                                            theme::semantic().text_primary,
                                         ),
                                         detail_mini(
                                             "响应",
                                             &crate::features::http_capture::model::format_bytes(
                                                 detail.response_size,
                                             ),
-                                            theme::semantic(dark).text_primary,
+                                            theme::semantic().text_primary,
                                         ),
                                     ])
                                     .into_any_element(),
@@ -1008,7 +990,7 @@ impl Render for CapturePanel {
                                 div()
                                     .h(px(28.0))
                                     .rounded(theme::radius_sm())
-                                    .bg(theme::semantic(dark).bg_subtle)
+                                    .bg(theme::semantic().bg_subtle)
                                     .flex()
                                     .gap_px()
                                     .children(DetailTab::ALL.iter().map(|&tab| {
@@ -1020,18 +1002,18 @@ impl Render for CapturePanel {
                                             .h(px(28.0))
                                             .rounded(theme::radius_sm())
                                             .bg(if active {
-                                                theme::semantic(dark).nav_active_bg
+                                                theme::semantic().nav_active_bg
                                             } else {
-                                                theme::semantic(dark).bg_subtle
+                                                theme::semantic().bg_subtle
                                             })
                                             .flex()
                                             .items_center()
                                             .justify_center()
                                             .text_size(px(11.0))
                                             .text_color(if active {
-                                                theme::semantic(dark).primary_active
+                                                theme::semantic().primary_active
                                             } else {
-                                                theme::semantic(dark).text_secondary
+                                                theme::semantic().text_secondary
                                             })
                                             .font_weight(if active {
                                                 gpui::FontWeight::SEMIBOLD
@@ -1041,7 +1023,7 @@ impl Render for CapturePanel {
                                             .cursor_pointer()
                                             .hover(|s| {
                                                 if !active {
-                                                    s.bg(theme::semantic(dark).bg_subtle_2)
+                                                    s.bg(theme::semantic().bg_subtle_2)
                                                 } else {
                                                     s
                                                 }
@@ -1077,11 +1059,11 @@ impl Render for CapturePanel {
             .child(ui::status_bar(
                 self.status_text(),
                 if notice.is_some() {
-                    theme::semantic(dark).warning
+                    theme::semantic().warning
                 } else if exchanges.is_empty() {
                     ui::text_tertiary()
                 } else {
-                    theme::semantic(dark).text_secondary
+                    theme::semantic().text_secondary
                 },
             ))
     }
@@ -1097,7 +1079,7 @@ fn detail_mini(key: &str, value: &str, value_color: impl Into<gpui::Hsla>) -> gp
         .text_size(px(11.0))
         .child(
             div()
-                .text_color(theme::semantic(crate::app::theme_mode::is_dark()).text_secondary)
+                .text_color(theme::semantic().text_secondary)
                 .child(key),
         )
         .child(
@@ -1139,7 +1121,7 @@ fn render_detail_tab_content(
     }
 }
 
-fn render_timing_section(detail: &CapturedExchange, dark: bool) -> gpui::AnyElement {
+fn render_timing_section(detail: &CapturedExchange, _dark: bool) -> gpui::AnyElement {
     let rows = detail.timing_rows();
     div()
         .flex()
@@ -1152,17 +1134,17 @@ fn render_timing_section(detail: &CapturedExchange, dark: bool) -> gpui::AnyElem
                 .font_family("SF Mono")
                 .p_1()
                 .rounded(theme::radius_sm())
-                .hover(|s| s.bg(theme::semantic(dark).bg_subtle_2))
+                .hover(|s| s.bg(theme::semantic().bg_subtle_2))
                 .child(
                     div()
                         .w(px(80.0))
-                        .text_color(theme::semantic(dark).text_secondary)
+                        .text_color(theme::semantic().text_secondary)
                         .child(key.to_string()),
                 )
                 .child(
                     div()
                         .flex_1()
-                        .text_color(theme::semantic(dark).text_primary)
+                        .text_color(theme::semantic().text_primary)
                         .child(value),
                 )
         }))
@@ -1189,17 +1171,17 @@ fn render_headers_section(
                 .font_family("SF Mono")
                 .p_1()
                 .rounded(theme::radius_sm())
-                .hover(|s| s.bg(theme::semantic(dark).bg_subtle_2))
+                .hover(|s| s.bg(theme::semantic().bg_subtle_2))
                 .child(
                     div()
                         .w(px(100.0))
-                        .text_color(theme::semantic(dark).text_secondary)
+                        .text_color(theme::semantic().text_secondary)
                         .child(entry.name.clone()),
                 )
                 .child(
                     div()
                         .flex_1()
-                        .text_color(theme::semantic(dark).text_primary)
+                        .text_color(theme::semantic().text_primary)
                         .child(entry.value.clone()),
                 )
         }))
@@ -1225,13 +1207,13 @@ fn render_body_section(title: &str, display: BodyDisplay, dark: bool) -> gpui::A
             .p_1()
             .text_size(px(11.0))
             .font_family("SF Mono")
-            .text_color(theme::semantic(dark).text_primary)
+            .text_color(theme::semantic().text_primary)
             .children(body.lines().map(|line| div().child(line.to_string())))
             .into_any_element(),
     }
 }
 
-fn render_overview_section(detail: &CapturedExchange, dark: bool) -> gpui::AnyElement {
+fn render_overview_section(detail: &CapturedExchange, _dark: bool) -> gpui::AnyElement {
     let rows: Vec<(&str, String)> = vec![
         ("方法", detail.method.clone()),
         ("URL", detail.url.clone()),
@@ -1272,17 +1254,17 @@ fn render_overview_section(detail: &CapturedExchange, dark: bool) -> gpui::AnyEl
                 .font_family("SF Mono")
                 .p_1()
                 .rounded(theme::radius_sm())
-                .hover(|s| s.bg(theme::semantic(dark).bg_subtle_2))
+                .hover(|s| s.bg(theme::semantic().bg_subtle_2))
                 .child(
                     div()
                         .w(px(80.0))
-                        .text_color(theme::semantic(dark).text_secondary)
+                        .text_color(theme::semantic().text_secondary)
                         .child(key.to_string()),
                 )
                 .child(
                     div()
                         .flex_1()
-                        .text_color(theme::semantic(dark).text_primary)
+                        .text_color(theme::semantic().text_primary)
                         .child(value),
                 )
         }))

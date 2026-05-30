@@ -5,13 +5,13 @@ use crate::app::theme;
 /// Unified settings card — header with title + optional subtitle, content below.
 /// Extracted from system_settings/view.rs for reuse across clipboard settings, download settings, etc.
 pub fn settings_card(
-    dark: bool,
+    _dark: bool,
     title: impl Into<SharedString>,
     subtitle: Option<impl Into<SharedString>>,
     content: impl IntoElement,
 ) -> impl IntoElement {
     let title = title.into();
-    let s = theme::semantic(dark);
+    let s = theme::semantic();
 
     div()
         .rounded(theme::radius_lg())
@@ -55,14 +55,14 @@ pub fn settings_card(
 
 /// Unified settings row — label + description on the left, control on the right.
 pub fn settings_row(
-    dark: bool,
+    _dark: bool,
     label: impl Into<SharedString>,
     description: impl Into<SharedString>,
     control: impl IntoElement,
 ) -> impl IntoElement {
     let label = label.into();
     let desc = description.into();
-    let s = theme::semantic(dark);
+    let s = theme::semantic();
 
     div()
         .min_h(px(52.0))

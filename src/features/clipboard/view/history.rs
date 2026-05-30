@@ -43,7 +43,7 @@ pub(super) fn history_page(
                 .h_full()
                 .flex()
                 .flex_col()
-                .bg(theme::semantic(dark).bg_subtle)
+                .bg(theme::semantic().bg_subtle)
                 .child(history_top_bar(
                     handle.clone(),
                     query_input,
@@ -85,8 +85,8 @@ pub(super) fn history_page(
                 .min_w(px(430.0))
                 .h_full()
                 .border_l_1()
-                .border_color(theme::semantic(dark).border_default)
-                .bg(theme::semantic(dark).bg_page)
+                .border_color(theme::semantic().border_default)
+                .bg(theme::semantic().bg_page)
                 .flex()
                 .flex_col()
                 .child(
@@ -117,8 +117,8 @@ fn history_top_bar(
         .h(px(62.0))
         .px(px(18.0))
         .border_b_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_page)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_page)
         .flex()
         .items_center()
         .child(div().w(px(220.0)))
@@ -139,29 +139,29 @@ fn history_top_bar(
                 .child(
                     div()
                         .text_size(px(13.0))
-                        .text_color(theme::semantic(dark).text_secondary)
+                        .text_color(theme::semantic().text_secondary)
                         .child(format!("{item_count} 条")),
                 )
                 .child(top_bar_icon_button(handle, dark)),
         )
 }
 
-fn top_bar_icon_button(handle: Entity<ClipboardPanel>, dark: bool) -> impl IntoElement {
+fn top_bar_icon_button(handle: Entity<ClipboardPanel>, _dark: bool) -> impl IntoElement {
     div()
         .id("clipboard-open-settings")
         .size(px(30.0))
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_elevated)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_elevated)
         .flex()
         .items_center()
         .justify_center()
-        .hover(|style| style.bg(theme::semantic(dark).row_hover).cursor_pointer())
+        .hover(|style| style.bg(theme::semantic().row_hover).cursor_pointer())
         .child(
             Icon::new(IconName::Settings)
                 .with_size(ComponentSize::Small)
-                .text_color(theme::semantic(dark).text_secondary),
+                .text_color(theme::semantic().text_secondary),
         )
         .on_click(move |_, _, cx| {
             let _ = cx.update_entity(&handle, |panel, cx| {
@@ -171,23 +171,23 @@ fn top_bar_icon_button(handle: Entity<ClipboardPanel>, dark: bool) -> impl IntoE
         })
 }
 
-fn history_filter_divider(dark: bool) -> impl IntoElement {
+fn history_filter_divider(_dark: bool) -> impl IntoElement {
     div()
         .w_full()
         .mt(px(14.0))
         .mb(px(10.0))
         .h(px(1.0))
-        .bg(theme::semantic(dark).border_default)
+        .bg(theme::semantic().border_default)
 }
 
-fn search_field(query_input: Entity<TextInput>, dark: bool) -> gpui::Div {
+fn search_field(query_input: Entity<TextInput>, _dark: bool) -> gpui::Div {
     div()
         .min_w(px(0.0))
         .h(px(32.0))
         .rounded(px(9.0))
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_elevated)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_elevated)
         .px(px(10.0))
         .flex()
         .items_center()
@@ -195,7 +195,7 @@ fn search_field(query_input: Entity<TextInput>, dark: bool) -> gpui::Div {
         .child(
             Icon::new(IconName::Search)
                 .with_size(ComponentSize::Medium)
-                .text_color(theme::semantic(dark).text_placeholder),
+                .text_color(theme::semantic().text_placeholder),
         )
         .child(div().flex_1().child(query_input.into_any_element()))
 }
@@ -203,7 +203,7 @@ fn search_field(query_input: Entity<TextInput>, dark: bool) -> gpui::Div {
 fn render_filter_tabs(
     handle: Entity<ClipboardPanel>,
     active: ClipboardFilter,
-    dark: bool,
+    _dark: bool,
 ) -> impl IntoElement {
     let tabs: Vec<gpui::AnyElement> = keyboard_filters()
         .into_iter()
@@ -222,18 +222,18 @@ fn render_filter_tabs(
                         0.12,
                     )
                 } else {
-                    theme::semantic(dark).bg_elevated.into()
+                    theme::semantic().bg_elevated.into()
                 })
                 .border_1()
                 .border_color(if is_active {
                     ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue)
                 } else {
-                    theme::semantic(dark).border_default
+                    theme::semantic().border_default
                 })
                 .text_color(if is_active {
                     ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue)
                 } else {
-                    theme::semantic(dark).text_secondary
+                    theme::semantic().text_secondary
                 })
                 .text_size(px(12.0))
                 .font_weight(if is_active {
@@ -244,7 +244,7 @@ fn render_filter_tabs(
                 .hover(move |style| {
                     style
                         .bg(if !is_active {
-                            theme::semantic(dark).row_hover.into()
+                            theme::semantic().row_hover.into()
                         } else {
                             hsla(0.0, 0.0, 0.0, 0.0)
                         })
@@ -318,7 +318,7 @@ fn history_virtual_list(
         .child(Scrollbar::vertical(&scroll).scrollbar_show(ScrollbarShow::Scrolling))
 }
 
-fn empty_state_text(query: &str, dark: bool, is_empty: bool) -> impl IntoElement {
+fn empty_state_text(query: &str, _dark: bool, is_empty: bool) -> impl IntoElement {
     let (title, subtitle) = if is_empty && query.trim().is_empty() {
         ("暂无剪贴板记录", "复制一段文本后，这里会开始积累历史")
     } else {
@@ -354,13 +354,13 @@ fn empty_state_text(query: &str, dark: bool, is_empty: bool) -> impl IntoElement
             div()
                 .text_size(px(14.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic(dark).text_primary)
+                .text_color(theme::semantic().text_primary)
                 .child(title),
         )
         .child(
             div()
                 .text_size(px(12.0))
-                .text_color(theme::semantic(dark).text_secondary)
+                .text_color(theme::semantic().text_secondary)
                 .child(subtitle),
         )
 }
@@ -381,7 +381,7 @@ fn history_row(
             0.12,
         )
     } else {
-        theme::semantic(dark).bg_elevated.into()
+        theme::semantic().bg_elevated.into()
     };
     let row_bg = if selected {
         theme::rgba_with_alpha(
@@ -391,7 +391,7 @@ fn history_row(
     } else {
         hsla(0.0, 0.0, 0.0, 0.0)
     };
-    let title_color = theme::semantic(dark).text_primary;
+    let title_color = theme::semantic().text_primary;
     let pin_handle = handle.clone();
     let delete_handle = handle.clone();
 
@@ -411,7 +411,7 @@ fn history_row(
                         0.08,
                     )
                 } else {
-                    theme::semantic(dark).row_hover.into()
+                    theme::semantic().row_hover.into()
                 })
                 .cursor_pointer()
         })
@@ -450,7 +450,7 @@ fn history_row(
                     div()
                         .text_size(px(11.0))
                         .line_height(px(15.0))
-                        .text_color(theme::semantic(dark).text_secondary)
+                        .text_color(theme::semantic().text_secondary)
                         .child(subtitle),
                 ),
         )
@@ -487,7 +487,7 @@ fn history_row(
 fn row_icon_button(
     icon: IconName,
     id: &'static str,
-    dark: bool,
+    _dark: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
     div()
@@ -495,16 +495,16 @@ fn row_icon_button(
         .size(px(28.0))
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_elevated)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_elevated)
         .flex()
         .items_center()
         .justify_center()
-        .hover(|style| style.bg(theme::semantic(dark).row_hover).cursor_pointer())
+        .hover(|style| style.bg(theme::semantic().row_hover).cursor_pointer())
         .child(
             Icon::new(icon)
                 .with_size(ComponentSize::Small)
-                .text_color(theme::semantic(dark).text_secondary),
+                .text_color(theme::semantic().text_secondary),
         )
         .on_click(move |event, window, cx| {
             on_click(event, window, cx);
@@ -522,15 +522,15 @@ fn history_row_media(
             .size(px(42.0))
             .rounded(px(8.0))
             .border_1()
-            .border_color(theme::semantic(dark).border_default)
-            .bg(theme::semantic(dark).bg_elevated)
+            .border_color(theme::semantic().border_default)
+            .bg(theme::semantic().bg_elevated)
             .overflow_hidden()
             .child(
                 img(PathBuf::from(item.content.clone()))
                     .object_fit(ObjectFit::Cover)
                     .size_full()
                     .with_fallback(move || {
-                        icon_label("IMG", icon_surface, theme::semantic(dark).warning)
+                        icon_label("IMG", icon_surface, theme::semantic().warning)
                             .into_any_element()
                     })
                     .into_any_element(),
@@ -613,17 +613,17 @@ fn history_item_icon(item: &ClipboardRecord) -> &'static str {
     }
 }
 
-fn history_item_icon_color(item: &ClipboardRecord, dark: bool) -> gpui::Rgba {
+fn history_item_icon_color(item: &ClipboardRecord, _dark: bool) -> gpui::Rgba {
     match item.kind {
         history_store::ClipboardItemKind::Text => match item.badge_kind() {
-            history_store::ClipboardBadgeKind::Link => theme::semantic(dark).success,
+            history_store::ClipboardBadgeKind::Link => theme::semantic().success,
             history_store::ClipboardBadgeKind::Json => {
                 ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue)
             }
-            history_store::ClipboardBadgeKind::Other => theme::semantic(dark).text_secondary,
+            history_store::ClipboardBadgeKind::Other => theme::semantic().text_secondary,
         },
-        history_store::ClipboardItemKind::Image => theme::semantic(dark).warning,
-        history_store::ClipboardItemKind::Files => theme::semantic(dark).danger,
+        history_store::ClipboardItemKind::Image => theme::semantic().warning,
+        history_store::ClipboardItemKind::Files => theme::semantic().danger,
     }
 }
 
@@ -666,12 +666,12 @@ fn preview_text_for_record(item: &ClipboardRecord) -> String {
     }
 }
 
-fn preview_text(preview_input: Entity<TextInput>, dark: bool) -> impl IntoElement {
+fn preview_text(preview_input: Entity<TextInput>, _dark: bool) -> impl IntoElement {
     div()
         .size_full()
         .px(px(14.0))
         .py(px(12.0))
-        .text_color(theme::semantic(dark).text_regular)
+        .text_color(theme::semantic().text_regular)
         .child(preview_input)
 }
 
@@ -679,14 +679,14 @@ fn preview_empty(dark: bool) -> impl IntoElement {
     preview_unavailable("选择一条记录", dark)
 }
 
-fn preview_unavailable(message: &'static str, dark: bool) -> impl IntoElement {
+fn preview_unavailable(message: &'static str, _dark: bool) -> impl IntoElement {
     div()
         .size_full()
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(12.0))
-        .text_color(theme::semantic(dark).text_placeholder)
+        .text_color(theme::semantic().text_placeholder)
         .child(message)
 }
 
@@ -706,8 +706,8 @@ fn detail_panel(
             .min_h(px(0.0))
             .rounded(px(8.0))
             .border_1()
-            .border_color(theme::semantic(dark).border_default)
-            .bg(theme::semantic(dark).bg_surface)
+            .border_color(theme::semantic().border_default)
+            .bg(theme::semantic().bg_surface)
             .overflow_hidden()
             .child(
                 selected_record
@@ -763,7 +763,7 @@ fn detail_actions(handle: Entity<ClipboardPanel>, is_pinned: bool, dark: bool) -
 
 fn detail_action_button(
     label: &'static str,
-    dark: bool,
+    _dark: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
     div()
@@ -772,14 +772,14 @@ fn detail_action_button(
         .px(px(12.0))
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::semantic(dark).border_default)
-        .bg(theme::semantic(dark).bg_surface)
+        .border_color(theme::semantic().border_default)
+        .bg(theme::semantic().bg_surface)
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(12.0))
-        .text_color(theme::semantic(dark).text_primary)
-        .hover(|style| style.bg(theme::semantic(dark).row_hover).cursor_pointer())
+        .text_color(theme::semantic().text_primary)
+        .hover(|style| style.bg(theme::semantic().row_hover).cursor_pointer())
         .child(label)
         .on_click(on_click)
 }

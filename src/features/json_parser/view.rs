@@ -348,10 +348,7 @@ impl RenderOnce for JsonParserElement {
                                 .flex_1()
                                 .h(px(34.0))
                                 .rounded(px(10.0))
-                                .bg(theme::rgba_with_alpha(
-                                    theme::semantic(dark).bg_surface,
-                                    0.86,
-                                ))
+                                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.86))
                                 .border_1()
                                 .border_color(ui::border_light())
                                 .child(query.unwrap().into_any_element()),
@@ -399,7 +396,7 @@ fn editor_split(
     split
         .child(editor_pane(
             "输入",
-            theme::semantic(dark).bg_surface,
+            theme::semantic().bg_surface,
             input,
             dark,
             layout_mode,
@@ -442,7 +439,7 @@ fn editor_pane(
 
 fn output_pane(
     output: Entity<TextInput>,
-    dark: bool,
+    _dark: bool,
     last_mode: JsonMode,
     layout_mode: JsonLayoutMode,
 ) -> impl IntoElement {
@@ -465,10 +462,7 @@ fn output_pane(
             div()
                 .flex_1()
                 .rounded(px(12.0))
-                .bg(theme::rgba_with_alpha(
-                    theme::semantic(dark).bg_subtle,
-                    0.76,
-                ))
+                .bg(theme::rgba_with_alpha(theme::semantic().bg_subtle, 0.76))
                 .border_1()
                 .border_color(ui::border_light())
                 .child(output),
@@ -480,21 +474,18 @@ fn status_bar(
     stats_text: String,
     error_loc_text: String,
     status_tone: StatusTone,
-    dark: bool,
+    _dark: bool,
 ) -> impl IntoElement {
     let status_color = match status_tone {
-        StatusTone::Neutral => theme::semantic(dark).text_regular,
-        StatusTone::Success => theme::semantic(dark).success,
-        StatusTone::Error => theme::semantic(dark).danger,
+        StatusTone::Neutral => theme::semantic().text_regular,
+        StatusTone::Success => theme::semantic().success,
+        StatusTone::Error => theme::semantic().danger,
     };
 
     div()
         .h(px(32.0))
         .rounded(px(10.0))
-        .bg(theme::rgba_with_alpha(
-            theme::semantic(dark).bg_surface,
-            0.7,
-        ))
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
         .border_1()
         .border_color(ui::border_light())
         .px_3()
@@ -513,7 +504,7 @@ fn status_bar(
                 div()
                     .text_size(px(11.0))
                     .font_family("SF Mono")
-                    .text_color(theme::semantic(dark).danger)
+                    .text_color(theme::semantic().danger)
                     .child(error_loc_text),
             )
         })
@@ -541,13 +532,13 @@ fn mode_button(
     label: &'static str,
     action: JsonAction,
     panel: Rc<RefCell<JsonPanel>>,
-    dark: bool,
+    _dark: bool,
     active: bool,
 ) -> impl IntoElement {
     let background = if active {
         theme::rgba_with_alpha(theme::accent_color(theme::ThemeAccent::Green), 0.14)
     } else {
-        theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 0.84)
+        theme::rgba_with_alpha(theme::semantic().bg_surface, 0.84)
     };
     let border = if active {
         theme::rgba_with_alpha(theme::accent_color(theme::ThemeAccent::Green), 0.24)
@@ -557,7 +548,7 @@ fn mode_button(
     let text_color = if active {
         theme::accent_color(theme::ThemeAccent::Green)
     } else {
-        theme::semantic(dark).text_primary
+        theme::semantic().text_primary
     };
 
     div()
@@ -585,17 +576,14 @@ fn toolbar_button(
     label: &'static str,
     action: JsonAction,
     panel: Rc<RefCell<JsonPanel>>,
-    dark: bool,
+    _dark: bool,
 ) -> impl IntoElement {
     div()
         .id(label)
         .h(px(30.0))
         .px_3()
         .rounded(px(8.0))
-        .bg(theme::rgba_with_alpha(
-            theme::semantic(dark).bg_surface,
-            0.84,
-        ))
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.84))
         .border_1()
         .border_color(ui::border_light())
         .hover(move |style| style.cursor_pointer())
@@ -603,7 +591,7 @@ fn toolbar_button(
         .items_center()
         .justify_center()
         .text_size(px(11.0))
-        .text_color(theme::semantic(dark).text_primary)
+        .text_color(theme::semantic().text_primary)
         .child(label)
         .on_click(move |_, window, cx| {
             run_action(action, &panel, cx);
@@ -611,7 +599,7 @@ fn toolbar_button(
         })
 }
 
-fn module_header(dark: bool) -> impl IntoElement {
+fn module_header(_dark: bool) -> impl IntoElement {
     div().flex().items_center().justify_between().child(
         div()
             .flex()
@@ -621,7 +609,7 @@ fn module_header(dark: bool) -> impl IntoElement {
                 div()
                     .text_size(px(16.0))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme::semantic(dark).text_primary)
+                    .text_color(theme::semantic().text_primary)
                     .child("📦 JSON 解析"),
             )
             .child(
