@@ -1173,35 +1173,52 @@ impl Render for ClipboardView {
         let items = self.items.clone();
         let selected = self.selected;
         let query = self.query.clone();
-        let query_input = self.query_input.clone().expect("query input missing");
-        let preview_input = self.preview_input.clone().expect("preview input missing");
+
+        // Gracefully fall back if inputs haven't been initialised yet.
+        let (Some(query_input), Some(preview_input)) =
+            (self.query_input.clone(), self.preview_input.clone())
+        else {
+            tracing::warn!("clipboard inputs not initialised; rendering placeholder");
+            return div()
+                .size_full()
+                .bg(theme::semantic().bg_page)
+                .child("剪贴板组件加载中...")
+                .into_any_element();
+        };
         let item_count = self.items.len();
         let selected_record = self.items.get(self.selected).cloned();
-        let settings_inputs = (
-            self.ignore_patterns_input
-                .clone()
-                .expect("ignore patterns input missing"),
-            self.max_text_chars_input
-                .clone()
-                .expect("max text chars input missing"),
-            self.hotkey_input.clone().expect("hotkey input missing"),
-        );
+        let settings_inputs = match (
+            self.ignore_patterns_input.clone(),
+            self.max_text_chars_input.clone(),
+            self.hotkey_input.clone(),
+        ) {
+            (Some(a), Some(b), Some(c)) => (a, b, c),
+            _ => {
+                tracing::warn!("clipboard settings inputs not initialised; rendering placeholder");
+                return div()
+                    .size_full()
+                    .bg(theme::semantic().bg_page)
+                    .child("剪贴板设置加载中...")
+                    .into_any_element();
+            }
+        };
         let settings_config = self.settings_snapshot();
         let status_text = self.status_text();
         let dark = crate::app::theme_mode::is_dark();
 
-        div()
+        let root = div()
             .size_full()
             .flex()
             .flex_col()
             .bg(theme::semantic().bg_page)
             .text_color(theme::semantic().text_primary)
-            .font_family(ui::font_ui())
-            .track_focus(
-                self.focus_handle
-                    .as_ref()
-                    .expect("panel focus handle missing"),
-            )
+            .font_family(ui::font_ui());
+        let root = if let Some(ref fh) = self.focus_handle {
+            root.track_focus(fh)
+        } else {
+            root
+        };
+        root
             .capture_key_down(cx.listener(Self::handle_panel_key))
             .child(if tab == ClipboardTab::History {
                 history_page(
@@ -1229,11 +1246,15 @@ impl Render for ClipboardView {
                 )
                 .into_any_element()
             })
+            .into_any_element()
     }
 }
 
 impl Focusable for ClipboardView {
     fn focus_handle(&self, _: &App) -> FocusHandle {
+        // Programmer invariant: focus_handle is always set in init()
+        // before the first render.  If this panics it means the view
+        // was constructed without calling init(), which is a bug.
         self.focus_handle
             .clone()
             .expect("clipboard panel focus handle missing")

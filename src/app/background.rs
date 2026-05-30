@@ -12,6 +12,7 @@ use crate::{
         theme_store::ThemeStore,
         window_controller::{WindowController, WindowControllerHandle},
     },
+    core::lock_or_recover,
     platform::power::PowerManager,
 };
 
@@ -98,6 +99,70 @@ impl BackgroundSupervisor {
         self.tasks.push(task);
     }
 
+    /// Start a low-level keyboard hook (WH_KEYBOARD_LL) for shortcuts that
+    /// cannot be registered via `RegisterHotKey` on Windows (e.g. Alt+Space).
+    #[cfg(target_os = "windows")]
+    pub fn start_low_level_hook(
+        &mut self,
+        window_controller: WindowControllerHandle,
+        cx: &mut App,
+    ) {
+        if !self.mark_started("low-level-hook") {
+            return;
+        }
+
+        let shortcut_service = cx.try_global::<crate::core::shortcut::ShortcutService>();
+        let Some(service) = shortcut_service else {
+            tracing::warn!("ShortcutService not available; skipping low-level hook");
+            return;
+        };
+
+        let entries = service.low_level_entries().to_vec();
+        if entries.is_empty() {
+            tracing::debug!("no low-level hook entries to install");
+            return;
+        }
+
+        let (hook, rx) = match crate::platform::low_level_hook::LowLevelHook::install(entries) {
+            Ok(pair) => pair,
+            Err(error) => {
+                tracing::warn!(error = %error, "failed to install low-level keyboard hook");
+                return;
+            }
+        };
+
+        tracing::debug!("low-level keyboard hook installed");
+
+        let task = cx.spawn(async move |async_cx| {
+            // Keep the hook alive while polling for events.
+            let _hook = hook;
+            loop {
+                // Poll rx periodically — WH_KEYBOARD_LL events arrive at
+                // human timescales, so 50 ms is more than responsive enough.
+                async_cx
+                    .background_executor()
+                    .timer(Duration::from_millis(50))
+                    .await;
+                while let Ok(hook_id) = rx.try_recv() {
+                    let window_controller = Arc::clone(&window_controller);
+                    let _ = async_cx.update(move |cx| {
+                        let target = cx
+                            .try_global::<crate::core::shortcut::ShortcutService>()
+                            .and_then(|service| service.dispatch_low_level(hook_id));
+                        if let Some(target) = target {
+                            crate::core::shortcut::dispatch_target(
+                                &target,
+                                window_controller,
+                                cx,
+                            );
+                        }
+                    });
+                }
+            }
+        });
+        self.tasks.push(task);
+    }
+
     pub fn start_theme_poll(&mut self, theme_store: Arc<Mutex<ThemeStore>>, cx: &mut App) {
         if !self.mark_started("theme-poll") {
             return;
@@ -134,7 +199,7 @@ impl BackgroundSupervisor {
                     .await;
                 let pm = Arc::clone(&power_manager);
                 let _ = async_cx.update(move |_cx| {
-                    pm.lock().expect("bg controller poisoned").update();
+                    lock_or_recover(&pm, "power-manager").update();
                 });
             }
         });
@@ -164,10 +229,7 @@ fn handle_tray_action(
             WindowController::show_launcher(window_controller, cx);
         }
         TrayAction::SetPreventSleep(mode) => {
-            power_manager
-                .lock()
-                .expect("bg controller poisoned")
-                .set_mode(mode);
+            lock_or_recover(&power_manager, "power-manager").set_mode(mode);
             let _ = crate::platform::tray::rebuild_menu(mode);
         }
         TrayAction::Restart => {

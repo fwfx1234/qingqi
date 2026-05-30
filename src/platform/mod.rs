@@ -2,6 +2,8 @@ pub mod apps;
 pub mod clipboard;
 pub mod display;
 pub mod hotkey;
+#[cfg(target_os = "windows")]
+pub mod low_level_hook;
 pub mod macos;
 pub mod power;
 pub mod shell;

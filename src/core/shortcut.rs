@@ -146,6 +146,9 @@ impl From<ShortcutScope> for ShortcutScopeKey {
     }
 }
 
+#[cfg(target_os = "windows")]
+use crate::platform::low_level_hook::LowLevelEntry;
+
 #[derive(Default)]
 pub struct ShortcutService {
     plugins: Option<Arc<Mutex<PluginManager>>>,
@@ -153,6 +156,13 @@ pub struct ShortcutService {
     resolved: Vec<ResolvedShortcut>,
     hotkey_ids: HashMap<u32, String>,
     registration_errors: HashMap<String, String>,
+    /// Shortcut ids that are handled via `WH_KEYBOARD_LL` instead of
+    /// `RegisterHotKey` (Windows-only — empty on other platforms).
+    #[cfg(target_os = "windows")]
+    low_level_ids: HashMap<u32, String>,
+    /// Low-level hook entries that need to be installed by background.
+    #[cfg(target_os = "windows")]
+    low_level_entries: Vec<LowLevelEntry>,
 }
 
 impl Global for ShortcutService {}
@@ -173,9 +183,7 @@ impl ShortcutService {
             // prevents plugins from registering system-wide hotkeys that
             // conflict with other applications.
             shortcuts.extend(
-                plugins
-                    .lock()
-                    .expect("plugin manager poisoned")
+                crate::core::lock_or_recover(&plugins, "plugin-manager")
                     .shortcuts()
                     .into_iter()
                     .map(|mut s| {
@@ -251,9 +259,7 @@ impl ShortcutService {
             .plugins
             .as_ref()
             .ok_or_else(|| anyhow!("plugin manager unavailable"))?;
-        plugins
-            .lock()
-            .expect("plugin manager poisoned")
+        crate::core::lock_or_recover(&plugins, "plugin-manager")
             .set_shortcut(&owner, id, &normalized, enabled)
             .with_context(|| format!("保存快捷键失败: {id}"))?;
         self.refresh(cx)
@@ -281,6 +287,26 @@ impl ShortcutService {
             return None;
         };
         Some(resolved.descriptor.target.clone())
+    }
+
+    /// Dispatch a low-level hook event (Windows WH_KEYBOARD_LL) to a shortcut target.
+    #[cfg(target_os = "windows")]
+    pub fn dispatch_low_level(&self, hook_id: u32) -> Option<ShortcutTarget> {
+        let shortcut_id = self.low_level_ids.get(&hook_id)?;
+        let Some(resolved) = self
+            .resolved
+            .iter()
+            .find(|shortcut| shortcut.descriptor.id == *shortcut_id && shortcut.active)
+        else {
+            return None;
+        };
+        Some(resolved.descriptor.target.clone())
+    }
+
+    /// Return the low-level hook entries that background should install.
+    #[cfg(target_os = "windows")]
+    pub fn low_level_entries(&self) -> &[LowLevelEntry] {
+        &self.low_level_entries
     }
 
     pub fn dispatch_app_action(&self, action: &ShortcutAction) -> Option<ShortcutTarget> {
@@ -342,6 +368,20 @@ impl ShortcutService {
             .map(|(shortcut_id, hotkey_id)| (hotkey_id, shortcut_id))
             .collect();
         self.registration_errors = registration_result.errors;
+
+        // On Windows, shortcuts that conflict with system-reserved combos
+        // (e.g. Alt+Space) are routed through WH_KEYBOARD_LL instead of
+        // being reported as errors.
+        #[cfg(target_os = "windows")]
+        {
+            self.low_level_ids.clear();
+            self.low_level_entries.clear();
+            for (shortcut_id, entry) in registration_result.low_level_fallbacks {
+                self.registration_errors.remove(&shortcut_id);
+                self.low_level_ids.insert(entry.id, shortcut_id.clone());
+                self.low_level_entries.push(entry);
+            }
+        }
 
         self.resolved = resolved
             .into_iter()

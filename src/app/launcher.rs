@@ -120,7 +120,7 @@ impl Launcher {
         _cx: &App,
     ) -> Self {
         let (all_commands, plugin_visuals, boost_map) = {
-            let mut manager = plugin_manager.lock().expect("plugin manager poisoned");
+            let mut manager = plugin_manager.lock().unwrap_or_else(|e| { tracing::error!("plugin manager poisoned, recovering"); e.into_inner() });
             let boost_map = Self::latest_boost_map(&clipboard_service, &*manager);
             let mut all_commands = app_catalog.search("", COMMAND_SEARCH_LIMIT);
             all_commands.extend(manager.commands_with_clipboard(&boost_map));
@@ -195,7 +195,7 @@ impl Launcher {
                             launcher
                                 .plugin_manager
                                 .lock()
-                                .expect("plugin manager poisoned")
+                                .unwrap_or_else(|e| { tracing::error!("plugin manager poisoned, recovering"); e.into_inner() })
                                 .invalidate_commands();
                         }
                         launcher.refresh_results_after_commands_changed(cx);
@@ -209,7 +209,7 @@ impl Launcher {
     fn refresh_results_after_commands_changed(&mut self, cx: &mut Context<Self>) {
         self.clipboard_boost_map = Self::latest_boost_map(
             &self.clipboard_service,
-            &*self.plugin_manager.lock().expect("plugin manager poisoned"),
+            &*self.plugin_manager.lock().unwrap_or_else(|e| { tracing::error!("plugin manager poisoned, recovering"); e.into_inner() }),
         );
         self.all_commands = self.default_commands_with_clipboard();
 
@@ -371,7 +371,7 @@ impl Launcher {
         commands.extend(
             self.plugin_manager
                 .lock()
-                .expect("plugin manager poisoned")
+                .unwrap_or_else(|e| { tracing::error!("plugin manager poisoned, recovering"); e.into_inner() })
                 .commands_with_clipboard(&self.clipboard_boost_map),
         );
         commands
@@ -382,7 +382,7 @@ impl Launcher {
         commands.extend(
             self.plugin_manager
                 .lock()
-                .expect("plugin manager poisoned")
+                .unwrap_or_else(|e| { tracing::error!("plugin manager poisoned, recovering"); e.into_inner() })
                 .query_commands_with_clipboard(
                     query,
                     COMMAND_SEARCH_LIMIT,
@@ -422,7 +422,7 @@ impl Launcher {
     fn refresh_clipboard_context_async(&mut self, cx: &mut Context<Self>) {
         let service = Arc::clone(&self.clipboard_service);
         let boost_map = {
-            let plugin = self.plugin_manager.lock().expect("plugin manager poisoned");
+            let plugin = self.plugin_manager.lock().unwrap_or_else(|e| { tracing::error!("plugin manager poisoned, recovering"); e.into_inner() });
             Launcher::latest_boost_map(&service, &*plugin)
         };
         self.search_task = Some(cx.spawn(async move |launcher, async_cx| {
@@ -619,7 +619,7 @@ impl Launcher {
                     let select_started = Instant::now();
                     self.plugin_manager
                         .lock()
-                        .expect("plugin manager poisoned")
+                        .unwrap_or_else(|e| { tracing::error!("plugin manager poisoned, recovering"); e.into_inner() })
                         .record_usage_key_background(plugin_list_usage_key(&item).to_string(), cx);
                     let item_id = item.id.clone();
                     let result = catch_unwind(AssertUnwindSafe(|| {
@@ -655,7 +655,7 @@ impl Launcher {
         let started = Instant::now();
         self.plugin_manager
             .lock()
-            .expect("plugin manager poisoned")
+            .unwrap_or_else(|e| { tracing::error!("plugin manager poisoned, recovering"); e.into_inner() })
             .record_command_launch_background(&item, cx);
         let activation = item.activation.clone();
         let Activation::Open { plugin_id } = &activation else {
@@ -707,7 +707,7 @@ impl Launcher {
                 let view_result = self
                     .plugin_manager
                     .lock()
-                    .expect("plugin manager poisoned")
+                    .unwrap_or_else(|e| { tracing::error!("plugin manager poisoned, recovering"); e.into_inner() })
                     .open_inline_view(plugin_id, cx);
                 log_launcher_step(plugin_id, "open inline view", view_started, Some(trace));
                 match view_result {
@@ -742,7 +742,7 @@ impl Launcher {
                 let view_result = self
                     .plugin_manager
                     .lock()
-                    .expect("plugin manager poisoned")
+                    .unwrap_or_else(|e| { tracing::error!("plugin manager poisoned, recovering"); e.into_inner() })
                     .open_list_view(plugin_id, cx);
                 log_launcher_step(plugin_id, "open list view", view_started, Some(trace));
                 match view_result {
@@ -981,7 +981,7 @@ impl Launcher {
         if let Some(controller) = self.window_controller.as_ref() {
             controller
                 .lock()
-                .expect("plugin manager poisoned")
+                .unwrap_or_else(|e| { tracing::error!("plugin manager poisoned, recovering"); e.into_inner() })
                 .clear_launcher_window();
         }
         window.defer(cx, |window, _cx| window.remove_window());
@@ -991,7 +991,7 @@ impl Launcher {
         if let Some(controller) = self.window_controller.as_ref() {
             controller
                 .lock()
-                .expect("plugin manager poisoned")
+                .unwrap_or_else(|e| { tracing::error!("plugin manager poisoned, recovering"); e.into_inner() })
                 .clear_launcher_window();
         }
         window.defer(cx, |window, _cx| window.remove_window());
@@ -1201,7 +1201,7 @@ impl Render for Launcher {
                     LauncherMode::InlinePlugin { view, .. } => self
                         .plugin_manager
                         .lock()
-                        .expect("plugin manager poisoned")
+                        .unwrap_or_else(|e| { tracing::error!("plugin manager poisoned, recovering"); e.into_inner() })
                         .manifests()
                         .into_iter()
                         .any(|m| {
@@ -1483,7 +1483,7 @@ fn plugin_list_row(
                         launcher
                             .plugin_manager
                             .lock()
-                            .expect("plugin manager poisoned")
+                            .unwrap_or_else(|e| { tracing::error!("plugin manager poisoned, recovering"); e.into_inner() })
                             .record_usage_key_background(
                                 plugin_list_usage_key(&item_for_click).to_string(),
                                 entity_cx,

@@ -98,7 +98,7 @@ impl AppIndexService {
     }
 
     pub fn snapshot(&self) -> AppIndexSnapshot {
-        let state = self.state.lock().expect("app index lock poisoned");
+        let state = self.state.lock().unwrap_or_else(|e| { tracing::error!("app index lock poisoned, recovering"); e.into_inner() });
         AppIndexSnapshot {
             apps: state.apps.clone(),
             scan_running: state.scan_running,
@@ -125,7 +125,7 @@ impl AppIndexService {
 
     pub fn top_apps(&self, limit: usize) -> Vec<AppEntry> {
         let (apps, usage) = {
-            let state = self.state.lock().expect("app index lock poisoned");
+            let state = self.state.lock().unwrap_or_else(|e| { tracing::error!("app index lock poisoned, recovering"); e.into_inner() });
             (state.apps.clone(), state.usage.clone())
         };
         let mut sorted = apps;
@@ -145,7 +145,7 @@ impl AppIndexService {
     pub fn search_page(&self, query: &str, offset: usize, limit: usize) -> Page<AppEntry> {
         let started = Instant::now();
         let apps = {
-            let state = self.state.lock().expect("app index lock poisoned");
+            let state = self.state.lock().unwrap_or_else(|e| { tracing::error!("app index lock poisoned, recovering"); e.into_inner() });
             (state.apps.clone(), state.usage.clone())
         };
         let page = search_apps_page(apps.0, &apps.1, query, offset, limit);
@@ -158,7 +158,7 @@ impl AppIndexService {
     }
 
     pub fn revision(&self) -> u64 {
-        self.state.lock().expect("app index lock poisoned").revision
+        self.state.lock().unwrap_or_else(|e| { tracing::error!("app index lock poisoned, recovering"); e.into_inner() }).revision
     }
 
     pub fn open_app(&self, path: &str) -> Result<(), String> {
@@ -169,12 +169,12 @@ impl AppIndexService {
         let result = self.store.record_launch(path);
         match self.store.usage_map() {
             Ok(usage) => {
-                let mut state = self.state.lock().expect("app index lock poisoned");
+                let mut state = self.state.lock().unwrap_or_else(|e| { tracing::error!("app index lock poisoned, recovering"); e.into_inner() });
                 state.usage = usage;
                 state.revision += 1;
             }
             Err(error) => {
-                let mut state = self.state.lock().expect("app index lock poisoned");
+                let mut state = self.state.lock().unwrap_or_else(|e| { tracing::error!("app index lock poisoned, recovering"); e.into_inner() });
                 state.last_error = Some(format!("刷新应用启动记录失败: {error}"));
                 state.revision += 1;
             }
@@ -186,7 +186,7 @@ impl AppIndexService {
     pub fn request_scan(self: &Arc<Self>) -> bool {
         let started = Instant::now();
         {
-            let mut state = self.state.lock().expect("app index lock poisoned");
+            let mut state = self.state.lock().unwrap_or_else(|e| { tracing::error!("app index lock poisoned, recovering"); e.into_inner() });
             if state.scan_running {
                 log_slow_app_index_step("app index request_scan skipped", started, &[]);
                 return false;
@@ -206,7 +206,7 @@ impl AppIndexService {
     pub fn request_probe_scan(self: &Arc<Self>) -> bool {
         let now = epoch_secs();
         {
-            let mut state = self.state.lock().expect("app index lock poisoned");
+            let mut state = self.state.lock().unwrap_or_else(|e| { tracing::error!("app index lock poisoned, recovering"); e.into_inner() });
             if state.scan_running || state.probe_running {
                 return false;
             }
@@ -226,7 +226,7 @@ impl AppIndexService {
         let started = Instant::now();
         let current_paths = scan_application_paths();
         let cached_paths = {
-            let state = self.state.lock().expect("app index lock poisoned");
+            let state = self.state.lock().unwrap_or_else(|e| { tracing::error!("app index lock poisoned, recovering"); e.into_inner() });
             let mut paths = state
                 .apps
                 .iter()
@@ -237,7 +237,7 @@ impl AppIndexService {
         };
         let changed = current_paths != cached_paths;
         {
-            let mut state = self.state.lock().expect("app index lock poisoned");
+            let mut state = self.state.lock().unwrap_or_else(|e| { tracing::error!("app index lock poisoned, recovering"); e.into_inner() });
             state.probe_running = false;
         }
         log_slow_app_index_step(
@@ -290,7 +290,7 @@ impl AppIndexService {
             &[("apps", &apps.len().to_string())],
         );
 
-        let mut state = self.state.lock().expect("app index lock poisoned");
+        let mut state = self.state.lock().unwrap_or_else(|e| { tracing::error!("app index lock poisoned, recovering"); e.into_inner() });
         state.apps = apps;
         state.scan_running = false;
         state.icon_refresh_running = false;
@@ -308,7 +308,7 @@ impl AppIndexService {
 
     fn publish_metadata_pass(&self, apps: Vec<AppEntry>) {
         let last_scan = {
-            let mut state = self.state.lock().expect("app index lock poisoned");
+            let mut state = self.state.lock().unwrap_or_else(|e| { tracing::error!("app index lock poisoned, recovering"); e.into_inner() });
             state.apps = apps.clone();
             state.icon_refresh_running = true;
             state.revision += 1;
@@ -325,7 +325,7 @@ impl AppIndexService {
             &[("apps", &app_count.to_string())],
         );
 
-        let mut state = self.state.lock().expect("app index lock poisoned");
+        let mut state = self.state.lock().unwrap_or_else(|e| { tracing::error!("app index lock poisoned, recovering"); e.into_inner() });
         match save_result {
             Ok(()) => {
                 state.revision += 1;

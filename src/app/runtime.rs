@@ -106,14 +106,15 @@ pub fn run() -> Result<()> {
         #[cfg(target_os = "windows")]
         window_controller
             .lock()
-            .expect("window controller poisoned")
+            .unwrap_or_else(|e| {
+                tracing::error!("window controller poisoned, recovering");
+                e.into_inner()
+            })
             .ensure_keep_alive_window(cx);
 
         set_menus(cx);
         app_catalog.start_background();
-        plugins
-            .lock()
-            .expect("plugin manager poisoned")
+        crate::core::lock_or_recover(&plugins, "plugin-manager")
             .start_background(cx);
         let mut background = BackgroundSupervisor::new();
         background.start_theme_poll(Arc::clone(&theme_store), cx);
@@ -140,7 +141,10 @@ pub fn run() -> Result<()> {
         }
         background.start_hotkey_events(Arc::clone(&window_controller), cx);
 
-        let initial_mode = power_manager.lock().expect("power manager poisoned").mode();
+        #[cfg(target_os = "windows")]
+        background.start_low_level_hook(Arc::clone(&window_controller), cx);
+
+        let initial_mode = crate::core::lock_or_recover(&power_manager, "power-manager").mode();
         match crate::platform::tray::install_tray(initial_mode) {
             Ok(()) => {
                 background.start_tray_poll(
@@ -155,9 +159,7 @@ pub fn run() -> Result<()> {
         cx.set_global(shortcut_service);
         cx.set_global(background);
     });
-    plugins_for_shutdown
-        .lock()
-        .expect("plugin manager poisoned")
+    crate::core::lock_or_recover(&plugins_for_shutdown, "plugin-manager")
         .shutdown();
     database_for_shutdown.shutdown();
     Ok(())
