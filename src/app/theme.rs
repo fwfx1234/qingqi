@@ -377,29 +377,35 @@ pub fn token(name: &str) -> Rgba {
 
 // ── Launcher-specific colors (from suishou LauncherWindow.qml) ──────────
 
-pub fn launcher_panel(dark: bool) -> Rgba {
+pub fn launcher_panel() -> Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark { rgb(0x0f0f23) } else { rgb(0xf8f5ff) }
 }
 
-pub fn launcher_panel_border(dark: bool) -> Rgba {
+pub fn launcher_panel_border() -> Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark { rgb(0x34304f) } else { rgb(0xded4ff) }
 }
 
-pub fn launcher_field(dark: bool) -> Rgba {
+pub fn launcher_field() -> Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark { rgb(0x15152c) } else { rgb(0xffffff) }
 }
 
-pub fn launcher_field_border(dark: bool) -> Rgba {
+pub fn launcher_field_border() -> Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark { rgb(0x2a2842) } else { rgb(0xe4dcff) }
 }
 
-pub fn launcher_row_selected(dark: bool) -> Rgba {
+pub fn launcher_row_selected() -> Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark { rgb(0x241b48) } else { rgb(0xf7f7fa) }
 }
 
 /// Icon surface background (unselected state).  Returns a colour with
 /// alpha so it composes correctly on top of the launcher glass.
-pub fn launcher_icon_surface(dark: bool) -> Hsla {
+pub fn launcher_icon_surface() -> Hsla {
+    let dark = crate::app::theme_mode::is_dark();
     if dark {
         hsla(0.0, 0.0, 1.0, 0.03)
     } else {
@@ -408,7 +414,8 @@ pub fn launcher_icon_surface(dark: bool) -> Hsla {
 }
 
 /// Icon border (unselected state).
-pub fn launcher_icon_border(dark: bool) -> Hsla {
+pub fn launcher_icon_border() -> Hsla {
+    let dark = crate::app::theme_mode::is_dark();
     if dark {
         hsla(0.0, 0.0, 1.0, 0.04)
     } else {
@@ -416,15 +423,18 @@ pub fn launcher_icon_border(dark: bool) -> Hsla {
     }
 }
 
-pub fn launcher_accent(dark: bool) -> Rgba {
+pub fn launcher_accent() -> Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark { rgb(0xc8b8ff) } else { rgb(0x6b4fcf) }
 }
 
-pub fn launcher_deep_background(dark: bool) -> Rgba {
+pub fn launcher_deep_background() -> Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark { rgb(0x0b0b1a) } else { rgb(0xf5f5f7) }
 }
 
-pub fn launcher_glass(dark: bool) -> Hsla {
+pub fn launcher_glass() -> Hsla {
+    let dark = crate::app::theme_mode::is_dark();
     if dark {
         rgba_with_alpha(rgb(0x0f0f23), 0.3)
     } else {
@@ -432,7 +442,8 @@ pub fn launcher_glass(dark: bool) -> Hsla {
     }
 }
 
-pub fn launcher_glass_border(dark: bool) -> Hsla {
+pub fn launcher_glass_border() -> Hsla {
+    let dark = crate::app::theme_mode::is_dark();
     if dark {
         hsla(0.0, 0.0, 1.0, 0.08)
     } else {
@@ -440,7 +451,8 @@ pub fn launcher_glass_border(dark: bool) -> Hsla {
     }
 }
 
-pub fn launcher_soft_line(dark: bool) -> Hsla {
+pub fn launcher_soft_line() -> Hsla {
+    let dark = crate::app::theme_mode::is_dark();
     if dark {
         hsla(0.0, 0.0, 1.0, 0.04)
     } else {
@@ -448,7 +460,8 @@ pub fn launcher_soft_line(dark: bool) -> Hsla {
     }
 }
 
-pub fn launcher_keycap(dark: bool) -> Hsla {
+pub fn launcher_keycap() -> Hsla {
+    let dark = crate::app::theme_mode::is_dark();
     if dark {
         hsla(0.0, 0.0, 1.0, 0.03)
     } else {
@@ -456,21 +469,25 @@ pub fn launcher_keycap(dark: bool) -> Hsla {
     }
 }
 
-pub fn launcher_muted_text(dark: bool) -> Rgba {
+pub fn launcher_muted_text() -> Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark { rgb(0x7777aa) } else { rgb(0x8888aa) }
 }
 
-pub fn launcher_faint_text(dark: bool) -> Rgba {
+pub fn launcher_faint_text() -> Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark { rgb(0x55557a) } else { rgb(0x9999bb) }
 }
 
 /// Title text in result/list rows.
-pub fn launcher_title_text(dark: bool) -> Rgba {
+pub fn launcher_title_text() -> Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark { rgb(0xddd8ec) } else { rgb(0x333348) }
 }
 
 /// Icon border in selected state.
-pub fn launcher_icon_border_selected(dark: bool) -> Hsla {
+pub fn launcher_icon_border_selected() -> Hsla {
+    let dark = crate::app::theme_mode::is_dark();
     if dark {
         rgba_with_alpha(rgb(0xe2e2ea), 0.2)
     } else {
@@ -479,7 +496,8 @@ pub fn launcher_icon_border_selected(dark: bool) -> Hsla {
 }
 
 /// Icon surface in selected state.
-pub fn launcher_icon_surface_selected(dark: bool) -> Hsla {
+pub fn launcher_icon_surface_selected() -> Hsla {
+    let dark = crate::app::theme_mode::is_dark();
     if dark {
         rgba_with_alpha(rgb(0xf2f2f7), 0.15)
     } else {
@@ -488,7 +506,8 @@ pub fn launcher_icon_surface_selected(dark: bool) -> Hsla {
 }
 
 /// Row hover background.
-pub fn launcher_row_hover(dark: bool) -> Hsla {
+pub fn launcher_row_hover() -> Hsla {
+    let dark = crate::app::theme_mode::is_dark();
     if dark {
         hsla(0.0, 0.0, 1.0, 0.025)
     } else {
@@ -497,7 +516,8 @@ pub fn launcher_row_hover(dark: bool) -> Hsla {
 }
 
 /// Badge / tag background.
-pub fn launcher_badge_bg(dark: bool) -> Hsla {
+pub fn launcher_badge_bg() -> Hsla {
+    let dark = crate::app::theme_mode::is_dark();
     if dark {
         hsla(0.0, 0.0, 1.0, 0.03)
     } else {
@@ -526,7 +546,8 @@ pub fn launcher_transparent() -> Hsla {
 }
 
 /// Plugin-specific icon tint color in the launcher.
-pub fn launcher_plugin_icon_tint(plugin_id: &str, dark: bool) -> Rgba {
+pub fn launcher_plugin_icon_tint(plugin_id: &str) -> Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark {
         match plugin_id {
             "api-debugger" => rgb(0xc8b8ff),
@@ -536,7 +557,7 @@ pub fn launcher_plugin_icon_tint(plugin_id: &str, dark: bool) -> Rgba {
             "json-parser" => rgb(0xaaccff),
             "ftp-sftp-ssh-client" => rgb(0x88ddff),
             "system-settings" => rgb(0xaaccff),
-            _ => launcher_accent(dark),
+            _ => launcher_accent(),
         }
     } else {
         match plugin_id {
@@ -547,7 +568,7 @@ pub fn launcher_plugin_icon_tint(plugin_id: &str, dark: bool) -> Rgba {
             "json-parser" => rgb(0x6688cc),
             "ftp-sftp-ssh-client" => rgb(0x5599cc),
             "system-settings" => rgb(0x6688cc),
-            _ => launcher_accent(dark),
+            _ => launcher_accent(),
         }
     }
 }

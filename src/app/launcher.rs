@@ -275,8 +275,8 @@ impl Launcher {
         );
         input.set_chrome(false, cx);
         input.set_text_colors(
-            theme::rgba_with_alpha(theme::launcher_title_text(false), 1.0),
-            theme::rgba_with_alpha(theme::launcher_faint_text(false), 1.0),
+            theme::rgba_with_alpha(theme::launcher_title_text(), 1.0),
+            theme::rgba_with_alpha(theme::launcher_faint_text(), 1.0),
             cx,
         );
     }
@@ -1028,11 +1028,11 @@ impl Render for Launcher {
             _ => 0,
         };
         let title_color = if dark {
-            theme::launcher_title_text(true)
+            theme::launcher_title_text()
         } else {
-            theme::launcher_title_text(false)
+            theme::launcher_title_text()
         };
-        let placeholder_color = theme::launcher_faint_text(dark);
+        let placeholder_color = theme::launcher_faint_text();
         log_slow_launcher_interaction(
             "render prepare",
             render_started,
@@ -1044,7 +1044,7 @@ impl Render for Launcher {
 
         div()
             .size_full()
-            .bg(theme::launcher_glass(dark))
+            .bg(theme::launcher_glass())
             .font_family(ui::font_ui())
             .text_color(title_color)
             .relative()
@@ -1060,7 +1060,7 @@ impl Render for Launcher {
                     .w_full()
                     .px(px(20.0))
                     .border_b_1()
-                    .border_color(theme::launcher_soft_line(dark))
+                    .border_color(theme::launcher_soft_line())
                     .flex()
                     .items_center()
                     .gap(px(10.0))
@@ -1068,12 +1068,12 @@ impl Render for Launcher {
                         div()
                             .size(px(24.0))
                             .rounded(px(8.0))
-                            .bg(theme::launcher_keycap(dark))
+                            .bg(theme::launcher_keycap())
                             .flex()
                             .items_center()
                             .justify_center()
                             .text_size(px(13.0))
-                            .text_color(theme::launcher_muted_text(dark))
+                            .text_color(theme::launcher_muted_text())
                             .child("⌥"),
                     )
                     .child(
@@ -1122,9 +1122,9 @@ impl Render for Launcher {
                                     .h(px(24.0))
                                     .px(px(10.0))
                                     .rounded(px(6.0))
-                                    .bg(theme::launcher_keycap(dark))
+                                    .bg(theme::launcher_keycap())
                                     .border_1()
-                                    .border_color(theme::launcher_soft_line(dark))
+                                    .border_color(theme::launcher_soft_line())
                                     .flex()
                                     .items_center()
                                     .text_size(px(10.0))
@@ -1152,7 +1152,7 @@ impl Render for Launcher {
                                 .items_center()
                                 .justify_center()
                                 .text_size(px(13.0))
-                                .text_color(theme::launcher_muted_text(dark))
+                                .text_color(theme::launcher_muted_text())
                                 .child("未找到匹配的功能"),
                         )
                     }
@@ -1228,7 +1228,7 @@ impl Render for Launcher {
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .text_color(theme::launcher_faint_text(dark))
+                                    .text_color(theme::launcher_faint_text())
                                     .child("插件渲染出错")
                                     .into_any_element()
                             }
@@ -1269,20 +1269,16 @@ fn launcher_quick_tab(
     label: &'static str,
     icon_label: &'static str,
 ) -> impl IntoElement {
-    let dark = theme_mode::is_dark();
+    let _dark = theme_mode::is_dark();
     div()
         .h(px(24.0))
         .px(px(8.0))
         .rounded(px(6.0))
-        .bg(theme::launcher_keycap(dark))
+        .bg(theme::launcher_keycap())
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(theme::launcher_soft_line())
         .cursor_pointer()
-        .hover(move |style| {
-            style
-                .bg(theme::launcher_row_selected(dark))
-                .cursor_pointer()
-        })
+        .hover(move |style| style.bg(theme::launcher_row_selected()).cursor_pointer())
         .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
             let Some(handle) = handle.clone() else {
                 return;
@@ -1310,13 +1306,13 @@ fn launcher_quick_tab(
         .child(
             div()
                 .text_size(px(11.0))
-                .text_color(theme::launcher_muted_text(dark))
+                .text_color(theme::launcher_muted_text())
                 .child(icon_label),
         )
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(theme::launcher_muted_text(dark))
+                .text_color(theme::launcher_muted_text())
                 .child(label),
         )
 }
@@ -1328,7 +1324,7 @@ fn plugin_list(
     selected: usize,
     query: String,
 ) -> impl IntoElement {
-    let dark = theme_mode::is_dark();
+    let _dark = theme_mode::is_dark();
     let count = items.len();
     if count == 0 {
         return div()
@@ -1346,7 +1342,7 @@ fn plugin_list(
                     .items_center()
                     .justify_center()
                     .text_size(px(13.0))
-                    .text_color(theme::launcher_muted_text(dark))
+                    .text_color(theme::launcher_muted_text())
                     .child(if query.trim().is_empty() {
                         "暂无内容"
                     } else {
@@ -1370,7 +1366,7 @@ fn plugin_list(
                     .items_center()
                     .justify_center()
                     .text_size(px(13.0))
-                    .text_color(theme::launcher_muted_text(dark))
+                    .text_color(theme::launcher_muted_text())
                     .child("启动器尚未完成初始化"),
             )
             .into_any_element();
@@ -1431,7 +1427,7 @@ fn plugin_list_row(
 ) -> impl IntoElement {
     let dark = theme_mode::is_dark();
     let item_for_click = item.clone();
-    let accent = theme::launcher_accent(dark);
+    let accent = theme::launcher_accent();
     let row_bg = if selected {
         theme::rgba_with_alpha(accent, if dark { 0.12 } else { 0.08 })
     } else {
@@ -1440,24 +1436,24 @@ fn plugin_list_row(
     let title_color = if selected {
         accent
     } else if dark {
-        theme::launcher_title_text(true)
+        theme::launcher_title_text()
     } else {
-        theme::launcher_title_text(false)
+        theme::launcher_title_text()
     };
-    let subtitle_color = theme::launcher_faint_text(dark);
+    let subtitle_color = theme::launcher_faint_text();
     let icon_surface = if selected {
-        theme::launcher_icon_surface_selected(dark)
+        theme::launcher_icon_surface_selected()
     } else if dark {
-        theme::launcher_badge_bg(true)
+        theme::launcher_badge_bg()
     } else {
-        theme::launcher_icon_surface(false)
+        theme::launcher_icon_surface()
     };
     let icon_border = if selected {
-        theme::launcher_icon_border_selected(dark)
+        theme::launcher_icon_border_selected()
     } else if dark {
-        theme::launcher_icon_border(true)
+        theme::launcher_icon_border()
     } else {
-        theme::launcher_icon_border(false)
+        theme::launcher_icon_border()
     };
     div()
         .id(("launcher-plugin-row", index))
@@ -1618,21 +1614,21 @@ fn result_row(
 ) -> impl IntoElement {
     let dark = theme_mode::is_dark();
     let item_for_click = item.clone();
-    let accent = theme::launcher_accent(dark);
+    let accent = theme::launcher_accent();
 
     let icon_surface = if selected {
-        theme::launcher_icon_surface_selected(dark)
+        theme::launcher_icon_surface_selected()
     } else if dark {
-        theme::launcher_badge_bg(true)
+        theme::launcher_badge_bg()
     } else {
-        theme::launcher_icon_surface(false)
+        theme::launcher_icon_surface()
     };
     let icon_border = if selected {
-        theme::launcher_icon_border_selected(dark)
+        theme::launcher_icon_border_selected()
     } else if dark {
-        theme::launcher_icon_border(true)
+        theme::launcher_icon_border()
     } else {
-        theme::launcher_icon_border(false)
+        theme::launcher_icon_border()
     };
 
     let (badge_label, badge_bg, badge_fg) = result_badge(&item);
@@ -1659,15 +1655,15 @@ fn result_row(
     let title_color = if selected {
         accent
     } else if dark {
-        theme::launcher_title_text(true)
+        theme::launcher_title_text()
     } else {
-        theme::launcher_title_text(false)
+        theme::launcher_title_text()
     };
-    let subtitle_color = theme::launcher_faint_text(dark);
+    let subtitle_color = theme::launcher_faint_text();
     let hover_bg = if dark {
-        theme::launcher_row_hover(true)
+        theme::launcher_row_hover()
     } else {
-        theme::launcher_row_hover(false)
+        theme::launcher_row_hover()
     };
 
     div()
@@ -1791,8 +1787,8 @@ fn launcher_icon(
 }
 
 fn launcher_icon_tint(plugin_id: &str) -> gpui::Rgba {
-    let dark = theme_mode::is_dark();
-    theme::launcher_plugin_icon_tint(plugin_id, dark)
+    let _dark = theme_mode::is_dark();
+    theme::launcher_plugin_icon_tint(plugin_id)
 }
 
 fn launcher_icon_label(item: &Command) -> &'static str {
@@ -1884,18 +1880,18 @@ fn log_slow_launcher_interaction(step: &'static str, started: Instant, fields: &
 fn result_badge(item: &Command) -> (String, gpui::Hsla, gpui::Rgba) {
     let dark = theme_mode::is_dark();
     let tag_bg = if dark {
-        theme::launcher_badge_bg(true)
+        theme::launcher_badge_bg()
     } else {
-        theme::launcher_badge_bg(false)
+        theme::launcher_badge_bg()
     };
-    let tag_fg = theme::launcher_faint_text(dark);
+    let tag_fg = theme::launcher_faint_text();
 
     match item.kind {
         CommandKind::App => (String::from("应用"), tag_bg, tag_fg),
         CommandKind::DynamicAction => (
             String::from("动作"),
-            theme::rgba_with_alpha(theme::launcher_accent(dark), if dark { 0.12 } else { 0.08 }),
-            theme::launcher_accent(dark),
+            theme::rgba_with_alpha(theme::launcher_accent(), if dark { 0.12 } else { 0.08 }),
+            theme::launcher_accent(),
         ),
         CommandKind::Plugin => match item.plugin_id.as_str() {
             "system-settings" => (String::from("系统"), tag_bg, tag_fg),
