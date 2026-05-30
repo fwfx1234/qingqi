@@ -6,17 +6,17 @@ use crate::{
     core::{
         command::{CommandItem, ContextKind, ContextMatcher},
         database::{DatabaseService, DatabaseSpec},
-        plugin::{Plugin, PluginCx, PluginManifest, PluginView, WindowView},
+        plugin::{Manifest, Plugin, PluginCx, PluginId, PluginView, WindowView},
         storage::AppPaths,
     },
     features::http_capture::{manifest, store::CaptureStore, view::CapturePanel},
 };
 
-pub struct HttpCaptureRuntime {
+pub struct HttpCapturePlugin {
     store: Arc<Mutex<CaptureStore>>,
 }
 
-impl HttpCaptureRuntime {
+impl HttpCapturePlugin {
     pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> anyhow::Result<Self> {
         let _ = paths;
         let store = CaptureStore::open(
@@ -29,8 +29,8 @@ impl HttpCaptureRuntime {
     }
 }
 
-impl Plugin for HttpCaptureRuntime {
-    fn manifest(&self) -> PluginManifest {
+impl Plugin for HttpCapturePlugin {
+    fn manifest(&self) -> Manifest {
         manifest::manifest()
     }
 
@@ -51,7 +51,7 @@ impl Plugin for HttpCaptureRuntime {
                 manifest.description.as_ref(),
                 manifest.keywords.iter().map(|s| s.as_ref()),
                 manifest.command_prefixes.iter().map(|s| s.as_ref()),
-                manifest.visual.icon.as_str(),
+                manifest.icon.as_str(),
             )
             .with_recommend_matchers([ContextMatcher::new(ContextKind::Url, 90)]),
         ]
@@ -71,12 +71,12 @@ struct HttpCaptureView {
 }
 
 impl WindowView for HttpCaptureView {
-    fn plugin_id(&self) -> &str {
-        manifest::PLUGIN_ID
+    fn plugin_id(&self) -> PluginId {
+        manifest::PLUGIN_ID.into()
     }
 
-    fn title(&self) -> &str {
-        "HTTP 抓包"
+    fn title(&self) -> Arc<str> {
+        "HTTP 抓包".into()
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {

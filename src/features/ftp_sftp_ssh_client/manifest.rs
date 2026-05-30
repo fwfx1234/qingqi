@@ -1,6 +1,6 @@
 use crate::core::{
     icon::IconRef,
-    plugin::PluginManifest,
+    plugin::Manifest,
     plugin_spec::{
         PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
         PluginWindowMode, WindowSpec,
@@ -9,8 +9,8 @@ use crate::core::{
 
 pub const PLUGIN_ID: &str = "ftp-sftp-ssh-client";
 
-pub fn manifest() -> PluginManifest {
-    PluginManifest {
+pub fn manifest() -> Manifest {
+    Manifest {
         id: PLUGIN_ID.into(),
         name: "FTP/SFTP/SSH 客户端".into(),
         description: "多 session 的 FTP、SFTP、SSH 远程工作台，支持协议日志与终端".into(),
@@ -18,6 +18,12 @@ pub fn manifest() -> PluginManifest {
             .into_iter()
             .map(Into::into)
             .collect(),
+        icon: IconRef::asset("qta/mdi6.folder-network-outline.png"),
+        prefixes: vec!["ftp".into(), "sftp".into(), "ssh".into()],
+        mode: PluginWindowMode::Window,
+        window: WindowSpec::ratio(0.86, 0.82),
+        category: PluginCategory::Tool,
+        status: PluginStatus::Preview,
         background: false,
         dynamic_commands: false,
         visual: Some(PluginVisualSpec {

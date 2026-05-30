@@ -157,11 +157,7 @@ fn top_bar_icon_button(handle: Entity<ClipboardPanel>, dark: bool) -> impl IntoE
         .flex()
         .items_center()
         .justify_center()
-        .hover(|style| {
-            style
-                .bg(theme::semantic(dark).row_hover)
-                .cursor_pointer()
-        })
+        .hover(|style| style.bg(theme::semantic(dark).row_hover).cursor_pointer())
         .child(
             Icon::new(IconName::Settings)
                 .with_size(ComponentSize::Small)
@@ -221,7 +217,10 @@ fn render_filter_tabs(
                 .px(px(10.0))
                 .rounded(px(6.0))
                 .bg(if is_active {
-                    theme::rgba_with_alpha(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue), 0.12)
+                    theme::rgba_with_alpha(
+                        ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue),
+                        0.12,
+                    )
                 } else {
                     theme::semantic(dark).bg_elevated.into()
                 })
@@ -337,13 +336,18 @@ fn empty_state_text(query: &str, dark: bool, is_empty: bool) -> impl IntoElement
             div()
                 .size(px(48.0))
                 .rounded(px(12.0))
-                .bg(theme::rgba_with_alpha(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue), 0.10))
+                .bg(theme::rgba_with_alpha(
+                    ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue),
+                    0.10,
+                ))
                 .flex()
                 .items_center()
                 .justify_center()
                 .text_size(px(16.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue))
+                .text_color(ui::accent_color(
+                    crate::core::plugin_spec::PluginAccent::Blue,
+                ))
                 .child("空"),
         )
         .child(
@@ -372,12 +376,18 @@ fn history_row(
     let subtitle = history_item_meta(&item);
     let pinned = item.pinned;
     let icon_surface = if selected {
-        theme::rgba_with_alpha(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue), 0.12)
+        theme::rgba_with_alpha(
+            ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue),
+            0.12,
+        )
     } else {
         theme::semantic(dark).bg_elevated.into()
     };
     let row_bg = if selected {
-        theme::rgba_with_alpha(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue), 0.06)
+        theme::rgba_with_alpha(
+            ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue),
+            0.06,
+        )
     } else {
         hsla(0.0, 0.0, 0.0, 0.0)
     };
@@ -396,7 +406,10 @@ fn history_row(
         .hover(move |style| {
             style
                 .bg(if selected {
-                    theme::rgba_with_alpha(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue), 0.08)
+                    theme::rgba_with_alpha(
+                        ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue),
+                        0.08,
+                    )
                 } else {
                     theme::semantic(dark).row_hover.into()
                 })
@@ -487,11 +500,7 @@ fn row_icon_button(
         .flex()
         .items_center()
         .justify_center()
-        .hover(|style| {
-            style
-                .bg(theme::semantic(dark).row_hover)
-                .cursor_pointer()
-        })
+        .hover(|style| style.bg(theme::semantic(dark).row_hover).cursor_pointer())
         .child(
             Icon::new(icon)
                 .with_size(ComponentSize::Small)
@@ -608,7 +617,9 @@ fn history_item_icon_color(item: &ClipboardRecord, dark: bool) -> gpui::Rgba {
     match item.kind {
         history_store::ClipboardItemKind::Text => match item.badge_kind() {
             history_store::ClipboardBadgeKind::Link => theme::semantic(dark).success,
-            history_store::ClipboardBadgeKind::Json => ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue),
+            history_store::ClipboardBadgeKind::Json => {
+                ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue)
+            }
             history_store::ClipboardBadgeKind::Other => theme::semantic(dark).text_secondary,
         },
         history_store::ClipboardItemKind::Image => theme::semantic(dark).warning,
@@ -768,11 +779,7 @@ fn detail_action_button(
         .justify_center()
         .text_size(px(12.0))
         .text_color(theme::semantic(dark).text_primary)
-        .hover(|style| {
-            style
-                .bg(theme::semantic(dark).row_hover)
-                .cursor_pointer()
-        })
+        .hover(|style| style.bg(theme::semantic(dark).row_hover).cursor_pointer())
         .child(label)
         .on_click(on_click)
 }

@@ -6,20 +6,20 @@ use crate::{
     app::events::{AppEventBus, AppEventKind},
     core::{
         database::{DatabaseService, DatabaseSpec},
-        plugin::{Plugin, PluginCx, PluginManifest, PluginView, WindowView},
+        plugin::{Manifest, Plugin, PluginCx, PluginId, PluginView, WindowView},
         storage::AppPaths,
     },
     features::ftp_sftp_ssh_client::{manifest, service::FtpSftpSshService, view},
 };
 
-pub struct FtpSftpSshRuntime {
+pub struct FtpSftpSshPlugin {
     database: Arc<DatabaseService>,
     paths: AppPaths,
     service: Option<Arc<FtpSftpSshService>>,
     watch_started: bool,
 }
 
-impl FtpSftpSshRuntime {
+impl FtpSftpSshPlugin {
     pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> anyhow::Result<Self> {
         Ok(Self {
             database,
@@ -74,8 +74,8 @@ impl FtpSftpSshRuntime {
     }
 }
 
-impl Plugin for FtpSftpSshRuntime {
-    fn manifest(&self) -> PluginManifest {
+impl Plugin for FtpSftpSshPlugin {
+    fn manifest(&self) -> Manifest {
         manifest::manifest()
     }
 
@@ -113,12 +113,12 @@ struct FtpSftpSshView {
 }
 
 impl WindowView for FtpSftpSshView {
-    fn plugin_id(&self) -> &str {
-        manifest::PLUGIN_ID
+    fn plugin_id(&self) -> PluginId {
+        manifest::PLUGIN_ID.into()
     }
 
-    fn title(&self) -> &str {
-        "FTP/SFTP/SSH 客户端"
+    fn title(&self) -> Arc<str> {
+        "FTP/SFTP/SSH 客户端".into()
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {

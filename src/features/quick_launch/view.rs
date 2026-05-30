@@ -9,7 +9,8 @@ use gpui::{
 use crate::{
     app::{
         text_input::{TextInput, TextInputStyle},
-        theme, ui::{self, components},
+        theme,
+        ui::{self, components},
     },
     features::quick_launch::{
         model::{
@@ -1113,7 +1114,7 @@ impl Render for QuickLaunchView {
             .size_full()
             .bg(theme::semantic(dark).bg_page)
             .text_color(theme::semantic(dark).text_primary)
-            .font_family("PingFang SC")
+            .font_family(ui::font_ui())
             .p_4()
             .flex()
             .flex_col()
@@ -1415,19 +1416,11 @@ fn management_row(
                             div().into_any_element()
                         })
                         .child(if action.enabled {
-                            status_chip(
-                                String::from("已启用"),
-                                theme::semantic(dark).success,
-                                dark,
-                            )
-                            .into_any_element()
+                            status_chip(String::from("已启用"), theme::semantic(dark).success, dark)
+                                .into_any_element()
                         } else {
-                            status_chip(
-                                String::from("已停用"),
-                                theme::semantic(dark).warning,
-                                dark,
-                            )
-                            .into_any_element()
+                            status_chip(String::from("已停用"), theme::semantic(dark).warning, dark)
+                                .into_any_element()
                         })
                         .child(
                             div()
@@ -1487,7 +1480,9 @@ fn empty_state(has_query: bool, dark: bool) -> impl IntoElement {
                 .items_center()
                 .justify_center()
                 .text_size(px(20.0))
-                .text_color(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue))
+                .text_color(ui::accent_color(
+                    crate::core::plugin_spec::PluginAccent::Blue,
+                ))
                 .child("Q"),
         )
         .child(
@@ -1533,11 +1528,7 @@ fn action_row(
         .border_b_1()
         .border_color(theme::semantic(dark).border_default)
         .bg(row_bg)
-        .hover(move |style| {
-            style
-                .bg(ui::row_hover(dark))
-                .cursor_pointer()
-        })
+        .hover(move |style| style.bg(ui::row_hover(dark)).cursor_pointer())
         .on_click({
             let handle = handle.clone();
             move |_, _, cx| {
@@ -1556,7 +1547,9 @@ fn action_row(
                 .items_center()
                 .justify_center()
                 .text_size(px(16.0))
-                .text_color(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue))
+                .text_color(ui::accent_color(
+                    crate::core::plugin_spec::PluginAccent::Blue,
+                ))
                 .child(icon_for_action(&action)),
         )
         .child(
@@ -1584,12 +1577,8 @@ fn action_row(
                             div().into_any_element()
                         })
                         .child(if running {
-                            status_chip(
-                                String::from("运行中"),
-                                theme::semantic(dark).success,
-                                dark,
-                            )
-                            .into_any_element()
+                            status_chip(String::from("运行中"), theme::semantic(dark).success, dark)
+                                .into_any_element()
                         } else {
                             div().into_any_element()
                         })
@@ -1602,12 +1591,8 @@ fn action_row(
                         .child(if action.enabled {
                             div().into_any_element()
                         } else {
-                            status_chip(
-                                "已停用".to_string(),
-                                theme::semantic(dark).warning,
-                                dark,
-                            )
-                            .into_any_element()
+                            status_chip("已停用".to_string(), theme::semantic(dark).warning, dark)
+                                .into_any_element()
                         }),
                 )
                 .child(
@@ -2673,9 +2658,12 @@ fn overlay_shell(
     on_close: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
     content: impl IntoElement,
 ) -> impl IntoElement {
-    components::overlay_host(dark, backdrop_id, move |event, _window, cx| {
-        on_close(event, cx)
-    }, content)
+    components::overlay_host(
+        dark,
+        backdrop_id,
+        move |event, _window, cx| on_close(event, cx),
+        content,
+    )
 }
 
 fn menu_overlay_shell(
@@ -2763,11 +2751,7 @@ fn action_button(
         .border_1()
         .border_color(theme::semantic(dark).border_default)
         .bg(theme::semantic(dark).bg_surface)
-        .hover(move |style| {
-            style
-                .bg(ui::row_hover(dark))
-                .cursor_pointer()
-        })
+        .hover(move |style| style.bg(ui::row_hover(dark)).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
@@ -2789,11 +2773,7 @@ fn icon_action_button(
         .border_1()
         .border_color(theme::semantic(dark).border_default)
         .bg(theme::semantic(dark).bg_surface)
-        .hover(move |style| {
-            style
-                .bg(ui::row_hover(dark))
-                .cursor_pointer()
-        })
+        .hover(move |style| style.bg(ui::row_hover(dark)).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
@@ -2898,11 +2878,7 @@ fn action_menu_item(
         .w_full()
         .px_3()
         .rounded(px(6.0))
-        .hover(move |style| {
-            style
-                .bg(ui::row_hover(dark))
-                .cursor_pointer()
-        })
+        .hover(move |style| style.bg(ui::row_hover(dark)).cursor_pointer())
         .flex()
         .items_center()
         .text_size(px(12.0))
@@ -3039,7 +3015,9 @@ fn kind_chip(label: String, dark: bool) -> impl IntoElement {
         .items_center()
         .justify_center()
         .text_size(px(10.0))
-        .text_color(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue))
+        .text_color(ui::accent_color(
+            crate::core::plugin_spec::PluginAccent::Blue,
+        ))
         .child(label)
 }
 

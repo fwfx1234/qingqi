@@ -1,6 +1,6 @@
 use crate::core::{
     icon::IconRef,
-    plugin::PluginManifest,
+    plugin::Manifest,
     plugin_spec::{
         PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
         PluginWindowMode, WindowSpec,
@@ -9,8 +9,8 @@ use crate::core::{
 
 pub const PLUGIN_ID: &str = "image-compress";
 
-pub fn manifest() -> PluginManifest {
-    PluginManifest {
+pub fn manifest() -> Manifest {
+    Manifest {
         id: PLUGIN_ID.into(),
         name: "图片压缩".into(),
         description: "PNG/JPEG/WebP 批量压缩".into(),
@@ -20,6 +20,12 @@ pub fn manifest() -> PluginManifest {
         .into_iter()
         .map(Into::into)
         .collect(),
+        icon: IconRef::asset("qta/mdi6.image-size-select-large.png"),
+        prefixes: vec!["img".into(), "image".into(), "compress".into()],
+        mode: PluginWindowMode::Inline,
+        window: WindowSpec::auto(),
+        category: PluginCategory::Tool,
+        status: PluginStatus::Ready,
         background: false,
         dynamic_commands: false,
         visual: Some(PluginVisualSpec {
@@ -28,7 +34,7 @@ pub fn manifest() -> PluginManifest {
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Inline,
-            window: WindowSpec::ratio(0.82, 0.8),
+            window: WindowSpec::auto(),
         }),
         stats: Some(PluginStats {
             primary: "批量压缩".into(),

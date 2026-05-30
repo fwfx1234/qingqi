@@ -1,6 +1,6 @@
 use crate::core::{
     icon::IconRef,
-    plugin::PluginManifest,
+    plugin::Manifest,
     plugin_spec::{
         PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
         PluginWindowMode, WindowSpec,
@@ -9,8 +9,8 @@ use crate::core::{
 
 pub const PLUGIN_ID: &str = "anti-peeping";
 
-pub fn manifest() -> PluginManifest {
-    PluginManifest {
+pub fn manifest() -> Manifest {
+    Manifest {
         id: PLUGIN_ID.into(),
         name: "防窥屏".into(),
         description: "全屏遮盖屏幕内容，防止旁人窥视".into(),
@@ -18,10 +18,16 @@ pub fn manifest() -> PluginManifest {
             .into_iter()
             .map(Into::into)
             .collect(),
+        icon: IconRef::asset("icons/shield-eye.svg"),
+        prefixes: vec!["privacy".into(), "peeping".into()],
+        mode: PluginWindowMode::Window,
+        window: WindowSpec::fixed_topmost(420.0, 320.0),
+        category: PluginCategory::Tool,
+        status: PluginStatus::Ready,
         background: false,
         dynamic_commands: false,
         visual: Some(PluginVisualSpec {
-            icon: IconRef::asset("qta/mdi6.shield-eye-outline.png"),
+            icon: IconRef::asset("icons/shield-eye.svg"),
             accent: PluginAccent::Slate,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,

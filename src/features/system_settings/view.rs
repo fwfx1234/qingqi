@@ -6,7 +6,13 @@ use gpui::{
 };
 
 use crate::{
-    app::{app_index::AppIndexSnapshot, text_input::TextInput, theme, ui::{self, components}, theme_store::ThemeMode},
+    app::{
+        app_index::AppIndexSnapshot,
+        text_input::TextInput,
+        theme,
+        theme_store::ThemeMode,
+        ui::{self, components},
+    },
     core::shortcut::{CORE_PLUGIN_ID, ShortcutScope, ShortcutView},
     features::system_settings::plugin::SettingsPanel,
     platform::macos::PermissionStatus,
@@ -74,7 +80,7 @@ impl RenderOnce for SettingsElement {
         div()
             .size_full()
             .bg(page_bg)
-            .font_family("PingFang SC")
+            .font_family(ui::font_ui())
             .text_color(text_primary)
             .flex()
             .flex_col()
@@ -309,11 +315,7 @@ fn retention_control(
                 .border_1()
                 .border_color(theme::semantic(dark).border_default)
                 .bg(theme::semantic(dark).bg_surface)
-                .hover(|style| {
-                    style
-                        .bg(theme::semantic(dark).bg_subtle)
-                        .cursor_pointer()
-                })
+                .hover(|style| style.bg(theme::semantic(dark).bg_subtle).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -354,11 +356,7 @@ fn retention_control(
                 .border_1()
                 .border_color(theme::semantic(dark).border_default)
                 .bg(theme::semantic(dark).bg_surface)
-                .hover(|style| {
-                    style
-                        .bg(theme::semantic(dark).bg_subtle)
-                        .cursor_pointer()
-                })
+                .hover(|style| style.bg(theme::semantic(dark).bg_subtle).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -411,11 +409,7 @@ fn retention_control(
                 .border_1()
                 .border_color(theme::semantic(dark).border_default)
                 .bg(theme::semantic(dark).bg_surface)
-                .hover(|style| {
-                    style
-                        .bg(theme::semantic(dark).bg_subtle)
-                        .cursor_pointer()
-                })
+                .hover(|style| style.bg(theme::semantic(dark).bg_subtle).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -561,11 +555,7 @@ fn plugin_dir_button(
         .border_1()
         .border_color(theme::semantic(dark).border_default)
         .bg(theme::semantic(dark).bg_surface)
-        .hover(|style| {
-            style
-                .bg(theme::semantic(dark).bg_subtle)
-                .cursor_pointer()
-        })
+        .hover(|style| style.bg(theme::semantic(dark).bg_subtle).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
@@ -1254,11 +1244,7 @@ fn diag_path_row(
                 .border_1()
                 .border_color(theme::semantic(dark).border_default)
                 .bg(theme::semantic(dark).bg_surface)
-                .hover(|style| {
-                    style
-                        .bg(theme::semantic(dark).bg_subtle)
-                        .cursor_pointer()
-                })
+                .hover(|style| style.bg(theme::semantic(dark).bg_subtle).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -1344,11 +1330,7 @@ fn action_button(
             .bg(theme::semantic(dark).bg_surface)
             .border_1()
             .border_color(theme::semantic(dark).border_default)
-            .hover(|style| {
-                style
-                    .bg(theme::semantic(dark).bg_subtle)
-                    .cursor_pointer()
-            })
+            .hover(|style| style.bg(theme::semantic(dark).bg_subtle).cursor_pointer())
             .flex()
             .items_center()
             .justify_center()
@@ -1419,11 +1401,7 @@ fn seg_button(
         .font_weight(gpui::FontWeight::MEDIUM)
         .text_color(text_color)
         .child(mode_short_label(mode))
-        .hover(move |style| {
-            style
-                .bg(theme::semantic(dark).bg_surface)
-                .cursor_pointer()
-        })
+        .hover(move |style| style.bg(theme::semantic(dark).bg_surface).cursor_pointer())
         .on_click(move |_, window, _cx| {
             panel.borrow_mut().set_theme_mode(mode);
             window.refresh();

@@ -1,29 +1,30 @@
 use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, Styled, Window, div, px, rgb};
+use std::sync::Arc;
 
 use crate::{
     app::ui,
     core::{
         plugin::{
-            InlineView, ListItem, ListView, Plugin, PluginCx, PluginManifest, PluginView,
+            InlineView, ListItem, ListView, Manifest, Plugin, PluginCx, PluginId, PluginView,
             WindowView,
         },
         plugin_spec::{PluginOverviewSection, PluginStats, PluginWindowMode},
     },
 };
 
-pub struct StubPluginRuntime {
+pub struct StubPlugin {
     id: &'static str,
     title: &'static str,
-    manifest: PluginManifest,
+    manifest: Manifest,
     hero: &'static str,
     sections: &'static [(&'static str, &'static str)],
 }
 
-impl StubPluginRuntime {
+impl StubPlugin {
     pub fn new(
         id: &'static str,
         title: &'static str,
-        manifest: PluginManifest,
+        manifest: Manifest,
         hero: &'static str,
         sections: &'static [(&'static str, &'static str)],
     ) -> Self {
@@ -37,13 +38,13 @@ impl StubPluginRuntime {
     }
 }
 
-impl Plugin for StubPluginRuntime {
-    fn manifest(&self) -> PluginManifest {
+impl Plugin for StubPlugin {
+    fn manifest(&self) -> Manifest {
         self.manifest.clone()
     }
 
     fn open(&mut self, _: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
-        let mode = self.manifest.visual.mode;
+        let mode = self.manifest.visual.as_ref().unwrap().mode;
         let view = StubPluginView {
             id: self.id,
             title: self.title,
@@ -66,18 +67,18 @@ impl Plugin for StubPluginRuntime {
 struct StubPluginView {
     id: &'static str,
     title: &'static str,
-    manifest: PluginManifest,
+    manifest: Manifest,
     hero: &'static str,
     sections: Vec<PluginOverviewSection>,
 }
 
 impl WindowView for StubPluginView {
-    fn plugin_id(&self) -> &str {
-        self.id
+    fn plugin_id(&self) -> PluginId {
+        PluginId::from(self.id)
     }
 
-    fn title(&self) -> &str {
-        self.title
+    fn title(&self) -> Arc<str> {
+        Arc::from(self.title)
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
@@ -93,12 +94,12 @@ impl WindowView for StubPluginView {
 }
 
 impl InlineView for StubPluginView {
-    fn plugin_id(&self) -> &str {
-        self.id
+    fn plugin_id(&self) -> PluginId {
+        PluginId::from(self.id)
     }
 
-    fn title(&self) -> &str {
-        self.title
+    fn title(&self) -> Arc<str> {
+        Arc::from(self.title)
     }
 
     fn render(&mut self, window: &mut Window, cx: &mut App) -> AnyElement {
@@ -107,12 +108,12 @@ impl InlineView for StubPluginView {
 }
 
 impl ListView for StubPluginView {
-    fn plugin_id(&self) -> &str {
-        self.id
+    fn plugin_id(&self) -> PluginId {
+        PluginId::from(self.id)
     }
 
-    fn title(&self) -> &str {
-        self.title
+    fn title(&self) -> Arc<str> {
+        Arc::from(self.title)
     }
 
     fn items(&mut self, _cx: &mut App) -> Vec<ListItem> {
@@ -123,7 +124,7 @@ impl ListView for StubPluginView {
 struct StubPluginPage {
     id: &'static str,
     title: &'static str,
-    manifest: PluginManifest,
+    manifest: Manifest,
     hero: &'static str,
     sections: Vec<PluginOverviewSection>,
 }
@@ -138,14 +139,23 @@ impl IntoElement for StubPluginPage {
 
 impl RenderOnce for StubPluginPage {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let visual = self.manifest.visual.clone();
-        let stats: PluginStats = self.manifest.stats.clone();
+        // SAFETY: stub plugins are always constructed with visual and stats specs
+        let visual = self
+            .manifest
+            .visual
+            .as_ref()
+            .expect("stub plugin requires visual spec");
+        let stats: &PluginStats = self
+            .manifest
+            .stats
+            .as_ref()
+            .expect("stub plugin requires stats");
         let accent = ui::accent_color(visual.accent);
 
         div()
             .size_full()
             .bg(ui::bg_canvas())
-            .font_family("PingFang SC")
+            .font_family(ui::font_ui())
             .text_color(ui::text_primary())
             .p_4()
             .flex()
@@ -193,7 +203,11 @@ impl RenderOnce for StubPluginPage {
                                 div()
                                     .flex()
                                     .gap_2()
-                                    .child(ui::stat_card("主能力", stats.primary, visual.accent))
+                                    .child(ui::stat_card(
+                                        "主能力",
+                                        stats.primary.clone(),
+                                        visual.accent,
+                                    ))
                                     .child(ui::stat_card(
                                         "交互模式",
                                         visual.mode.label(),
@@ -213,6 +227,8 @@ impl RenderOnce for StubPluginPage {
                     ),
             )
             .children(self.sections.into_iter().map(|section| {
+                let title = section.title.to_string();
+                let body = section.body.to_string();
                 div()
                     .rounded(px(12.0))
                     .bg(ui::bg_surface())
@@ -227,21 +243,25 @@ impl RenderOnce for StubPluginPage {
                             .text_size(px(15.0))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(accent)
-                            .child(section.title),
+                            .child(title),
                     )
                     .child(
                         div()
                             .text_size(px(13.0))
                             .line_height(px(20.0))
                             .text_color(ui::text_secondary())
-                            .child(section.body),
+                            .child(body),
                     )
             }))
             .child(ui::status_bar(
                 format!(
                     "{}: {}",
                     self.manifest.name.as_ref(),
-                    self.manifest.command_hint.as_ref()
+                    self.manifest
+                        .command_hint
+                        .as_ref()
+                        .map(|s| s.as_ref())
+                        .unwrap_or("")
                 ),
                 rgb(0x475569),
             ))

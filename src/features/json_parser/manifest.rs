@@ -1,6 +1,6 @@
 use crate::core::{
     icon::IconRef,
-    plugin::PluginManifest,
+    plugin::Manifest,
     plugin_spec::{
         PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
         PluginWindowMode, WindowSpec,
@@ -9,8 +9,8 @@ use crate::core::{
 
 pub const PLUGIN_ID: &str = "json-parser";
 
-pub fn manifest() -> PluginManifest {
-    PluginManifest {
+pub fn manifest() -> Manifest {
+    Manifest {
         id: PLUGIN_ID.into(),
         name: "JSON 解析".into(),
         description: "JSON 格式化、验证与 JSONPath 查询".into(),
@@ -18,6 +18,12 @@ pub fn manifest() -> PluginManifest {
             .into_iter()
             .map(Into::into)
             .collect(),
+        icon: IconRef::asset("icons/json.svg"),
+        prefixes: vec!["json".into(), "jq".into()],
+        mode: PluginWindowMode::Inline,
+        window: WindowSpec::auto(),
+        category: PluginCategory::Tool,
+        status: PluginStatus::Ready,
         background: false,
         dynamic_commands: false,
         visual: Some(PluginVisualSpec {
@@ -26,7 +32,7 @@ pub fn manifest() -> PluginManifest {
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Inline,
-            window: WindowSpec::ratio(0.82, 0.84),
+            window: WindowSpec::auto(),
         }),
         stats: Some(PluginStats {
             primary: "格式化".into(),
@@ -62,13 +68,16 @@ mod tests {
     #[test]
     fn manifest_has_correct_accent() {
         let manifest = manifest();
-        assert_eq!(manifest.visual.accent, PluginAccent::Green);
+        assert_eq!(
+            manifest.visual.as_ref().unwrap().accent,
+            PluginAccent::Green
+        );
     }
 
     #[test]
     fn manifest_has_correct_category() {
         let manifest = manifest();
-        assert_eq!(manifest.visual.category, PluginCategory::Tool);
+        assert_eq!(manifest.category, PluginCategory::Tool);
     }
 
     #[test]

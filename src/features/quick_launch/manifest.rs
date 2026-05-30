@@ -1,6 +1,6 @@
 use crate::core::{
     icon::IconRef,
-    plugin::PluginManifest,
+    plugin::Manifest,
     plugin_spec::{
         PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
         PluginWindowMode, WindowSpec,
@@ -9,8 +9,8 @@ use crate::core::{
 
 pub const PLUGIN_ID: &str = "quick-launch";
 
-pub fn manifest() -> PluginManifest {
-    PluginManifest {
+pub fn manifest() -> Manifest {
+    Manifest {
         id: PLUGIN_ID.into(),
         name: "快速启动".into(),
         description: "系统命令与常用动作快速执行".into(),
@@ -20,10 +20,16 @@ pub fn manifest() -> PluginManifest {
         .into_iter()
         .map(Into::into)
         .collect(),
+        icon: IconRef::asset("icons/bolt.svg"),
+        prefixes: vec!["ql".into(), "quick".into()],
+        mode: PluginWindowMode::Window,
+        window: WindowSpec::fixed(860.0, 620.0),
+        category: PluginCategory::Tool,
+        status: PluginStatus::Ready,
         background: true,
         dynamic_commands: true,
         visual: Some(PluginVisualSpec {
-            icon: IconRef::asset("qta/fa5s.bolt.png"),
+            icon: IconRef::asset("icons/bolt.svg"),
             accent: PluginAccent::Amber,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,

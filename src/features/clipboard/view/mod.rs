@@ -1196,7 +1196,7 @@ impl Render for ClipboardPanel {
             .flex_col()
             .bg(theme::semantic(dark).bg_page)
             .text_color(theme::semantic(dark).text_primary)
-            .font_family("PingFang SC")
+            .font_family(ui::font_ui())
             .track_focus(
                 self.focus_handle
                     .as_ref()

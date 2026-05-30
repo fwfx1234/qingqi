@@ -359,7 +359,7 @@ impl Render for CapturePanel {
             .size_full()
             .bg(theme::semantic(dark).bg_page)
             .text_color(theme::semantic(dark).text_primary)
-            .font_family("PingFang SC")
+            .font_family(ui::font_ui())
             .flex()
             .flex_col()
             .gap_3()
@@ -494,10 +494,7 @@ impl Render for CapturePanel {
                                     let chip_bg: gpui::Hsla = if active {
                                         theme::rgba_with_alpha(color, 0.18)
                                     } else {
-                                        theme::rgba_with_alpha(
-                                            theme::semantic(dark).bg_subtle,
-                                            1.0,
-                                        )
+                                        theme::rgba_with_alpha(theme::semantic(dark).bg_subtle, 1.0)
                                     };
                                     div()
                                         .id(SharedString::from(format!("method-chip-{m}")))
@@ -780,7 +777,9 @@ impl Render for CapturePanel {
                                             .child(
                                                 div()
                                                     .w(px(58.0))
-                                                    .text_color(theme::semantic(dark).text_secondary)
+                                                    .text_color(
+                                                        theme::semantic(dark).text_secondary,
+                                                    )
                                                     .child(if timestamp.len() >= 16 {
                                                         timestamp[11..16].to_string()
                                                     } else {
@@ -834,14 +833,18 @@ impl Render for CapturePanel {
                                                 div()
                                                     .w(px(70.0))
                                                     .text_align(gpui::TextAlign::Right)
-                                                    .text_color(theme::semantic(dark).text_secondary)
+                                                    .text_color(
+                                                        theme::semantic(dark).text_secondary,
+                                                    )
                                                     .child(size),
                                             )
                                             .child(
                                                 div()
                                                     .w(px(62.0))
                                                     .text_align(gpui::TextAlign::Right)
-                                                    .text_color(theme::semantic(dark).text_secondary)
+                                                    .text_color(
+                                                        theme::semantic(dark).text_secondary,
+                                                    )
                                                     .child(duration),
                                             )
                                     }))
@@ -878,7 +881,9 @@ impl Render for CapturePanel {
                                             })
                                             .child(
                                                 div()
-                                                    .text_color(theme::semantic(dark).text_secondary)
+                                                    .text_color(
+                                                        theme::semantic(dark).text_secondary,
+                                                    )
                                                     .child(format!(
                                                         "{}–{} / {}",
                                                         offset + 1,
@@ -1284,7 +1289,7 @@ fn render_overview_section(detail: &CapturedExchange, dark: bool) -> gpui::AnyEl
         .into_any_element()
 }
 
-fn render_empty_tab(label: &str, dark: bool) -> gpui::AnyElement {
+fn render_empty_tab(label: &str, _dark: bool) -> gpui::AnyElement {
     div()
         .flex_1()
         .flex()

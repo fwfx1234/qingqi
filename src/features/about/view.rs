@@ -21,7 +21,7 @@ impl RenderOnce for AboutPage {
         div()
             .size_full()
             .bg(theme::semantic(dark).bg_page)
-            .font_family("PingFang SC")
+            .font_family(ui::font_ui())
             .text_color(theme::semantic(dark).text_primary)
             .flex()
             .items_center()

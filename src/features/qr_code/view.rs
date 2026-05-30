@@ -14,7 +14,8 @@ use gpui::{
 use crate::{
     app::{
         text_input::{TextInput, TextInputStyle},
-        theme, ui::{self, components},
+        theme,
+        ui::{self, components},
     },
     core::storage::AppPaths,
     features::qr_code::{
@@ -1397,7 +1398,7 @@ fn status_bar(message: String, tone: StatusTone, dark: bool) -> impl IntoElement
         )
 }
 
-fn section_label(label: &str, dark: bool) -> impl IntoElement {
+fn section_label(label: &str, _dark: bool) -> impl IntoElement {
     div()
         .text_size(px(11.0))
         .text_color(ui::text_secondary())
@@ -1405,11 +1406,21 @@ fn section_label(label: &str, dark: bool) -> impl IntoElement {
 }
 
 fn primary_action_button(label: &str, _dark: bool) -> gpui::Div {
-    components::button(label.to_string(), components::ButtonVariant::Primary, Some(crate::core::plugin_spec::PluginAccent::Blue), _dark)
+    components::button(
+        label.to_string(),
+        components::ButtonVariant::Primary,
+        Some(crate::core::plugin_spec::PluginAccent::Blue),
+        _dark,
+    )
 }
 
 fn action_button(label: &str, dark: bool) -> gpui::Div {
-    components::button(label.to_string(), components::ButtonVariant::Secondary, None, dark)
+    components::button(
+        label.to_string(),
+        components::ButtonVariant::Secondary,
+        None,
+        dark,
+    )
 }
 
 fn utility_button(label: &str, active: bool, dark: bool) -> gpui::Div {
@@ -1502,5 +1513,10 @@ fn module_title(title: &str, tag: &str, dark: bool) -> impl IntoElement {
 }
 
 fn ghost_button(label: &str, dark: bool) -> gpui::Div {
-    components::button(label.to_string(), components::ButtonVariant::Ghost, None, dark)
+    components::button(
+        label.to_string(),
+        components::ButtonVariant::Ghost,
+        None,
+        dark,
+    )
 }

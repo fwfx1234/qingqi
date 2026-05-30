@@ -394,8 +394,23 @@ pub fn launcher_row_selected(dark: bool) -> Rgba {
     if dark { rgb(0x241b48) } else { rgb(0xf7f7fa) }
 }
 
-pub fn launcher_icon_surface(dark: bool) -> Rgba {
-    if dark { rgb(0x1a1a35) } else { rgb(0xf8f8fb) }
+/// Icon surface background (unselected state).  Returns a colour with
+/// alpha so it composes correctly on top of the launcher glass.
+pub fn launcher_icon_surface(dark: bool) -> Hsla {
+    if dark {
+        hsla(0.0, 0.0, 1.0, 0.03)
+    } else {
+        rgba_with_alpha(rgb(0xf8f8fb), 0.78)
+    }
+}
+
+/// Icon border (unselected state).
+pub fn launcher_icon_border(dark: bool) -> Hsla {
+    if dark {
+        hsla(0.0, 0.0, 1.0, 0.04)
+    } else {
+        rgba_with_alpha(rgb(0xe7e7ee), 0.72)
+    }
 }
 
 pub fn launcher_accent(dark: bool) -> Rgba {
@@ -444,6 +459,94 @@ pub fn launcher_muted_text(dark: bool) -> Rgba {
 
 pub fn launcher_faint_text(dark: bool) -> Rgba {
     if dark { rgb(0x55557a) } else { rgb(0x9999bb) }
+}
+
+/// Title text in result/list rows.
+pub fn launcher_title_text(dark: bool) -> Rgba {
+    if dark { rgb(0xddd8ec) } else { rgb(0x333348) }
+}
+
+/// Icon border in selected state.
+pub fn launcher_icon_border_selected(dark: bool) -> Hsla {
+    if dark {
+        rgba_with_alpha(rgb(0xe2e2ea), 0.2)
+    } else {
+        rgba_with_alpha(rgb(0xe2e2ea), 0.9)
+    }
+}
+
+/// Icon surface in selected state.
+pub fn launcher_icon_surface_selected(dark: bool) -> Hsla {
+    if dark {
+        rgba_with_alpha(rgb(0xf2f2f7), 0.15)
+    } else {
+        rgba_with_alpha(rgb(0xf2f2f7), 0.9)
+    }
+}
+
+/// Row hover background.
+pub fn launcher_row_hover(dark: bool) -> Hsla {
+    if dark {
+        hsla(0.0, 0.0, 1.0, 0.025)
+    } else {
+        rgba_with_alpha(rgb(0xf7f7fa), 0.72)
+    }
+}
+
+/// Badge / tag background.
+pub fn launcher_badge_bg(dark: bool) -> Hsla {
+    if dark {
+        hsla(0.0, 0.0, 1.0, 0.03)
+    } else {
+        rgba_with_alpha(rgb(0xf7f7fa), 0.82)
+    }
+}
+
+/// Selected row background in light mode.
+pub fn launcher_row_bg_selected_light() -> Hsla {
+    rgba_with_alpha(rgb(0xf6f6fa), 0.96)
+}
+
+/// Selected row border in light mode.
+pub fn launcher_row_border_selected_light() -> Hsla {
+    rgba_with_alpha(rgb(0xe2e2ea), 0.95)
+}
+
+/// Subtle glow behind the selected row in dark mode.
+pub fn launcher_row_glow_dark() -> Hsla {
+    hsla(0.72, 0.72, 0.56, 0.04)
+}
+
+/// Fully transparent background placeholder (used for unselected row default).
+pub fn launcher_transparent() -> Hsla {
+    hsla(0.0, 0.0, 0.0, 0.0)
+}
+
+/// Plugin-specific icon tint color in the launcher.
+pub fn launcher_plugin_icon_tint(plugin_id: &str, dark: bool) -> Rgba {
+    if dark {
+        match plugin_id {
+            "api-debugger" => rgb(0xc8b8ff),
+            "clipboard" => rgb(0x88dd88),
+            "http-capture" => rgb(0xff8888),
+            "image-compress" => rgb(0xffcc44),
+            "json-parser" => rgb(0xaaccff),
+            "ftp-sftp-ssh-client" => rgb(0x88ddff),
+            "system-settings" => rgb(0xaaccff),
+            _ => launcher_accent(dark),
+        }
+    } else {
+        match plugin_id {
+            "api-debugger" => rgb(0x6b4fcf),
+            "clipboard" => rgb(0x55aa55),
+            "http-capture" => rgb(0xcc6666),
+            "image-compress" => rgb(0xccaa33),
+            "json-parser" => rgb(0x6688cc),
+            "ftp-sftp-ssh-client" => rgb(0x5599cc),
+            "system-settings" => rgb(0x6688cc),
+            _ => launcher_accent(dark),
+        }
+    }
 }
 
 // ── Accent color mapping ───────────────────────────────────────────────

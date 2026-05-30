@@ -64,8 +64,18 @@ impl ViewMode {
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum WindowSize {
-    Fixed { width: f32, height: f32 },
-    Ratio { width: f32, height: f32 },
+    Fixed {
+        width: f32,
+        height: f32,
+    },
+    Ratio {
+        width: f32,
+        height: f32,
+    },
+    /// Size to the available content area. For inline plugins this means
+    /// the launcher panel flexes between a sensible min and max height;
+    /// for window plugins this falls back to a default ratio.
+    Auto,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -74,7 +84,7 @@ pub struct WindowSpec {
     pub always_on_top: bool,
 }
 
-// ── Compatibility aliases for ongoing Manifest → PluginManifest migration ──
+// ── Compatibility aliases for ongoing Manifest → Manifest migration ──
 
 pub type PluginWindowMode = ViewMode;
 
@@ -103,7 +113,10 @@ pub struct PluginOverviewSection {
 }
 
 impl PluginOverviewSection {
-    pub fn new(title: impl Into<std::sync::Arc<str>>, body: impl Into<std::sync::Arc<str>>) -> Self {
+    pub fn new(
+        title: impl Into<std::sync::Arc<str>>,
+        body: impl Into<std::sync::Arc<str>>,
+    ) -> Self {
         Self {
             title: title.into(),
             body: body.into(),
@@ -116,7 +129,7 @@ impl WindowSpec {
     pub const fn fixed(width: f32, height: f32) -> Self {
         Self {
             size: WindowSize::Fixed { width, height },
-            always_on_top: false,
+            always_on_top: true,
         }
     }
 
@@ -130,7 +143,21 @@ impl WindowSpec {
     pub const fn ratio(width: f32, height: f32) -> Self {
         Self {
             size: WindowSize::Ratio { width, height },
-            always_on_top: false,
+            always_on_top: true,
+        }
+    }
+
+    pub const fn auto() -> Self {
+        Self {
+            size: WindowSize::Auto,
+            always_on_top: true,
+        }
+    }
+
+    pub const fn from_size(size: WindowSize) -> Self {
+        Self {
+            size,
+            always_on_top: true,
         }
     }
 }

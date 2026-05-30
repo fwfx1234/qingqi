@@ -11,12 +11,13 @@ use gpui_component::{
     switch::Switch,
     tab::TabBar,
 };
+use std::sync::Arc;
 
 use crate::{
     app::{theme, ui},
     core::{
         icon::IconRef,
-        plugin::{InlineView, Plugin, PluginCx, PluginManifest, PluginView},
+        plugin::{InlineView, Manifest, Plugin, PluginCx, PluginId, PluginView},
         plugin_spec::{
             PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
             PluginWindowMode, WindowSpec,
@@ -24,15 +25,15 @@ use crate::{
     },
 };
 
-pub struct GpuiDemoRuntime;
+pub struct GpuiDemoPlugin;
 
-impl GpuiDemoRuntime {
+impl GpuiDemoPlugin {
     pub fn new() -> Self {
         Self
     }
 
-    pub fn manifest_static() -> PluginManifest {
-        PluginManifest {
+    pub fn manifest_static() -> Manifest {
+        Manifest {
             id: "gpui-demo".into(),
             name: "GPUI 学习演示".into(),
             description: "GPUI 组件、布局和交互的 Rust 实验场".into(),
@@ -40,29 +41,35 @@ impl GpuiDemoRuntime {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
+            icon: IconRef::asset("qta/mdi6.school-outline.png"),
+            prefixes: vec!["gpui".into(), "demo".into()],
+            mode: PluginWindowMode::Inline,
+            window: WindowSpec::ratio(0.8, 0.8),
+            category: PluginCategory::Tool,
+            status: PluginStatus::Preview,
             background: false,
             dynamic_commands: false,
-            visual: PluginVisualSpec {
+            visual: Some(PluginVisualSpec {
                 icon: IconRef::asset("qta/mdi6.school-outline.png"),
                 accent: PluginAccent::Purple,
                 category: PluginCategory::Tool,
                 status: PluginStatus::Preview,
                 mode: PluginWindowMode::Inline,
                 window: WindowSpec::ratio(0.8, 0.8),
-            },
-            stats: PluginStats {
+            }),
+            stats: Some(PluginStats {
                 primary: "控件范式".into(),
                 secondary: "布局样例".into(),
                 tertiary: "持续沉淀".into(),
-            },
-            command_hint: "用于沉淀 Qingqi 的 GPUI 组件、布局和交互范式".into(),
+            }),
+            command_hint: Some("用于沉淀 Qingqi 的 GPUI 组件、布局和交互范式".into()),
             command_prefixes: ["gpui", "demo"].into_iter().map(Into::into).collect(),
         }
     }
 }
 
-impl Plugin for GpuiDemoRuntime {
-    fn manifest(&self) -> PluginManifest {
+impl Plugin for GpuiDemoPlugin {
+    fn manifest(&self) -> Manifest {
         Self::manifest_static()
     }
 
@@ -91,12 +98,12 @@ struct GpuiDemoView {
 }
 
 impl InlineView for GpuiDemoView {
-    fn plugin_id(&self) -> &str {
-        "gpui-demo"
+    fn plugin_id(&self) -> PluginId {
+        "gpui-demo".into()
     }
 
-    fn title(&self) -> &str {
-        "GPUI 学习演示"
+    fn title(&self) -> Arc<str> {
+        "GPUI 学习演示".into()
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
@@ -133,7 +140,7 @@ impl RenderOnce for GpuiDemoPage {
         div()
             .size_full()
             .bg(theme::semantic(dark).bg_page)
-            .font_family("PingFang SC")
+            .font_family(ui::font_ui())
             .text_color(theme::semantic(dark).text_primary)
             .flex()
             .flex_col()

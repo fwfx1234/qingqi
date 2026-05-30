@@ -1,6 +1,6 @@
 use gpui::{IntoElement, ParentElement, SharedString, Styled, div, px};
 
-use crate::app::{theme, ui};
+use crate::app::theme;
 
 /// Unified settings card — header with title + optional subtitle, content below.
 /// Extracted from system_settings/view.rs for reuse across clipboard settings, download settings, etc.
@@ -32,17 +32,13 @@ pub fn settings_card(
                 .items_center()
                 .justify_between()
                 .child({
-                    let mut header = div()
-                        .flex()
-                        .flex_col()
-                        .gap_0p5()
-                        .child(
-                            div()
-                                .text_size(theme::font_size_body())
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(s.text_primary)
-                                .child(title.clone()),
-                        );
+                    let mut header = div().flex().flex_col().gap_0p5().child(
+                        div()
+                            .text_size(theme::font_size_body())
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(s.text_primary)
+                            .child(title.clone()),
+                    );
                     if let Some(st) = subtitle {
                         header = header.child(
                             div()

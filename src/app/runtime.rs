@@ -63,7 +63,7 @@ pub fn run() -> Result<()> {
         CommandUsageStore::new(Arc::clone(&database), "command-usage"),
     );
 
-    let builtin_services = register_builtin_plugins(
+    let clipboard_service = register_builtin_plugins(
         &mut plugins,
         paths.clone(),
         Arc::clone(&theme_store),
@@ -71,7 +71,6 @@ pub fn run() -> Result<()> {
         events.clone(),
         Arc::clone(&app_index_service),
     )?;
-    let clipboard_service = builtin_services.clipboard_service;
 
     let plugins = Rc::new(RefCell::new(plugins));
     let window_controller = Rc::new(RefCell::new(WindowController::new(

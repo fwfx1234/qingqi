@@ -1353,8 +1353,7 @@ fn open_tabs_bar(
                         .border_color(if active {
                             api_accent(dark)
                         } else {
-                            theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 0.0)
-                                .into()
+                            theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 0.0).into()
                         })
                         .bg(if active {
                             theme::rgba_with_alpha(api_accent(dark), 0.08)
@@ -1633,11 +1632,8 @@ fn editor_panel(
                                 .border_color(if active {
                                     api_accent(dark)
                                 } else {
-                                    theme::rgba_with_alpha(
-                                        theme::semantic(dark).bg_surface,
-                                        0.0,
-                                    )
-                                    .into()
+                                    theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 0.0)
+                                        .into()
                                 })
                                 .text_size(px(10.0))
                                 .text_color(if active {
@@ -1758,10 +1754,7 @@ fn response_panel(
                                 .bg(if active {
                                     theme::rgba_with_alpha(api_accent(dark), 0.08)
                                 } else {
-                                    theme::rgba_with_alpha(
-                                        theme::semantic(dark).bg_surface,
-                                        0.0,
-                                    )
+                                    theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 0.0)
                                 })
                                 .text_size(px(11.0))
                                 .text_color(if active {
@@ -2092,7 +2085,9 @@ fn env_manager_dialog(
                                                         div()
                                                             .text_size(px(14.0))
                                                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                            .text_color(theme::semantic(dark).text_primary)
+                                                            .text_color(
+                                                                theme::semantic(dark).text_primary,
+                                                            )
                                                             .truncate()
                                                             .child(environment.name.clone()),
                                                     )
@@ -2562,7 +2557,7 @@ fn context_menu_item(
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
-fn menu_separator(dark: bool) -> impl IntoElement {
+fn menu_separator(_dark: bool) -> impl IntoElement {
     div().h(px(1.0)).bg(ui::border_light())
 }
 
@@ -2715,7 +2710,7 @@ fn scenario_status_label(status: ScenarioStatus, dark: bool) -> impl IntoElement
         .child(status.label())
 }
 
-fn section_micro_label(label: impl Into<String>, dark: bool) -> impl IntoElement {
+fn section_micro_label(label: impl Into<String>, _dark: bool) -> impl IntoElement {
     div()
         .text_size(px(10.0))
         .font_weight(gpui::FontWeight::SEMIBOLD)

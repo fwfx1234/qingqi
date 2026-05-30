@@ -550,20 +550,10 @@ fn plugin_window_options(
     display: Option<std::rc::Rc<dyn gpui::PlatformDisplay>>,
     bounds: Bounds<gpui::Pixels>,
 ) -> WindowOptions {
-    let Some(manifest) = manifest else {
-        return WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
-            display_id: display.map(|display| display.id()),
-            titlebar: Some(TitlebarOptions {
-                title: Some(title.to_string().into()),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-    };
+    // All plugin windows are PopUp (always-on-top) regardless of manifest
+    // settings — plugins are tool panels that should float above normal windows.
+    let client_drawn_window = manifest.is_some_and(|m| m.id.as_ref() == "clipboard");
 
-    let always_on_top = manifest.window.always_on_top;
-    let client_drawn_window = manifest.id.as_ref() == "clipboard";
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         display_id: display.map(|display| display.id()),
@@ -573,15 +563,11 @@ fn plugin_window_options(
             traffic_light_position: client_drawn_window.then_some(point(px(28.0), px(22.0))),
             ..Default::default()
         }),
-        kind: if always_on_top {
-            WindowKind::PopUp
-        } else {
-            WindowKind::Normal
-        },
-        is_resizable: !always_on_top,
+        kind: WindowKind::PopUp,
+        is_resizable: false,
         is_minimizable: true,
         window_background: WindowBackgroundAppearance::Opaque,
-        window_min_size: always_on_top.then_some(bounds.size),
+        window_min_size: Some(bounds.size),
         window_decorations: client_drawn_window.then_some(WindowDecorations::Client),
         ..Default::default()
     }
@@ -611,6 +597,10 @@ fn plugin_bounds(
             } else {
                 platform::display::centered_on_active_display(cx, size(px(1100.0), px(760.0)))
             }
+        }
+        WindowSize::Auto => {
+            // Fall back to a reasonable default size for auto-sized windows.
+            platform::display::centered_on_active_display(cx, size(px(980.0), px(640.0)))
         }
     }
 }

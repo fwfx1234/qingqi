@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 use gpui::{
@@ -10,21 +11,21 @@ use crate::{
     app::ui,
     core::{
         command::CommandItem,
-        plugin::{Plugin, PluginCx, PluginManifest, PluginView, WindowView},
+        plugin::{Manifest, Plugin, PluginCx, PluginId, PluginView, WindowView},
         storage::AppPaths,
     },
 };
 
 use super::manifest;
 
-pub struct AntiPeepingRuntime {
+pub struct AntiPeepingPlugin {
     paths: AppPaths,
     image_path: Rc<RefCell<Option<String>>>,
     active: Rc<RefCell<bool>>,
     overlay_windows: Rc<RefCell<Vec<AnyWindowHandle>>>,
 }
 
-impl AntiPeepingRuntime {
+impl AntiPeepingPlugin {
     pub fn new(paths: AppPaths) -> Self {
         let image_path = Rc::new(RefCell::new(Self::load_custom_image(&paths)));
         Self {
@@ -102,8 +103,8 @@ impl AntiPeepingRuntime {
     }
 }
 
-impl Plugin for AntiPeepingRuntime {
-    fn manifest(&self) -> PluginManifest {
+impl Plugin for AntiPeepingPlugin {
+    fn manifest(&self) -> Manifest {
         manifest::manifest()
     }
 
@@ -115,7 +116,7 @@ impl Plugin for AntiPeepingRuntime {
             "全屏遮盖所有屏幕内容",
             m.keywords.iter().map(|s| s.as_ref()),
             m.command_prefixes.iter().map(|s| s.as_ref()),
-            m.visual.icon.as_str(),
+            m.icon.as_str(),
         )]
     }
 
@@ -150,12 +151,12 @@ struct AntiPeepingView {
 }
 
 impl WindowView for AntiPeepingView {
-    fn plugin_id(&self) -> &str {
-        manifest::PLUGIN_ID
+    fn plugin_id(&self) -> PluginId {
+        manifest::PLUGIN_ID.into()
     }
 
-    fn title(&self) -> &str {
-        "防窥屏"
+    fn title(&self) -> Arc<str> {
+        "防窥屏".into()
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> gpui::AnyElement {
@@ -239,7 +240,7 @@ impl WindowView for AntiPeepingView {
                         } else {
                             Some(draft_clone.clone())
                         };
-                        AntiPeepingRuntime::save_custom_image(&paths_clone, &draft_clone);
+                        AntiPeepingPlugin::save_custom_image(&paths_clone, &draft_clone);
                     })
             })
             .into_any_element()
@@ -291,7 +292,7 @@ impl Render for AntiPeepingOverlay {
                     *active.borrow_mut() = false;
                     cx.stop_propagation();
                     let overlay_windows = Rc::clone(&overlay_windows);
-                    cx.defer(move |cx| AntiPeepingRuntime::close_overlays(cx, &overlay_windows));
+                    cx.defer(move |cx| AntiPeepingPlugin::close_overlays(cx, &overlay_windows));
                 }
             })
             .when_some(image_path, |this, path| {

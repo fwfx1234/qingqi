@@ -7,20 +7,20 @@ use crate::{
     core::{
         command::{CommandItem, ContextKind, ContextMatcher},
         database::{DatabaseService, DatabaseSpec},
-        plugin::{Plugin, PluginCx, PluginView, WindowView},
+        plugin::{Plugin, PluginCx, PluginId, PluginView, WindowView},
         storage::AppPaths,
     },
     features::api_debugger::{manifest, service::ApiService, view},
 };
 
-pub struct ApiDebuggerRuntime {
+pub struct ApiDebuggerPlugin {
     database: Arc<DatabaseService>,
     paths: AppPaths,
     service: Option<Arc<ApiService>>,
     watch_started: bool,
 }
 
-impl ApiDebuggerRuntime {
+impl ApiDebuggerPlugin {
     pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> Self {
         Self {
             database,
@@ -66,7 +66,7 @@ impl ApiDebuggerRuntime {
     }
 }
 
-impl Default for ApiDebuggerRuntime {
+impl Default for ApiDebuggerPlugin {
     fn default() -> Self {
         let paths = AppPaths::resolve().expect("failed to resolve qingqi data path");
         let database = Arc::new(DatabaseService::new(paths.clone()));
@@ -74,8 +74,8 @@ impl Default for ApiDebuggerRuntime {
     }
 }
 
-impl Plugin for ApiDebuggerRuntime {
-    fn manifest(&self) -> crate::core::plugin::PluginManifest {
+impl Plugin for ApiDebuggerPlugin {
+    fn manifest(&self) -> crate::core::plugin::Manifest {
         manifest::manifest()
     }
 
@@ -92,11 +92,11 @@ impl Plugin for ApiDebuggerRuntime {
                 manifest.description.as_ref(),
                 manifest.keywords.iter().map(|s| s.as_ref()),
                 manifest.command_prefixes.iter().map(|s| s.as_ref()),
-                manifest.visual.icon.as_str(),
+                manifest.icon.as_str(),
             )
             .with_recommend_matchers([
                 ContextMatcher::new(ContextKind::Url, 120),
-                ContextMatcher::clipboard(ContextKind::Url, 70),
+                ContextMatcher::new(ContextKind::Url, 70),
             ]),
         ]
     }
@@ -115,12 +115,12 @@ struct ApiDebuggerView {
 }
 
 impl WindowView for ApiDebuggerView {
-    fn plugin_id(&self) -> &str {
-        manifest::PLUGIN_ID
+    fn plugin_id(&self) -> PluginId {
+        manifest::PLUGIN_ID.into()
     }
 
-    fn title(&self) -> &str {
-        "API 调试器"
+    fn title(&self) -> Arc<str> {
+        "API 调试器".into()
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {

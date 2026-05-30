@@ -169,7 +169,16 @@ impl ShortcutService {
     pub fn reload_from_plugins(&mut self, cx: &mut App) -> Result<()> {
         let mut shortcuts = vec![core_open_launcher_shortcut()];
         if let Some(plugins) = self.plugins.as_ref() {
-            shortcuts.extend(plugins.borrow_mut().shortcuts());
+            // Force all plugin shortcuts to App scope — only core shortcuts
+            // (e.g. Alt+Space to toggle launcher) may be global.  This
+            // prevents plugins from registering system-wide hotkeys that
+            // conflict with other applications.
+            shortcuts.extend(plugins.borrow_mut().shortcuts().into_iter().map(|mut s| {
+                if s.owner_plugin_id != CORE_PLUGIN_ID {
+                    s.scope = ShortcutScope::App;
+                }
+                s
+            }));
         }
         self.replace_shortcuts(shortcuts, cx)
     }
@@ -612,8 +621,16 @@ pub fn dispatch_target(
         ShortcutTarget::Command(target) => {
             WindowController::run_command(window_controller, target.clone(), cx);
         }
-        ShortcutTarget::PluginAction { .. } => {
-            tracing::warn!("plugin action shortcut dispatch is not implemented yet");
+        ShortcutTarget::PluginAction {
+            plugin_id,
+            action_id,
+        } => {
+            let activation = Activation::Run(crate::core::command::Action::PluginAction {
+                plugin_id: plugin_id.clone(),
+                action_id: action_id.clone(),
+                payload: None,
+            });
+            WindowController::run_command(window_controller, activation, cx);
         }
     }
 }

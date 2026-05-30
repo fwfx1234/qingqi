@@ -31,7 +31,7 @@ impl Activation {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CommandKind {
     App,
     Plugin,
@@ -308,9 +308,10 @@ impl Command {
             .score_plain(context.input_body.as_str())
             .map(|matched| matched.score)
             .unwrap_or(0);
-        let input_context_match = self.recommend_matchers.iter().any(|matcher| {
-            context.input_kinds.contains(&matcher.kind)
-        });
+        let input_context_match = self
+            .recommend_matchers
+            .iter()
+            .any(|matcher| context.input_kinds.contains(&matcher.kind));
 
         if input_context_match && base_score <= 0 {
             input_body.to_string()

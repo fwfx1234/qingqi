@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::{cell::RefCell, rc::Rc};
 
 use gpui::{App, IntoElement, Window};
@@ -5,7 +6,10 @@ use gpui::{App, IntoElement, Window};
 use crate::{
     core::{
         command::{ClipboardPayload, Command, ContextKind, ContextMatcher},
-        plugin::{InlineView, Manifest, Plugin, PluginCx, PluginView, recommended_plugin_command},
+        plugin::{
+            InlineView, Manifest, Plugin, PluginCx, PluginId, PluginView,
+            recommended_plugin_command,
+        },
     },
     features::json_parser::{manifest, view},
 };
@@ -40,7 +44,7 @@ impl Plugin for JsonParserPlugin {
         }
     }
 
-    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+    fn open(&mut self, _cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         Ok(PluginView::Inline(Box::new(JsonParserView {
             panel: Rc::new(RefCell::new(view::JsonPanel::new())),
         })))
@@ -52,12 +56,12 @@ struct JsonParserView {
 }
 
 impl InlineView for JsonParserView {
-    fn plugin_id(&self) -> &str {
-        manifest::PLUGIN_ID
+    fn plugin_id(&self) -> PluginId {
+        manifest::PLUGIN_ID.into()
     }
 
-    fn title(&self) -> &str {
-        "JSON 解析"
+    fn title(&self) -> Arc<str> {
+        "JSON 解析".into()
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> gpui::AnyElement {

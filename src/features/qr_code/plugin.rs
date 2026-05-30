@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::{cell::RefCell, rc::Rc};
 
 use gpui::{App, IntoElement, Window};
@@ -5,7 +6,10 @@ use gpui::{App, IntoElement, Window};
 use crate::{
     core::{
         command::{Command, ContextKind, ContextMatcher},
-        plugin::{InlineView, Manifest, Plugin, PluginCx, PluginView, recommended_plugin_command},
+        plugin::{
+            InlineView, Manifest, Plugin, PluginCx, PluginId, PluginView,
+            recommended_plugin_command,
+        },
         storage::AppPaths,
     },
     features::qr_code::{manifest, view},
@@ -31,7 +35,7 @@ impl Plugin for QrCodePlugin {
         )
     }
 
-    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+    fn open(&mut self, _cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         Ok(PluginView::Inline(Box::new(QrCodeView {
             panel: Rc::new(RefCell::new(view::QrPanel::new(self.paths.clone())?)),
         })))
@@ -43,12 +47,12 @@ struct QrCodeView {
 }
 
 impl InlineView for QrCodeView {
-    fn plugin_id(&self) -> &str {
-        manifest::PLUGIN_ID
+    fn plugin_id(&self) -> PluginId {
+        manifest::PLUGIN_ID.into()
     }
 
-    fn title(&self) -> &str {
-        "二维码"
+    fn title(&self) -> Arc<str> {
+        "二维码".into()
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> gpui::AnyElement {

@@ -1,6 +1,6 @@
 use crate::core::{
     icon::IconRef,
-    plugin::PluginManifest,
+    plugin::Manifest,
     plugin_spec::{
         PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
         PluginWindowMode, WindowSpec,
@@ -9,8 +9,8 @@ use crate::core::{
 
 pub const PLUGIN_ID: &str = "api-debugger";
 
-pub fn manifest() -> PluginManifest {
-    PluginManifest {
+pub fn manifest() -> Manifest {
+    Manifest {
         id: PLUGIN_ID.into(),
         name: "API 调试器".into(),
         description: "HTTP 接口测试，支持环境切换、参数编辑与响应查看".into(),
@@ -18,10 +18,16 @@ pub fn manifest() -> PluginManifest {
             .into_iter()
             .map(Into::into)
             .collect(),
+        icon: IconRef::asset("icons/api.svg"),
+        prefixes: vec!["api".into(), "http".into()],
+        mode: PluginWindowMode::Window,
+        window: WindowSpec::ratio(0.84, 0.84),
+        category: PluginCategory::Tool,
+        status: PluginStatus::Ready,
         background: false,
         dynamic_commands: false,
         visual: Some(PluginVisualSpec {
-            icon: IconRef::asset("qta/mdi6.api.png"),
+            icon: IconRef::asset("icons/api.svg"),
             accent: PluginAccent::Blue,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,

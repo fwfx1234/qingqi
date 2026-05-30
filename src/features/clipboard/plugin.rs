@@ -9,19 +9,19 @@ use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 use crate::{
     app::events::AppEventBus,
     core::{
-        command::{Activation, CommandItem, ContextKind, ContextMatcher},
-        plugin::{Plugin, PluginCx, PluginView, WindowView},
+        command::{Activation, CommandItem},
+        plugin::{Plugin, PluginCx, PluginId, PluginView, WindowView},
         shortcut::{ShortcutDescriptor, ShortcutScope, ShortcutTarget},
     },
     features::clipboard::{manifest, service::ClipboardService, view},
 };
 
-pub struct ClipboardRuntime {
+pub struct ClipboardPlugin {
     service: Arc<Mutex<ClipboardService>>,
     watch_started: bool,
 }
 
-impl ClipboardRuntime {
+impl ClipboardPlugin {
     pub fn new(service: ClipboardService) -> Self {
         Self {
             service: Arc::new(Mutex::new(service)),
@@ -34,23 +34,21 @@ impl ClipboardRuntime {
     }
 }
 
-impl Plugin for ClipboardRuntime {
+impl Plugin for ClipboardPlugin {
     fn manifest(&self) -> crate::core::plugin::Manifest {
         manifest::manifest()
     }
 
     fn commands(&self, _query: &str) -> Vec<CommandItem> {
         let manifest = self.manifest();
-        vec![
-            CommandItem::plugin_open(
-                manifest.id.as_ref(),
-                manifest.name.as_ref(),
-                manifest.description.as_ref(),
-                manifest.keywords.iter().map(|s| s.as_ref()),
-                manifest.prefixes.iter().map(|s| s.as_ref()),
-                manifest.icon.as_str(),
-            ),
-        ]
+        vec![CommandItem::plugin_open(
+            manifest.id.as_ref(),
+            manifest.name.as_ref(),
+            manifest.description.as_ref(),
+            manifest.keywords.iter().map(|s| s.as_ref()),
+            manifest.prefixes.iter().map(|s| s.as_ref()),
+            manifest.icon.as_str(),
+        )]
     }
 
     fn open(&mut self, cx: &mut PluginCx<'_>) -> Result<PluginView> {
@@ -181,12 +179,12 @@ struct ClipboardView {
 }
 
 impl WindowView for ClipboardView {
-    fn plugin_id(&self) -> &str {
-        manifest::PLUGIN_ID
+    fn plugin_id(&self) -> PluginId {
+        manifest::PLUGIN_ID.into()
     }
 
-    fn title(&self) -> &str {
-        "剪贴板历史"
+    fn title(&self) -> Arc<str> {
+        "剪贴板历史".into()
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
@@ -237,7 +235,7 @@ mod tests {
         service
             .set_hotkey(String::from("Ctrl+Alt+V"))
             .expect("legacy hotkey should persist");
-        let mut runtime = ClipboardRuntime::new(service);
+        let mut runtime = ClipboardPlugin::new(service);
 
         let shortcut = runtime
             .shortcuts()

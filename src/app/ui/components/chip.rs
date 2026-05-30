@@ -1,4 +1,4 @@
-use gpui::{IntoElement, ParentElement, Styled, div, px};
+use gpui::{ParentElement, Styled, div, px};
 
 use crate::app::{theme, ui};
 use crate::core::plugin_spec::PluginAccent;

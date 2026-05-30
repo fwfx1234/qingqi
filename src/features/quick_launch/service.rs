@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    os::unix::process::CommandExt,
     process::{Command as ProcessCommand, Stdio},
     sync::{
         Arc, Mutex,
@@ -612,6 +611,7 @@ fn run_script_action(service: &QuickLaunchService, action: &PreparedAction) -> R
         .args(arguments)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    #[cfg(unix)]
     unsafe {
         command.pre_exec(|| {
             if libc::setpgid(0, 0) != 0 {
@@ -831,14 +831,23 @@ fn error_capture(message: &str) -> RunCapture {
 }
 
 fn signal_process(pid: u32, signal: &str) -> Result<()> {
-    let sig = match signal {
-        "KILL" => libc::SIGKILL,
-        _ => libc::SIGTERM,
-    };
-    let rc = unsafe { libc::kill(-(pid as i32), sig) };
-    if rc != 0 {
-        let error = std::io::Error::last_os_error();
-        ensure!(false, "发送 {signal} 信号失败: {error}");
+    #[cfg(unix)]
+    {
+        let sig = match signal {
+            "KILL" => libc::SIGKILL,
+            _ => libc::SIGTERM,
+        };
+        let rc = unsafe { libc::kill(-(pid as i32), sig) };
+        if rc != 0 {
+            let error = std::io::Error::last_os_error();
+            ensure!(false, "发送 {signal} 信号失败: {error}");
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        // On non-Unix platforms, try to kill the process directly
+        let _ = (pid, signal);
+        ensure!(false, "进程信号发送仅在 Unix 平台支持");
     }
     Ok(())
 }

@@ -15,7 +15,7 @@ use crate::{
     },
     core::{
         icon::IconRef,
-        plugin::{InlineView, Plugin, PluginCx, PluginManifest, PluginView},
+        plugin::{InlineView, Manifest, Plugin, PluginCx, PluginId, PluginView},
         plugin_spec::{
             PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
             PluginWindowMode, WindowSpec,
@@ -29,14 +29,14 @@ use crate::{
 use super::settings_store::{SettingsStore, retention_status_text};
 use super::view::SettingsElement;
 
-pub struct SystemSettingsRuntime {
+pub struct SystemSettingsPlugin {
     theme_store: Arc<Mutex<ThemeStore>>,
     settings_store: Arc<Mutex<SettingsStore>>,
     app_index_service: Option<Arc<AppIndexService>>,
     app_paths: AppPaths,
 }
 
-impl SystemSettingsRuntime {
+impl SystemSettingsPlugin {
     pub fn new(
         theme_store: Arc<Mutex<ThemeStore>>,
         app_paths: AppPaths,
@@ -51,8 +51,8 @@ impl SystemSettingsRuntime {
         }
     }
 
-    pub fn manifest_static() -> PluginManifest {
-        PluginManifest {
+    pub fn manifest_static() -> Manifest {
+        Manifest {
             id: "system-settings".into(),
             name: "系统设置".into(),
             description: "主题切换与应用偏好设置".into(),
@@ -60,29 +60,35 @@ impl SystemSettingsRuntime {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
+            icon: IconRef::asset("qta/mdi6.cog-outline.png"),
+            prefixes: vec!["set".into(), "settings".into()],
+            mode: PluginWindowMode::Inline,
+            window: WindowSpec::ratio(0.72, 0.7),
+            category: PluginCategory::System,
+            status: PluginStatus::Ready,
             background: false,
             dynamic_commands: false,
-            visual: PluginVisualSpec {
+            visual: Some(PluginVisualSpec {
                 icon: IconRef::asset("qta/mdi6.cog-outline.png"),
                 accent: PluginAccent::Slate,
                 category: PluginCategory::System,
                 status: PluginStatus::Ready,
                 mode: PluginWindowMode::Inline,
                 window: WindowSpec::ratio(0.72, 0.7),
-            },
-            stats: PluginStats {
+            }),
+            stats: Some(PluginStats {
                 primary: "主题设置".into(),
                 secondary: "配置持久化".into(),
                 tertiary: "偏好设置".into(),
-            },
-            command_hint: "主题、窗口保留、应用索引与诊断信息".into(),
+            }),
+            command_hint: Some("主题、窗口保留、应用索引与诊断信息".into()),
             command_prefixes: ["set", "settings"].into_iter().map(Into::into).collect(),
         }
     }
 }
 
-impl Plugin for SystemSettingsRuntime {
-    fn manifest(&self) -> PluginManifest {
+impl Plugin for SystemSettingsPlugin {
+    fn manifest(&self) -> Manifest {
         Self::manifest_static()
     }
 
@@ -106,12 +112,12 @@ pub struct SystemSettingsView {
 }
 
 impl InlineView for SystemSettingsView {
-    fn plugin_id(&self) -> &str {
-        "system-settings"
+    fn plugin_id(&self) -> PluginId {
+        "system-settings".into()
     }
 
-    fn title(&self) -> &str {
-        "系统设置"
+    fn title(&self) -> Arc<str> {
+        "系统设置".into()
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::{cell::RefCell, path::Path, rc::Rc};
 
 use gpui::{App, IntoElement, Window};
@@ -5,7 +6,10 @@ use gpui::{App, IntoElement, Window};
 use crate::{
     core::{
         command::{ClipboardPayload, Command, ContextKind, ContextMatcher},
-        plugin::{InlineView, Manifest, Plugin, PluginCx, PluginView, recommended_plugin_command},
+        plugin::{
+            InlineView, Manifest, Plugin, PluginCx, PluginId, PluginView,
+            recommended_plugin_command,
+        },
         storage::AppPaths,
     },
     features::image_compress::{manifest, service::ImageCompressService, view},
@@ -43,7 +47,7 @@ impl Plugin for ImageCompressPlugin {
         None
     }
 
-    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+    fn open(&mut self, _cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let service = ImageCompressService::new(self.paths.clone())?;
         Ok(PluginView::Inline(Box::new(ImageCompressInlineView {
             panel: Rc::new(RefCell::new(view::ImageCompressPanel::new(service))),
@@ -56,12 +60,12 @@ struct ImageCompressInlineView {
 }
 
 impl InlineView for ImageCompressInlineView {
-    fn plugin_id(&self) -> &str {
-        manifest::PLUGIN_ID
+    fn plugin_id(&self) -> PluginId {
+        manifest::PLUGIN_ID.into()
     }
 
-    fn title(&self) -> &str {
-        "图片压缩"
+    fn title(&self) -> Arc<str> {
+        "图片压缩".into()
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> gpui::AnyElement {

@@ -1,6 +1,6 @@
 use crate::core::{
     icon::IconRef,
-    plugin::PluginManifest,
+    plugin::Manifest,
     plugin_spec::{
         PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
         PluginWindowMode, WindowSpec,
@@ -9,8 +9,8 @@ use crate::core::{
 
 pub const PLUGIN_ID: &str = "qr-code";
 
-pub fn manifest() -> PluginManifest {
-    PluginManifest {
+pub fn manifest() -> Manifest {
+    Manifest {
         id: PLUGIN_ID.into(),
         name: "二维码".into(),
         description: "二维码生成与扫描".into(),
@@ -18,6 +18,12 @@ pub fn manifest() -> PluginManifest {
             .into_iter()
             .map(Into::into)
             .collect(),
+        icon: IconRef::asset("qta/mdi6.qrcode.png"),
+        prefixes: vec!["qr".into(), "qrcode".into()],
+        mode: PluginWindowMode::Inline,
+        window: WindowSpec::auto(),
+        category: PluginCategory::Tool,
+        status: PluginStatus::Ready,
         background: false,
         dynamic_commands: false,
         visual: Some(PluginVisualSpec {
@@ -26,7 +32,7 @@ pub fn manifest() -> PluginManifest {
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Inline,
-            window: WindowSpec::ratio(0.76, 0.76),
+            window: WindowSpec::auto(),
         }),
         stats: Some(PluginStats {
             primary: "生成".into(),

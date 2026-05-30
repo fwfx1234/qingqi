@@ -1,6 +1,6 @@
 use crate::core::{
     icon::IconRef,
-    plugin::PluginManifest,
+    plugin::Manifest,
     plugin_spec::{
         PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
         PluginWindowMode, WindowSpec,
@@ -9,8 +9,8 @@ use crate::core::{
 
 pub const PLUGIN_ID: &str = "http-capture";
 
-pub fn manifest() -> PluginManifest {
-    PluginManifest {
+pub fn manifest() -> Manifest {
+    Manifest {
         id: PLUGIN_ID.into(),
         name: "HTTP 抓包".into(),
         description: "HTTP 请求捕获与分析".into(),
@@ -18,6 +18,12 @@ pub fn manifest() -> PluginManifest {
             .into_iter()
             .map(Into::into)
             .collect(),
+        icon: IconRef::asset("icons/capture.svg"),
+        prefixes: vec!["cap".into(), "capture".into(), "httpcap".into()],
+        mode: PluginWindowMode::Window,
+        window: WindowSpec::ratio(0.86, 0.82),
+        category: PluginCategory::Tool,
+        status: PluginStatus::Ready,
         background: true,
         dynamic_commands: false,
         visual: Some(PluginVisualSpec {
@@ -65,7 +71,7 @@ mod tests {
     #[test]
     fn manifest_has_correct_accent() {
         let manifest = manifest();
-        assert_eq!(manifest.visual.accent, PluginAccent::Cyan);
+        assert_eq!(manifest.visual.as_ref().unwrap().accent, PluginAccent::Cyan);
     }
 
     #[test]

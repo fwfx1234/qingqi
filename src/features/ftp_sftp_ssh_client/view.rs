@@ -877,7 +877,7 @@ impl RenderOnce for FtpSftpSshElement {
                 .is_some_and(|summary| summary.status == ConnectionStatus::Connected);
 
         ui::plugin_surface(dark)
-            .font_family("PingFang SC")
+            .font_family(ui::font_ui())
             .relative()
             .on_key_down({
                 let panel = Rc::clone(&self.panel);
@@ -3432,7 +3432,7 @@ fn protocol_hint_card(
         .child(hint)
 }
 
-fn editor_notice(notice: String, dark: bool) -> impl IntoElement {
+fn editor_notice(notice: String, _dark: bool) -> impl IntoElement {
     div()
         .text_size(px(11.0))
         .line_height(px(18.0))
@@ -3440,7 +3440,7 @@ fn editor_notice(notice: String, dark: bool) -> impl IntoElement {
         .child(notice)
 }
 
-fn editor_section_title(label: &'static str, dark: bool) -> impl IntoElement {
+fn editor_section_title(label: &'static str, _dark: bool) -> impl IntoElement {
     div()
         .text_size(px(10.0))
         .font_weight(FontWeight::SEMIBOLD)

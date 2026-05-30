@@ -8,7 +8,8 @@ use gpui::{
 use crate::{
     app::{
         text_input::{TextInput, TextInputStyle},
-        theme, ui::{self, components},
+        theme,
+        ui::{self, components},
     },
     core::{
         job::{JobId, JobProvider},
@@ -1404,10 +1405,7 @@ fn progress_bar(
         .w_full()
         .h(px(6.0))
         .rounded(px(3.0))
-        .bg(theme::rgba_with_alpha(
-            theme::semantic(dark).bg_subtle,
-            0.8,
-        ))
+        .bg(theme::rgba_with_alpha(theme::semantic(dark).bg_subtle, 0.8))
         .overflow_hidden()
         .child(
             div()
@@ -1733,7 +1731,7 @@ fn action_button(label: &str, dark: bool) -> gpui::Div {
         .child(label.to_string())
 }
 
-fn action_icon(icon: &str, dark: bool) -> gpui::Div {
+fn action_icon(icon: &str, _dark: bool) -> gpui::Div {
     div()
         .size(px(22.0))
         .rounded(px(4.0))

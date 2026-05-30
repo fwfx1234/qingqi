@@ -11,7 +11,10 @@ pub(super) fn header_action_button(
         .rounded(px(10.0))
         .border_1()
         .border_color(theme::semantic(dark).border_default)
-        .bg(theme::rgba_with_alpha(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue), 0.08))
+        .bg(theme::rgba_with_alpha(
+            ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue),
+            0.08,
+        ))
         .flex()
         .items_center()
         .justify_center()
@@ -22,11 +25,7 @@ pub(super) fn header_action_button(
         .text_size(px(12.0))
         .font_weight(gpui::FontWeight::MEDIUM)
         .text_color(theme::semantic(dark).text_primary)
-        .hover(|style| {
-            style
-                .bg(theme::semantic(dark).row_hover)
-                .cursor_pointer()
-        })
+        .hover(|style| style.bg(theme::semantic(dark).row_hover).cursor_pointer())
         .child(child)
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
@@ -44,11 +43,7 @@ pub(super) fn theme_button(
         .border_1()
         .border_color(theme::semantic(dark).border_default)
         .bg(theme::semantic(dark).bg_surface)
-        .hover(|style| {
-            style
-                .bg(ui::row_hover(dark))
-                .cursor_pointer()
-        })
+        .hover(|style| style.bg(ui::row_hover(dark)).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()

@@ -7,18 +7,18 @@ use crate::{
     core::{
         command::{Action, Activation, CommandInvocation, CommandItem, CommandOutcome},
         database::{DatabaseService, DatabaseSpec},
-        plugin::{Plugin, PluginCx, PluginView, WindowView},
+        plugin::{Plugin, PluginCx, PluginId, PluginView, WindowView},
         storage::AppPaths,
     },
     features::quick_launch::{manifest, service::QuickLaunchService, view::QuickLaunchView},
 };
 
-pub struct QuickLaunchRuntime {
+pub struct QuickLaunchPlugin {
     service: Arc<QuickLaunchService>,
     watch_started: bool,
 }
 
-impl QuickLaunchRuntime {
+impl QuickLaunchPlugin {
     pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> anyhow::Result<Self> {
         Ok(Self {
             service: Arc::new(QuickLaunchService::new(database, paths)?),
@@ -27,8 +27,8 @@ impl QuickLaunchRuntime {
     }
 }
 
-impl Plugin for QuickLaunchRuntime {
-    fn manifest(&self) -> crate::core::plugin::PluginManifest {
+impl Plugin for QuickLaunchPlugin {
+    fn manifest(&self) -> crate::core::plugin::Manifest {
         manifest::manifest()
     }
 
@@ -56,7 +56,7 @@ impl Plugin for QuickLaunchRuntime {
             manifest.description.as_ref(),
             manifest.keywords.iter().map(|s| s.as_ref()),
             manifest.command_prefixes.iter().map(|s| s.as_ref()),
-            manifest.visual.icon.as_str(),
+            manifest.icon.as_str(),
         )];
         let actions = self
             .service
@@ -70,7 +70,7 @@ impl Plugin for QuickLaunchRuntime {
                 action.description.clone(),
                 action.command_keywords(),
                 ["ql", "quick"],
-                manifest.visual.icon.as_str(),
+                manifest.icon.as_str(),
                 Some(action.id.to_string()),
             )
             .with_usage_key(format!("quick-launch:action:{}", action.id))
@@ -143,12 +143,12 @@ struct QuickLaunchWindowView {
 }
 
 impl WindowView for QuickLaunchWindowView {
-    fn plugin_id(&self) -> &str {
-        manifest::PLUGIN_ID
+    fn plugin_id(&self) -> PluginId {
+        manifest::PLUGIN_ID.into()
     }
 
-    fn title(&self) -> &str {
-        "快速启动"
+    fn title(&self) -> Arc<str> {
+        "快速启动".into()
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
@@ -201,10 +201,10 @@ mod tests {
                 "echo ok",
             ))
             .unwrap();
-        let runtime = QuickLaunchRuntime::new(database, paths).unwrap();
+        let runtime = QuickLaunchPlugin::new(database, paths).unwrap();
 
         let command = runtime
-            .commands()
+            .commands("")
             .into_iter()
             .find(|command| command.title == "Build Project")
             .expect("quick launch action command should be present");

@@ -5,18 +5,20 @@ use std::{
     sync::Arc,
 };
 
+use anyhow::Context;
+
 use gpui::{App, Window};
 use serde::{Deserialize, Serialize};
 
 use crate::core::{
     command::{
-        ClipboardPayload, Command, CommandInvocation, CommandOutcome, ContextMatcher,
+        ClipboardPayload, Command, CommandInvocation, CommandKind, CommandOutcome, ContextMatcher,
         build_launcher_context,
     },
     command_usage::{CommandUsage, CommandUsageStore},
     events::{AppEventBus, AppEventKind},
     icon::IconRef,
-    plugin_spec::{PluginCategory, PluginStatus, ViewMode, WindowSpec},
+    plugin_spec::{PluginCategory, PluginStatus, ViewMode, WindowSize, WindowSpec},
     shortcut::ShortcutDescriptor,
 };
 
@@ -93,16 +95,16 @@ impl PluginView {
 }
 
 pub trait WindowView {
-    fn plugin_id(&self) -> &str;
-    fn title(&self) -> &str;
+    fn plugin_id(&self) -> PluginId;
+    fn title(&self) -> Arc<str>;
     fn render(&mut self, window: &mut Window, cx: &mut App) -> gpui::AnyElement;
     fn on_reopen(&mut self, _window: &mut Window, _cx: &mut App) {}
     fn on_close(&mut self) {}
 }
 
 pub trait InlineView {
-    fn plugin_id(&self) -> &str;
-    fn title(&self) -> &str;
+    fn plugin_id(&self) -> PluginId;
+    fn title(&self) -> Arc<str>;
     fn render(&mut self, window: &mut Window, cx: &mut App) -> gpui::AnyElement;
     fn on_input_changed(&mut self, _text: &str, _cx: &mut App) {}
     fn on_enter(&mut self, _cx: &mut App) -> bool {
@@ -112,8 +114,8 @@ pub trait InlineView {
 }
 
 pub trait ListView {
-    fn plugin_id(&self) -> &str;
-    fn title(&self) -> &str;
+    fn plugin_id(&self) -> PluginId;
+    fn title(&self) -> Arc<str>;
     fn items(&mut self, _cx: &mut App) -> Vec<ListItem>;
     fn on_input_changed(&mut self, text: &str, cx: &mut App) -> Vec<ListItem> {
         let _ = text;
@@ -199,9 +201,6 @@ pub trait Plugin {
 
 pub type PluginId = Arc<str>;
 
-/// Type alias for the ongoing `Manifest` → `PluginManifest` migration.
-pub type PluginManifest = Manifest;
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Manifest {
     pub id: PluginId,
@@ -225,6 +224,112 @@ pub struct Manifest {
     pub command_hint: Option<Arc<str>>,
     #[serde(skip)]
     pub command_prefixes: Vec<Arc<str>>,
+}
+
+impl Manifest {
+    /// Minimal inline plugin — only the essentials, everything else defaults.
+    ///
+    /// The window uses [`WindowSize::Auto`] so the launcher panel flexes to
+    /// content height instead of requiring a hardcoded size.
+    pub fn inline(
+        id: impl Into<Arc<str>>,
+        name: impl Into<Arc<str>>,
+        description: impl Into<Arc<str>>,
+        icon: IconRef,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            description: description.into(),
+            icon,
+            keywords: vec![],
+            prefixes: vec![],
+            mode: ViewMode::Inline,
+            window: WindowSpec::auto(),
+            category: PluginCategory::Tool,
+            status: PluginStatus::Ready,
+            background: false,
+            dynamic_commands: false,
+            visual: None,
+            stats: None,
+            command_hint: None,
+            command_prefixes: vec![],
+        }
+    }
+
+    /// Window plugin with explicit size.
+    pub fn windowed(
+        id: impl Into<Arc<str>>,
+        name: impl Into<Arc<str>>,
+        description: impl Into<Arc<str>>,
+        icon: IconRef,
+        size: WindowSize,
+    ) -> Self {
+        Self {
+            mode: ViewMode::Window,
+            window: WindowSpec::from_size(size),
+            ..Self::inline(id, name, description, icon)
+        }
+    }
+
+    /// Builder-style: attach keywords.
+    pub fn with_keywords(
+        mut self,
+        keywords: impl IntoIterator<Item = impl Into<Arc<str>>>,
+    ) -> Self {
+        self.keywords = keywords.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Builder-style: attach command prefixes.
+    pub fn with_prefixes(
+        mut self,
+        prefixes: impl IntoIterator<Item = impl Into<Arc<str>>>,
+    ) -> Self {
+        self.prefixes = prefixes.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Builder-style: set `dynamic_commands = true`.
+    pub fn with_dynamic_commands(mut self) -> Self {
+        self.dynamic_commands = true;
+        self
+    }
+
+    /// Builder-style: run in background.
+    pub fn with_background(mut self) -> Self {
+        self.background = true;
+        self.status = PluginStatus::Background;
+        self
+    }
+
+    /// Builder-style: attach a visual spec for the plugin overview UI.
+    pub fn with_visual(mut self, visual: crate::core::plugin_spec::PluginVisualSpec) -> Self {
+        self.visual = Some(visual);
+        self
+    }
+
+    /// Builder-style: attach stats for the plugin overview UI.
+    pub fn with_stats(mut self, stats: crate::core::plugin_spec::PluginStats) -> Self {
+        self.stats = Some(stats);
+        self
+    }
+
+    /// Builder-style: attach a command hint shown in the launcher.
+    pub fn with_command_hint(mut self, hint: impl Into<Arc<str>>) -> Self {
+        self.command_hint = Some(hint.into());
+        self
+    }
+
+    /// Builder-style: attach command prefixes (same keys as `prefixes`, kept
+    /// separately during the manifest migration).
+    pub fn with_command_prefixes(
+        mut self,
+        prefixes: impl IntoIterator<Item = impl Into<Arc<str>>>,
+    ) -> Self {
+        self.command_prefixes = prefixes.into_iter().map(Into::into).collect();
+        self
+    }
 }
 
 pub fn recommended_plugin_command(
@@ -307,7 +412,20 @@ impl PluginManager {
                     .get(plugin_id)
                     .map(|plugin| (plugin_id.clone(), plugin))
             })
-            .flat_map(|(_plugin_id, plugin)| plugin.shortcuts())
+            .flat_map(|(id, plugin)| {
+                let plugin_id = id.clone();
+                match catch_unwind(AssertUnwindSafe(|| plugin.shortcuts())) {
+                    Ok(shortcuts) => shortcuts,
+                    Err(error) => {
+                        tracing::error!(
+                            plugin_id = %plugin_id,
+                            error = %panic_message(error),
+                            "plugin panicked in shortcuts()"
+                        );
+                        Vec::new()
+                    }
+                }
+            })
             .collect()
     }
 
@@ -322,29 +440,44 @@ impl PluginManager {
             .plugins
             .get_mut(plugin_id)
             .ok_or_else(|| anyhow::anyhow!("plugin not registered: {plugin_id}"))?;
-        plugin.set_shortcut(shortcut_id, accelerator, enabled)
+        let pid = plugin_id.to_string();
+        let sid = shortcut_id.to_string();
+        let acc = accelerator.to_string();
+        catch_unwind(AssertUnwindSafe(|| {
+            plugin.set_shortcut(&sid, &acc, enabled)
+        }))
+        .unwrap_or_else(|error| {
+            Err(anyhow::anyhow!(
+                "plugin {pid} panicked in set_shortcut: {}",
+                panic_message(error)
+            ))
+        })
     }
 
-    pub fn commands_with_clipboard(
-        &mut self,
-        boost_map: &HashMap<String, i32>,
-    ) -> Vec<Command> {
+    pub fn commands_with_clipboard(&mut self, boost_map: &HashMap<String, i32>) -> Vec<Command> {
         self.refresh_command_cache();
         self.sorted_commands_with_clipboard("", self.command_cache.clone(), false, boost_map)
     }
 
     fn build_commands(&self) -> Vec<Command> {
-        let mut commands = self
-            .plugins
-            .iter()
-            .flat_map(|(plugin_id, plugin)| {
-                if self.dynamic_plugin_ids.contains(plugin_id) {
-                    default_plugin_command(plugin.manifest())
-                } else {
-                    plugin.commands("")
+        let mut commands: Vec<Command> = Vec::new();
+        for (plugin_id, plugin) in self.plugins.iter() {
+            if self.dynamic_plugin_ids.contains(plugin_id) {
+                commands.extend(default_plugin_command(plugin.manifest()));
+            } else {
+                let id = plugin_id.clone();
+                match catch_unwind(AssertUnwindSafe(|| plugin.commands(""))) {
+                    Ok(plugin_commands) => commands.extend(plugin_commands),
+                    Err(error) => {
+                        tracing::error!(
+                            plugin_id = %id,
+                            error = %panic_message(error),
+                            "plugin panicked in commands()"
+                        );
+                    }
                 }
-            })
-            .collect::<Vec<_>>();
+            }
+        }
         commands.sort_by(|a, b| a.title.cmp(&b.title));
         commands
     }
@@ -417,7 +550,12 @@ impl PluginManager {
         commands: Vec<Command>,
         require_positive_score: bool,
     ) -> Vec<Command> {
-        self.sorted_commands_with_clipboard(query, commands, require_positive_score, &HashMap::new())
+        self.sorted_commands_with_clipboard(
+            query,
+            commands,
+            require_positive_score,
+            &HashMap::new(),
+        )
     }
 
     fn sorted_commands_with_clipboard(
@@ -449,9 +587,19 @@ impl PluginManager {
         self.plugins
             .iter()
             .filter_map(|(id, plugin)| {
-                plugin
-                    .clipboard_boost(payload)
-                    .map(|boost| (id.to_string(), boost))
+                let plugin_id = id.clone();
+                match catch_unwind(AssertUnwindSafe(|| plugin.clipboard_boost(payload))) {
+                    Ok(Some(boost)) => Some((plugin_id.to_string(), boost)),
+                    Ok(None) => None,
+                    Err(error) => {
+                        tracing::error!(
+                            plugin_id = %plugin_id,
+                            error = %panic_message(error),
+                            "plugin panicked in clipboard_boost()"
+                        );
+                        None
+                    }
+                }
             })
             .collect()
     }
@@ -469,6 +617,9 @@ impl PluginManager {
                 let right_usage = usage.get(&right.usage_key).cloned().unwrap_or_default();
                 right_score
                     .cmp(left_score)
+                    .then_with(|| {
+                        command_kind_priority(left.kind).cmp(&command_kind_priority(right.kind))
+                    })
                     .then_with(|| right_usage.use_count.cmp(&left_usage.use_count))
                     .then_with(|| right_usage.last_used_at.cmp(&left_usage.last_used_at))
                     .then_with(|| left.title.cmp(&right.title))
@@ -480,6 +631,11 @@ impl PluginManager {
         // Tier 0 – plugin returned clipboard_boost > 0  → score first
         // Tier 1 – previously used, no clipboard match  → usage first
         // Tier 2 – everything else                       → usage first
+        //
+        // Within each tier, CommandKind acts as tiebreaker:
+        // Plugin (0) > DynamicAction (1) > App (2).
+        // This ensures plugins surface first when nothing has usage data,
+        // but a used app outranks an unused plugin.
         scored.sort_by(|(left_score, left), (right_score, right)| {
             let left_usage = usage.get(&left.usage_key).cloned().unwrap_or_default();
             let right_usage = usage.get(&right.usage_key).cloned().unwrap_or_default();
@@ -498,6 +654,9 @@ impl PluginManager {
                     .cmp(left_score)
                     .then_with(|| right_usage.use_count.cmp(&left_usage.use_count))
                     .then_with(|| right_usage.last_used_at.cmp(&left_usage.last_used_at))
+                    .then_with(|| {
+                        command_kind_priority(left.kind).cmp(&command_kind_priority(right.kind))
+                    })
                     .then_with(|| left.title.cmp(&right.title))
             } else {
                 // Tier 1 & 2: usage first
@@ -506,6 +665,9 @@ impl PluginManager {
                     .cmp(&left_usage.use_count)
                     .then_with(|| right_usage.last_used_at.cmp(&left_usage.last_used_at))
                     .then_with(|| right_score.cmp(left_score))
+                    .then_with(|| {
+                        command_kind_priority(left.kind).cmp(&command_kind_priority(right.kind))
+                    })
                     .then_with(|| left.title.cmp(&right.title))
             }
         });
@@ -590,14 +752,8 @@ impl PluginManager {
         let expected_mode = plugin.manifest().mode;
         let events = self.events.clone();
         let mut plugin_cx = PluginCx::new(events, cx);
-        let view = catch_unwind(AssertUnwindSafe(|| plugin.open(&mut plugin_cx))).unwrap_or_else(
-            |error| {
-                Err(anyhow::anyhow!(
-                    "plugin {plugin_id} panicked while opening: {}",
-                    panic_message(error)
-                ))
-            },
-        )?;
+        let view = call_plugin(plugin_id, || plugin.open(&mut plugin_cx))
+            .with_context(|| format!("plugin {plugin_id} panicked while opening"))?;
         debug_assert_eq!(
             expected_mode,
             view.mode(),
@@ -640,29 +796,40 @@ impl PluginManager {
             .plugins
             .get_mut(plugin_id.as_str())
             .ok_or_else(|| anyhow::anyhow!("plugin not registered: {plugin_id}"))?;
-        catch_unwind(AssertUnwindSafe(|| plugin.handle_command(invocation, cx))).unwrap_or_else(
-            |error| {
-                Err(anyhow::anyhow!(
-                    "plugin {plugin_id} panicked while handling command: {}",
-                    panic_message(error)
-                ))
-            },
-        )
+        call_plugin(&plugin_id, || plugin.handle_command(invocation, cx))
+            .with_context(|| format!("plugin {plugin_id} panicked while handling command"))
     }
 
     pub fn start_background(&mut self, cx: &mut App) {
         for plugin in self.plugins.values_mut() {
             let background = plugin.manifest().background;
-            if background {
-                let events = self.events.clone();
-                plugin.start_background(events, cx);
+            if !background {
+                continue;
+            }
+            let id = plugin.manifest().id.clone();
+            let events = self.events.clone();
+            let result = catch_unwind(AssertUnwindSafe(|| plugin.start_background(events, cx)));
+            if let Err(error) = result {
+                tracing::error!(
+                    plugin_id = %id,
+                    error = %panic_message(error),
+                    "plugin panicked in start_background"
+                );
             }
         }
     }
 
     pub fn shutdown(&mut self) {
         for plugin in self.plugins.values_mut() {
-            plugin.shutdown();
+            let id = plugin.manifest().id.clone();
+            let result = catch_unwind(AssertUnwindSafe(|| plugin.shutdown()));
+            if let Err(error) = result {
+                tracing::error!(
+                    plugin_id = %id,
+                    error = %panic_message(error),
+                    "plugin panicked in shutdown"
+                );
+            }
         }
     }
 
@@ -670,10 +837,34 @@ impl PluginManager {
         if let Some(plugin) = self.plugins.get_mut(plugin_id) {
             let background = plugin.manifest().background;
             if !background {
-                plugin.close_idle();
+                let id = plugin.manifest().id.clone();
+                let result = catch_unwind(AssertUnwindSafe(|| plugin.close_idle()));
+                if let Err(error) = result {
+                    tracing::error!(
+                        plugin_id = %id,
+                        error = %panic_message(error),
+                        "plugin panicked in close_idle"
+                    );
+                }
             }
         }
     }
+}
+
+/// Single panic boundary for plugin activation dispatch.
+///
+/// All plugin calls that constitute "activation" (open, handle_command) pass
+/// through this function so that a panicking plugin never takes down the
+/// launcher or other plugin windows.  This is the **one** isolation seam
+/// required by the architecture (§6.4); lifecycle hooks (start_background,
+/// shutdown, close_idle) keep their own lightweight guards.
+fn call_plugin<T>(plugin_id: &str, f: impl FnOnce() -> anyhow::Result<T>) -> anyhow::Result<T> {
+    catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|error| {
+        Err(anyhow::anyhow!(
+            "plugin {plugin_id} panicked: {}",
+            panic_message(error)
+        ))
+    })
 }
 
 pub fn panic_message(error: Box<dyn Any + Send>) -> String {
@@ -701,61 +892,17 @@ fn command_sort_tier(command: &Command, use_count: i64, boost_map: &HashMap<Stri
     2
 }
 
-// ── Migration stubs for ongoing refactoring ──────────────────────
-
-/// Generic plugin runtime configured via builder pattern.
-pub struct ConfiguredPluginRuntime<S = ()> {
-    _state: std::marker::PhantomData<S>,
-}
-
-impl<S> ConfiguredPluginRuntime<S> {
-    pub fn new(_manifest: fn() -> Manifest) -> Self {
-        Self { _state: std::marker::PhantomData }
-    }
-
-    pub fn with_state(_manifest: fn() -> Manifest, _state: S) -> Self {
-        Self { _state: std::marker::PhantomData }
-    }
-
-    pub fn with_view(
-        self,
-        _open: fn(&mut S, &mut PluginCx<'_>) -> anyhow::Result<PluginView>,
-    ) -> Self { self }
-
-    pub fn with_commands(
-        self,
-        _commands: fn(Manifest) -> Vec<Command>,
-    ) -> Self { self }
-}
-
-/// Thin wrapper over an `Rc<RefCell<T>>` panel that implements `InlineView`.
-pub struct PanelPluginView<T> {
-    _marker: std::marker::PhantomData<T>,
-}
-
-impl<T: 'static> PanelPluginView<T> {
-    pub fn new(
-        _plugin_id: &str,
-        _title: &str,
-        _state: T,
-        _render: fn(&T, &mut Window, &mut App) -> gpui::AnyElement,
-    ) -> Self {
-        Self { _marker: std::marker::PhantomData }
-    }
-
-    pub fn with_input_changed(
-        self,
-        _f: fn(&T, &str, &mut App),
-    ) -> Self { self }
-
-    pub fn with_close(self, _f: fn(&T)) -> Self { self }
-}
-
-impl<T: 'static> InlineView for PanelPluginView<T> {
-    fn plugin_id(&self) -> &str { "" }
-    fn title(&self) -> &str { "" }
-    fn render(&mut self, _window: &mut Window, _cx: &mut App) -> gpui::AnyElement {
-        gpui::div().into_any_element()
+/// Priority within the same sort tier.
+///
+/// Lower number = higher priority.
+/// Plugins surface first by default so the user discovers them;
+/// usage data (use_count) still dominates, so a frequently-used app
+/// outranks an unused plugin.
+pub fn command_kind_priority(kind: CommandKind) -> u8 {
+    match kind {
+        CommandKind::Plugin => 0,
+        CommandKind::DynamicAction => 1,
+        CommandKind::App => 2,
     }
 }
 

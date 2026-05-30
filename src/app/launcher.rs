@@ -1,6 +1,7 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
+    panic::{AssertUnwindSafe, catch_unwind},
     rc::Rc,
     sync::{
         Arc, Mutex,
@@ -12,8 +13,8 @@ use std::{
 use gpui::{
     App, AppContext, BoxShadow, Context, Entity, Focusable, InteractiveElement, IntoElement,
     KeyDownEvent, ParentElement, Render, ScrollStrategy, StatefulInteractiveElement, Styled,
-    Subscription, Task, UniformListScrollHandle, Window, div, hsla, point, prelude::FluentBuilder,
-    px, rgb, size, uniform_list,
+    Subscription, Task, UniformListScrollHandle, Window, div, point, prelude::FluentBuilder,
+    px, size, uniform_list,
 };
 use gpui_component::scroll::Scrollbar;
 
@@ -26,12 +27,9 @@ use crate::{
         window_controller::{PluginOpenTrace, WindowControllerHandle},
     },
     core::{
-        command::{
-            Activation, ClipboardPayload, Command, CommandKind, LauncherContext,
-            build_launcher_context,
-        },
-        plugin::{InlineView, ListView, PluginListItem, PluginManager},
-        plugin_spec::{PluginStatus, ViewMode},
+        command::{Activation, ClipboardPayload, Command, CommandKind, build_launcher_context},
+        plugin::{InlineView, ListView, PluginListItem, PluginManager, command_kind_priority},
+        plugin_spec::{PluginStatus, ViewMode, WindowSize},
     },
     features::clipboard::{
         history_store::{ClipboardItemKind, ClipboardRecord, parse_file_paths},
@@ -233,7 +231,16 @@ impl Launcher {
             selected,
         } = &mut self.mode
         {
-            let next_items = view.on_input_changed(&query, cx);
+            let plugin_id = view.plugin_id().to_string();
+            let next_items = catch_unwind(AssertUnwindSafe(|| view.on_input_changed(&query, cx)))
+                .unwrap_or_else(|error| {
+                    tracing::error!(
+                        plugin_id = %plugin_id,
+                        error = %crate::core::plugin::panic_message(error),
+                        "plugin panicked in on_input_changed (list refresh)"
+                    );
+                    Vec::new()
+                });
             merge_plugin_list_items(items, next_items);
             *selected = (*selected).min(items.len().saturating_sub(1));
             self.plugin_list_visible_start = visible_start_for_selection(*selected);
@@ -263,7 +270,7 @@ impl Launcher {
         );
         input.set_chrome(false, cx);
         input.set_text_colors(
-            theme::rgba_with_alpha(rgb(0x333348), 1.0),
+            theme::rgba_with_alpha(theme::launcher_title_text(false), 1.0),
             theme::rgba_with_alpha(theme::launcher_faint_text(false), 1.0),
             cx,
         );
@@ -273,13 +280,20 @@ impl Launcher {
         commands: &[Command],
         visuals: &HashMap<String, PluginVisual>,
     ) -> Rc<Vec<Command>> {
-        Rc::new(
-            commands
-                .iter()
-                .filter(|item| Self::is_default_command(item, visuals))
-                .cloned()
-                .collect(),
-        )
+        let mut results: Vec<Command> = commands
+            .iter()
+            .filter(|item| Self::is_default_command(item, visuals))
+            .cloned()
+            .collect();
+        // Sort plugins before apps when no usage data exists yet.
+        // Within the same CommandKind, keep the original ordering (score-based
+        // for plugins, alphabetical for apps).
+        results.sort_by(|a, b| {
+            command_kind_priority(a.kind)
+                .cmp(&command_kind_priority(b.kind))
+                .then_with(|| a.title.cmp(&b.title))
+        });
+        Rc::new(results)
     }
 
     fn is_default_command(item: &Command, visuals: &HashMap<String, PluginVisual>) -> bool {
@@ -310,7 +324,7 @@ impl Launcher {
             .unwrap_or_default()
     }
 
-    fn perform_search_for_query(&mut self, query: String, cx: &App) {
+    fn perform_search_for_query(&mut self, query: String, _cx: &App) {
         self.last_query = query.clone();
         self.pending_query = query.clone();
         let query_empty = query.trim().is_empty();
@@ -362,7 +376,11 @@ impl Launcher {
         commands.extend(
             self.plugin_manager
                 .borrow_mut()
-                .query_commands_with_clipboard(query, COMMAND_SEARCH_LIMIT, &self.clipboard_boost_map),
+                .query_commands_with_clipboard(
+                    query,
+                    COMMAND_SEARCH_LIMIT,
+                    &self.clipboard_boost_map,
+                ),
         );
 
         let mut seen = HashSet::new();
@@ -386,6 +404,9 @@ impl Launcher {
         scored.sort_by(|(left_score, left), (right_score, right)| {
             right_score
                 .cmp(left_score)
+                .then_with(|| {
+                    command_kind_priority(left.kind).cmp(&command_kind_priority(right.kind))
+                })
                 .then_with(|| left.title.cmp(&right.title))
         });
         scored.into_iter().map(|(_, command)| command).collect()
@@ -393,22 +414,17 @@ impl Launcher {
 
     fn refresh_clipboard_context_async(&mut self, cx: &mut Context<Self>) {
         let service = Arc::clone(&self.clipboard_service);
-        let plugin_manager = self.plugin_manager.clone();
+        let boost_map = {
+            let plugin = self.plugin_manager.borrow();
+            Launcher::latest_boost_map(&service, &*plugin)
+        };
         self.search_task = Some(cx.spawn(async move |launcher, async_cx| {
-            let boost_map = async_cx
-                .background_executor()
-                .spawn(async move {
-                    let plugin = plugin_manager.borrow();
-                    Launcher::latest_boost_map(&service, &*plugin)
-                })
-                .await;
-
             let _ = launcher.update(async_cx, |launcher, cx| {
                 let current_query = launcher.query(cx);
-                launcher.clipboard_boost_map = boost_map;
-                launcher.all_commands = launcher.default_commands_with_clipboard();
+                launcher.clipboard_boost_map = boost_map.clone();
 
                 if current_query.trim().is_empty() {
+                    launcher.all_commands = launcher.default_commands_with_clipboard();
                     launcher.results =
                         Self::default_results(&launcher.all_commands, &launcher.plugin_visuals);
                 } else {
@@ -446,7 +462,15 @@ impl Launcher {
         match &mut self.mode {
             LauncherMode::Search => self.schedule_search(cx),
             LauncherMode::InlinePlugin { view, .. } => {
-                view.on_input_changed(&query, cx);
+                let plugin_id = view.plugin_id().to_string();
+                let result = catch_unwind(AssertUnwindSafe(|| view.on_input_changed(&query, cx)));
+                if let Err(error) = result {
+                    tracing::error!(
+                        plugin_id = %plugin_id,
+                        error = %crate::core::plugin::panic_message(error),
+                        "plugin panicked in on_input_changed (inline)"
+                    );
+                }
                 cx.notify();
             }
             LauncherMode::ListPlugin {
@@ -455,7 +479,20 @@ impl Launcher {
                 selected,
                 ..
             } => {
-                *items = Rc::new(view.on_input_changed(&query, cx));
+                let plugin_id = view.plugin_id().to_string();
+                let result = catch_unwind(AssertUnwindSafe(|| view.on_input_changed(&query, cx)));
+                match result {
+                    Ok(new_items) => {
+                        *items = Rc::new(new_items);
+                    }
+                    Err(error) => {
+                        tracing::error!(
+                            plugin_id = %plugin_id,
+                            error = %crate::core::plugin::panic_message(error),
+                            "plugin panicked in on_input_changed (list)"
+                        );
+                    }
+                }
                 *selected = (*selected).min(items.len().saturating_sub(1));
                 self.plugin_list_visible_start = visible_start_for_selection(*selected);
                 cx.notify();
@@ -525,20 +562,30 @@ impl Launcher {
                 self.open_command(item, window, cx, trace);
             }
             LauncherMode::InlinePlugin { view, .. } => {
-                log_launcher_enter_started(view.plugin_id(), trace, "inline plugin", None);
+                let plugin_id = view.plugin_id().to_string();
+                log_launcher_enter_started(&plugin_id, trace, "inline plugin", None);
                 let enter_started = Instant::now();
-                if view.on_enter(cx) {
+                let confirmed = catch_unwind(AssertUnwindSafe(|| view.on_enter(cx)))
+                    .unwrap_or_else(|error| {
+                        tracing::error!(
+                            plugin_id = %plugin_id,
+                            error = %crate::core::plugin::panic_message(error),
+                            "plugin panicked in on_enter (inline)"
+                        );
+                        false
+                    });
+                if confirmed {
                     log_launcher_step(
-                        view.plugin_id(),
+                        &plugin_id,
                         "inline plugin enter",
                         enter_started,
                         Some(trace),
                     );
-                    log_launcher_total(view.plugin_id(), trace);
+                    log_launcher_total(&plugin_id, trace);
                     self.close_window_app(window, cx);
                 } else {
                     log_launcher_step(
-                        view.plugin_id(),
+                        &plugin_id,
                         "inline plugin enter",
                         enter_started,
                         Some(trace),
@@ -555,8 +602,9 @@ impl Launcher {
                     return;
                 };
                 if item.enabled {
+                    let plugin_id = view.plugin_id().to_string();
                     log_launcher_enter_started(
-                        view.plugin_id(),
+                        &plugin_id,
                         trace,
                         "list plugin item",
                         Some(item.title.as_str()),
@@ -565,14 +613,24 @@ impl Launcher {
                     self.plugin_manager
                         .borrow()
                         .record_usage_key_background(plugin_list_usage_key(&item).to_string(), cx);
-                    view.on_list_item_selected(&item.id, cx);
+                    let item_id = item.id.clone();
+                    let result = catch_unwind(AssertUnwindSafe(|| {
+                        view.on_list_item_selected(&item_id, cx)
+                    }));
+                    if let Err(error) = result {
+                        tracing::error!(
+                            plugin_id = %plugin_id,
+                            error = %crate::core::plugin::panic_message(error),
+                            "plugin panicked in on_list_item_selected"
+                        );
+                    }
                     log_launcher_step(
-                        view.plugin_id(),
+                        &plugin_id,
                         "list item selected",
                         select_started,
                         Some(trace),
                     );
-                    log_launcher_total(view.plugin_id(), trace);
+                    log_launcher_total(&plugin_id, trace);
                     self.close_window_app(window, cx);
                 }
             }
@@ -786,7 +844,16 @@ impl Launcher {
                 return;
             }
 
-            let more_items = view.on_input_changed(&query, cx);
+            let plugin_id = view.plugin_id().to_string();
+            let more_items = catch_unwind(AssertUnwindSafe(|| view.on_input_changed(&query, cx)))
+                .unwrap_or_else(|error| {
+                    tracing::error!(
+                        plugin_id = %plugin_id,
+                        error = %crate::core::plugin::panic_message(error),
+                        "plugin panicked in on_input_changed (prefetch)"
+                    );
+                    Vec::new()
+                });
             if more_items.len() > items.len() {
                 merge_plugin_list_items(items, more_items);
             }
@@ -854,8 +921,28 @@ impl Launcher {
 
     fn close_plugin_mode(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         match std::mem::replace(&mut self.mode, LauncherMode::Search) {
-            LauncherMode::InlinePlugin { mut view, .. } => view.on_close(),
-            LauncherMode::ListPlugin { mut view, .. } => view.on_close(),
+            LauncherMode::InlinePlugin { mut view, .. } => {
+                let plugin_id = view.plugin_id().to_string();
+                let result = catch_unwind(AssertUnwindSafe(|| view.on_close()));
+                if let Err(error) = result {
+                    tracing::error!(
+                        plugin_id = %plugin_id,
+                        error = %crate::core::plugin::panic_message(error),
+                        "plugin panicked in on_close (inline)"
+                    );
+                }
+            }
+            LauncherMode::ListPlugin { mut view, .. } => {
+                let plugin_id = view.plugin_id().to_string();
+                let result = catch_unwind(AssertUnwindSafe(|| view.on_close()));
+                if let Err(error) = result {
+                    tracing::error!(
+                        plugin_id = %plugin_id,
+                        error = %crate::core::plugin::panic_message(error),
+                        "plugin panicked in on_close (list)"
+                    );
+                }
+            }
             LauncherMode::Search => {}
         }
         self.results_scroll.scroll_to_item(0, ScrollStrategy::Top);
@@ -923,7 +1010,11 @@ impl Render for Launcher {
             LauncherMode::ListPlugin { selected, .. } => *selected,
             _ => 0,
         };
-        let title_color = if dark { rgb(0xddd8ec) } else { rgb(0x333348) };
+        let title_color = if dark {
+            theme::launcher_title_text(true)
+        } else {
+            theme::launcher_title_text(false)
+        };
         let placeholder_color = theme::launcher_faint_text(dark);
         log_slow_launcher_interaction(
             "render prepare",
@@ -1002,14 +1093,12 @@ impl Render for Launcher {
                                 "clipboard",
                                 "剪贴板",
                                 "TAB",
-                                dark,
                             ))
                             .child(launcher_quick_tab(
                                 handle.clone(),
                                 "system-settings",
                                 "设置",
                                 "SET",
-                                dark,
                             ))
                             .child(
                                 div()
@@ -1073,7 +1162,6 @@ impl Render for Launcher {
                                                         item,
                                                         idx == sel,
                                                         idx,
-                                                        dark,
                                                     ))
                                             })
                                             .collect::<Vec<_>>()
@@ -1090,18 +1178,60 @@ impl Render for Launcher {
                 }
             })
             .when(inline_mode, |launcher| {
+                // Resolve auto-height preference from the plugin manifest
+                // before rendering, so we can size the container accordingly.
+                let use_auto_height = match &self.mode {
+                    LauncherMode::InlinePlugin { view, .. } => self
+                        .plugin_manager
+                        .borrow()
+                        .manifests()
+                        .into_iter()
+                        .any(|m| {
+                            m.id.as_ref() == view.plugin_id().as_ref()
+                                && matches!(m.window.size, WindowSize::Auto)
+                        }),
+                    _ => false,
+                };
+
                 let content = match &mut self.mode {
-                    LauncherMode::InlinePlugin { view, .. } => view.render(window, cx),
+                    LauncherMode::InlinePlugin { view, .. } => {
+                        let plugin_id = view.plugin_id().as_ref().to_string();
+                        let result = catch_unwind(AssertUnwindSafe(|| view.render(window, cx)));
+                        match result {
+                            Ok(element) => element,
+                            Err(error) => {
+                                tracing::error!(
+                                    plugin_id = %plugin_id,
+                                    error = %crate::core::plugin::panic_message(error),
+                                    "plugin panicked while rendering inline view"
+                                );
+                                div()
+                                    .size_full()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_color(theme::launcher_faint_text(dark))
+                                    .child("插件渲染出错")
+                                    .into_any_element()
+                            }
+                        }
+                    }
                     _ => div().into_any_element(),
                 };
-                launcher.child(
-                    div()
-                        .id("launcher-inline-plugin")
-                        .w_full()
-                        .h(px(RESULTS_MAX_HEIGHT))
-                        .overflow_hidden()
-                        .child(content),
-                )
+
+                let container = div()
+                    .id("launcher-inline-plugin")
+                    .w_full()
+                    .overflow_hidden();
+
+                launcher.child(if use_auto_height {
+                    container
+                        .min_h(px(EMPTY_RESULTS_HEIGHT))
+                        .max_h(px(RESULTS_MAX_HEIGHT))
+                        .child(content)
+                } else {
+                    container.h(px(RESULTS_MAX_HEIGHT)).child(content)
+                })
             })
             .when(!search_mode && !inline_mode, |launcher| {
                 launcher.child(plugin_list(
@@ -1110,7 +1240,6 @@ impl Render for Launcher {
                     list_items,
                     list_selected,
                     query,
-                    dark,
                 ))
             })
     }
@@ -1121,8 +1250,8 @@ fn launcher_quick_tab(
     plugin_id: &'static str,
     label: &'static str,
     icon_label: &'static str,
-    dark: bool,
 ) -> impl IntoElement {
+    let dark = theme_mode::is_dark();
     div()
         .h(px(24.0))
         .px(px(8.0))
@@ -1180,8 +1309,8 @@ fn plugin_list(
     items: Rc<Vec<PluginListItem>>,
     selected: usize,
     query: String,
-    dark: bool,
 ) -> impl IntoElement {
+    let dark = theme_mode::is_dark();
     let count = items.len();
     if count == 0 {
         return div()
@@ -1244,13 +1373,7 @@ fn plugin_list(
                             .h(px(ROW_SLOT))
                             .flex_none()
                             .pb(px(ROW_GAP))
-                            .child(plugin_list_row(
-                                handle.clone(),
-                                item,
-                                idx == selected,
-                                idx,
-                                dark,
-                            ))
+                            .child(plugin_list_row(handle.clone(), item, idx == selected, idx))
                     })
                     .collect::<Vec<_>>()
             })
@@ -1287,36 +1410,36 @@ fn plugin_list_row(
     item: PluginListItem,
     selected: bool,
     index: usize,
-    dark: bool,
 ) -> impl IntoElement {
+    let dark = theme_mode::is_dark();
     let item_for_click = item.clone();
     let accent = theme::launcher_accent(dark);
     let row_bg = if selected {
         theme::rgba_with_alpha(accent, if dark { 0.12 } else { 0.08 })
     } else {
-        hsla(0.0, 0.0, 0.0, 0.0)
+        theme::launcher_transparent()
     };
     let title_color = if selected {
         accent
     } else if dark {
-        rgb(0xddd8ec)
+        theme::launcher_title_text(true)
     } else {
-        rgb(0x333348)
+        theme::launcher_title_text(false)
     };
     let subtitle_color = theme::launcher_faint_text(dark);
     let icon_surface = if selected {
-        theme::rgba_with_alpha(rgb(0xf2f2f7), if dark { 0.15 } else { 0.9 })
+        theme::launcher_icon_surface_selected(dark)
     } else if dark {
-        hsla(0.0, 0.0, 1.0, 0.03)
+        theme::launcher_badge_bg(true)
     } else {
-        theme::rgba_with_alpha(rgb(0xf8f8fb), 0.78)
+        theme::launcher_icon_surface(false)
     };
     let icon_border = if selected {
-        theme::rgba_with_alpha(rgb(0xe2e2ea), if dark { 0.2 } else { 0.9 })
+        theme::launcher_icon_border_selected(dark)
     } else if dark {
-        hsla(0.0, 0.0, 1.0, 0.04)
+        theme::launcher_icon_border(true)
     } else {
-        theme::rgba_with_alpha(rgb(0xe7e7ee), 0.72)
+        theme::launcher_icon_border(false)
     };
     div()
         .id(("launcher-plugin-row", index))
@@ -1473,59 +1596,59 @@ fn result_row(
     item: Command,
     selected: bool,
     index: usize,
-    dark: bool,
 ) -> impl IntoElement {
+    let dark = theme_mode::is_dark();
     let item_for_click = item.clone();
     let accent = theme::launcher_accent(dark);
 
     let icon_surface = if selected {
-        theme::rgba_with_alpha(rgb(0xf2f2f7), if dark { 0.15 } else { 0.9 })
+        theme::launcher_icon_surface_selected(dark)
     } else if dark {
-        hsla(0.0, 0.0, 1.0, 0.03)
+        theme::launcher_badge_bg(true)
     } else {
-        theme::rgba_with_alpha(rgb(0xf8f8fb), 0.78)
+        theme::launcher_icon_surface(false)
     };
     let icon_border = if selected {
-        theme::rgba_with_alpha(rgb(0xe2e2ea), if dark { 0.2 } else { 0.9 })
+        theme::launcher_icon_border_selected(dark)
     } else if dark {
-        hsla(0.0, 0.0, 1.0, 0.04)
+        theme::launcher_icon_border(true)
     } else {
-        theme::rgba_with_alpha(rgb(0xe7e7ee), 0.72)
+        theme::launcher_icon_border(false)
     };
 
-    let (badge_label, badge_bg, badge_fg) = result_badge(&item, dark);
+    let (badge_label, badge_bg, badge_fg) = result_badge(&item);
 
     let row_bg = if selected {
         if dark {
             theme::rgba_with_alpha(accent, 0.12)
         } else {
-            theme::rgba_with_alpha(rgb(0xf6f6fa), 0.96)
+            gpui::Hsla::from(theme::launcher_row_bg_selected_light())
         }
     } else {
-        hsla(0.0, 0.0, 0.0, 0.0)
+        theme::launcher_transparent()
     };
     let row_border = if selected {
         if dark {
             theme::rgba_with_alpha(accent, 0.2)
         } else {
-            theme::rgba_with_alpha(rgb(0xe2e2ea), 0.95)
+            gpui::Hsla::from(theme::launcher_row_border_selected_light())
         }
     } else {
-        hsla(0.0, 0.0, 1.0, 0.0)
+        theme::launcher_transparent()
     };
 
     let title_color = if selected {
         accent
     } else if dark {
-        rgb(0xddd8ec)
+        theme::launcher_title_text(true)
     } else {
-        rgb(0x333348)
+        theme::launcher_title_text(false)
     };
     let subtitle_color = theme::launcher_faint_text(dark);
     let hover_bg = if dark {
-        hsla(0.0, 0.0, 1.0, 0.025)
+        theme::launcher_row_hover(true)
     } else {
-        theme::rgba_with_alpha(rgb(0xf7f7fa), 0.72)
+        theme::launcher_row_hover(false)
     };
 
     div()
@@ -1540,7 +1663,7 @@ fn result_row(
         .border_color(row_border)
         .when(selected && dark, |row| {
             row.shadow(vec![BoxShadow {
-                color: hsla(0.72, 0.72, 0.56, 0.04),
+                color: theme::launcher_row_glow_dark(),
                 offset: point(px(0.0), px(0.0)),
                 blur_radius: px(30.0),
                 spread_radius: px(0.0),
@@ -1575,7 +1698,7 @@ fn result_row(
             &item,
             icon_surface,
             icon_border,
-            launcher_icon_tint(&item.plugin_id, dark),
+            launcher_icon_tint(&item.plugin_id),
         ))
         .child(
             div()
@@ -1648,30 +1771,9 @@ fn launcher_icon(
         })
 }
 
-fn launcher_icon_tint(plugin_id: &str, dark: bool) -> gpui::Rgba {
-    if dark {
-        match plugin_id {
-            "api-debugger" => rgb(0xc8b8ff),
-            "clipboard" => rgb(0x88dd88),
-            "http-capture" => rgb(0xff8888),
-            "image-compress" => rgb(0xffcc44),
-            "json-parser" => rgb(0xaaccff),
-            "ftp-sftp-ssh-client" => rgb(0x88ddff),
-            "system-settings" => rgb(0xaaccff),
-            _ => theme::launcher_accent(dark),
-        }
-    } else {
-        match plugin_id {
-            "api-debugger" => rgb(0x6b4fcf),
-            "clipboard" => rgb(0x55aa55),
-            "http-capture" => rgb(0xcc6666),
-            "image-compress" => rgb(0xccaa33),
-            "json-parser" => rgb(0x6688cc),
-            "ftp-sftp-ssh-client" => rgb(0x5599cc),
-            "system-settings" => rgb(0x6688cc),
-            _ => theme::launcher_accent(dark),
-        }
-    }
+fn launcher_icon_tint(plugin_id: &str) -> gpui::Rgba {
+    let dark = theme_mode::is_dark();
+    theme::launcher_plugin_icon_tint(plugin_id, dark)
 }
 
 fn launcher_icon_label(item: &Command) -> &'static str {
@@ -1760,11 +1862,12 @@ fn log_slow_launcher_interaction(step: &'static str, started: Instant, fields: &
     }
 }
 
-fn result_badge(item: &Command, dark: bool) -> (String, gpui::Hsla, gpui::Rgba) {
+fn result_badge(item: &Command) -> (String, gpui::Hsla, gpui::Rgba) {
+    let dark = theme_mode::is_dark();
     let tag_bg = if dark {
-        hsla(0.0, 0.0, 1.0, 0.03)
+        theme::launcher_badge_bg(true)
     } else {
-        theme::rgba_with_alpha(rgb(0xf7f7fa), 0.82)
+        theme::launcher_badge_bg(false)
     };
     let tag_fg = theme::launcher_faint_text(dark);
 

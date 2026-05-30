@@ -411,7 +411,7 @@ fn editor_pane(
     title: &'static str,
     background: gpui::Rgba,
     content: impl IntoElement,
-    dark: bool,
+    _dark: bool,
     layout_mode: JsonLayoutMode,
 ) -> impl IntoElement {
     div()

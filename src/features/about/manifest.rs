@@ -1,6 +1,6 @@
 use crate::core::{
     icon::IconRef,
-    plugin::PluginManifest,
+    plugin::Manifest,
     plugin_spec::{
         PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
         PluginWindowMode, WindowSpec,
@@ -9,8 +9,8 @@ use crate::core::{
 
 pub const PLUGIN_ID: &str = "about";
 
-pub fn manifest() -> PluginManifest {
-    PluginManifest {
+pub fn manifest() -> Manifest {
+    Manifest {
         id: PLUGIN_ID.into(),
         name: "关于".into(),
         description: "桌面工具箱版本信息".into(),
@@ -18,6 +18,12 @@ pub fn manifest() -> PluginManifest {
             .into_iter()
             .map(Into::into)
             .collect(),
+        icon: IconRef::asset("icons/about.svg"),
+        prefixes: vec!["about".into()],
+        mode: PluginWindowMode::Inline,
+        window: WindowSpec::auto(),
+        category: PluginCategory::About,
+        status: PluginStatus::Ready,
         background: false,
         dynamic_commands: false,
         visual: Some(PluginVisualSpec {
@@ -26,7 +32,7 @@ pub fn manifest() -> PluginManifest {
             category: PluginCategory::About,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Inline,
-            window: WindowSpec::ratio(0.58, 0.5),
+            window: WindowSpec::auto(),
         }),
         stats: Some(PluginStats {
             primary: "版本信息".into(),
@@ -62,13 +68,13 @@ mod tests {
     #[test]
     fn manifest_has_correct_accent() {
         let m = manifest();
-        assert_eq!(m.visual.accent, PluginAccent::Amber);
+        assert_eq!(m.visual.as_ref().unwrap().accent, PluginAccent::Amber);
     }
 
     #[test]
     fn manifest_has_correct_category() {
         let m = manifest();
-        assert_eq!(m.visual.category, PluginCategory::About);
+        assert_eq!(m.category, PluginCategory::About);
     }
 
     #[test]

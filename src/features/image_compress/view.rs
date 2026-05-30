@@ -18,8 +18,10 @@ use gpui::{
 };
 
 use crate::{
-    app::{theme,
-        ui::{self, components}},
+    app::{
+        theme,
+        ui::{self, components},
+    },
     core::plugin_spec::PluginAccent,
     platform,
 };
@@ -1392,10 +1394,7 @@ fn thumbnail(path: &Path, dark: bool) -> impl IntoElement {
     div()
         .size(px(THUMB_SIZE))
         .rounded(px(8.0))
-        .bg(theme::rgba_with_alpha(
-            theme::semantic(dark).bg_subtle,
-            0.8,
-        ))
+        .bg(theme::rgba_with_alpha(theme::semantic(dark).bg_subtle, 0.8))
         .border_1()
         .border_color(ui::border_light())
         .overflow_hidden()
@@ -1625,15 +1624,30 @@ fn footer_bar(
 }
 
 fn primary_button(label: &str, accent: PluginAccent, dark: bool) -> gpui::Div {
-    components::button(label.to_string(), components::ButtonVariant::Primary, Some(accent), dark)
+    components::button(
+        label.to_string(),
+        components::ButtonVariant::Primary,
+        Some(accent),
+        dark,
+    )
 }
 
 fn secondary_button(label: &str, dark: bool) -> gpui::Div {
-    components::button(label.to_string(), components::ButtonVariant::Secondary, None, dark)
+    components::button(
+        label.to_string(),
+        components::ButtonVariant::Secondary,
+        None,
+        dark,
+    )
 }
 
 fn ghost_button(label: &str, dark: bool) -> gpui::Div {
-    components::button(label.to_string(), components::ButtonVariant::Ghost, None, dark)
+    components::button(
+        label.to_string(),
+        components::ButtonVariant::Ghost,
+        None,
+        dark,
+    )
 }
 
 fn action_button(label: &str, dark: bool) -> gpui::Div {

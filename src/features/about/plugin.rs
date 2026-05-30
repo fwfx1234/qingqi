@@ -1,21 +1,35 @@
 use gpui::{App, IntoElement, Window};
+use std::sync::Arc;
 
 use crate::{
-    core::plugin::{ConfiguredPluginRuntime, PanelPluginView, PluginCx, PluginView},
+    core::plugin::{InlineView, Manifest, Plugin, PluginCx, PluginId, PluginView},
     features::about::{manifest, view::AboutPage},
 };
 
-pub type AboutRuntime = ConfiguredPluginRuntime<()>;
+pub struct AboutPlugin;
 
-pub fn runtime() -> AboutRuntime {
-    ConfiguredPluginRuntime::new(manifest::manifest).with_view(open_view)
+impl Plugin for AboutPlugin {
+    fn manifest(&self) -> Manifest {
+        manifest::manifest()
+    }
+
+    fn open(&mut self, _cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+        Ok(PluginView::Inline(Box::new(AboutView)))
+    }
 }
 
-fn open_view(_: &mut (), _: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
-    Ok(PluginView::Inline(Box::new(PanelPluginView::new(
-        manifest::PLUGIN_ID,
-        "关于",
-        (),
-        |_, _window: &mut Window, _cx: &mut App| AboutPage.into_any_element(),
-    ))))
+struct AboutView;
+
+impl InlineView for AboutView {
+    fn plugin_id(&self) -> PluginId {
+        manifest::PLUGIN_ID.into()
+    }
+
+    fn title(&self) -> Arc<str> {
+        "关于".into()
+    }
+
+    fn render(&mut self, _window: &mut Window, _cx: &mut App) -> gpui::AnyElement {
+        AboutPage.into_any_element()
+    }
 }

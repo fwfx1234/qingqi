@@ -7,21 +7,21 @@ use crate::{
     core::{
         command::{CommandItem, ContextKind, ContextMatcher},
         database::{DatabaseService, DatabaseSpec},
-        plugin::{Plugin, PluginCx, PluginManifest, PluginView, WindowView},
+        plugin::{Manifest, Plugin, PluginCx, PluginId, PluginView, WindowView},
         storage::AppPaths,
     },
 };
 
 use super::{manifest, service::DownloadService, store::DownloadStore, view};
 
-pub struct DownloadManagerRuntime {
+pub struct DownloadManagerPlugin {
     database: Arc<DatabaseService>,
     paths: AppPaths,
     service: Option<Rc<RefCell<DownloadService>>>,
     watch_started: bool,
 }
 
-impl DownloadManagerRuntime {
+impl DownloadManagerPlugin {
     pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> anyhow::Result<Self> {
         Ok(Self {
             database,
@@ -75,8 +75,8 @@ impl DownloadManagerRuntime {
     }
 }
 
-impl Plugin for DownloadManagerRuntime {
-    fn manifest(&self) -> PluginManifest {
+impl Plugin for DownloadManagerPlugin {
+    fn manifest(&self) -> Manifest {
         manifest::manifest()
     }
 
@@ -97,11 +97,11 @@ impl Plugin for DownloadManagerRuntime {
                 manifest.description.as_ref(),
                 manifest.keywords.iter().map(|s| s.as_ref()),
                 manifest.command_prefixes.iter().map(|s| s.as_ref()),
-                manifest.visual.icon.as_str(),
+                manifest.icon.as_str(),
             )
             .with_recommend_matchers([
                 ContextMatcher::new(ContextKind::Url, 90),
-                ContextMatcher::clipboard(ContextKind::Url, 60),
+                ContextMatcher::new(ContextKind::Url, 60),
             ]),
         ]
     }
@@ -124,12 +124,12 @@ struct DownloadManagerView {
 }
 
 impl WindowView for DownloadManagerView {
-    fn plugin_id(&self) -> &str {
-        manifest::PLUGIN_ID
+    fn plugin_id(&self) -> PluginId {
+        manifest::PLUGIN_ID.into()
     }
 
-    fn title(&self) -> &str {
-        "下载管理器"
+    fn title(&self) -> Arc<str> {
+        "下载管理器".into()
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
