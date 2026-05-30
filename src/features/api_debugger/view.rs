@@ -2092,10 +2092,7 @@ fn env_manager_dialog(
                                                         div()
                                                             .text_size(px(14.0))
                                                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                            .text_color(theme::token(
-                                                                "color-text-primary",
-                                                                dark,
-                                                            ))
+                                                            .text_color(theme::semantic(dark).text_primary)
                                                             .truncate()
                                                             .child(environment.name.clone()),
                                                     )
@@ -2144,10 +2141,7 @@ fn env_manager_dialog(
                                             div()
                                                 .text_size(px(18.0))
                                                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                .text_color(theme::token(
-                                                    "color-text-primary",
-                                                    dark,
-                                                ))
+                                                .text_color(theme::semantic(dark).text_primary)
                                                 .child(current_environment.name.clone()),
                                         )
                                         .child(

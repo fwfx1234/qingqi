@@ -780,10 +780,7 @@ impl Render for CapturePanel {
                                             .child(
                                                 div()
                                                     .w(px(58.0))
-                                                    .text_color(theme::token(
-                                                        "color-text-secondary",
-                                                        dark,
-                                                    ))
+                                                    .text_color(theme::semantic(dark).text_secondary)
                                                     .child(if timestamp.len() >= 16 {
                                                         timestamp[11..16].to_string()
                                                     } else {
@@ -800,10 +797,7 @@ impl Render for CapturePanel {
                                             .child(
                                                 div()
                                                     .w(px(130.0))
-                                                    .text_color(theme::token(
-                                                        "color-text-primary",
-                                                        dark,
-                                                    ))
+                                                    .text_color(theme::semantic(dark).text_primary)
                                                     .overflow_hidden()
                                                     .text_ellipsis()
                                                     .child(host),
@@ -811,10 +805,7 @@ impl Render for CapturePanel {
                                             .child(
                                                 div()
                                                     .flex_1()
-                                                    .text_color(theme::token(
-                                                        "color-text-primary",
-                                                        dark,
-                                                    ))
+                                                    .text_color(theme::semantic(dark).text_primary)
                                                     .overflow_hidden()
                                                     .text_ellipsis()
                                                     .child(url),
@@ -843,20 +834,14 @@ impl Render for CapturePanel {
                                                 div()
                                                     .w(px(70.0))
                                                     .text_align(gpui::TextAlign::Right)
-                                                    .text_color(theme::token(
-                                                        "color-text-secondary",
-                                                        dark,
-                                                    ))
+                                                    .text_color(theme::semantic(dark).text_secondary)
                                                     .child(size),
                                             )
                                             .child(
                                                 div()
                                                     .w(px(62.0))
                                                     .text_align(gpui::TextAlign::Right)
-                                                    .text_color(theme::token(
-                                                        "color-text-secondary",
-                                                        dark,
-                                                    ))
+                                                    .text_color(theme::semantic(dark).text_secondary)
                                                     .child(duration),
                                             )
                                     }))
@@ -870,10 +855,7 @@ impl Render for CapturePanel {
                                             .justify_center()
                                             .gap_3()
                                             .border_t_1()
-                                            .border_color(theme::token(
-                                                "color-border-default",
-                                                dark,
-                                            ))
+                                            .border_color(theme::semantic(dark).border_default)
                                             .text_size(px(11.0))
                                             .child({
                                                 let prev_link = div()
@@ -881,7 +863,7 @@ impl Render for CapturePanel {
                                                     .text_color(if has_prev {
                                                         theme::semantic(dark).primary
                                                     } else {
-                                                        theme::token("color-text-tertiary", dark)
+                                                        ui::text_tertiary()
                                                     })
                                                     .child("上一页");
                                                 if has_prev {
@@ -896,10 +878,7 @@ impl Render for CapturePanel {
                                             })
                                             .child(
                                                 div()
-                                                    .text_color(theme::token(
-                                                        "color-text-secondary",
-                                                        dark,
-                                                    ))
+                                                    .text_color(theme::semantic(dark).text_secondary)
                                                     .child(format!(
                                                         "{}–{} / {}",
                                                         offset + 1,
@@ -913,7 +892,7 @@ impl Render for CapturePanel {
                                                     .text_color(if has_next {
                                                         theme::semantic(dark).primary
                                                     } else {
-                                                        theme::token("color-text-tertiary", dark)
+                                                        ui::text_tertiary()
                                                     })
                                                     .child("下一页");
                                                 if has_next {
@@ -972,7 +951,7 @@ impl Render for CapturePanel {
                                     .into_any_element(),
                                 None => div()
                                     .text_size(px(11.0))
-                                    .text_color(theme::token("color-text-tertiary", dark))
+                                    .text_color(ui::text_tertiary())
                                     .child("未选择记录")
                                     .into_any_element(),
                             })
@@ -1036,7 +1015,7 @@ impl Render for CapturePanel {
                                             .h(px(28.0))
                                             .rounded(theme::radius_sm())
                                             .bg(if active {
-                                                theme::token("color-nav-active-bg", dark)
+                                                theme::semantic(dark).nav_active_bg
                                             } else {
                                                 theme::semantic(dark).bg_subtle
                                             })
@@ -1081,7 +1060,7 @@ impl Render for CapturePanel {
                                             .items_center()
                                             .justify_center()
                                             .text_size(px(12.0))
-                                            .text_color(theme::token("color-text-tertiary", dark))
+                                            .text_color(ui::text_tertiary())
                                             .child("选择一条记录查看详情")
                                             .into_any_element(),
                                     },
@@ -1095,7 +1074,7 @@ impl Render for CapturePanel {
                 if notice.is_some() {
                     theme::semantic(dark).warning
                 } else if exchanges.is_empty() {
-                    theme::token("color-text-tertiary", dark)
+                    ui::text_tertiary()
                 } else {
                     theme::semantic(dark).text_secondary
                 },
@@ -1113,10 +1092,7 @@ fn detail_mini(key: &str, value: &str, value_color: impl Into<gpui::Hsla>) -> gp
         .text_size(px(11.0))
         .child(
             div()
-                .text_color(theme::token(
-                    "color-text-secondary",
-                    crate::app::theme_mode::is_dark(),
-                ))
+                .text_color(theme::semantic(crate::app::theme_mode::is_dark()).text_secondary)
                 .child(key),
         )
         .child(
@@ -1235,7 +1211,7 @@ fn render_body_section(title: &str, display: BodyDisplay, dark: bool) -> gpui::A
             .justify_center()
             .p_3()
             .text_size(px(11.0))
-            .text_color(theme::token("color-text-tertiary", dark))
+            .text_color(ui::text_tertiary())
             .child(msg)
             .into_any_element(),
         BodyDisplay::Text(body) => div()
@@ -1315,7 +1291,7 @@ fn render_empty_tab(label: &str, dark: bool) -> gpui::AnyElement {
         .items_center()
         .justify_center()
         .text_size(px(12.0))
-        .text_color(theme::token("color-text-tertiary", dark))
+        .text_color(ui::text_tertiary())
         .child(format!("{label}无数据"))
         .into_any_element()
 }
