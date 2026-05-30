@@ -3,7 +3,7 @@ use super::*;
 use gpui_component::scroll::ScrollableElement;
 
 pub(super) fn settings_page(
-    handle: Entity<ClipboardPanel>,
+    handle: Entity<ClipboardView>,
     status_text: String,
     config: ClipboardConfig,
     inputs: (Entity<TextInput>, Entity<TextInput>, Entity<TextInput>),
@@ -27,7 +27,7 @@ pub(super) fn settings_page(
 }
 
 fn settings_header(
-    handle: Entity<ClipboardPanel>,
+    handle: Entity<ClipboardView>,
     status_text: String,
     dark: bool,
 ) -> impl IntoElement {
@@ -80,7 +80,7 @@ fn settings_header(
 }
 
 fn settings_panel(
-    handle: Entity<ClipboardPanel>,
+    handle: Entity<ClipboardView>,
     config: ClipboardConfig,
     inputs: (Entity<TextInput>, Entity<TextInput>, Entity<TextInput>),
     dark: bool,

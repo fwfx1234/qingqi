@@ -37,13 +37,13 @@ impl Plugin for QrCodePlugin {
 
     fn open(&mut self, _cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         Ok(PluginView::Inline(Box::new(QrCodeView {
-            panel: Rc::new(RefCell::new(view::QrPanel::new(self.paths.clone())?)),
+            panel: Rc::new(RefCell::new(view::QrView::new(self.paths.clone())?)),
         })))
     }
 }
 
 struct QrCodeView {
-    panel: Rc<RefCell<view::QrPanel>>,
+    panel: Rc<RefCell<view::QrView>>,
 }
 
 impl InlineView for QrCodeView {

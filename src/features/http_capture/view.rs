@@ -18,7 +18,7 @@ use gpui::{
 
 const PAGE_SIZE: i64 = 50;
 
-pub struct CapturePanel {
+pub struct CaptureView {
     store: Arc<Mutex<CaptureStore>>,
     search_input: Entity<TextInput>,
     host_input: Entity<TextInput>,
@@ -38,7 +38,7 @@ pub struct CapturePanel {
     subscriptions: Vec<Subscription>,
 }
 
-impl CapturePanel {
+impl CaptureView {
     pub fn new(store: Arc<Mutex<CaptureStore>>, cx: &mut Context<Self>) -> Self {
         let search_input = cx.new(|cx| {
             let mut input = TextInput::new(cx, "搜索 URL 关键词", "");
@@ -321,7 +321,7 @@ impl CapturePanel {
     }
 }
 
-impl Render for CapturePanel {
+impl Render for CaptureView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let dark = crate::app::theme_mode::is_dark();
         let exchanges = self.exchanges.clone();
@@ -490,7 +490,7 @@ impl Render for CapturePanel {
                             .child(div().flex().flex_wrap().gap_1().children(
                                 ["GET", "POST", "PUT", "DELETE"].iter().map(|&m| {
                                     let active = filter_method == m;
-                                    let color = CapturePanel::method_color(dark, m);
+                                    let color = CaptureView::method_color(dark, m);
                                     let chip_bg: gpui::Hsla = if active {
                                         theme::rgba_with_alpha(color, 0.18)
                                     } else {
@@ -729,9 +729,9 @@ impl Render for CapturePanel {
                                         let selected = selected_id == Some(ex.id);
                                         let ex_id = ex.id;
                                         let method_color =
-                                            CapturePanel::method_color(dark, &ex.method);
+                                            CaptureView::method_color(dark, &ex.method);
                                         let status_color =
-                                            CapturePanel::status_color(dark, ex.status);
+                                            CaptureView::status_color(dark, ex.status);
                                         let timestamp = ex.timestamp.clone();
                                         let method = ex.method.clone();
                                         let host = ex.host.clone();
@@ -917,7 +917,7 @@ impl Render for CapturePanel {
                                         div()
                                             .text_size(px(11.0))
                                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                                            .text_color(CapturePanel::method_color(
+                                            .text_color(CaptureView::method_color(
                                                 dark,
                                                 &detail.method,
                                             ))
@@ -959,7 +959,7 @@ impl Render for CapturePanel {
                                             } else {
                                                 "-".to_string()
                                             },
-                                            CapturePanel::status_color(dark, detail.status),
+                                            CaptureView::status_color(dark, detail.status),
                                         ),
                                         detail_mini(
                                             "耗时",

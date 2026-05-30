@@ -77,7 +77,7 @@ struct FileMenuState {
     position: Point<Pixels>,
 }
 
-pub struct FtpSftpSshPanel {
+pub struct FtpSftpSshView {
     service: Arc<FtpSftpSshService>,
     profiles_cache: Vec<RemoteProfile>,
     selected_profile_cache: Option<RemoteProfile>,
@@ -102,7 +102,7 @@ pub struct FtpSftpSshPanel {
     file_menu: Option<FileMenuState>,
 }
 
-impl FtpSftpSshPanel {
+impl FtpSftpSshView {
     fn log_ui_action(&self, action: &'static str) {
         tracing::info!(target: "ftp_sftp_ssh.ui", action, "ftp/sftp/ssh ui action");
     }
@@ -778,7 +778,7 @@ impl ProfileEditorInputs {
 }
 
 pub struct FtpSftpSshElement {
-    pub panel: Rc<RefCell<FtpSftpSshPanel>>,
+    pub panel: Rc<RefCell<FtpSftpSshView>>,
 }
 
 impl IntoElement for FtpSftpSshElement {
@@ -1003,7 +1003,7 @@ fn top_bar(
     selected: Option<&RemoteProfile>,
     summary: Option<&SessionSummary>,
     status: ConnectionStatus,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
 ) -> impl IntoElement {
     let status_color = match status {
         ConnectionStatus::Connected => theme::semantic().success,
@@ -1120,7 +1120,7 @@ fn sidebar(
     search_input: Option<Entity<TextInput>>,
     selected_id: Option<i64>,
     summaries_by_id: &HashMap<i64, SessionSummary>,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
 ) -> impl IntoElement {
     let open_count = profiles.len();
     div()
@@ -1232,7 +1232,7 @@ fn connection_card(
     profile: RemoteProfile,
     summary: Option<SessionSummary>,
     selected: bool,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
 ) -> impl IntoElement {
     let is_connected = summary
         .as_ref()
@@ -1409,7 +1409,7 @@ fn file_workspace(
     remote_items: Vec<RemoteFileItem>,
     current_path: String,
     can_drop: bool,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
 ) -> impl IntoElement {
     let supports_files = selected.is_some_and(|profile| profile.protocol.supports_file_browser());
     let path_text = if current_path.is_empty() {
@@ -1670,7 +1670,7 @@ fn file_workspace(
 fn remote_entry_row(
     dark: bool,
     item: RemoteFileItem,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
 ) -> impl IntoElement {
     let is_text_file = !item.is_dir && looks_like_text_file_name(&item.name);
     let primary_label = if item.is_dir { "进入" } else { "下载" };
@@ -1821,7 +1821,7 @@ fn protocol_panel(
     terminal_snapshot: TerminalSnapshot,
     protocol_log: Vec<ProtocolLogEntry>,
     terminal_input: Option<Entity<TextInput>>,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
 ) -> impl IntoElement {
     let title = match right_panel_mode {
         RightPanelMode::Terminal => "SSH 终端",
@@ -1885,7 +1885,7 @@ fn terminal_workspace(
     summary: Option<&SessionSummary>,
     terminal_snapshot: TerminalSnapshot,
     terminal_input: Option<Entity<TextInput>>,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
 ) -> impl IntoElement {
     let connected = summary.is_some_and(|summary| summary.status == ConnectionStatus::Connected);
     let terminal_bg = ui::terminal_bg();
@@ -2064,7 +2064,7 @@ fn ftp_log_workspace(
     dark: bool,
     protocol_log: Vec<ProtocolLogEntry>,
     summary: Option<&SessionSummary>,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
 ) -> impl IntoElement {
     let count = protocol_log.len();
     let profile_id = summary.map(|summary| summary.profile_id);
@@ -2177,7 +2177,7 @@ fn transfer_panel(
     all_transfers: Vec<SessionTransferItem>,
     show_global_transfers: bool,
     collapsed: bool,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
 ) -> impl IntoElement {
     let transfer_scope_items = if show_global_transfers {
         None
@@ -2386,7 +2386,7 @@ fn transfer_panel(
 fn draft_section(
     dark: bool,
     drafts: Vec<RemoteEditDraft>,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
 ) -> impl IntoElement {
     div()
         .flex()
@@ -2506,7 +2506,7 @@ fn transfer_card(
     dark: bool,
     item: &TransferItem,
     session_name: Option<String>,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
 ) -> impl IntoElement {
     let progress = item.progress_percent() as f32 / 100.0;
     let fill_width = (280.0 * progress.clamp(0.0, 1.0)).max(if progress > 0.0 { 2.0 } else { 0.0 });
@@ -2634,7 +2634,7 @@ fn profile_editor_overlay(
     dark: bool,
     editor: Option<ProfileEditorSnapshot>,
     _selected: Option<RemoteProfile>,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
 ) -> gpui::AnyElement {
     let Some(editor) = editor else {
         return overlay_shell(
@@ -3076,7 +3076,7 @@ fn profile_inline_field(label: &'static str, input: Entity<TextInput>, dark: boo
 fn new_folder_overlay(
     dark: bool,
     input: Option<Entity<TextInput>>,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
 ) -> impl IntoElement {
     overlay_shell(
         dark,
@@ -3142,7 +3142,7 @@ fn profile_menu_overlay(
     dark: bool,
     menu: Option<ProfileMenuState>,
     summaries_by_id: &HashMap<i64, SessionSummary>,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
 ) -> gpui::AnyElement {
     let Some(menu) = menu else {
         return div().into_any_element();
@@ -3244,7 +3244,7 @@ fn profile_menu_overlay(
 fn file_menu_overlay(
     dark: bool,
     menu: Option<FileMenuState>,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
 ) -> gpui::AnyElement {
     let Some(menu) = menu else {
         return div().into_any_element();
@@ -3341,7 +3341,7 @@ fn file_menu_overlay(
 fn overlay_shell(
     dark: bool,
     backdrop_id: &'static str,
-    panel: Rc<RefCell<FtpSftpSshPanel>>,
+    panel: Rc<RefCell<FtpSftpSshView>>,
     content: impl IntoElement,
 ) -> impl IntoElement {
     div()

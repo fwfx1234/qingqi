@@ -50,13 +50,13 @@ impl Plugin for ImageCompressPlugin {
     fn open(&mut self, _cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let service = ImageCompressService::new(self.paths.clone())?;
         Ok(PluginView::Inline(Box::new(ImageCompressInlineView {
-            panel: Rc::new(RefCell::new(view::ImageCompressPanel::new(service))),
+            panel: Rc::new(RefCell::new(view::ImageCompressView::new(service))),
         })))
     }
 }
 
 struct ImageCompressInlineView {
-    panel: Rc<RefCell<view::ImageCompressPanel>>,
+    panel: Rc<RefCell<view::ImageCompressView>>,
 }
 
 impl InlineView for ImageCompressInlineView {

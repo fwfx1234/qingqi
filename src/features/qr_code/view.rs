@@ -32,7 +32,7 @@ enum StatusTone {
     Error,
 }
 
-pub struct QrPanel {
+pub struct QrView {
     input: Option<Entity<TextInput>>,
     history_query_input: Option<Entity<TextInput>>,
     scan_path_input: Option<Entity<TextInput>>,
@@ -66,7 +66,7 @@ enum QrBackgroundResult {
     },
 }
 
-impl QrPanel {
+impl QrView {
     pub fn new(paths: AppPaths) -> Result<Self> {
         let service = QrCodeService::new(paths)?;
         Ok(Self {
@@ -659,7 +659,7 @@ impl QrPanel {
 }
 
 pub struct QrCodeElement {
-    pub panel: Rc<RefCell<QrPanel>>,
+    pub panel: Rc<RefCell<QrView>>,
 }
 
 impl IntoElement for QrCodeElement {
@@ -942,7 +942,7 @@ fn preview_panel(dark: bool, qr_matrix: Vec<bool>, qr_size: usize) -> impl IntoE
 }
 
 fn scan_panel(
-    panel: Rc<RefCell<QrPanel>>,
+    panel: Rc<RefCell<QrView>>,
     scan_path_input: Entity<TextInput>,
     scan_result: String,
     scan_error: String,
@@ -1101,7 +1101,7 @@ fn scan_panel(
 }
 
 fn history_panel(
-    panel: Rc<RefCell<QrPanel>>,
+    panel: Rc<RefCell<QrView>>,
     history_query: Entity<TextInput>,
     history: Vec<QrHistoryRecord>,
     dark: bool,
@@ -1250,7 +1250,7 @@ fn history_panel(
 fn overlay_shell(
     dark: bool,
     backdrop_id: &'static str,
-    panel: Rc<RefCell<QrPanel>>,
+    panel: Rc<RefCell<QrView>>,
     content: impl IntoElement,
 ) -> impl IntoElement {
     div()
@@ -1287,7 +1287,7 @@ fn overlay_shell(
 }
 
 fn history_row(
-    panel: Rc<RefCell<QrPanel>>,
+    panel: Rc<RefCell<QrView>>,
     item: QrHistoryRecord,
     index: usize,
     dark: bool,

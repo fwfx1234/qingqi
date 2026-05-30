@@ -109,7 +109,7 @@ impl Plugin for DownloadManagerPlugin {
     fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let service = self.service()?;
         self.ensure_watcher(Rc::clone(&service), cx.events.clone(), cx.app);
-        let panel = Rc::new(RefCell::new(view::DownloadManagerPanel::new(service)));
+        let panel = Rc::new(RefCell::new(view::DownloadManagerView::new(service)));
         panel.borrow_mut().init(cx.app);
         Ok(PluginView::Window(Box::new(DownloadManagerView { panel })))
     }
@@ -120,7 +120,7 @@ impl Plugin for DownloadManagerPlugin {
 }
 
 struct DownloadManagerView {
-    panel: Rc<RefCell<view::DownloadManagerPanel>>,
+    panel: Rc<RefCell<view::DownloadManagerView>>,
 }
 
 impl WindowView for DownloadManagerView {

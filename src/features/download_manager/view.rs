@@ -76,7 +76,7 @@ impl FilterTab {
     }
 }
 
-pub struct DownloadManagerPanel {
+pub struct DownloadManagerView {
     service: Rc<RefCell<DownloadService>>,
     tasks: Vec<DownloadTask>,
     job_summary: DownloadJobSummary,
@@ -105,7 +105,7 @@ pub struct DownloadManagerPanel {
     headers_input: Option<Entity<TextInput>>,
 }
 
-impl DownloadManagerPanel {
+impl DownloadManagerView {
     pub fn new(service: Rc<RefCell<DownloadService>>) -> Self {
         let tasks = Self::load_tasks(&service, FilterTab::All);
         let (
@@ -316,7 +316,7 @@ impl DownloadManagerPanel {
         self.subscriptions.clear();
     }
 
-    pub fn observe_inputs(&mut self, handle: Rc<RefCell<DownloadManagerPanel>>, cx: &mut App) {
+    pub fn observe_inputs(&mut self, handle: Rc<RefCell<DownloadManagerView>>, cx: &mut App) {
         if !self.subscriptions.is_empty() {
             return;
         }
@@ -673,7 +673,7 @@ impl DownloadManagerPanel {
 }
 
 pub struct DownloadManagerElement {
-    pub panel: Rc<RefCell<DownloadManagerPanel>>,
+    pub panel: Rc<RefCell<DownloadManagerView>>,
 }
 
 impl IntoElement for DownloadManagerElement {
@@ -874,7 +874,7 @@ fn header_bar(_dark: bool, active_count: usize) -> impl IntoElement {
 fn url_input_bar(
     dark: bool,
     url_input: Entity<TextInput>,
-    panel: Rc<RefCell<DownloadManagerPanel>>,
+    panel: Rc<RefCell<DownloadManagerView>>,
 ) -> impl IntoElement {
     div()
         .rounded(px(12.0))
@@ -948,7 +948,7 @@ fn filter_bar(
     dark: bool,
     active_filter: FilterTab,
     counts: &TaskCounts,
-    panel: Rc<RefCell<DownloadManagerPanel>>,
+    panel: Rc<RefCell<DownloadManagerView>>,
 ) -> impl IntoElement {
     let status_filters = [
         FilterTab::All,
@@ -1111,7 +1111,7 @@ fn task_list(
     dark: bool,
     tasks: Vec<DownloadTask>,
     progress_by_id: HashMap<String, f64>,
-    panel: Rc<RefCell<DownloadManagerPanel>>,
+    panel: Rc<RefCell<DownloadManagerView>>,
 ) -> impl IntoElement {
     if tasks.is_empty() {
         return div()
@@ -1172,7 +1172,7 @@ fn task_row(
     job_progress: Option<f64>,
     index: usize,
     dark: bool,
-    panel: Rc<RefCell<DownloadManagerPanel>>,
+    panel: Rc<RefCell<DownloadManagerView>>,
 ) -> impl IntoElement {
     let status = task.status;
     let task_id = task.id.clone();
@@ -1451,7 +1451,7 @@ fn bottom_bar(
     save_dir: &str,
     settings: &super::model::DownloadSettings,
     stats: &DownloadStats,
-    panel: Rc<RefCell<DownloadManagerPanel>>,
+    panel: Rc<RefCell<DownloadManagerView>>,
 ) -> impl IntoElement {
     let speed_note = if settings.speed_limit_kbps > 0 {
         format!("  限速 {} KB/s", settings.speed_limit_kbps)
@@ -1538,7 +1538,7 @@ fn settings_overlay(
     referer_input: Option<Entity<TextInput>>,
     cookie_input: Option<Entity<TextInput>>,
     headers_input: Option<Entity<TextInput>>,
-    panel: Rc<RefCell<DownloadManagerPanel>>,
+    panel: Rc<RefCell<DownloadManagerView>>,
 ) -> impl IntoElement {
     div()
         .absolute()

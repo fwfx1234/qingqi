@@ -9,7 +9,7 @@ use crate::{
         plugin::{Manifest, Plugin, PluginCx, PluginId, PluginView, WindowView},
         storage::AppPaths,
     },
-    features::http_capture::{manifest, store::CaptureStore, view::CapturePanel},
+    features::http_capture::{manifest, store::CaptureStore, view::CaptureView},
 };
 
 pub struct HttpCapturePlugin {
@@ -59,7 +59,7 @@ impl Plugin for HttpCapturePlugin {
 
     fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let store = Arc::clone(&self.store);
-        let view = cx.app.new(|cx| CapturePanel::new(store, cx));
+        let view = cx.app.new(|cx| CaptureView::new(store, cx));
         Ok(PluginView::Window(Box::new(HttpCaptureView { view })))
     }
 
@@ -67,7 +67,7 @@ impl Plugin for HttpCapturePlugin {
 }
 
 struct HttpCaptureView {
-    view: Entity<CapturePanel>,
+    view: Entity<CaptureView>,
 }
 
 impl WindowView for HttpCaptureView {

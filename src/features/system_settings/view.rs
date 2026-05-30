@@ -14,12 +14,12 @@ use crate::{
         ui::{self, components},
     },
     core::shortcut::{CORE_PLUGIN_ID, ShortcutScope, ShortcutView},
-    features::system_settings::plugin::SettingsPanel,
+    features::system_settings::plugin::SettingsView,
     platform::macos::PermissionStatus,
 };
 
 pub struct SettingsElement {
-    pub panel: Rc<RefCell<SettingsPanel>>,
+    pub panel: Rc<RefCell<SettingsView>>,
 }
 
 impl IntoElement for SettingsElement {
@@ -293,7 +293,7 @@ impl RenderOnce for SettingsElement {
 // ── Retention control ──
 
 fn retention_control(
-    panel: Rc<RefCell<SettingsPanel>>,
+    panel: Rc<RefCell<SettingsView>>,
     seconds: u64,
     message: String,
     _dark: bool,
@@ -434,7 +434,7 @@ fn retention_control(
 // ── App index row ──
 
 fn app_index_row(
-    panel: Rc<RefCell<SettingsPanel>>,
+    panel: Rc<RefCell<SettingsView>>,
     dark: bool,
     has_snapshot: bool,
     snapshot: Option<AppIndexSnapshot>,
@@ -521,7 +521,7 @@ fn app_index_row(
 }
 
 fn app_index_action_button(
-    panel: Rc<RefCell<SettingsPanel>>,
+    panel: Rc<RefCell<SettingsView>>,
     dark: bool,
     available: bool,
 ) -> AnyElement {
@@ -539,7 +539,7 @@ fn app_index_action_button(
 }
 
 fn plugin_dir_button(
-    panel: Rc<RefCell<SettingsPanel>>,
+    panel: Rc<RefCell<SettingsView>>,
     _dark: bool,
     _root_path: &str,
 ) -> impl IntoElement {
@@ -565,7 +565,7 @@ fn plugin_dir_button(
 }
 
 fn icon_cache_clear_button(
-    panel: Rc<RefCell<SettingsPanel>>,
+    panel: Rc<RefCell<SettingsView>>,
     _dark: bool,
     message: String,
 ) -> impl IntoElement {
@@ -607,7 +607,7 @@ fn icon_cache_clear_button(
 // ── Shortcuts ──
 
 fn shortcuts_section(
-    panel: Rc<RefCell<SettingsPanel>>,
+    panel: Rc<RefCell<SettingsView>>,
     rows: Vec<(ShortcutView, Entity<TextInput>)>,
     message: String,
     dark: bool,
@@ -646,7 +646,7 @@ fn shortcuts_section(
 }
 
 fn shortcut_row(
-    panel: Rc<RefCell<SettingsPanel>>,
+    panel: Rc<RefCell<SettingsView>>,
     view: ShortcutView,
     input: Entity<TextInput>,
     dark: bool,
@@ -1078,7 +1078,7 @@ fn permission_row(
 // ── Accessibility row (real status + open settings button) ──
 
 fn accessibility_row(
-    panel: Rc<RefCell<SettingsPanel>>,
+    panel: Rc<RefCell<SettingsView>>,
     _dark: bool,
     status: PermissionStatus,
     text: &str,
@@ -1184,7 +1184,7 @@ enum DiagAction {
 }
 
 fn diag_path_row(
-    panel: Rc<RefCell<SettingsPanel>>,
+    panel: Rc<RefCell<SettingsView>>,
     dark: bool,
     label: &'static str,
     _description: &'static str,
@@ -1328,7 +1328,7 @@ fn action_button(
 // ── Segmented Control for Theme Mode ──
 
 fn mode_segment(
-    panel: Rc<RefCell<SettingsPanel>>,
+    panel: Rc<RefCell<SettingsView>>,
     current_mode: ThemeMode,
     dark: bool,
 ) -> impl IntoElement {
@@ -1361,7 +1361,7 @@ fn mode_segment(
 }
 
 fn seg_button(
-    panel: Rc<RefCell<SettingsPanel>>,
+    panel: Rc<RefCell<SettingsView>>,
     mode: ThemeMode,
     current_mode: ThemeMode,
     _dark: bool,

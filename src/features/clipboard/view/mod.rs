@@ -38,7 +38,7 @@ pub(super) enum ClipboardTab {
     Settings,
 }
 
-pub struct ClipboardPanel {
+pub struct ClipboardView {
     focus_handle: Option<FocusHandle>,
     service: Arc<Mutex<ClipboardService>>,
     query_input: Option<Entity<TextInput>>,
@@ -64,7 +64,7 @@ pub struct ClipboardPanel {
     subscriptions: Vec<Subscription>,
 }
 
-impl ClipboardPanel {
+impl ClipboardView {
     pub(crate) fn new(service: Arc<Mutex<ClipboardService>>) -> Self {
         Self {
             focus_handle: None,
@@ -1089,7 +1089,7 @@ impl ClipboardPanel {
 }
 
 fn render_tab_bar(
-    handle: Entity<ClipboardPanel>,
+    handle: Entity<ClipboardView>,
     active: ClipboardTab,
     _dark: bool,
 ) -> impl IntoElement {
@@ -1152,7 +1152,7 @@ fn render_tab_bar(
         }))
 }
 
-impl Render for ClipboardPanel {
+impl Render for ClipboardView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.focus_pending {
             if let Some(query_input) = self.query_input.as_ref() {
@@ -1232,7 +1232,7 @@ impl Render for ClipboardPanel {
     }
 }
 
-impl Focusable for ClipboardPanel {
+impl Focusable for ClipboardView {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle
             .clone()
@@ -1266,7 +1266,7 @@ mod tests {
             path.parent().unwrap().to_path_buf(),
         )));
         let mut panel =
-            ClipboardPanel::new(Arc::new(Mutex::new(ClipboardService::new(database, path))));
+            ClipboardView::new(Arc::new(Mutex::new(ClipboardService::new(database, path))));
         panel.filter = ClipboardFilter::Code;
         assert_eq!(panel.status_text(), "代码 · 暂无剪贴板记录");
 
@@ -1300,7 +1300,7 @@ mod tests {
             path.parent().unwrap().to_path_buf(),
         )));
         let service = Arc::new(Mutex::new(ClipboardService::new(database, path)));
-        let mut panel = ClipboardPanel::new(Arc::clone(&service));
+        let mut panel = ClipboardView::new(Arc::clone(&service));
 
         assert_eq!(panel.tab, ClipboardTab::History);
         panel.set_tab(ClipboardTab::Settings);

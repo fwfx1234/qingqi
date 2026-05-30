@@ -45,7 +45,7 @@ enum JsonLayoutMode {
     Stacked,
 }
 
-pub struct JsonPanel {
+pub struct JsonView {
     input: Option<Entity<TextInput>>,
     query: Option<Entity<TextInput>>,
     output: Option<Entity<TextInput>>,
@@ -63,7 +63,7 @@ struct JsonBackgroundResult {
     mode: JsonMode,
 }
 
-impl JsonPanel {
+impl JsonView {
     pub fn new() -> Self {
         Self {
             input: None,
@@ -240,7 +240,7 @@ impl JsonPanel {
 }
 
 pub struct JsonParserElement {
-    pub panel: Rc<RefCell<JsonPanel>>,
+    pub panel: Rc<RefCell<JsonView>>,
 }
 
 impl IntoElement for JsonParserElement {
@@ -531,7 +531,7 @@ fn output_title(mode: JsonMode) -> &'static str {
 fn mode_button(
     label: &'static str,
     action: JsonAction,
-    panel: Rc<RefCell<JsonPanel>>,
+    panel: Rc<RefCell<JsonView>>,
     _dark: bool,
     active: bool,
 ) -> impl IntoElement {
@@ -575,7 +575,7 @@ fn mode_button(
 fn toolbar_button(
     label: &'static str,
     action: JsonAction,
-    panel: Rc<RefCell<JsonPanel>>,
+    panel: Rc<RefCell<JsonView>>,
     _dark: bool,
 ) -> impl IntoElement {
     div()
@@ -621,7 +621,7 @@ fn module_header(_dark: bool) -> impl IntoElement {
     )
 }
 
-fn run_action(action: JsonAction, panel: &Rc<RefCell<JsonPanel>>, cx: &mut App) {
+fn run_action(action: JsonAction, panel: &Rc<RefCell<JsonView>>, cx: &mut App) {
     match action {
         JsonAction::CopyOutput => {
             let output = panel
@@ -684,7 +684,7 @@ fn run_action(action: JsonAction, panel: &Rc<RefCell<JsonPanel>>, cx: &mut App) 
     }
 }
 
-fn apply_mode(mode: JsonMode, panel: &Rc<RefCell<JsonPanel>>, cx: &mut App) {
+fn apply_mode(mode: JsonMode, panel: &Rc<RefCell<JsonView>>, cx: &mut App) {
     let (input_text, query_text) = {
         let mut state = panel.borrow_mut();
         state.ensure_inputs(cx);

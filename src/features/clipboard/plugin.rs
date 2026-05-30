@@ -57,7 +57,7 @@ impl Plugin for ClipboardPlugin {
         }
 
         let panel = cx.app.new(|cx| {
-            let mut panel = view::ClipboardPanel::new(Arc::clone(&self.service));
+            let mut panel = view::ClipboardView::new(Arc::clone(&self.service));
             panel.init(cx);
             panel
         });
@@ -175,7 +175,7 @@ impl Plugin for ClipboardPlugin {
 }
 
 struct ClipboardView {
-    panel: Entity<view::ClipboardPanel>,
+    panel: Entity<view::ClipboardView>,
 }
 
 impl WindowView for ClipboardView {

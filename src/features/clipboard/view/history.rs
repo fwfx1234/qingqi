@@ -18,7 +18,7 @@ pub(super) fn keyboard_filters() -> [ClipboardFilter; 5] {
 }
 
 pub(super) fn history_page(
-    handle: Entity<ClipboardPanel>,
+    handle: Entity<ClipboardView>,
     items: Arc<Vec<ClipboardRecord>>,
     selected: usize,
     query: &str,
@@ -108,7 +108,7 @@ pub(super) fn history_page(
 }
 
 fn history_top_bar(
-    handle: Entity<ClipboardPanel>,
+    handle: Entity<ClipboardView>,
     query_input: Entity<TextInput>,
     item_count: usize,
     dark: bool,
@@ -146,7 +146,7 @@ fn history_top_bar(
         )
 }
 
-fn top_bar_icon_button(handle: Entity<ClipboardPanel>, _dark: bool) -> impl IntoElement {
+fn top_bar_icon_button(handle: Entity<ClipboardView>, _dark: bool) -> impl IntoElement {
     div()
         .id("clipboard-open-settings")
         .size(px(30.0))
@@ -201,7 +201,7 @@ fn search_field(query_input: Entity<TextInput>, _dark: bool) -> gpui::Div {
 }
 
 fn render_filter_tabs(
-    handle: Entity<ClipboardPanel>,
+    handle: Entity<ClipboardView>,
     active: ClipboardFilter,
     _dark: bool,
 ) -> impl IntoElement {
@@ -269,7 +269,7 @@ fn render_filter_tabs(
 }
 
 fn history_list(
-    handle: Entity<ClipboardPanel>,
+    handle: Entity<ClipboardView>,
     items: Arc<Vec<ClipboardRecord>>,
     selected: usize,
     query: &str,
@@ -286,7 +286,7 @@ fn history_list(
 }
 
 fn history_virtual_list(
-    handle: Entity<ClipboardPanel>,
+    handle: Entity<ClipboardView>,
     items: Arc<Vec<ClipboardRecord>>,
     selected: usize,
     scroll: UniformListScrollHandle,
@@ -366,7 +366,7 @@ fn empty_state_text(query: &str, _dark: bool, is_empty: bool) -> impl IntoElemen
 }
 
 fn history_row(
-    handle: Entity<ClipboardPanel>,
+    handle: Entity<ClipboardView>,
     item: ClipboardRecord,
     index: usize,
     selected: bool,
@@ -691,7 +691,7 @@ fn preview_unavailable(message: &'static str, _dark: bool) -> impl IntoElement {
 }
 
 fn detail_panel(
-    handle: Entity<ClipboardPanel>,
+    handle: Entity<ClipboardView>,
     selected_record: Option<ClipboardRecord>,
     _status_text: String,
     preview_input: Entity<TextInput>,
@@ -723,7 +723,7 @@ fn detail_panel(
     }
 }
 
-fn detail_actions(handle: Entity<ClipboardPanel>, is_pinned: bool, dark: bool) -> impl IntoElement {
+fn detail_actions(handle: Entity<ClipboardView>, is_pinned: bool, dark: bool) -> impl IntoElement {
     div()
         .flex()
         .items_center()

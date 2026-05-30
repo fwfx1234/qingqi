@@ -46,13 +46,13 @@ impl Plugin for JsonParserPlugin {
 
     fn open(&mut self, _cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         Ok(PluginView::Inline(Box::new(JsonParserView {
-            panel: Rc::new(RefCell::new(view::JsonPanel::new())),
+            panel: Rc::new(RefCell::new(view::JsonView::new())),
         })))
     }
 }
 
 struct JsonParserView {
-    panel: Rc<RefCell<view::JsonPanel>>,
+    panel: Rc<RefCell<view::JsonView>>,
 }
 
 impl InlineView for JsonParserView {

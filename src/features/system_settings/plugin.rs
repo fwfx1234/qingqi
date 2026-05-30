@@ -93,7 +93,7 @@ impl Plugin for SystemSettingsPlugin {
     }
 
     fn open(&mut self, _: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
-        let panel = SettingsPanel::new(
+        let panel = SettingsView::new(
             Arc::clone(&self.theme_store),
             Arc::clone(&self.settings_store),
             self.app_index_service.clone(),
@@ -108,7 +108,7 @@ impl Plugin for SystemSettingsPlugin {
 }
 
 pub struct SystemSettingsView {
-    panel: Rc<RefCell<SettingsPanel>>,
+    panel: Rc<RefCell<SettingsView>>,
 }
 
 impl InlineView for SystemSettingsView {
@@ -132,7 +132,7 @@ impl InlineView for SystemSettingsView {
     }
 }
 
-pub struct SettingsPanel {
+pub struct SettingsView {
     theme_store: Arc<Mutex<ThemeStore>>,
     settings_store: Arc<Mutex<SettingsStore>>,
     app_index_service: Option<Arc<AppIndexService>>,
@@ -147,7 +147,7 @@ pub struct SettingsPanel {
     shortcut_message: String,
 }
 
-impl SettingsPanel {
+impl SettingsView {
     fn new(
         theme_store: Arc<Mutex<ThemeStore>>,
         settings_store: Arc<Mutex<SettingsStore>>,

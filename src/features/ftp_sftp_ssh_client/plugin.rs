@@ -91,7 +91,7 @@ impl Plugin for FtpSftpSshPlugin {
         let service = self.service()?;
         self.ensure_watcher(Arc::clone(&service), cx.events.clone(), cx.app);
         Ok(PluginView::Window(Box::new(FtpSftpSshView {
-            panel: Rc::new(RefCell::new(view::FtpSftpSshPanel::new(service))),
+            panel: Rc::new(RefCell::new(view::FtpSftpSshView::new(service))),
         })))
     }
 
@@ -109,7 +109,7 @@ impl Plugin for FtpSftpSshPlugin {
 }
 
 struct FtpSftpSshView {
-    panel: Rc<RefCell<view::FtpSftpSshPanel>>,
+    panel: Rc<RefCell<view::FtpSftpSshView>>,
 }
 
 impl WindowView for FtpSftpSshView {

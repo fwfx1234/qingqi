@@ -80,7 +80,7 @@ struct QueueItem {
     from_clipboard: bool,
 }
 
-pub struct ImageCompressPanel {
+pub struct ImageCompressView {
     service: ImageCompressService,
     items: Vec<QueueItem>,
     mode: CompressionMode,
@@ -98,7 +98,7 @@ pub struct ImageCompressPanel {
     drain_task: Option<gpui::Task<()>>,
 }
 
-impl ImageCompressPanel {
+impl ImageCompressView {
     pub fn new(service: ImageCompressService) -> Self {
         let output_dir = service.default_output_dir().to_path_buf();
         Self {
@@ -748,7 +748,7 @@ fn normalize_image_input_path(value: &str) -> PathBuf {
 }
 
 pub struct ImageCompressElement {
-    pub panel: Rc<RefCell<ImageCompressPanel>>,
+    pub panel: Rc<RefCell<ImageCompressView>>,
 }
 
 impl IntoElement for ImageCompressElement {
@@ -1055,7 +1055,7 @@ fn drop_zone(_dark: bool, pending_count: usize) -> gpui::Div {
 fn image_table(
     items: Vec<QueueItem>,
     dark: bool,
-    panel: Rc<RefCell<ImageCompressPanel>>,
+    panel: Rc<RefCell<ImageCompressView>>,
 ) -> impl IntoElement {
     let content = if items.is_empty() {
         div()
@@ -1118,7 +1118,7 @@ fn image_row(
     item: QueueItem,
     index: usize,
     dark: bool,
-    panel: Rc<RefCell<ImageCompressPanel>>,
+    panel: Rc<RefCell<ImageCompressView>>,
 ) -> impl IntoElement {
     let from_clipboard = item.from_clipboard;
     let is_success = item.status == QueueStatus::Success;
@@ -1458,7 +1458,7 @@ fn footer_bar(
     running: bool,
     batch_total: usize,
     batch_completed: usize,
-    panel: Rc<RefCell<ImageCompressPanel>>,
+    panel: Rc<RefCell<ImageCompressView>>,
 ) -> impl IntoElement {
     let summary = if running && batch_total > 0 {
         format!(
@@ -1901,7 +1901,7 @@ mod tests {
         }
 
         // Panel collects
-        let mut panel = ImageCompressPanel {
+        let mut panel = ImageCompressView {
             service: ImageCompressService::for_test(PathBuf::from("/tmp")),
             batch_total: 0,
             items: vec![QueueItem {
@@ -1952,7 +1952,7 @@ mod tests {
             // batch_done is still false — worker hasn't finished all items
         }
 
-        let mut panel = ImageCompressPanel {
+        let mut panel = ImageCompressView {
             service: ImageCompressService::for_test(PathBuf::from("/tmp")),
             batch_total: 0,
             items: vec![
@@ -2015,7 +2015,7 @@ mod tests {
     #[test]
     fn request_cancel_sets_flag_and_resets_pending_items() {
         let shared = SharedBatchResults::default();
-        let mut panel = ImageCompressPanel {
+        let mut panel = ImageCompressView {
             service: ImageCompressService::for_test(PathBuf::from("/tmp")),
             batch_total: 2,
             items: vec![
@@ -2087,7 +2087,7 @@ mod tests {
     #[test]
     fn request_cancel_noop_when_not_running() {
         let shared = SharedBatchResults::default();
-        let mut panel = ImageCompressPanel {
+        let mut panel = ImageCompressView {
             service: ImageCompressService::for_test(PathBuf::from("/tmp")),
             batch_total: 0,
             items: vec![],
@@ -2108,7 +2108,7 @@ mod tests {
 
     #[test]
     fn batch_completed_counts_correctly() {
-        let mut panel = ImageCompressPanel {
+        let mut panel = ImageCompressView {
             service: ImageCompressService::for_test(PathBuf::from("/tmp")),
             items: vec![],
             mode: CompressionMode::VisuallyLossless,
@@ -2154,7 +2154,7 @@ mod tests {
 
     #[test]
     fn batch_completed_never_negative() {
-        let panel = ImageCompressPanel {
+        let panel = ImageCompressView {
             service: ImageCompressService::for_test(PathBuf::from("/tmp")),
             items: vec![],
             mode: CompressionMode::VisuallyLossless,
@@ -2187,7 +2187,7 @@ mod tests {
             });
         }
 
-        let mut panel = ImageCompressPanel {
+        let mut panel = ImageCompressView {
             service: ImageCompressService::for_test(PathBuf::from("/tmp")),
             batch_total: 3,
             items: vec![
@@ -2292,7 +2292,7 @@ mod tests {
             state.message = Some("压缩完成，共处理 1 张".to_string());
         }
 
-        let mut panel = ImageCompressPanel {
+        let mut panel = ImageCompressView {
             service: ImageCompressService::for_test(PathBuf::from("/tmp")),
             batch_total: 1,
             items: vec![QueueItem {
@@ -2340,7 +2340,7 @@ mod tests {
             });
         }
 
-        let mut panel = ImageCompressPanel {
+        let mut panel = ImageCompressView {
             service: ImageCompressService::for_test(PathBuf::from("/tmp")),
             batch_total: 0,
             items: vec![QueueItem {
@@ -2381,7 +2381,7 @@ mod tests {
     #[test]
     fn cancel_tracks_completed_and_cancelled_counts() {
         let shared = SharedBatchResults::default();
-        let mut panel = ImageCompressPanel {
+        let mut panel = ImageCompressView {
             service: ImageCompressService::for_test(PathBuf::from("/tmp")),
             batch_total: 5,
             items: vec![
@@ -2490,7 +2490,7 @@ mod tests {
             state.message = Some("已取消，完成 1 张，取消 1 张".to_string());
         }
 
-        let mut panel = ImageCompressPanel {
+        let mut panel = ImageCompressView {
             service: ImageCompressService::for_test(PathBuf::from("/tmp")),
             batch_total: 2,
             items: vec![
@@ -2554,7 +2554,7 @@ mod tests {
 
     #[test]
     fn batch_total_saturating_sub_never_panics() {
-        let mut panel = ImageCompressPanel {
+        let mut panel = ImageCompressView {
             service: ImageCompressService::for_test(PathBuf::from("/tmp")),
             items: vec![],
             mode: CompressionMode::VisuallyLossless,

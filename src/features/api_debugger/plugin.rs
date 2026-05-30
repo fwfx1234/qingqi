@@ -105,13 +105,13 @@ impl Plugin for ApiDebuggerPlugin {
         let service = self.service();
         self.ensure_watcher(Arc::clone(&service), cx.events.clone(), cx.app);
         Ok(PluginView::Window(Box::new(ApiDebuggerView {
-            panel: Rc::new(RefCell::new(view::ApiDebuggerPanel::new(service, cx.app))),
+            panel: Rc::new(RefCell::new(view::ApiDebuggerView::new(service, cx.app))),
         })))
     }
 }
 
 struct ApiDebuggerView {
-    panel: Rc<RefCell<view::ApiDebuggerPanel>>,
+    panel: Rc<RefCell<view::ApiDebuggerView>>,
 }
 
 impl WindowView for ApiDebuggerView {

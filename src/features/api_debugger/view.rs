@@ -75,7 +75,7 @@ impl OpenTab {
     }
 }
 
-pub struct ApiDebuggerPanel {
+pub struct ApiDebuggerView {
     service: Arc<ApiService>,
     groups: Vec<ApiGroup>,
     environments: Vec<ApiEnvironment>,
@@ -109,7 +109,7 @@ pub struct ApiDebuggerPanel {
     notice: String,
 }
 
-impl ApiDebuggerPanel {
+impl ApiDebuggerView {
     pub fn new(service: Arc<ApiService>, cx: &mut App) -> Self {
         let workspace_result = service.load_workspace();
         let (groups, environments, notice) = match workspace_result {
@@ -812,7 +812,7 @@ impl ApiDebuggerPanel {
 }
 
 pub struct ApiDebuggerElement {
-    pub panel: Rc<RefCell<ApiDebuggerPanel>>,
+    pub panel: Rc<RefCell<ApiDebuggerView>>,
 }
 
 impl IntoElement for ApiDebuggerElement {
@@ -1004,7 +1004,7 @@ impl RenderOnce for ApiDebuggerElement {
 }
 
 fn collection_tree(
-    panel: Rc<RefCell<ApiDebuggerPanel>>,
+    panel: Rc<RefCell<ApiDebuggerView>>,
     groups: Vec<ApiGroup>,
     selected_request: usize,
     selected_scenario: Option<usize>,
@@ -1076,7 +1076,7 @@ fn collection_tree(
 }
 
 fn group_section(
-    panel: Rc<RefCell<ApiDebuggerPanel>>,
+    panel: Rc<RefCell<ApiDebuggerView>>,
     group: ApiGroup,
     request_start: usize,
     selected_request: usize,
@@ -1175,7 +1175,7 @@ fn group_section(
 }
 
 fn request_tree_block(
-    panel: Rc<RefCell<ApiDebuggerPanel>>,
+    panel: Rc<RefCell<ApiDebuggerView>>,
     request_index: usize,
     request: ApiRequest,
     selected_request: usize,
@@ -1311,7 +1311,7 @@ fn request_tree_block(
 }
 
 fn open_tabs_bar(
-    panel: Rc<RefCell<ApiDebuggerPanel>>,
+    panel: Rc<RefCell<ApiDebuggerView>>,
     tabs: Vec<OpenTab>,
     active_tab: OpenTab,
     titles: Vec<String>,
@@ -1456,7 +1456,7 @@ fn open_tabs_bar(
 }
 
 fn action_bar(
-    panel: Rc<RefCell<ApiDebuggerPanel>>,
+    panel: Rc<RefCell<ApiDebuggerView>>,
     request: ApiRequest,
     environment: ApiEnvironment,
     path_input: Entity<TextInput>,
@@ -1585,7 +1585,7 @@ fn scenario_banner(scenario: ApiScenario, request: ApiRequest, dark: bool) -> im
 }
 
 fn editor_panel(
-    panel: Rc<RefCell<ApiDebuggerPanel>>,
+    panel: Rc<RefCell<ApiDebuggerView>>,
     editor_tab: EditorTab,
     editor_input: Entity<TextInput>,
     dark: bool,
@@ -1685,7 +1685,7 @@ fn editor_panel(
 }
 
 fn response_panel(
-    panel: Rc<RefCell<ApiDebuggerPanel>>,
+    panel: Rc<RefCell<ApiDebuggerView>>,
     response_tab: ResponseTab,
     response: ApiResponse,
     response_text: String,
@@ -1808,7 +1808,7 @@ fn response_panel(
 }
 
 fn env_popup(
-    panel: Rc<RefCell<ApiDebuggerPanel>>,
+    panel: Rc<RefCell<ApiDebuggerView>>,
     environments: Vec<ApiEnvironment>,
     selected_environment: usize,
     dark: bool,
@@ -1922,7 +1922,7 @@ fn env_popup(
 }
 
 fn env_manager_dialog(
-    panel: Rc<RefCell<ApiDebuggerPanel>>,
+    panel: Rc<RefCell<ApiDebuggerView>>,
     selected_environment: usize,
     env_detail_tab: EnvDetailTab,
     environments: Vec<ApiEnvironment>,
@@ -2397,7 +2397,7 @@ fn overlay_shell(
 }
 
 fn context_menu_overlay(
-    panel: Rc<RefCell<ApiDebuggerPanel>>,
+    panel: Rc<RefCell<ApiDebuggerView>>,
     title: String,
     position: Option<(f32, f32)>,
     dark: bool,
