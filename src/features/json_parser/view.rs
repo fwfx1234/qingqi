@@ -272,7 +272,7 @@ impl RenderOnce for JsonParserElement {
         let dark = crate::app::theme_mode::is_dark();
         let layout_mode = json_layout_mode(window.bounds().size.width);
 
-        ui::plugin_surface(dark).child(
+        ui::plugin_surface().child(
             ui::plugin_scroll_content()
                 .flex()
                 .flex_col()

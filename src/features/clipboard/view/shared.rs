@@ -32,7 +32,7 @@ pub(super) fn header_action_button(
 
 pub(super) fn theme_button(
     label: &'static str,
-    dark: bool,
+    _dark: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement {
     div()
@@ -43,7 +43,7 @@ pub(super) fn theme_button(
         .border_1()
         .border_color(theme::semantic().border_default)
         .bg(theme::semantic().bg_surface)
-        .hover(|style| style.bg(ui::row_hover(dark)).cursor_pointer())
+        .hover(|style| style.bg(ui::row_hover()).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()

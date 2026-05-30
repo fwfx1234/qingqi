@@ -714,7 +714,7 @@ impl RenderOnce for DownloadManagerElement {
         let headers_input = panel.headers_input.clone();
         drop(panel);
 
-        ui::plugin_surface(dark).child(
+        ui::plugin_surface().child(
             ui::plugin_content().child(
                 div()
                     .size_full()
@@ -1120,7 +1120,7 @@ fn task_list(
             .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.74))
             .border_1()
             .border_color(ui::border_light())
-            .child(ui::ui_empty_state("还没有下载任务", dark))
+            .child(ui::ui_empty_state("还没有下载任务"))
             .into_any_element();
     }
 

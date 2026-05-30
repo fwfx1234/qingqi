@@ -865,7 +865,7 @@ impl RenderOnce for ApiDebuggerElement {
         let in_flight = panel.service.is_in_flight();
         drop(panel);
 
-        ui::plugin_surface(dark)
+        ui::plugin_surface()
             .font_family("Inter, PingFang SC")
             .relative()
             .overflow_hidden()

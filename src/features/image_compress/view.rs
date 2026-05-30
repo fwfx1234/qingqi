@@ -781,7 +781,7 @@ impl RenderOnce for ImageCompressElement {
         let batch_completed = panel.batch_completed();
         drop(panel);
 
-        ui::plugin_surface(dark).child(
+        ui::plugin_surface().child(
             ui::plugin_content().child(
                 div()
                     .size_full()
@@ -1064,7 +1064,7 @@ fn image_table(
             .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.74))
             .border_1()
             .border_color(ui::border_light())
-            .child(ui::ui_empty_state("还没有图片，先导入一张试试", dark))
+            .child(ui::ui_empty_state("还没有图片，先导入一张试试"))
             .into_any_element()
     } else {
         div()

@@ -69,17 +69,17 @@ pub fn info() -> gpui::Rgba {
 }
 
 /// Backdrop color for overlay/modal遮罩 (replaces individual hsla in overlay_shell)
-pub fn overlay_backdrop(_dark: bool) -> gpui::Hsla {
+pub fn overlay_backdrop() -> gpui::Hsla {
     theme::semantic().overlay_backdrop
 }
 
 /// Keycap / subtle chip background (replaces launcher_keycap)
-pub fn bg_keycap(_dark: bool) -> gpui::Hsla {
+pub fn bg_keycap() -> gpui::Hsla {
     theme::semantic().keycap_bg
 }
 
 /// Row hover background (replaces launcher_row_selected in plugin views)
-pub fn row_hover(_dark: bool) -> gpui::Rgba {
+pub fn row_hover() -> gpui::Rgba {
     theme::semantic().row_hover
 }
 
@@ -87,7 +87,8 @@ pub fn white() -> gpui::Rgba {
     theme::white()
 }
 
-pub fn panel_heading_text(dark: bool) -> gpui::Rgba {
+pub fn panel_heading_text() -> gpui::Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark {
         theme::semantic().text_primary
     } else {
@@ -95,19 +96,23 @@ pub fn panel_heading_text(dark: bool) -> gpui::Rgba {
     }
 }
 
-pub fn terminal_bg(dark: bool) -> gpui::Rgba {
+pub fn terminal_bg() -> gpui::Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark { rgb(0x0b1118) } else { rgb(0x111827) }
 }
 
-pub fn terminal_fg(dark: bool) -> gpui::Rgba {
+pub fn terminal_fg() -> gpui::Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark { rgb(0xd7e2ee) } else { rgb(0xe5e7eb) }
 }
 
-pub fn terminal_muted(dark: bool) -> gpui::Rgba {
+pub fn terminal_muted() -> gpui::Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark { rgb(0x7dd3fc) } else { rgb(0xbfdbfe) }
 }
 
-pub fn terminal_border(dark: bool) -> gpui::Rgba {
+pub fn terminal_border() -> gpui::Rgba {
+    let dark = crate::app::theme_mode::is_dark();
     if dark { rgb(0x1f2937) } else { rgb(0x374151) }
 }
 
@@ -476,7 +481,7 @@ pub fn row_card(selected: bool) -> gpui::Div {
         })
 }
 
-pub fn plugin_surface(_dark: bool) -> gpui::Div {
+pub fn plugin_surface() -> gpui::Div {
     div()
         .size_full()
         .bg(theme::semantic().bg_page)
@@ -567,7 +572,8 @@ pub fn ui_button(
 }
 
 /// Icon-only button (matching suishou UiIconButton)
-pub fn ui_icon_button(icon_text: SharedString, dark: bool, size_px: f32) -> gpui::Div {
+pub fn ui_icon_button(icon_text: SharedString, size_px: f32) -> gpui::Div {
+    let dark = crate::app::theme_mode::is_dark();
     div()
         .size(px(size_px))
         .rounded(theme::radius_md())
@@ -618,7 +624,7 @@ pub fn ui_badge(label: impl Into<SharedString>, color: Option<gpui::Rgba>) -> im
 }
 
 /// Empty state display (matching suishou UiEmptyState)
-pub fn ui_empty_state(message: impl Into<SharedString>, _dark: bool) -> impl IntoElement {
+pub fn ui_empty_state(message: impl Into<SharedString>) -> impl IntoElement {
     let message = message.into();
     div()
         .w_full()

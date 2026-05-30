@@ -718,7 +718,6 @@ impl Render for CapturePanel {
                                         } else {
                                             "暂无抓包记录 — 请先接入代理捕获引擎"
                                         },
-                                        dark,
                                     ))
                                     .into_any_element()
                             } else {

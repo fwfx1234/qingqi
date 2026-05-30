@@ -63,7 +63,8 @@ pub fn button(
 }
 
 /// Unified icon button — returns a styled element for icons.
-pub fn icon_button(icon_svg: &str, dark: bool, size_px: f32) -> gpui::Div {
+pub fn icon_button(icon_svg: &str, size_px: f32) -> gpui::Div {
+    let dark = crate::app::theme_mode::is_dark();
     let color = if dark {
         theme::slate_400()
     } else {

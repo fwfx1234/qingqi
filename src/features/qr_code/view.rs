@@ -701,7 +701,7 @@ impl RenderOnce for QrCodeElement {
         let input_text = input.read(cx).text();
         drop(panel);
 
-        ui::plugin_surface(dark)
+        ui::plugin_surface()
             .relative()
             .child(
                 ui::plugin_scroll_content()

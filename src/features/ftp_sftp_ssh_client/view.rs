@@ -876,7 +876,7 @@ impl RenderOnce for FtpSftpSshElement {
                 .as_ref()
                 .is_some_and(|summary| summary.status == ConnectionStatus::Connected);
 
-        ui::plugin_surface(dark)
+        ui::plugin_surface()
             .font_family(ui::font_ui())
             .relative()
             .on_key_down({
@@ -1128,7 +1128,7 @@ fn sidebar(
         .min_h(px(0.0))
         .border_r_1()
         .border_color(ui::border_light())
-        .bg(ui::bg_keycap(dark))
+        .bg(ui::bg_keycap())
         .flex()
         .flex_col()
         .child(
@@ -1581,7 +1581,7 @@ fn file_workspace(
                 .px(px(12.0))
                 .border_b_1()
                 .border_color(ui::border_light())
-                .bg(ui::bg_keycap(dark))
+                .bg(ui::bg_keycap())
                 .flex()
                 .items_center()
                 .child(
@@ -1687,7 +1687,7 @@ fn remote_entry_row(
         .border_b_1()
         .border_color(ui::border_light())
         .bg(if item.path.is_empty() {
-            theme::rgba_with_alpha(ui::row_hover(dark), 1.0)
+            theme::rgba_with_alpha(ui::row_hover(), 1.0)
         } else if item.selected {
             if dark {
                 theme::rgba_with_alpha(theme::accent_color(theme::ThemeAccent::Cyan), 0.24)
@@ -1927,7 +1927,7 @@ fn terminal_workspace(
                     row.child(
                         div()
                             .rounded(px(999.0))
-                            .bg(ui::bg_keycap(dark))
+                            .bg(ui::bg_keycap())
                             .px(px(8.0))
                             .py(px(4.0))
                             .font_family("SF Mono")
@@ -2039,7 +2039,7 @@ fn terminal_workspace(
                         .rounded(px(7.0))
                         .border_1()
                         .border_color(ui::border_light())
-                        .bg(ui::bg_keycap(dark))
+                        .bg(ui::bg_keycap())
                         .child(
                             terminal_input
                                 .unwrap_or_else(|| panic!("terminal input should be initialized")),
@@ -2144,7 +2144,7 @@ fn empty_protocol_workspace(dark: bool, protocol: Option<RemoteProtocol>) -> imp
         .child(empty_state_card(dark, "协议工作区未激活", message))
 }
 
-fn protocol_log_row(dark: bool, entry: ProtocolLogEntry) -> impl IntoElement {
+fn protocol_log_row(_dark: bool, entry: ProtocolLogEntry) -> impl IntoElement {
     let color = match entry.kind {
         ProtocolLogKind::Command => rgb(0x0ea5e9),
         ProtocolLogKind::Response => rgb(0x10b981),
@@ -2156,7 +2156,7 @@ fn protocol_log_row(dark: bool, entry: ProtocolLogEntry) -> impl IntoElement {
         .rounded(px(10.0))
         .border_1()
         .border_color(ui::border_light())
-        .bg(ui::bg_keycap(dark))
+        .bg(ui::bg_keycap())
         .px(px(10.0))
         .py(px(8.0))
         .font_family("SF Mono")
@@ -2412,7 +2412,7 @@ fn draft_section(
                 .rounded(px(12.0))
                 .border_1()
                 .border_color(ui::border_light())
-                .bg(ui::bg_keycap(dark))
+                .bg(ui::bg_keycap())
                 .p(px(12.0))
                 .flex()
                 .flex_col()
@@ -2523,7 +2523,7 @@ fn transfer_card(
         .rounded(px(12.0))
         .border_1()
         .border_color(ui::border_light())
-        .bg(ui::bg_keycap(dark))
+        .bg(ui::bg_keycap())
         .px(px(12.0))
         .py(px(10.0))
         .flex()
@@ -3104,7 +3104,7 @@ fn new_folder_overlay(
                     .rounded(px(10.0))
                     .border_1()
                     .border_color(ui::border_light())
-                    .bg(ui::bg_keycap(dark))
+                    .bg(ui::bg_keycap())
                     .child(input.unwrap_or_else(|| panic!("new folder input should exist"))),
             )
             .child(
@@ -3388,7 +3388,7 @@ fn search_input_shell(input: Option<Entity<TextInput>>, _dark: bool) -> impl Int
 }
 
 fn protocol_hint_card(
-    dark: bool,
+    _dark: bool,
     protocol: RemoteProtocol,
     passive_mode: bool,
     jump_enabled: bool,
@@ -3420,7 +3420,7 @@ fn protocol_hint_card(
         .rounded(px(12.0))
         .border_1()
         .border_color(ui::border_light())
-        .bg(ui::bg_keycap(dark))
+        .bg(ui::bg_keycap())
         .px(px(12.0))
         .py(px(10.0))
         .text_size(px(10.0))
@@ -3445,7 +3445,7 @@ fn editor_section_title(label: &'static str, _dark: bool) -> impl IntoElement {
         .child(label)
 }
 
-fn profile_field(label: &'static str, input: Entity<TextInput>, dark: bool) -> impl IntoElement {
+fn profile_field(label: &'static str, input: Entity<TextInput>, _dark: bool) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -3461,7 +3461,7 @@ fn profile_field(label: &'static str, input: Entity<TextInput>, dark: bool) -> i
                 .rounded(px(10.0))
                 .border_1()
                 .border_color(ui::border_light())
-                .bg(ui::bg_keycap(dark))
+                .bg(ui::bg_keycap())
                 .child(input),
         )
 }
@@ -3478,7 +3478,7 @@ fn segmented_chip(label: &'static str, active: bool, dark: bool) -> gpui::Div {
                 hsla(0.54, 0.70, 0.78, 0.14)
             }
         } else {
-            ui::bg_keycap(dark)
+            ui::bg_keycap()
         })
         .border_1()
         .border_color(if active {
@@ -3499,12 +3499,12 @@ fn segmented_chip(label: &'static str, active: bool, dark: bool) -> gpui::Div {
         .child(label)
 }
 
-fn status_pill(label: String, color: gpui::Rgba, dark: bool) -> impl IntoElement {
+fn status_pill(label: String, color: gpui::Rgba, _dark: bool) -> impl IntoElement {
     div()
         .h(px(22.0))
         .px(px(8.0))
         .rounded(px(999.0))
-        .bg(ui::bg_keycap(dark))
+        .bg(ui::bg_keycap())
         .border_1()
         .border_color(ui::border_light())
         .flex()
@@ -3540,7 +3540,7 @@ fn small_action(label: &'static str, dark: bool) -> gpui::Div {
         .rounded(px(6.0))
         .border_1()
         .border_color(ui::border_light())
-        .bg(ui::bg_keycap(dark))
+        .bg(ui::bg_keycap())
         .hover(move |style| style.bg(row_hover_color(dark)).cursor_pointer())
         .flex()
         .items_center()
@@ -3556,7 +3556,7 @@ fn small_icon_action(icon: IconName, dark: bool) -> gpui::Div {
         .rounded(px(6.0))
         .border_1()
         .border_color(ui::border_light())
-        .bg(ui::bg_keycap(dark))
+        .bg(ui::bg_keycap())
         .hover(move |style| style.bg(row_hover_color(dark)).cursor_pointer())
         .flex()
         .items_center()
@@ -3572,7 +3572,7 @@ fn small_icon_text_action(icon: IconName, label: &'static str, dark: bool) -> gp
         .rounded(px(6.0))
         .border_1()
         .border_color(ui::border_light())
-        .bg(ui::bg_keycap(dark))
+        .bg(ui::bg_keycap())
         .hover(move |style| style.bg(row_hover_color(dark)).cursor_pointer())
         .flex()
         .items_center()
@@ -3611,7 +3611,7 @@ fn transfer_count_chip(
         .bg(if emphasize {
             theme::rgba_with_alpha(color, if dark { 0.20 } else { 0.12 })
         } else {
-            ui::bg_keycap(dark)
+            ui::bg_keycap()
         })
         .text_size(px(9.0))
         .text_color(if emphasize {
@@ -3625,12 +3625,12 @@ fn transfer_count_chip(
         .child(format!("{label} {count}"))
 }
 
-fn empty_state_card(dark: bool, title: &'static str, body: &str) -> impl IntoElement {
+fn empty_state_card(_dark: bool, title: &'static str, body: &str) -> impl IntoElement {
     div()
         .rounded(px(14.0))
         .border_1()
         .border_color(ui::border_light())
-        .bg(ui::bg_keycap(dark))
+        .bg(ui::bg_keycap())
         .p(px(16.0))
         .flex()
         .flex_col()

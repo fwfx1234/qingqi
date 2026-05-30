@@ -1509,7 +1509,7 @@ fn action_row(
     dark: bool,
 ) -> impl IntoElement {
     let row_bg = if selected {
-        ui::row_hover(dark)
+        ui::row_hover()
     } else {
         theme::semantic().bg_surface
     };
@@ -1528,7 +1528,7 @@ fn action_row(
         .border_b_1()
         .border_color(theme::semantic().border_default)
         .bg(row_bg)
-        .hover(move |style| style.bg(ui::row_hover(dark)).cursor_pointer())
+        .hover(move |style| style.bg(ui::row_hover()).cursor_pointer())
         .on_click({
             let handle = handle.clone();
             move |_, _, cx| {
@@ -2735,7 +2735,7 @@ fn primary_action_button(
 
 fn action_button(
     label: &'static str,
-    dark: bool,
+    _dark: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement {
     div()
@@ -2747,7 +2747,7 @@ fn action_button(
         .border_1()
         .border_color(theme::semantic().border_default)
         .bg(theme::semantic().bg_surface)
-        .hover(move |style| style.bg(ui::row_hover(dark)).cursor_pointer())
+        .hover(move |style| style.bg(ui::row_hover()).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
@@ -2759,7 +2759,7 @@ fn action_button(
 
 fn icon_action_button(
     label: &'static str,
-    dark: bool,
+    _dark: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
     div()
@@ -2769,7 +2769,7 @@ fn icon_action_button(
         .border_1()
         .border_color(theme::semantic().border_default)
         .bg(theme::semantic().bg_surface)
-        .hover(move |style| style.bg(ui::row_hover(dark)).cursor_pointer())
+        .hover(move |style| style.bg(ui::row_hover()).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
@@ -2865,7 +2865,7 @@ fn action_menu_items(
 fn action_menu_item(
     label: &'static str,
     destructive: bool,
-    dark: bool,
+    _dark: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement {
     div()
@@ -2874,7 +2874,7 @@ fn action_menu_item(
         .w_full()
         .px_3()
         .rounded(px(6.0))
-        .hover(move |style| style.bg(ui::row_hover(dark)).cursor_pointer())
+        .hover(move |style| style.bg(ui::row_hover()).cursor_pointer())
         .flex()
         .items_center()
         .text_size(px(12.0))
@@ -3075,7 +3075,7 @@ fn latest_run_status_chip(
 fn segment_button(
     label: &'static str,
     active: bool,
-    dark: bool,
+    _dark: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement {
     div()
@@ -3099,7 +3099,7 @@ fn segment_button(
                 .bg(if active {
                     theme::semantic().primary_bg
                 } else {
-                    ui::row_hover(dark)
+                    ui::row_hover()
                 })
                 .cursor_pointer()
         })
