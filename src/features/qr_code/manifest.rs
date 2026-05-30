@@ -18,7 +18,7 @@ pub fn manifest() -> Manifest {
             .into_iter()
             .map(Into::into)
             .collect(),
-        icon: IconRef::asset("qta/mdi6.qrcode.png"),
+        icon: IconRef::asset("icons/qr.svg"),
         prefixes: vec!["qr".into(), "qrcode".into()],
         mode: PluginWindowMode::Inline,
         window: WindowSpec::auto(),
@@ -27,7 +27,7 @@ pub fn manifest() -> Manifest {
         background: false,
         dynamic_commands: false,
         visual: Some(PluginVisualSpec {
-            icon: IconRef::asset("qta/mdi6.qrcode.png"),
+            icon: IconRef::asset("icons/qr.svg"),
             accent: PluginAccent::Blue,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,

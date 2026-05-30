@@ -3660,7 +3660,7 @@ fn status_bar(dark: bool, accent: gpui::Rgba, message: String) -> impl IntoEleme
         .items_center()
         .child(ui::status_bar(
             message,
-            if dark { accent } else { theme::slate_700() },
+            if dark { accent } else { theme::semantic().text_regular },
         ))
 }
 

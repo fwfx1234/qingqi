@@ -60,7 +60,7 @@ impl SystemSettingsPlugin {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
-            icon: IconRef::asset("qta/mdi6.cog-outline.png"),
+            icon: IconRef::asset("icons/settings.svg"),
             prefixes: vec!["set".into(), "settings".into()],
             mode: PluginWindowMode::Inline,
             window: WindowSpec::ratio(0.72, 0.7),
@@ -69,7 +69,7 @@ impl SystemSettingsPlugin {
             background: false,
             dynamic_commands: false,
             visual: Some(PluginVisualSpec {
-                icon: IconRef::asset("qta/mdi6.cog-outline.png"),
+                icon: IconRef::asset("icons/settings.svg"),
                 accent: PluginAccent::Slate,
                 category: PluginCategory::System,
                 status: PluginStatus::Ready,

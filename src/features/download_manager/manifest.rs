@@ -18,7 +18,7 @@ pub fn manifest() -> Manifest {
             .into_iter()
             .map(Into::into)
             .collect(),
-        icon: IconRef::asset("qta/mdi6.download.png"),
+        icon: IconRef::asset("icons/download.svg"),
         prefixes: vec!["down".into(), "download".into()],
         mode: PluginWindowMode::Window,
         window: WindowSpec::ratio(0.86, 0.82),
@@ -27,7 +27,7 @@ pub fn manifest() -> Manifest {
         background: false,
         dynamic_commands: false,
         visual: Some(PluginVisualSpec {
-            icon: IconRef::asset("qta/mdi6.download.png"),
+            icon: IconRef::asset("icons/download.svg"),
             accent: PluginAccent::Green,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,

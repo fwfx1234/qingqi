@@ -41,7 +41,7 @@ impl GpuiDemoPlugin {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
-            icon: IconRef::asset("qta/mdi6.school-outline.png"),
+            icon: IconRef::asset("icons/school.svg"),
             prefixes: vec!["gpui".into(), "demo".into()],
             mode: PluginWindowMode::Inline,
             window: WindowSpec::ratio(0.8, 0.8),
@@ -50,7 +50,7 @@ impl GpuiDemoPlugin {
             background: false,
             dynamic_commands: false,
             visual: Some(PluginVisualSpec {
-                icon: IconRef::asset("qta/mdi6.school-outline.png"),
+                icon: IconRef::asset("icons/school.svg"),
                 accent: PluginAccent::Purple,
                 category: PluginCategory::Tool,
                 status: PluginStatus::Preview,
@@ -181,7 +181,7 @@ fn header(_dark: bool, accent: PluginAccent) -> impl IntoElement {
         .items_center()
         .gap_3()
         .child(ui::icon_tile(
-            "qta/mdi6.school-outline.png",
+            "icons/school.svg",
             accent,
             52.0,
         ))

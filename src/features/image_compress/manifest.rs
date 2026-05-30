@@ -20,7 +20,7 @@ pub fn manifest() -> Manifest {
         .into_iter()
         .map(Into::into)
         .collect(),
-        icon: IconRef::asset("qta/mdi6.image-size-select-large.png"),
+        icon: IconRef::asset("icons/image.svg"),
         prefixes: vec!["img".into(), "image".into(), "compress".into()],
         mode: PluginWindowMode::Inline,
         window: WindowSpec::auto(),
@@ -29,7 +29,7 @@ pub fn manifest() -> Manifest {
         background: false,
         dynamic_commands: false,
         visual: Some(PluginVisualSpec {
-            icon: IconRef::asset("qta/mdi6.image-size-select-large.png"),
+            icon: IconRef::asset("icons/image.svg"),
             accent: PluginAccent::Amber,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,

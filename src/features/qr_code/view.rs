@@ -1466,7 +1466,7 @@ fn icon_button(active: bool, _dark: bool, count: usize) -> gpui::Div {
         .gap_1()
         .px_2()
         .child(ui::icon_element(
-            "qta/mdi6.history.png",
+            "icons/history.svg",
             if active {
                 ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue)
             } else {
