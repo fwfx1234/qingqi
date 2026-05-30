@@ -277,7 +277,7 @@ impl RenderOnce for JsonParserElement {
                 .flex()
                 .flex_col()
                 .gap_3()
-                .child(module_header(dark))
+                .child(module_header())
                 .child(
                     div()
                         .flex()
@@ -599,7 +599,7 @@ fn toolbar_button(
         })
 }
 
-fn module_header(_dark: bool) -> impl IntoElement {
+fn module_header() -> impl IntoElement {
     div().flex().items_center().justify_between().child(
         div()
             .flex()

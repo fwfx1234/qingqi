@@ -188,7 +188,7 @@ fn settings_panel(
             settings_input_group(
                 div()
                     .w(px(180.0))
-                    .child(input_shell(max_text_chars_input, dark)),
+                    .child(input_shell(max_text_chars_input)),
                 div()
                     .flex()
                     .gap_2()
@@ -240,7 +240,7 @@ fn settings_panel(
             settings_input_group(
                 div()
                     .w(px(320.0))
-                    .child(input_shell(ignore_patterns_input, dark)),
+                    .child(input_shell(ignore_patterns_input)),
                 div()
                     .flex()
                     .gap_2()
@@ -271,7 +271,7 @@ fn settings_panel(
             settings_input_group(
                 div()
                     .w(px(180.0))
-                    .child(input_shell(hotkey_input, dark)),
+                    .child(input_shell(hotkey_input)),
                 div().child(theme_button("保存快捷键", dark, {
                     let handle = handle.clone();
                     move |_, cx| {
@@ -338,7 +338,7 @@ fn settings_input_group(field: impl IntoElement, actions: impl IntoElement) -> i
         .child(actions)
 }
 
-fn input_shell(input: Entity<TextInput>, _dark: bool) -> impl IntoElement {
+fn input_shell(input: Entity<TextInput>) -> impl IntoElement {
     div()
         .rounded(px(6.0))
         .border_1()
