@@ -5,7 +5,7 @@ use gpui::{AnyElement, App, IntoElement, Window};
 use crate::{
     app::events::{AppEventBus, AppEventKind},
     core::{
-        command::{CommandItem, ContextKind, ContextMatcher},
+        command::{Command, ContextKind, ContextMatcher},
         database::{DatabaseService, DatabaseSpec},
         plugin::{Manifest, Plugin, PluginCx, PluginId, PluginView, WindowView},
         storage::AppPaths,
@@ -88,10 +88,10 @@ impl Plugin for DownloadManagerPlugin {
         )]
     }
 
-    fn commands(&self, _query: &str) -> Vec<CommandItem> {
+    fn commands(&self, _query: &str) -> Vec<Command> {
         let manifest = self.manifest();
         vec![
-            CommandItem::plugin_open(
+            Command::plugin_open(
                 manifest.id.as_ref(),
                 manifest.name.as_ref(),
                 manifest.description.as_ref(),

@@ -48,8 +48,7 @@ impl fmt::Display for CommandKind {
     }
 }
 
-/// Type alias for the ongoing `Command` → `CommandItem` migration.
-pub type CommandItem = Command;
+/// Type alias for the ongoing `Command` → `Command` migration.
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Command {

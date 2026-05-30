@@ -1,6 +1,6 @@
 use gpui::{IntoElement, ParentElement, RenderOnce, Styled, Window, div, px};
 
-use crate::app::{theme, ui};
+use crate::app::{theme, theme_mode, ui};
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -86,43 +86,34 @@ impl RenderOnce for AboutPage {
                     )
                     // ── Tech stack card ────────────────────────────────────
                     .child(section_card(
-                        dark,
                         "技术栈",
                         div()
                             .flex()
                             .flex_col()
                             .gap_2()
-                            .child(tech_row(dark, "UI 框架", "GPUI 0.2.2"))
-                            .child(tech_row(dark, "渲染后端", "macos-blade (Metal)"))
-                            .child(tech_row(dark, "数据库", "SQLite (rusqlite)"))
-                            .child(tech_row(dark, "序列化", "serde / serde_json"))
-                            .child(tech_row(dark, "日志", "tracing / tracing-subscriber")),
+                            .child(tech_row("UI 框架", "GPUI 0.2.2"))
+                            .child(tech_row("渲染后端", "macos-blade (Metal)"))
+                            .child(tech_row("数据库", "SQLite (rusqlite)"))
+                            .child(tech_row("序列化", "serde / serde_json"))
+                            .child(tech_row("日志", "tracing / tracing-subscriber")),
                     ))
                     // ── Architecture card ──────────────────────────────────
                     .child(section_card(
-                        dark,
                         "架构概览",
                         div()
                             .flex()
                             .flex_col()
                             .gap_2()
                             .child(desc_row(
-                                dark,
                                 "插件系统",
                                 "运行时/会话两层架构，插件静态注册，按需创建窗口",
                             ))
                             .child(desc_row(
-                                dark,
                                 "命令系统",
                                 "统一搜索评分引擎，覆盖插件命令与应用索引",
                             ))
+                            .child(desc_row("平台抽象", "剪贴板、文件系统、进程管理抽象层"))
                             .child(desc_row(
-                                dark,
-                                "平台抽象",
-                                "剪贴板、文件系统、进程管理抽象层",
-                            ))
-                            .child(desc_row(
-                                dark,
                                 "主题系统",
                                 "设计令牌驱动的亮色/暗色主题，35+ 语义色",
                             )),
@@ -136,7 +127,9 @@ impl RenderOnce for AboutPage {
     }
 }
 
-fn section_card(dark: bool, title: &'static str, children: impl IntoElement) -> impl IntoElement {
+fn section_card(title: &'static str, children: impl IntoElement) -> impl IntoElement {
+    let _dark = theme_mode::is_dark();
+    let dark = theme_mode::is_dark();
     div()
         .w(px(420.0))
         .rounded(px(10.0))
@@ -157,7 +150,8 @@ fn section_card(dark: bool, title: &'static str, children: impl IntoElement) -> 
         .child(children)
 }
 
-fn tech_row(dark: bool, label: &'static str, value: &'static str) -> impl IntoElement {
+fn tech_row(label: &'static str, value: &'static str) -> impl IntoElement {
+    let dark = theme_mode::is_dark();
     div()
         .flex()
         .items_center()
@@ -177,7 +171,8 @@ fn tech_row(dark: bool, label: &'static str, value: &'static str) -> impl IntoEl
         )
 }
 
-fn desc_row(dark: bool, label: &'static str, desc: &'static str) -> impl IntoElement {
+fn desc_row(label: &'static str, desc: &'static str) -> impl IntoElement {
+    let dark = theme_mode::is_dark();
     div()
         .flex()
         .flex_col()

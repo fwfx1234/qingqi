@@ -5,7 +5,7 @@ use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 use crate::{
     app::events::{AppEventBus, AppEventKind},
     core::{
-        command::{Action, Activation, CommandInvocation, CommandItem, CommandOutcome},
+        command::{Action, Activation, Command, CommandInvocation, CommandOutcome},
         database::{DatabaseService, DatabaseSpec},
         plugin::{Plugin, PluginCx, PluginId, PluginView, WindowView},
         storage::AppPaths,
@@ -48,9 +48,9 @@ impl Plugin for QuickLaunchPlugin {
         })))
     }
 
-    fn commands(&self, _query: &str) -> Vec<CommandItem> {
+    fn commands(&self, _query: &str) -> Vec<Command> {
         let manifest = self.manifest();
-        let mut commands = vec![CommandItem::plugin_open(
+        let mut commands = vec![Command::plugin_open(
             manifest.id.as_ref(),
             manifest.name.as_ref(),
             manifest.description.as_ref(),
@@ -63,7 +63,7 @@ impl Plugin for QuickLaunchPlugin {
             .list_actions("", Some(true))
             .unwrap_or_default();
         commands.extend(actions.into_iter().map(|action| {
-            CommandItem::plugin_action(
+            Command::plugin_action(
                 manifest.id.as_ref(),
                 format!("action-{}", action.id),
                 action.name.clone(),

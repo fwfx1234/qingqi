@@ -10,7 +10,7 @@ use gpui::{
 use crate::{
     app::ui,
     core::{
-        command::CommandItem,
+        command::Command,
         plugin::{Manifest, Plugin, PluginCx, PluginId, PluginView, WindowView},
         storage::AppPaths,
     },
@@ -108,9 +108,9 @@ impl Plugin for AntiPeepingPlugin {
         manifest::manifest()
     }
 
-    fn commands(&self, _query: &str) -> Vec<CommandItem> {
+    fn commands(&self, _query: &str) -> Vec<Command> {
         let m = self.manifest();
-        vec![CommandItem::plugin_open(
+        vec![Command::plugin_open(
             m.id.as_ref(),
             "打开防窥屏",
             "全屏遮盖所有屏幕内容",

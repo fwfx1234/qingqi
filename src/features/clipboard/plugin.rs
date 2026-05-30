@@ -9,7 +9,7 @@ use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 use crate::{
     app::events::AppEventBus,
     core::{
-        command::{Activation, CommandItem},
+        command::{Activation, Command},
         plugin::{Plugin, PluginCx, PluginId, PluginView, WindowView},
         shortcut::{ShortcutDescriptor, ShortcutScope, ShortcutTarget},
     },
@@ -39,9 +39,9 @@ impl Plugin for ClipboardPlugin {
         manifest::manifest()
     }
 
-    fn commands(&self, _query: &str) -> Vec<CommandItem> {
+    fn commands(&self, _query: &str) -> Vec<Command> {
         let manifest = self.manifest();
-        vec![CommandItem::plugin_open(
+        vec![Command::plugin_open(
             manifest.id.as_ref(),
             manifest.name.as_ref(),
             manifest.description.as_ref(),
