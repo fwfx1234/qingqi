@@ -170,7 +170,7 @@ impl RenderOnce for SettingsElement {
                         dark,
                         "已安装插件管理",
                         "管理已安装插件的启用/卸载",
-                        disabled_badge(dark, "尚未实现"),
+                        disabled_badge("尚未实现"),
                     )),
             ))
             // ── Shortcuts ──
@@ -266,7 +266,7 @@ impl RenderOnce for SettingsElement {
                         dark,
                         "主题配置",
                         "当前主题持久化文件",
-                        path_badge(dark, &config_path),
+                        path_badge(&config_path),
                     ))
                     .child(components::settings_row(
                         dark,
@@ -284,7 +284,7 @@ impl RenderOnce for SettingsElement {
                         dark,
                         "日志诊断",
                         "后台服务状态、最近错误、警告统计",
-                        disabled_badge(dark, "尚未实现"),
+                        disabled_badge("尚未实现"),
                     )),
             ))
     }
@@ -482,7 +482,7 @@ fn app_index_row(
         })
         .into_any_element()
     } else {
-        disabled_badge(dark, "不可用").into_any_element()
+        disabled_badge("不可用").into_any_element()
     };
 
     div()
@@ -534,7 +534,7 @@ fn app_index_action_button(
         })
         .into_any_element()
     } else {
-        disabled_badge(dark, "服务不可用").into_any_element()
+        disabled_badge("服务不可用").into_any_element()
     }
 }
 
@@ -672,7 +672,7 @@ fn shortcut_row(
     let enabled = descriptor.enabled;
     let editable = descriptor.editable;
     let status = shortcut_status(&view);
-    let status_style = shortcut_status_style(&view, dark);
+    let status_style = shortcut_status_style(&view);
     let shortcut_id = descriptor.id.clone();
     let save_enabled = editable;
 
@@ -705,7 +705,7 @@ fn shortcut_row(
                                 .text_color(text_primary)
                                 .child(descriptor.title.clone()),
                         )
-                        .child(scope_badge(dark, scope_label, descriptor.scope))
+                        .child(scope_badge(scope_label, descriptor.scope))
                         .child(status_badge(status, status_style)),
                 )
                 .child(
@@ -724,7 +724,7 @@ fn shortcut_row(
                 .flex()
                 .items_center()
                 .gap(px(8.0))
-                .child(shortcut_input_shell(input.clone(), dark, editable))
+                .child(shortcut_input_shell(input.clone(), editable))
                 .child(shortcut_action_button(dark, "保存", true, save_enabled, {
                     let panel = Rc::clone(&panel);
                     let shortcut_id = shortcut_id.clone();
@@ -767,7 +767,7 @@ fn shortcut_row(
         )
 }
 
-fn shortcut_input_shell(input: Entity<TextInput>, _dark: bool, editable: bool) -> impl IntoElement {
+fn shortcut_input_shell(input: Entity<TextInput>, editable: bool) -> impl IntoElement {
     div()
         .w(px(160.0))
         .rounded(theme::radius_sm())
@@ -852,7 +852,7 @@ fn shortcut_status(view: &ShortcutView) -> String {
     }
 }
 
-fn shortcut_status_style(view: &ShortcutView, _dark: bool) -> (gpui::Rgba, gpui::Rgba) {
+fn shortcut_status_style(view: &ShortcutView) -> (gpui::Rgba, gpui::Rgba) {
     if view.error.is_some() || view.overridden_by.is_some() {
         return (
             theme::semantic().warning,
@@ -877,7 +877,7 @@ fn shortcut_status_style(view: &ShortcutView, _dark: bool) -> (gpui::Rgba, gpui:
     )
 }
 
-fn scope_badge(_dark: bool, text: &'static str, scope: ShortcutScope) -> impl IntoElement {
+fn scope_badge(text: &'static str, scope: ShortcutScope) -> impl IntoElement {
     let color = match scope {
         ShortcutScope::Global => ui::accent_color(crate::core::plugin_spec::PluginAccent::Slate),
         ShortcutScope::App => theme::semantic().text_secondary,
@@ -1185,7 +1185,7 @@ enum DiagAction {
 
 fn diag_path_row(
     panel: Rc<RefCell<SettingsView>>,
-    dark: bool,
+    _dark: bool,
     label: &'static str,
     _description: &'static str,
     path: &str,
@@ -1221,7 +1221,7 @@ fn diag_path_row(
                         .text_color(theme::semantic().text_primary)
                         .child(label),
                 )
-                .child(path_badge(dark, path)),
+                .child(path_badge(path)),
         )
         .child(
             div()
@@ -1250,7 +1250,7 @@ fn diag_path_row(
         )
 }
 
-fn disabled_badge(_dark: bool, text: &'static str) -> impl IntoElement {
+fn disabled_badge(text: &'static str) -> impl IntoElement {
     let status_color = theme::semantic().text_secondary;
     let status_bg = theme::rgba_with_alpha(theme::semantic().text_secondary, 0.08);
 
@@ -1268,7 +1268,7 @@ fn disabled_badge(_dark: bool, text: &'static str) -> impl IntoElement {
         .child(text)
 }
 
-fn path_badge(_dark: bool, path: &str) -> impl IntoElement {
+fn path_badge(path: &str) -> impl IntoElement {
     div()
         .h(px(28.0))
         .px_2()
