@@ -8,7 +8,8 @@ use gpui::{
 use crate::{
     app::{
         text_input::{TextInput, TextInputStyle},
-        theme, ui,
+        theme,
+        ui::{self, components},
     },
     core::{
         job::{JobId, JobProvider},
@@ -835,7 +836,7 @@ fn header_bar(dark: bool, active_count: usize) -> impl IntoElement {
                 .child(
                     div()
                         .text_size(px(11.0))
-                        .text_color(theme::launcher_muted_text(dark))
+                        .text_color(ui::text_secondary())
                         .child("HTTP/HTTPS · 多任务 · 断点续传"),
                 ),
         )
@@ -854,7 +855,7 @@ fn header_bar(dark: bool, active_count: usize) -> impl IntoElement {
                     .border_color(if active_count > 0 {
                         theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.25)
                     } else {
-                        theme::launcher_soft_line(dark)
+                        ui::border_light()
                     })
                     .flex()
                     .items_center()
@@ -863,7 +864,7 @@ fn header_bar(dark: bool, active_count: usize) -> impl IntoElement {
                     .text_color(if active_count > 0 {
                         ui::accent_color(PluginAccent::Green)
                     } else {
-                        theme::launcher_muted_text(dark)
+                        ui::text_secondary()
                     })
                     .child(format!("{} 进行中", active_count)),
             ),
@@ -914,7 +915,7 @@ fn url_input_bar(
                     0.88,
                 ))
                 .border_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .flex()
                 .items_center()
                 .child(url_input.into_any_element()),
@@ -1045,7 +1046,7 @@ fn filter_bar(
                 .child(
                     div()
                         .text_size(px(9.0))
-                        .text_color(theme::launcher_faint_text(dark))
+                        .text_color(ui::text_tertiary())
                         .child("分类:"),
                 )
                 .children(category_filters.iter().map(|&tab| {
@@ -1083,7 +1084,7 @@ fn filter_chip(label: &str, count: usize, active: bool, dark: bool) -> gpui::Div
         .border_color(if active {
             theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.25)
         } else {
-            theme::launcher_soft_line(dark)
+            ui::border_light()
         })
         .hover(|style| style.cursor_pointer())
         .flex()
@@ -1094,7 +1095,7 @@ fn filter_chip(label: &str, count: usize, active: bool, dark: bool) -> gpui::Div
         .text_color(if active {
             ui::accent_color(PluginAccent::Green)
         } else {
-            theme::launcher_muted_text(dark)
+            ui::text_secondary()
         })
         .child(label.to_string())
         .child(
@@ -1103,7 +1104,7 @@ fn filter_chip(label: &str, count: usize, active: bool, dark: bool) -> gpui::Div
                 .text_color(if active {
                     ui::accent_color(PluginAccent::Green)
                 } else {
-                    theme::launcher_faint_text(dark)
+                    ui::text_tertiary()
                 })
                 .child(format!("{count}")),
         )
@@ -1124,7 +1125,7 @@ fn task_list(
                 0.74,
             ))
             .border_1()
-            .border_color(theme::launcher_soft_line(dark))
+            .border_color(ui::border_light())
             .child(ui::ui_empty_state("还没有下载任务", dark))
             .into_any_element();
     }
@@ -1137,7 +1138,7 @@ fn task_list(
             0.78,
         ))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .overflow_hidden()
         .flex()
         .flex_col()
@@ -1150,18 +1151,18 @@ fn task_list(
                     0.65,
                 ))
                 .border_b_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .flex()
                 .items_center()
                 .text_size(px(10.0))
-                .text_color(theme::launcher_faint_text(dark))
-                .child(table_header_cell("", 28.0))
-                .child(table_header_flex("文件名", 2.2))
-                .child(table_header_cell("大小", 90.0))
-                .child(table_header_cell("速度", 80.0))
-                .child(table_header_flex("进度", 1.6))
-                .child(table_header_cell("状态", 72.0))
-                .child(table_header_cell("", 30.0)),
+                .text_color(ui::text_tertiary())
+                .child(components::table_header_cell("", 28.0))
+                .child(components::table_header_flex("文件名", 2.2))
+                .child(components::table_header_cell("大小", 90.0))
+                .child(components::table_header_cell("速度", 80.0))
+                .child(components::table_header_flex("进度", 1.6))
+                .child(components::table_header_cell("状态", 72.0))
+                .child(components::table_header_cell("", 30.0)),
         )
         .child(
             div()
@@ -1200,7 +1201,7 @@ fn task_row(
         .h(px(56.0))
         .px_3()
         .border_b_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .flex()
         .items_center()
         .gap_2()
@@ -1228,7 +1229,7 @@ fn task_row(
                     div()
                         .text_size(px(9.0))
                         .font_family("SF Mono")
-                        .text_color(theme::launcher_faint_text(dark))
+                        .text_color(ui::text_tertiary())
                         .child(truncate_url(&task.url, 56)),
                 ),
         )
@@ -1237,7 +1238,7 @@ fn task_row(
                 .w(px(90.0))
                 .text_size(px(10.0))
                 .font_family("SF Mono")
-                .text_color(theme::launcher_faint_text(dark))
+                .text_color(ui::text_tertiary())
                 .child(format_progress(&task, true)),
         )
         .child(
@@ -1248,7 +1249,7 @@ fn task_row(
                 .text_color(if is_active {
                     ui::accent_color(PluginAccent::Green)
                 } else {
-                    theme::launcher_faint_text(dark)
+                    ui::text_tertiary()
                 })
                 .child(if is_active {
                     format_speed(task.speed_bps)
@@ -1274,7 +1275,7 @@ fn task_row(
                         .text_size(px(9.0))
                         .font_family("SF Mono")
                         .text_align(gpui::TextAlign::Right)
-                        .text_color(theme::launcher_faint_text(dark))
+                        .text_color(ui::text_tertiary())
                         .child(format!("{:.0}%", task.progress_percent())),
                 ),
         )
@@ -1441,8 +1442,8 @@ fn status_tag(status: TaskStatus, dark: bool) -> impl IntoElement {
             theme::token("color-danger", dark),
         ),
         TaskStatus::Cancelled => (
-            theme::rgba_with_alpha(theme::launcher_muted_text(dark), 0.1),
-            theme::launcher_muted_text(dark),
+            theme::rgba_with_alpha(ui::text_secondary(), 0.1),
+            ui::text_secondary(),
         ),
     };
 
@@ -1489,7 +1490,7 @@ fn bottom_bar(
             0.7,
         ))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .p_3()
         .flex()
         .items_center()
@@ -1504,7 +1505,7 @@ fn bottom_bar(
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(theme::launcher_faint_text(dark))
+                .text_color(ui::text_tertiary())
                 .overflow_hidden()
                 .child(format!(
                     "目录: {}  并发 {}{}",
@@ -1538,7 +1539,7 @@ fn bottom_bar(
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(theme::launcher_faint_text(dark))
+                .text_color(ui::text_tertiary())
                 .child(summary),
         )
 }
@@ -1574,7 +1575,7 @@ fn settings_overlay(
                 .justify_between()
                 .p_4()
                 .border_b_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .child(
                     div()
                         .text_size(px(14.0))
@@ -1657,7 +1658,7 @@ fn settings_field(dark: bool, label: &str, input: Option<Entity<TextInput>>) -> 
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(theme::launcher_faint_text(dark))
+                .text_color(ui::text_tertiary())
                 .child(label.to_string()),
         )
         .child(
@@ -1669,7 +1670,7 @@ fn settings_field(dark: bool, label: &str, input: Option<Entity<TextInput>>) -> 
                     0.65,
                 ))
                 .border_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .flex()
                 .items_center()
                 .children(input.map(|e| e.into_any_element())),
@@ -1703,7 +1704,7 @@ fn secondary_btn(label: &str, dark: bool) -> gpui::Div {
             0.88,
         ))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .hover(|style| style.cursor_pointer())
         .flex()
         .items_center()
@@ -1723,7 +1724,7 @@ fn action_button(label: &str, dark: bool) -> gpui::Div {
             0.88,
         ))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .hover(|style| style.cursor_pointer())
         .flex()
         .items_center()
@@ -1742,15 +1743,15 @@ fn action_icon(icon: &str, dark: bool) -> gpui::Div {
         .items_center()
         .justify_center()
         .text_size(px(12.0))
-        .text_color(theme::launcher_muted_text(dark))
+        .text_color(ui::text_secondary())
         .child(icon.to_string())
 }
 
-fn table_header_cell(label: &str, width: f32) -> gpui::Div {
+fn components::table_header_cell(label: &str, width: f32) -> gpui::Div {
     div().w(px(width)).child(label.to_string())
 }
 
-fn table_header_flex(label: &str, grow: f32) -> gpui::Div {
+fn components::table_header_flex(label: &str, grow: f32) -> gpui::Div {
     let cell = div().child(label.to_string());
     if grow >= 2.0 {
         cell.flex_1()

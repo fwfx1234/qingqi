@@ -1008,7 +1008,7 @@ fn top_bar(
     let status_color = match status {
         ConnectionStatus::Connected => rgb(0x16a34a),
         ConnectionStatus::Failed => rgb(0xef4444),
-        ConnectionStatus::Idle => theme::launcher_faint_text(dark),
+        ConnectionStatus::Idle => ui::text_tertiary(),
     };
     let title = selected
         .map(|profile| profile.name.clone())
@@ -1023,7 +1023,7 @@ fn top_bar(
         .h(px(44.0))
         .px(px(12.0))
         .border_b_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .flex()
         .items_center()
         .gap(px(8.0))
@@ -1044,14 +1044,14 @@ fn top_bar(
                 .child(
                     div()
                         .text_size(px(11.0))
-                        .text_color(theme::launcher_muted_text(dark))
+                        .text_color(ui::text_secondary())
                         .line_clamp(1)
                         .child(detail),
                 )
                 .child(
                     div()
                         .text_size(px(11.0))
-                        .text_color(theme::launcher_muted_text(dark))
+                        .text_color(ui::text_secondary())
                         .child("·"),
                 )
                 .child(
@@ -1127,8 +1127,8 @@ fn sidebar(
         .w(px(236.0))
         .min_h(px(0.0))
         .border_r_1()
-        .border_color(theme::launcher_soft_line(dark))
-        .bg(theme::launcher_keycap(dark))
+        .border_color(ui::border_light())
+        .bg(ui::bg_keycap(dark))
         .flex()
         .flex_col()
         .child(
@@ -1158,7 +1158,7 @@ fn sidebar(
                                 .child(
                                     div()
                                         .text_size(px(11.0))
-                                        .text_color(theme::launcher_muted_text(dark))
+                                        .text_color(ui::text_secondary())
                                         .child(format!("{open_count} 个")),
                                 ),
                         )
@@ -1205,7 +1205,7 @@ fn sidebar(
                             .items_center()
                             .justify_center()
                             .text_size(px(12.0))
-                            .text_color(theme::launcher_muted_text(dark))
+                            .text_color(ui::text_secondary())
                             .child("暂无连接"),
                     )
                 })
@@ -1220,7 +1220,7 @@ fn sidebar(
                 .h(px(30.0))
                 .px(px(12.0))
                 .text_size(px(11.0))
-                .text_color(theme::launcher_faint_text(dark))
+                .text_color(ui::text_tertiary())
                 .flex()
                 .items_center()
                 .child(format!("{open_count} 个连接 · 右键查看操作")),
@@ -1281,7 +1281,7 @@ fn connection_card(
         .child(div().size(px(7.0)).rounded(px(999.0)).bg(if is_connected {
             rgb(0x22c55e)
         } else {
-            theme::launcher_faint_text(dark)
+            ui::text_tertiary()
         }))
         .child(
             div()
@@ -1330,7 +1330,7 @@ fn connection_card(
                         .text_color(if selected {
                             hsla(0.0, 0.0, 1.0, 0.78).into()
                         } else {
-                            theme::launcher_muted_text(dark)
+                            ui::text_secondary()
                         })
                         .line_clamp(1)
                         .child(profile.endpoint()),
@@ -1381,7 +1381,7 @@ fn connection_card(
                         .text_color(if selected {
                             rgb(0xffffff)
                         } else {
-                            theme::launcher_faint_text(dark)
+                            ui::text_tertiary()
                         })
                         .hover(move |style| style.cursor_pointer())
                         .child("⋯")
@@ -1439,7 +1439,7 @@ fn file_workspace(
         .min_w(px(330.0))
         .min_h(px(0.0))
         .border_r_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .bg(theme::token("color-bg-surface", dark))
         .flex()
         .flex_col()
@@ -1448,7 +1448,7 @@ fn file_workspace(
                 .h(px(44.0))
                 .px(px(12.0))
                 .border_b_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .flex()
                 .items_center()
                 .justify_between()
@@ -1477,7 +1477,7 @@ fn file_workspace(
                 .child(
                     div()
                         .text_size(px(12.0))
-                        .text_color(theme::launcher_muted_text(dark))
+                        .text_color(ui::text_secondary())
                         .child(format!("{item_count} 项")),
                 ),
         )
@@ -1486,7 +1486,7 @@ fn file_workspace(
                 .h(px(38.0))
                 .px(px(12.0))
                 .border_b_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .flex()
                 .items_center()
                 .gap(px(8.0))
@@ -1580,8 +1580,8 @@ fn file_workspace(
                 .h(px(30.0))
                 .px(px(12.0))
                 .border_b_1()
-                .border_color(theme::launcher_soft_line(dark))
-                .bg(theme::launcher_keycap(dark))
+                .border_color(ui::border_light())
+                .bg(ui::bg_keycap(dark))
                 .flex()
                 .items_center()
                 .child(
@@ -1589,14 +1589,14 @@ fn file_workspace(
                         .flex_1()
                         .min_w(px(0.0))
                         .text_size(px(11.0))
-                        .text_color(theme::launcher_muted_text(dark))
+                        .text_color(ui::text_secondary())
                         .child("名称"),
                 )
                 .child(
                     div()
                         .w(px(72.0))
                         .text_size(px(11.0))
-                        .text_color(theme::launcher_muted_text(dark))
+                        .text_color(ui::text_secondary())
                         .child("大小"),
                 ),
         )
@@ -1638,7 +1638,7 @@ fn file_workspace(
                             .items_center()
                             .justify_center()
                             .text_size(px(12.0))
-                            .text_color(theme::launcher_muted_text(dark))
+                            .text_color(ui::text_secondary())
                             .child(upload_hint.clone()),
                     )
                 })
@@ -1653,12 +1653,12 @@ fn file_workspace(
                 .h(px(24.0))
                 .px(px(12.0))
                 .border_t_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .text_size(px(11.0))
                 .text_color(if can_drop {
                     accent
                 } else {
-                    theme::launcher_muted_text(dark)
+                    ui::text_secondary()
                 })
                 .flex()
                 .items_center()
@@ -1685,9 +1685,9 @@ fn remote_entry_row(
         )))
         .h(px(34.0))
         .border_b_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .bg(if item.path.is_empty() {
-            theme::rgba_with_alpha(theme::launcher_row_selected(dark), 1.0)
+            theme::rgba_with_alpha(ui::row_hover(dark), 1.0)
         } else if item.selected {
             if dark {
                 theme::rgba_with_alpha(theme::accent_color(theme::ThemeAccent::Cyan), 0.24)
@@ -1724,7 +1724,7 @@ fn remote_entry_row(
                 .text_color(if item.is_dir {
                     theme::accent_color(theme::ThemeAccent::Cyan)
                 } else {
-                    theme::launcher_muted_text(dark)
+                    ui::text_secondary()
                 })
                 .child(
                     Icon::new(if item.is_dir {
@@ -1736,7 +1736,7 @@ fn remote_entry_row(
                     .text_color(if item.is_dir {
                         theme::accent_color(theme::ThemeAccent::Cyan)
                     } else {
-                        theme::launcher_muted_text(dark)
+                        ui::text_secondary()
                     }),
                 ),
         )
@@ -1752,7 +1752,7 @@ fn remote_entry_row(
             div()
                 .w(px(72.0))
                 .text_size(px(11.0))
-                .text_color(theme::launcher_muted_text(dark))
+                .text_color(ui::text_secondary())
                 .items_center()
                 .child(if item.is_dir {
                     String::new()
@@ -1842,7 +1842,7 @@ fn protocol_panel(
                 .h(px(44.0))
                 .px(px(12.0))
                 .border_b_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .flex()
                 .items_center()
                 .justify_between()
@@ -1858,7 +1858,7 @@ fn protocol_panel(
                     summary
                         .map(|summary| summary.status.label().to_string())
                         .unwrap_or_else(|| String::from("未连接")),
-                    theme::launcher_muted_text(dark),
+                    ui::text_secondary(),
                     dark,
                 )),
         )
@@ -1901,7 +1901,7 @@ fn terminal_workspace(
                 .px(px(16.0))
                 .h(px(34.0))
                 .border_b_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .flex()
                 .items_center()
                 .gap(px(8.0))
@@ -1911,7 +1911,7 @@ fn terminal_workspace(
                         .text_color(if connected {
                             rgb(0x0ea5e9)
                         } else {
-                            theme::launcher_muted_text(dark)
+                            ui::text_secondary()
                         }),
                 )
                 .child(status_pill(
@@ -1919,7 +1919,7 @@ fn terminal_workspace(
                     if connected {
                         rgb(0x0ea5e9)
                     } else {
-                        theme::launcher_faint_text(dark)
+                        ui::text_tertiary()
                     },
                     dark,
                 ))
@@ -1927,12 +1927,12 @@ fn terminal_workspace(
                     row.child(
                         div()
                             .rounded(px(999.0))
-                            .bg(theme::launcher_keycap(dark))
+                            .bg(ui::bg_keycap(dark))
                             .px(px(8.0))
                             .py(px(4.0))
                             .font_family("SF Mono")
                             .text_size(px(10.0))
-                            .text_color(theme::launcher_muted_text(dark))
+                            .text_color(ui::text_secondary())
                             .line_clamp(1)
                             .child(terminal_snapshot.cwd_hint.clone()),
                     )
@@ -2021,7 +2021,7 @@ fn terminal_workspace(
                 .px(px(8.0))
                 .py(px(6.0))
                 .border_t_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .flex()
                 .items_center()
                 .gap(px(6.0))
@@ -2030,7 +2030,7 @@ fn terminal_workspace(
                     div()
                         .font_family("SF Mono")
                         .text_size(px(12.0))
-                        .text_color(theme::launcher_muted_text(dark))
+                        .text_color(ui::text_secondary())
                         .child("$"),
                 )
                 .child(
@@ -2038,8 +2038,8 @@ fn terminal_workspace(
                         .flex_1()
                         .rounded(px(7.0))
                         .border_1()
-                        .border_color(theme::launcher_soft_line(dark))
-                        .bg(theme::launcher_keycap(dark))
+                        .border_color(ui::border_light())
+                        .bg(ui::bg_keycap(dark))
                         .child(
                             terminal_input
                                 .unwrap_or_else(|| panic!("terminal input should be initialized")),
@@ -2078,7 +2078,7 @@ fn ftp_log_workspace(
                 .px(px(16.0))
                 .h(px(34.0))
                 .border_b_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .flex()
                 .items_center()
                 .gap(px(8.0))
@@ -2086,7 +2086,7 @@ fn ftp_log_workspace(
                 .child(
                     div()
                         .text_size(px(10.0))
-                        .text_color(theme::launcher_muted_text(dark))
+                        .text_color(ui::text_secondary())
                         .child("命令蓝 / 响应绿 / 信息灰 / 错误红"),
                 )
                 .child(div().flex_1())
@@ -2148,15 +2148,15 @@ fn protocol_log_row(dark: bool, entry: ProtocolLogEntry) -> impl IntoElement {
     let color = match entry.kind {
         ProtocolLogKind::Command => rgb(0x0ea5e9),
         ProtocolLogKind::Response => rgb(0x10b981),
-        ProtocolLogKind::Info => theme::launcher_muted_text(dark),
+        ProtocolLogKind::Info => ui::text_secondary(),
         ProtocolLogKind::Error => rgb(0xef4444),
     };
 
     div()
         .rounded(px(10.0))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
-        .bg(theme::launcher_keycap(dark))
+        .border_color(ui::border_light())
+        .bg(ui::bg_keycap(dark))
         .px(px(10.0))
         .py(px(8.0))
         .font_family("SF Mono")
@@ -2201,7 +2201,7 @@ fn transfer_panel(
 
     div()
         .border_t_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .h(if collapsed { px(32.0) } else { px(168.0) })
         .bg(theme::token("color-bg-surface", dark))
         .flex()
@@ -2211,7 +2211,7 @@ fn transfer_panel(
                 .h(px(32.0))
                 .px(px(12.0))
                 .border_b_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .flex()
                 .items_center()
                 .justify_between()
@@ -2264,7 +2264,7 @@ fn transfer_panel(
                             row.child(
                                 div()
                                     .text_size(px(11.0))
-                                    .text_color(theme::launcher_muted_text(dark))
+                                    .text_color(ui::text_secondary())
                                     .child("暂无任务"),
                             )
                         }),
@@ -2414,8 +2414,8 @@ fn draft_section(
             div()
                 .rounded(px(12.0))
                 .border_1()
-                .border_color(theme::launcher_soft_line(dark))
-                .bg(theme::launcher_keycap(dark))
+                .border_color(ui::border_light())
+                .bg(ui::bg_keycap(dark))
                 .p(px(12.0))
                 .flex()
                 .flex_col()
@@ -2439,7 +2439,7 @@ fn draft_section(
                                 .child(
                                     div()
                                         .text_size(px(10.0))
-                                        .text_color(theme::launcher_muted_text(dark))
+                                        .text_color(ui::text_secondary())
                                         .line_clamp(1)
                                         .child(draft.remote_path.clone()),
                                 ),
@@ -2453,7 +2453,7 @@ fn draft_section(
                 .child(
                     div()
                         .text_size(px(10.0))
-                        .text_color(theme::launcher_muted_text(dark))
+                        .text_color(ui::text_secondary())
                         .line_clamp(1)
                         .child(format!("本地缓存: {}", draft.local_cache_path)),
                 )
@@ -2514,19 +2514,19 @@ fn transfer_card(
     let progress = item.progress_percent() as f32 / 100.0;
     let fill_width = (280.0 * progress.clamp(0.0, 1.0)).max(if progress > 0.0 { 2.0 } else { 0.0 });
     let status_color = match item.status {
-        TransferStatus::Queued => theme::launcher_muted_text(dark),
+        TransferStatus::Queued => ui::text_secondary(),
         TransferStatus::Running => rgb(0x0ea5e9),
         TransferStatus::Completed => rgb(0x10b981),
         TransferStatus::Failed => rgb(0xef4444),
-        TransferStatus::Cancelled => theme::launcher_faint_text(dark),
+        TransferStatus::Cancelled => ui::text_tertiary(),
     };
     let transfer_id = item.id.clone();
 
     div()
         .rounded(px(12.0))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
-        .bg(theme::launcher_keycap(dark))
+        .border_color(ui::border_light())
+        .bg(ui::bg_keycap(dark))
         .px(px(12.0))
         .py(px(10.0))
         .flex()
@@ -2574,7 +2574,7 @@ fn transfer_card(
                                     col.child(
                                         div()
                                             .text_size(px(10.0))
-                                            .text_color(theme::launcher_muted_text(dark))
+                                            .text_color(ui::text_secondary())
                                             .line_clamp(1)
                                             .child(session_name.unwrap_or_default()),
                                     )
@@ -2627,7 +2627,7 @@ fn transfer_card(
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(theme::launcher_muted_text(dark))
+                .text_color(ui::text_secondary())
                 .line_clamp(1)
                 .child(format!("{} · {}", item.local_path, item.remote_path)),
         )
@@ -2660,7 +2660,7 @@ fn profile_editor_overlay(
             .max_h(px(700.0))
             .rounded(px(12.0))
             .border_1()
-            .border_color(theme::launcher_soft_line(dark))
+            .border_color(ui::border_light())
             .bg(theme::token("color-bg-surface", dark))
             .shadow_lg()
             .flex()
@@ -2684,7 +2684,7 @@ fn profile_editor_overlay(
                     .child(
                         div()
                             .text_size(px(12.0))
-                            .text_color(theme::launcher_muted_text(dark))
+                            .text_color(ui::text_secondary())
                             .child("为 SFTP / FTP / FTPS 服务器配置访问凭据。"),
                     ),
             )
@@ -2814,7 +2814,7 @@ fn profile_editor_overlay(
                         div()
                             .rounded(px(12.0))
                             .border_1()
-                            .border_color(theme::launcher_soft_line(dark))
+                            .border_color(ui::border_light())
                             .bg(theme::token("color-bg-surface", dark))
                             .px(px(12.0))
                             .py(px(10.0))
@@ -2830,7 +2830,7 @@ fn profile_editor_overlay(
                                     .child(
                                         div()
                                             .text_size(px(11.0))
-                                            .text_color(theme::launcher_faint_text(dark))
+                                            .text_color(ui::text_tertiary())
                                             .child("默认目录 · 编码 · 超时 · 跳板机"),
                                     ),
                             )
@@ -2977,14 +2977,14 @@ fn profile_editor_overlay(
                     .px(px(18.0))
                     .py(px(10.0))
                     .border_t_1()
-                    .border_color(theme::launcher_soft_line(dark))
+                    .border_color(ui::border_light())
                     .flex()
                     .items_center()
                     .justify_between()
                     .child(
                         div()
                             .text_size(px(11.0))
-                            .text_color(theme::launcher_faint_text(dark))
+                            .text_color(ui::text_tertiary())
                             .child("敏感信息以明文方式保存到本地数据库。"),
                     )
                     .child(
@@ -3024,7 +3024,7 @@ fn profile_form_section(title: &'static str, dark: bool, body: gpui::Div) -> gpu
     div()
         .rounded(px(8.0))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .bg(theme::token("color-bg-surface", dark))
         .px(px(14.0))
         .py(px(10.0))
@@ -3044,7 +3044,7 @@ fn profile_form_section(title: &'static str, dark: bool, body: gpui::Div) -> gpu
 fn profile_label_value_row(label: &'static str, content: gpui::Div, dark: bool) -> gpui::Div {
     div()
         .border_b_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .h(px(42.0))
         .px(px(2.0))
         .flex()
@@ -3063,7 +3063,7 @@ fn profile_label_value_row(label: &'static str, content: gpui::Div, dark: bool) 
                 .h(px(34.0))
                 .rounded(px(8.0))
                 .border_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .bg(theme::token("color-bg-elevated", dark))
                 .px(px(10.0))
                 .flex()
@@ -3089,7 +3089,7 @@ fn new_folder_overlay(
             .w(px(420.0))
             .rounded(px(16.0))
             .border_1()
-            .border_color(theme::launcher_soft_line(dark))
+            .border_color(ui::border_light())
             .bg(theme::token("color-bg-elevated", dark))
             .shadow_lg()
             .p(px(18.0))
@@ -3106,8 +3106,8 @@ fn new_folder_overlay(
                 div()
                     .rounded(px(10.0))
                     .border_1()
-                    .border_color(theme::launcher_soft_line(dark))
-                    .bg(theme::launcher_keycap(dark))
+                    .border_color(ui::border_light())
+                    .bg(ui::bg_keycap(dark))
                     .child(input.unwrap_or_else(|| panic!("new folder input should exist"))),
             )
             .child(
@@ -3180,7 +3180,7 @@ fn profile_menu_overlay(
                 .w(px(196.0))
                 .rounded(px(12.0))
                 .border_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .bg(theme::token("color-bg-elevated", dark))
                 .shadow_lg()
                 .p(px(6.0))
@@ -3282,7 +3282,7 @@ fn file_menu_overlay(
                 .w(px(196.0))
                 .rounded(px(12.0))
                 .border_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .bg(theme::token("color-bg-elevated", dark))
                 .shadow_lg()
                 .p(px(6.0))
@@ -3385,7 +3385,7 @@ fn search_input_shell(input: Option<Entity<TextInput>>, dark: bool) -> impl Into
     div()
         .rounded(px(8.0))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .bg(theme::token("color-bg-surface", dark))
         .child(input.unwrap_or_else(|| panic!("search input should be initialized")))
 }
@@ -3422,13 +3422,13 @@ fn protocol_hint_card(
     div()
         .rounded(px(12.0))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
-        .bg(theme::launcher_keycap(dark))
+        .border_color(ui::border_light())
+        .bg(ui::bg_keycap(dark))
         .px(px(12.0))
         .py(px(10.0))
         .text_size(px(10.0))
         .line_height(px(16.0))
-        .text_color(theme::launcher_muted_text(dark))
+        .text_color(ui::text_secondary())
         .child(hint)
 }
 
@@ -3436,7 +3436,7 @@ fn editor_notice(notice: String, dark: bool) -> impl IntoElement {
     div()
         .text_size(px(11.0))
         .line_height(px(18.0))
-        .text_color(theme::launcher_muted_text(dark))
+        .text_color(ui::text_secondary())
         .child(notice)
 }
 
@@ -3444,7 +3444,7 @@ fn editor_section_title(label: &'static str, dark: bool) -> impl IntoElement {
     div()
         .text_size(px(10.0))
         .font_weight(FontWeight::SEMIBOLD)
-        .text_color(theme::launcher_faint_text(dark))
+        .text_color(ui::text_tertiary())
         .child(label)
 }
 
@@ -3456,15 +3456,15 @@ fn profile_field(label: &'static str, input: Entity<TextInput>, dark: bool) -> i
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(theme::launcher_muted_text(dark))
+                .text_color(ui::text_secondary())
                 .child(label),
         )
         .child(
             div()
                 .rounded(px(10.0))
                 .border_1()
-                .border_color(theme::launcher_soft_line(dark))
-                .bg(theme::launcher_keycap(dark))
+                .border_color(ui::border_light())
+                .bg(ui::bg_keycap(dark))
                 .child(input),
         )
 }
@@ -3481,13 +3481,13 @@ fn segmented_chip(label: &'static str, active: bool, dark: bool) -> gpui::Div {
                 hsla(0.54, 0.70, 0.78, 0.14)
             }
         } else {
-            theme::launcher_keycap(dark)
+            ui::bg_keycap(dark)
         })
         .border_1()
         .border_color(if active {
             theme::rgba_with_alpha(theme::accent_color(theme::ThemeAccent::Cyan), 0.34)
         } else {
-            theme::launcher_soft_line(dark)
+            ui::border_light()
         })
         .hover(move |style| style.cursor_pointer())
         .flex()
@@ -3497,7 +3497,7 @@ fn segmented_chip(label: &'static str, active: bool, dark: bool) -> gpui::Div {
         .text_color(if active {
             theme::accent_color(theme::ThemeAccent::Cyan)
         } else {
-            theme::launcher_muted_text(dark)
+            ui::text_secondary()
         })
         .child(label)
 }
@@ -3507,9 +3507,9 @@ fn status_pill(label: String, color: gpui::Rgba, dark: bool) -> impl IntoElement
         .h(px(22.0))
         .px(px(8.0))
         .rounded(px(999.0))
-        .bg(theme::launcher_keycap(dark))
+        .bg(ui::bg_keycap(dark))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .flex()
         .items_center()
         .gap(px(6.0))
@@ -3542,8 +3542,8 @@ fn small_action(label: &'static str, dark: bool) -> gpui::Div {
         .px(px(7.0))
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
-        .bg(theme::launcher_keycap(dark))
+        .border_color(ui::border_light())
+        .bg(ui::bg_keycap(dark))
         .hover(move |style| style.bg(row_hover_color(dark)).cursor_pointer())
         .flex()
         .items_center()
@@ -3558,8 +3558,8 @@ fn small_icon_action(icon: IconName, dark: bool) -> gpui::Div {
         .size(px(24.0))
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
-        .bg(theme::launcher_keycap(dark))
+        .border_color(ui::border_light())
+        .bg(ui::bg_keycap(dark))
         .hover(move |style| style.bg(row_hover_color(dark)).cursor_pointer())
         .flex()
         .items_center()
@@ -3574,8 +3574,8 @@ fn small_icon_text_action(icon: IconName, label: &'static str, dark: bool) -> gp
         .px(px(7.0))
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
-        .bg(theme::launcher_keycap(dark))
+        .border_color(ui::border_light())
+        .bg(ui::bg_keycap(dark))
         .hover(move |style| style.bg(row_hover_color(dark)).cursor_pointer())
         .flex()
         .items_center()
@@ -3614,13 +3614,13 @@ fn transfer_count_chip(
         .bg(if emphasize {
             theme::rgba_with_alpha(color, if dark { 0.20 } else { 0.12 })
         } else {
-            theme::launcher_keycap(dark)
+            ui::bg_keycap(dark)
         })
         .text_size(px(9.0))
         .text_color(if emphasize {
             color
         } else {
-            theme::launcher_muted_text(dark)
+            ui::text_secondary()
         })
         .flex()
         .items_center()
@@ -3632,8 +3632,8 @@ fn empty_state_card(dark: bool, title: &'static str, body: &str) -> impl IntoEle
     div()
         .rounded(px(14.0))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
-        .bg(theme::launcher_keycap(dark))
+        .border_color(ui::border_light())
+        .bg(ui::bg_keycap(dark))
         .p(px(16.0))
         .flex()
         .flex_col()
@@ -3648,7 +3648,7 @@ fn empty_state_card(dark: bool, title: &'static str, body: &str) -> impl IntoEle
             div()
                 .text_size(px(10.0))
                 .line_height(px(16.0))
-                .text_color(theme::launcher_muted_text(dark))
+                .text_color(ui::text_secondary())
                 .child(body.to_string()),
         )
 }
@@ -3658,7 +3658,7 @@ fn status_bar(dark: bool, accent: gpui::Rgba, message: String) -> impl IntoEleme
         .h(px(28.0))
         .px(px(14.0))
         .border_t_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .flex()
         .items_center()
         .child(ui::status_bar(

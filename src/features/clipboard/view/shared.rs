@@ -11,7 +11,7 @@ pub(super) fn header_action_button(
         .rounded(px(10.0))
         .border_1()
         .border_color(theme::token("color-border-default", dark))
-        .bg(theme::rgba_with_alpha(theme::launcher_accent(dark), 0.08))
+        .bg(theme::rgba_with_alpha(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue), 0.08))
         .flex()
         .items_center()
         .justify_center()
@@ -46,7 +46,7 @@ pub(super) fn theme_button(
         .bg(theme::token("color-bg-surface", dark))
         .hover(|style| {
             style
-                .bg(theme::launcher_row_selected(dark))
+                .bg(ui::row_hover(dark))
                 .cursor_pointer()
         })
         .flex()

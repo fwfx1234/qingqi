@@ -1482,12 +1482,12 @@ fn empty_state(has_query: bool, dark: bool) -> impl IntoElement {
             div()
                 .size(px(44.0))
                 .rounded(px(12.0))
-                .bg(theme::launcher_icon_surface(dark))
+                .bg(theme::semantic(dark).bg_subtle)
                 .flex()
                 .items_center()
                 .justify_center()
                 .text_size(px(20.0))
-                .text_color(theme::launcher_accent(dark))
+                .text_color(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue))
                 .child("Q"),
         )
         .child(
@@ -1514,7 +1514,7 @@ fn action_row(
     dark: bool,
 ) -> impl IntoElement {
     let row_bg = if selected {
-        theme::launcher_row_selected(dark)
+        ui::row_hover(dark)
     } else {
         theme::token("color-bg-surface", dark)
     };
@@ -1535,7 +1535,7 @@ fn action_row(
         .bg(row_bg)
         .hover(move |style| {
             style
-                .bg(theme::launcher_row_selected(dark))
+                .bg(ui::row_hover(dark))
                 .cursor_pointer()
         })
         .on_click({
@@ -1551,12 +1551,12 @@ fn action_row(
             div()
                 .size(px(36.0))
                 .rounded(px(8.0))
-                .bg(theme::launcher_icon_surface(dark))
+                .bg(theme::semantic(dark).bg_subtle)
                 .flex()
                 .items_center()
                 .justify_center()
                 .text_size(px(16.0))
-                .text_color(theme::launcher_accent(dark))
+                .text_color(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue))
                 .child(icon_for_action(&action)),
         )
         .child(
@@ -2673,32 +2673,9 @@ fn overlay_shell(
     on_close: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
     content: impl IntoElement,
 ) -> impl IntoElement {
-    div()
-        .size_full()
-        .absolute()
-        .top_0()
-        .left_0()
-        .child(
-            div()
-                .size_full()
-                .absolute()
-                .top_0()
-                .left_0()
-                .bg(hsla(0.0, 0.0, 0.0, if dark { 0.46 } else { 0.24 }))
-                .id(backdrop_id)
-                .on_click(move |event, _window, cx| on_close(event, cx)),
-        )
-        .child(
-            div()
-                .size_full()
-                .absolute()
-                .top_0()
-                .left_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(content),
-        )
+    components::overlay_host(dark, backdrop_id, move |event, _window, cx| {
+        on_close(event, cx)
+    }, content)
 }
 
 fn menu_overlay_shell(
@@ -2788,7 +2765,7 @@ fn action_button(
         .bg(theme::token("color-bg-surface", dark))
         .hover(move |style| {
             style
-                .bg(theme::launcher_row_selected(dark))
+                .bg(ui::row_hover(dark))
                 .cursor_pointer()
         })
         .flex()
@@ -2814,7 +2791,7 @@ fn icon_action_button(
         .bg(theme::token("color-bg-surface", dark))
         .hover(move |style| {
             style
-                .bg(theme::launcher_row_selected(dark))
+                .bg(ui::row_hover(dark))
                 .cursor_pointer()
         })
         .flex()
@@ -2923,7 +2900,7 @@ fn action_menu_item(
         .rounded(px(6.0))
         .hover(move |style| {
             style
-                .bg(theme::launcher_row_selected(dark))
+                .bg(ui::row_hover(dark))
                 .cursor_pointer()
         })
         .flex()
@@ -3062,7 +3039,7 @@ fn kind_chip(label: String, dark: bool) -> impl IntoElement {
         .items_center()
         .justify_center()
         .text_size(px(10.0))
-        .text_color(theme::launcher_accent(dark))
+        .text_color(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue))
         .child(label)
 }
 
@@ -3148,7 +3125,7 @@ fn segment_button(
                 .bg(if active {
                     theme::token("color-primary-bg", dark)
                 } else {
-                    theme::launcher_row_selected(dark)
+                    ui::row_hover(dark)
                 })
                 .cursor_pointer()
         })
@@ -3157,7 +3134,7 @@ fn segment_button(
         .justify_center()
         .text_size(px(12.0))
         .text_color(if active {
-            theme::launcher_accent(dark)
+            ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue)
         } else {
             theme::token("color-text-primary", dark)
         })

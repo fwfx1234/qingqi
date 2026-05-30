@@ -18,7 +18,8 @@ use gpui::{
 };
 
 use crate::{
-    app::{theme, ui},
+    app::{theme,
+        ui::{self, components}},
     core::plugin_spec::PluginAccent,
     platform,
 };
@@ -799,7 +800,7 @@ impl RenderOnce for ImageCompressElement {
                                     .child(
                                         div()
                                             .text_size(px(11.0))
-                                            .text_color(theme::launcher_muted_text(dark))
+                                            .text_color(ui::text_secondary())
                                             .child("PNG / JPEG / WebP · 批量处理"),
                                     ),
                             )
@@ -961,7 +962,7 @@ fn mode_chip(label: &str, active: bool, dark: bool) -> gpui::Div {
         .border_color(if active {
             theme::rgba_with_alpha(ui::accent_color(PluginAccent::Amber), 0.25)
         } else {
-            theme::launcher_soft_line(dark)
+            ui::border_light()
         })
         .hover(move |style| style.cursor_pointer())
         .flex()
@@ -971,7 +972,7 @@ fn mode_chip(label: &str, active: bool, dark: bool) -> gpui::Div {
         .text_color(if active {
             ui::accent_color(PluginAccent::Amber)
         } else {
-            theme::launcher_muted_text(dark)
+            ui::text_secondary()
         })
         .child(label.to_string())
 }
@@ -985,7 +986,7 @@ fn quality_button(label: &str, dark: bool) -> gpui::Div {
             0.88,
         ))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .hover(move |style| style.cursor_pointer())
         .flex()
         .items_center()
@@ -1041,7 +1042,7 @@ fn drop_zone(dark: bool, pending_count: usize) -> gpui::Div {
                 .child(
                     div()
                         .text_size(px(10.0))
-                        .text_color(theme::launcher_faint_text(dark))
+                        .text_color(ui::text_tertiary())
                         .child("支持 PNG, JPG, WebP · 批量处理"),
                 ),
         )
@@ -1067,7 +1068,7 @@ fn image_table(
                 0.74,
             ))
             .border_1()
-            .border_color(theme::launcher_soft_line(dark))
+            .border_color(ui::border_light())
             .child(ui::ui_empty_state("还没有图片，先导入一张试试", dark))
             .into_any_element()
     } else {
@@ -1079,7 +1080,7 @@ fn image_table(
                 0.78,
             ))
             .border_1()
-            .border_color(theme::launcher_soft_line(dark))
+            .border_color(ui::border_light())
             .overflow_hidden()
             .flex()
             .flex_col()
@@ -1092,17 +1093,17 @@ fn image_table(
                         0.65,
                     ))
                     .border_b_1()
-                    .border_color(theme::launcher_soft_line(dark))
+                    .border_color(ui::border_light())
                     .flex()
                     .items_center()
                     .text_size(px(10.0))
-                    .text_color(theme::launcher_faint_text(dark))
-                    .child(table_header_cell("预览", 76.0))
-                    .child(table_header_flex("文件名", 2.4))
-                    .child(table_header_flex("原始大小", 1.0))
-                    .child(table_header_flex("压缩后", 1.0))
-                    .child(table_header_flex("状态", 1.0))
-                    .child(table_header_cell("", 30.0)),
+                    .text_color(ui::text_tertiary())
+                    .child(components::table_header_cell("预览", 76.0))
+                    .child(components::table_header_flex("文件名", 2.4))
+                    .child(components::table_header_flex("原始大小", 1.0))
+                    .child(components::table_header_flex("压缩后", 1.0))
+                    .child(components::table_header_flex("状态", 1.0))
+                    .child(components::table_header_cell("", 30.0)),
             )
             .child(
                 div()
@@ -1140,7 +1141,7 @@ fn image_row(
         .h(px(58.0))
         .px_3()
         .border_b_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .flex()
         .items_center()
         .gap_2()
@@ -1178,7 +1179,7 @@ fn image_row(
                                     Some(
                                         div()
                                             .text_size(px(9.0))
-                                            .text_color(theme::launcher_faint_text(dark))
+                                            .text_color(ui::text_tertiary())
                                             .child("📋"),
                                     )
                                 } else {
@@ -1189,7 +1190,7 @@ fn image_row(
                             div()
                                 .text_size(px(10.0))
                                 .font_family("SF Mono")
-                                .text_color(theme::launcher_faint_text(dark))
+                                .text_color(ui::text_tertiary())
                                 .child(format!(
                                     "{} x {}{}",
                                     item.source.preview.width,
@@ -1207,7 +1208,7 @@ fn image_row(
                         .w(px(96.0))
                         .text_size(px(10.0))
                         .font_family("SF Mono")
-                        .text_color(theme::launcher_faint_text(dark))
+                        .text_color(ui::text_tertiary())
                         .child(format_size(item.source.original_size)),
                 )
                 .child(
@@ -1215,7 +1216,7 @@ fn image_row(
                         .w(px(96.0))
                         .text_size(px(10.0))
                         .font_family("SF Mono")
-                        .text_color(theme::launcher_faint_text(dark))
+                        .text_color(ui::text_tertiary())
                         .child(
                             item.output_size
                                 .map(format_size)
@@ -1370,7 +1371,7 @@ fn image_row(
                                     .id(("image-compress-remove", index))
                                     .w(px(20.0))
                                     .text_size(px(10.0))
-                                    .text_color(theme::launcher_faint_text(dark))
+                                    .text_color(ui::text_tertiary())
                                     .hover(move |style| style.cursor_pointer())
                                     .child("✕")
                                     .on_click({
@@ -1397,7 +1398,7 @@ fn thumbnail(path: &Path, dark: bool) -> impl IntoElement {
             0.8,
         ))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .overflow_hidden()
         .child(
             img(path.to_path_buf())
@@ -1446,11 +1447,11 @@ fn status_tag(status: QueueStatus, dark: bool, reduction_ratio: Option<f32>) -> 
         .child(label)
 }
 
-fn table_header_cell(label: &str, width: f32) -> impl IntoElement {
+fn components::table_header_cell(label: &str, width: f32) -> impl IntoElement {
     div().w(px(width)).child(label.to_string())
 }
 
-fn table_header_flex(label: &str, grow: f32) -> impl IntoElement {
+fn components::table_header_flex(label: &str, grow: f32) -> impl IntoElement {
     let cell = div().child(label.to_string());
     if grow >= 2.0 {
         cell.flex_1().into_any_element()
@@ -1498,7 +1499,7 @@ fn footer_bar(
             0.7,
         ))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .p_3()
         .flex()
         .flex_col()
@@ -1597,7 +1598,7 @@ fn footer_bar(
                 .child(
                     div()
                         .text_size(px(11.0))
-                        .text_color(theme::launcher_faint_text(dark))
+                        .text_color(ui::text_tertiary())
                         .child(summary),
                 ),
         )
@@ -1618,7 +1619,7 @@ fn footer_bar(
                         .w(px(320.0))
                         .text_size(px(10.0))
                         .font_family("SF Mono")
-                        .text_color(theme::launcher_faint_text(dark))
+                        .text_color(ui::text_tertiary())
                         .child(output_dir),
                 ),
         )
@@ -1649,7 +1650,7 @@ fn secondary_button(label: &str, dark: bool) -> gpui::Div {
             0.88,
         ))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .hover(move |style| style.cursor_pointer())
         .flex()
         .items_center()
@@ -1669,7 +1670,7 @@ fn ghost_button(label: &str, dark: bool) -> gpui::Div {
         .items_center()
         .justify_center()
         .text_size(px(11.0))
-        .text_color(theme::launcher_muted_text(dark))
+        .text_color(ui::text_secondary())
         .child(label.to_string())
 }
 
@@ -1683,7 +1684,7 @@ fn action_button(label: &str, dark: bool) -> gpui::Div {
             0.88,
         ))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .hover(move |style| style.cursor_pointer())
         .flex()
         .items_center()

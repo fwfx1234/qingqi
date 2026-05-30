@@ -102,20 +102,20 @@ impl RenderOnce for SettingsElement {
                 ),
             )
             // ── Theme & Appearance ──
-            .child(settings_card(
+            .child(components::settings_card(
                 dark,
                 "主题与外观",
                 Some("控制台视觉样式"),
                 div()
                     .flex()
                     .flex_col()
-                    .child(settings_row(
+                    .child(components::settings_row(
                         dark,
                         "主题模式",
                         "切换浅色 / 深色 / 跟随系统外观",
                         mode_segment(Rc::clone(&self.panel), current_mode, dark),
                     ))
-                    .child(settings_row(
+                    .child(components::settings_row(
                         dark,
                         "系统检测",
                         if system_dark {
@@ -136,14 +136,14 @@ impl RenderOnce for SettingsElement {
                     )),
             ))
             // ── Plugin Retention ──
-            .child(settings_card(
+            .child(components::settings_card(
                 dark,
                 "插件管理",
                 Some("窗口保留与导入管理"),
                 div()
                     .flex()
                     .flex_col()
-                    .child(settings_row(
+                    .child(components::settings_row(
                         dark,
                         "插件窗口保留",
                         &retention_status,
@@ -154,13 +154,13 @@ impl RenderOnce for SettingsElement {
                             dark,
                         ),
                     ))
-                    .child(settings_row(
+                    .child(components::settings_row(
                         dark,
                         "导入插件",
                         "目录/ZIP 导入尚未实现；可打开目标目录查看",
                         plugin_dir_button(Rc::clone(&self.panel), dark, &imported_plugin_root),
                     ))
-                    .child(settings_row(
+                    .child(components::settings_row(
                         dark,
                         "已安装插件管理",
                         "管理已安装插件的启用/卸载",
@@ -168,7 +168,7 @@ impl RenderOnce for SettingsElement {
                     )),
             ))
             // ── Shortcuts ──
-            .child(settings_card(
+            .child(components::settings_card(
                 dark,
                 "快捷键",
                 Some("全局与应用内快捷键"),
@@ -180,7 +180,7 @@ impl RenderOnce for SettingsElement {
                 ),
             ))
             // ── App Index ──
-            .child(settings_card(
+            .child(components::settings_card(
                 dark,
                 "应用索引",
                 Some("软件快速启动的应用缓存"),
@@ -192,7 +192,7 @@ impl RenderOnce for SettingsElement {
                 )),
             ))
             // ── macOS Permissions ──
-            .child(settings_card(
+            .child(components::settings_card(
                 dark,
                 "macOS 权限",
                 Some("系统级访问授权状态"),
@@ -225,7 +225,7 @@ impl RenderOnce for SettingsElement {
                     )),
             ))
             // ── Diagnostics ──
-            .child(settings_card(
+            .child(components::settings_card(
                 dark,
                 "开发诊断",
                 Some("数据、缓存与日志路径"),
@@ -256,25 +256,25 @@ impl RenderOnce for SettingsElement {
                         &log_dir,
                         DiagAction::LogDir,
                     ))
-                    .child(settings_row(
+                    .child(components::settings_row(
                         dark,
                         "主题配置",
                         "当前主题持久化文件",
                         path_badge(dark, &config_path),
                     ))
-                    .child(settings_row(
+                    .child(components::settings_row(
                         dark,
                         "应用索引维护",
                         "手动重建软件快速启动的应用索引",
                         app_index_action_button(Rc::clone(&self.panel), dark, has_app_snapshot),
                     ))
-                    .child(settings_row(
+                    .child(components::settings_row(
                         dark,
                         "清理图标缓存",
                         &icon_cache_dir,
                         icon_cache_clear_button(Rc::clone(&self.panel), dark, icon_cache_message),
                     ))
-                    .child(settings_row(
+                    .child(components::settings_row(
                         dark,
                         "日志诊断",
                         "后台服务状态、最近错误、警告统计",
@@ -897,7 +897,7 @@ fn shortcut_status_style(view: &ShortcutView, dark: bool) -> (gpui::Rgba, gpui::
 
 fn scope_badge(dark: bool, text: &'static str, scope: ShortcutScope) -> impl IntoElement {
     let color = match scope {
-        ShortcutScope::Global => theme::launcher_accent(dark),
+        ShortcutScope::Global => ui::accent_color(crate::core::plugin_spec::PluginAccent::Slate),
         ShortcutScope::App => theme::token("color-text-secondary", dark),
     };
     div()

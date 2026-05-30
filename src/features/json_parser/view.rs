@@ -340,7 +340,7 @@ impl RenderOnce for JsonParserElement {
                             div()
                                 .w(px(74.0))
                                 .text_size(px(11.0))
-                                .text_color(theme::launcher_muted_text(dark))
+                                .text_color(ui::text_secondary())
                                 .child("JSONPath"),
                         )
                         .child(
@@ -353,7 +353,7 @@ impl RenderOnce for JsonParserElement {
                                     0.86,
                                 ))
                                 .border_1()
-                                .border_color(theme::launcher_soft_line(dark))
+                                .border_color(ui::border_light())
                                 .child(query.unwrap().into_any_element()),
                         ),
                 )
@@ -426,7 +426,7 @@ fn editor_pane(
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(theme::launcher_muted_text(dark))
+                .text_color(ui::text_secondary())
                 .child(title),
         )
         .child(
@@ -435,7 +435,7 @@ fn editor_pane(
                 .rounded(px(12.0))
                 .bg(theme::rgba_with_alpha(background, 0.86))
                 .border_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .child(content),
         )
 }
@@ -458,7 +458,7 @@ fn output_pane(
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(theme::launcher_muted_text(dark))
+                .text_color(ui::text_secondary())
                 .child(output_title(last_mode)),
         )
         .child(
@@ -470,7 +470,7 @@ fn output_pane(
                     0.76,
                 ))
                 .border_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .child(output),
         )
 }
@@ -496,7 +496,7 @@ fn status_bar(
             0.7,
         ))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .px_3()
         .flex()
         .items_center()
@@ -522,7 +522,7 @@ fn status_bar(
                 div()
                     .text_size(px(11.0))
                     .font_family("SF Mono")
-                    .text_color(theme::launcher_faint_text(dark))
+                    .text_color(ui::text_tertiary())
                     .child(stats_text),
             )
         })
@@ -552,7 +552,7 @@ fn mode_button(
     let border = if active {
         theme::rgba_with_alpha(theme::accent_color(theme::ThemeAccent::Green), 0.24)
     } else {
-        theme::launcher_soft_line(dark)
+        ui::border_light()
     };
     let text_color = if active {
         theme::accent_color(theme::ThemeAccent::Green)
@@ -597,7 +597,7 @@ fn toolbar_button(
             0.84,
         ))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .hover(move |style| style.cursor_pointer())
         .flex()
         .items_center()
@@ -627,7 +627,7 @@ fn module_header(dark: bool) -> impl IntoElement {
             .child(
                 div()
                     .text_size(px(11.0))
-                    .text_color(theme::launcher_muted_text(dark))
+                    .text_color(ui::text_secondary())
                     .child("JSON Parser"),
             ),
     )

@@ -1028,7 +1028,7 @@ fn collection_tree(
                 .h(px(52.0))
                 .px(px(16.0))
                 .border_b_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .flex()
                 .items_center()
                 .justify_between()
@@ -1110,7 +1110,7 @@ fn group_section(
                 .child(
                     div()
                         .text_size(px(10.0))
-                        .text_color(theme::launcher_faint_text(dark))
+                        .text_color(ui::text_tertiary())
                         .child("▾"),
                 )
                 .child(
@@ -1118,7 +1118,7 @@ fn group_section(
                         .flex_1()
                         .text_size(px(13.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(theme::launcher_muted_text(dark))
+                        .text_color(ui::text_secondary())
                         .truncate()
                         .child(group.name.clone()),
                 )
@@ -1127,7 +1127,7 @@ fn group_section(
                     div()
                         .px(px(4.0))
                         .text_size(px(11.0))
-                        .text_color(theme::launcher_faint_text(dark))
+                        .text_color(ui::text_tertiary())
                         .child("⋯"),
                 )
                 .on_mouse_down(MouseButton::Right, {
@@ -1324,7 +1324,7 @@ fn open_tabs_bar(
         .h(px(48.0))
         .px(px(12.0))
         .border_b_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .flex()
         .items_center()
         .gap(px(8.0))
@@ -1370,7 +1370,7 @@ fn open_tabs_bar(
                         .text_color(if active {
                             api_accent(dark)
                         } else {
-                            theme::launcher_faint_text(dark)
+                            ui::text_tertiary()
                         })
                         .hover(move |style| {
                             style
@@ -1425,7 +1425,7 @@ fn open_tabs_bar(
                     if dark { 0.48 } else { 0.74 },
                 ))
                 .text_size(px(11.0))
-                .text_color(theme::launcher_muted_text(dark))
+                .text_color(ui::text_secondary())
                 .hover(move |style| {
                     style
                         .bg(theme::rgba_with_alpha(api_accent(dark), 0.06))
@@ -1444,7 +1444,7 @@ fn open_tabs_bar(
                 .child(
                     div()
                         .text_size(px(9.0))
-                        .text_color(theme::launcher_faint_text(dark))
+                        .text_color(ui::text_tertiary())
                         .child("▾"),
                 )
                 .on_click({
@@ -1470,7 +1470,7 @@ fn action_bar(
         .px(px(12.0))
         .py(px(9.0))
         .border_b_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .bg(theme::rgba_with_alpha(
             theme::token("color-bg-surface", dark),
             if dark { 0.30 } else { 0.42 },
@@ -1523,7 +1523,7 @@ fn action_bar(
                 .h(px(38.0))
                 .rounded(px(11.0))
                 .border_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
                     theme::token("color-bg-surface", dark),
                     if dark { 0.38 } else { 0.66 },
@@ -1536,7 +1536,7 @@ fn action_bar(
                     div()
                         .font_family("SF Mono")
                         .text_size(px(11.0))
-                        .text_color(theme::launcher_faint_text(dark))
+                        .text_color(ui::text_tertiary())
                         .child(environment.base_url),
                 )
                 .child(div().flex_1().min_w(px(0.0)).child(path_input)),
@@ -1565,7 +1565,7 @@ fn scenario_banner(scenario: ApiScenario, request: ApiRequest, dark: bool) -> im
         .px(px(14.0))
         .py(px(10.0))
         .border_b_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .bg(theme::rgba_with_alpha(api_accent(dark), 0.06))
         .flex()
         .items_center()
@@ -1599,7 +1599,7 @@ fn editor_panel(
         .flex_1()
         .min_w(px(320.0))
         .border_r_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .bg(theme::rgba_with_alpha(
             theme::token("color-bg-surface", dark),
             if dark { 0.18 } else { 0.32 },
@@ -1610,7 +1610,7 @@ fn editor_panel(
             div()
                 .px(px(12.0))
                 .border_b_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
                     theme::token("color-bg-surface", dark),
                     if dark { 0.28 } else { 0.45 },
@@ -1643,7 +1643,7 @@ fn editor_panel(
                                 .text_color(if active {
                                     api_accent(dark)
                                 } else {
-                                    theme::launcher_faint_text(dark)
+                                    ui::text_tertiary()
                                 })
                                 .hover(move |style| {
                                     style.text_color(api_accent(dark)).cursor_pointer()
@@ -1679,7 +1679,7 @@ fn editor_panel(
                             div()
                                 .rounded(px(12.0))
                                 .border_1()
-                                .border_color(theme::launcher_soft_line(dark))
+                                .border_color(ui::border_light())
                                 .bg(theme::rgba_with_alpha(
                                     theme::token("color-bg-surface", dark),
                                     if dark { 0.38 } else { 0.62 },
@@ -1714,7 +1714,7 @@ fn response_panel(
                 .px(px(14.0))
                 .py(px(10.0))
                 .border_b_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
                     theme::token("color-bg-surface", dark),
                     if dark { 0.28 } else { 0.45 },
@@ -1735,7 +1735,7 @@ fn response_panel(
                 .px(px(12.0))
                 .py(px(8.0))
                 .border_b_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
                     theme::token("color-bg-surface", dark),
                     if dark { 0.20 } else { 0.32 },
@@ -1767,7 +1767,7 @@ fn response_panel(
                                 .text_color(if active {
                                     api_accent(dark)
                                 } else {
-                                    theme::launcher_faint_text(dark)
+                                    ui::text_tertiary()
                                 })
                                 .hover(move |style| {
                                     style
@@ -1810,9 +1810,9 @@ fn response_panel(
                 .px(px(14.0))
                 .py(px(8.0))
                 .border_t_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .text_size(px(11.0))
-                .text_color(theme::launcher_muted_text(dark))
+                .text_color(ui::text_secondary())
                 .child(notice),
         )
 }
@@ -1877,7 +1877,7 @@ fn env_popup(
                                     div()
                                         .font_family("SF Mono")
                                         .text_size(px(11.0))
-                                        .text_color(theme::launcher_faint_text(dark))
+                                        .text_color(ui::text_tertiary())
                                         .truncate()
                                         .child(environment.base_url.clone()),
                                 ),
@@ -1906,7 +1906,7 @@ fn env_popup(
                 .px(px(18.0))
                 .py(px(12.0))
                 .border_t_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(api_accent(dark))
@@ -1969,7 +1969,7 @@ fn env_manager_dialog(
                 .h(px(62.0))
                 .px(px(24.0))
                 .border_b_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
                     theme::token("color-bg-surface", dark),
                     if dark { 0.34 } else { 0.52 },
@@ -1993,7 +1993,7 @@ fn env_manager_dialog(
                         .child(
                             div()
                                 .text_size(px(13.0))
-                                .text_color(theme::launcher_muted_text(dark))
+                                .text_color(ui::text_secondary())
                                 .child(format!("{} 个环境", environments.len())),
                         ),
                 )
@@ -2012,7 +2012,7 @@ fn env_manager_dialog(
                     div()
                         .w(px(292.0))
                         .border_r_1()
-                        .border_color(theme::launcher_soft_line(dark))
+                        .border_color(ui::border_light())
                         .bg(theme::rgba_with_alpha(
                             theme::token("color-bg-surface", dark),
                             if dark { 0.18 } else { 0.34 },
@@ -2103,9 +2103,7 @@ fn env_manager_dialog(
                                                         div()
                                                             .font_family("SF Mono")
                                                             .text_size(px(11.0))
-                                                            .text_color(theme::launcher_faint_text(
-                                                                dark,
-                                                            ))
+                                                            .text_color(ui::text_tertiary())
                                                             .truncate()
                                                             .child(environment.base_url.clone()),
                                                     ),
@@ -2158,14 +2156,14 @@ fn env_manager_dialog(
                                                 .px(px(10.0))
                                                 .rounded(px(999.0))
                                                 .border_1()
-                                                .border_color(theme::launcher_soft_line(dark))
+                                                .border_color(ui::border_light())
                                                 .bg(theme::rgba_with_alpha(
                                                     theme::token("color-bg-surface", dark),
                                                     if dark { 0.32 } else { 0.52 },
                                                 ))
                                                 .font_family("SF Mono")
                                                 .text_size(px(12.0))
-                                                .text_color(theme::launcher_muted_text(dark))
+                                                .text_color(ui::text_secondary())
                                                 .flex()
                                                 .items_center()
                                                 .child(current_environment.base_url.clone()),
@@ -2214,7 +2212,7 @@ fn env_manager_dialog(
                                                 .border_color(if active {
                                                     theme::rgba_with_alpha(api_accent(dark), 0.18)
                                                 } else {
-                                                    theme::launcher_soft_line(dark)
+                                                    ui::border_light()
                                                 })
                                                 .bg(if active {
                                                     theme::rgba_with_alpha(api_accent(dark), 0.08)
@@ -2233,7 +2231,7 @@ fn env_manager_dialog(
                                                 .text_color(if active {
                                                     api_accent(dark)
                                                 } else {
-                                                    theme::launcher_muted_text(dark)
+                                                    ui::text_secondary()
                                                 })
                                                 .hover(move |style| {
                                                     style
@@ -2292,7 +2290,7 @@ fn env_manager_dialog(
                                 .min_h(px(0.0))
                                 .rounded(px(14.0))
                                 .border_1()
-                                .border_color(theme::launcher_soft_line(dark))
+                                .border_color(ui::border_light())
                                 .bg(theme::rgba_with_alpha(
                                     theme::token("color-bg-surface", dark),
                                     if dark { 0.30 } else { 0.54 },
@@ -2307,7 +2305,7 @@ fn env_manager_dialog(
                 .h(px(58.0))
                 .px(px(24.0))
                 .border_t_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
                     theme::token("color-bg-surface", dark),
                     if dark { 0.28 } else { 0.46 },
@@ -2368,7 +2366,7 @@ fn labeled_field(label: &'static str, input: Entity<TextInput>, dark: bool) -> i
                 .h(px(38.0))
                 .rounded(px(10.0))
                 .border_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
                     theme::token("color-bg-surface", dark),
                     if dark { 0.34 } else { 0.58 },
@@ -2459,7 +2457,7 @@ fn context_menu_overlay(
                         .px(px(16.0))
                         .py(px(13.0))
                         .border_b_1()
-                        .border_color(theme::launcher_soft_line(dark))
+                        .border_color(ui::border_light())
                         .text_size(px(15.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(api_accent(dark))
@@ -2563,7 +2561,7 @@ fn context_menu_item(
             row.child(
                 div()
                     .text_size(px(11.0))
-                    .text_color(theme::launcher_faint_text(dark))
+                    .text_color(ui::text_tertiary())
                     .child(shortcut),
             )
         })
@@ -2571,7 +2569,7 @@ fn context_menu_item(
 }
 
 fn menu_separator(dark: bool) -> impl IntoElement {
-    div().h(px(1.0)).bg(theme::launcher_soft_line(dark))
+    div().h(px(1.0)).bg(ui::border_light())
 }
 
 fn transparent_surface(dark: bool) -> gpui::Hsla {
@@ -2727,7 +2725,7 @@ fn section_micro_label(label: impl Into<String>, dark: bool) -> impl IntoElement
     div()
         .text_size(px(10.0))
         .font_weight(gpui::FontWeight::SEMIBOLD)
-        .text_color(theme::launcher_faint_text(dark))
+        .text_color(ui::text_tertiary())
         .child(label.into())
 }
 
@@ -2879,7 +2877,7 @@ fn action_link(
         .text_color(if primary {
             api_accent(dark)
         } else {
-            theme::launcher_muted_text(dark)
+            ui::text_secondary()
         })
         .hover(move |style| {
             style

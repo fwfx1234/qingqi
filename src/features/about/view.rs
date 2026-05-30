@@ -39,7 +39,7 @@ impl RenderOnce for AboutPage {
                             .overflow_hidden()
                             .child(ui::icon_element(
                                 "app-icon.svg",
-                                theme::launcher_accent(dark),
+                                ui::accent_color(crate::core::plugin_spec::PluginAccent::Amber),
                                 72.0,
                             )),
                     )

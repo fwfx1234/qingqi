@@ -14,7 +14,8 @@ use gpui::{
 use crate::{
     app::{
         text_input::{TextInput, TextInputStyle},
-        theme, ui,
+        theme,
+        ui::{self, components},
     },
     core::storage::AppPaths,
     features::qr_code::{
@@ -761,7 +762,7 @@ impl RenderOnce for QrCodeElement {
                                                 0.82,
                                             ))
                                             .border_1()
-                                            .border_color(theme::launcher_soft_line(dark))
+                                            .border_color(ui::border_light())
                                             .child(input),
                                     )
                                     .child(
@@ -890,7 +891,7 @@ fn preview_panel(dark: bool, qr_matrix: Vec<bool>, qr_size: usize) -> impl IntoE
                     0.88,
                 ))
                 .border_1()
-                .border_color(theme::launcher_soft_line(dark))
+                .border_color(ui::border_light())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -935,7 +936,7 @@ fn preview_panel(dark: bool, qr_matrix: Vec<bool>, qr_size: usize) -> impl IntoE
                     } else {
                         div()
                             .text_size(px(12.0))
-                            .text_color(theme::launcher_faint_text(dark))
+                            .text_color(ui::text_tertiary())
                             .child("二维码预览")
                             .into_any_element()
                     }
@@ -1379,7 +1380,7 @@ fn status_bar(message: String, tone: StatusTone, dark: bool) -> impl IntoElement
             0.7,
         ))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .px_3()
         .flex()
         .items_center()
@@ -1389,7 +1390,7 @@ fn status_bar(message: String, tone: StatusTone, dark: bool) -> impl IntoElement
                 .flex_1()
                 .text_size(px(11.0))
                 .text_color(match tone {
-                    StatusTone::Neutral => theme::launcher_muted_text(dark),
+                    StatusTone::Neutral => ui::text_secondary(),
                     StatusTone::Success => theme::token("color-success", dark),
                     StatusTone::Error => theme::token("color-danger", dark),
                 })
@@ -1400,7 +1401,7 @@ fn status_bar(message: String, tone: StatusTone, dark: bool) -> impl IntoElement
 fn section_label(label: &str, dark: bool) -> impl IntoElement {
     div()
         .text_size(px(11.0))
-        .text_color(theme::launcher_muted_text(dark))
+        .text_color(ui::text_secondary())
         .child(label.to_string())
 }
 
@@ -1431,7 +1432,7 @@ fn action_button(label: &str, dark: bool) -> gpui::Div {
             0.88,
         ))
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .hover(move |style| style.cursor_pointer())
         .flex()
         .items_center()
@@ -1455,7 +1456,7 @@ fn utility_button(label: &str, active: bool, dark: bool) -> gpui::Div {
             theme::rgba_with_alpha(theme::token("color-bg-surface", dark), 0.8)
         })
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .hover(move |style| style.cursor_pointer())
         .flex()
         .items_center()
@@ -1483,7 +1484,7 @@ fn icon_button(active: bool, dark: bool, count: usize) -> gpui::Div {
             theme::rgba_with_alpha(theme::token("color-bg-surface", dark), 0.8)
         })
         .border_1()
-        .border_color(theme::launcher_soft_line(dark))
+        .border_color(ui::border_light())
         .hover(move |style| style.cursor_pointer())
         .flex()
         .items_center()
@@ -1525,7 +1526,7 @@ fn module_title(title: &str, tag: &str, dark: bool) -> impl IntoElement {
         .child(
             div()
                 .text_size(px(11.0))
-                .text_color(theme::launcher_muted_text(dark))
+                .text_color(ui::text_secondary())
                 .child(tag.to_string()),
         )
 }
@@ -1540,6 +1541,6 @@ fn ghost_button(label: &str, dark: bool) -> gpui::Div {
         .items_center()
         .justify_center()
         .text_size(px(11.0))
-        .text_color(theme::launcher_muted_text(dark))
+        .text_color(ui::text_secondary())
         .child(label.to_string())
 }
