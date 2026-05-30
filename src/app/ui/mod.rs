@@ -1,3 +1,5 @@
+pub mod components;
+
 use gpui::{
     InteractiveElement, IntoElement, ParentElement, SharedString, StatefulInteractiveElement,
     Styled, Window, div, hsla, img, px, rgb, svg,
@@ -8,65 +10,116 @@ use crate::{
     core::plugin_spec::{PluginAccent, PluginCategory, PluginStatus},
 };
 
-// ── Background Colors (delegated to theme tokens) ─────────────────────────
+// ── Background Colors (compile-time safe via theme::semantic) ────────────
 
 pub fn bg_canvas() -> gpui::Rgba {
-    theme::token("color-bg-page", crate::app::theme_mode::is_dark())
+    theme::semantic(crate::app::theme_mode::is_dark()).bg_page
 }
 
 pub fn bg_surface() -> gpui::Rgba {
-    theme::token("color-bg-surface", crate::app::theme_mode::is_dark())
+    theme::semantic(crate::app::theme_mode::is_dark()).bg_surface
 }
 
 pub fn bg_subtle() -> gpui::Rgba {
-    theme::token("color-bg-subtle", crate::app::theme_mode::is_dark())
+    theme::semantic(crate::app::theme_mode::is_dark()).bg_subtle
 }
 
 pub fn bg_hover() -> gpui::Rgba {
-    theme::token("color-bg-subtle", crate::app::theme_mode::is_dark())
+    theme::semantic(crate::app::theme_mode::is_dark()).bg_subtle
 }
 
-// ── Text Colors (delegated to theme tokens) ─────────────────────────────
+// ── Text Colors ─────────────────────────────────────────────────────────
 
 pub fn text_primary() -> gpui::Rgba {
-    theme::token("color-text-primary", crate::app::theme_mode::is_dark())
+    theme::semantic(crate::app::theme_mode::is_dark()).text_primary
 }
 
 pub fn text_secondary() -> gpui::Rgba {
-    theme::token("color-text-regular", crate::app::theme_mode::is_dark())
+    theme::semantic(crate::app::theme_mode::is_dark()).text_regular
 }
 
 pub fn text_tertiary() -> gpui::Rgba {
-    theme::token("color-text-secondary", crate::app::theme_mode::is_dark())
+    theme::semantic(crate::app::theme_mode::is_dark()).text_secondary
 }
 
-// ── Border Colors (delegated to theme tokens) ───────────────────────────
+// ── Border Colors ───────────────────────────────────────────────────────
 
-pub fn border_light() -> gpui::Rgba {
-    theme::token("color-border-default", crate::app::theme_mode::is_dark())
+pub fn border_light() -> gpui::Hsla {
+    theme::semantic(crate::app::theme_mode::is_dark())
+        .border_default
+        .into()
 }
 
-pub fn border_strong() -> gpui::Rgba {
-    theme::token("color-border-strong", crate::app::theme_mode::is_dark())
+pub fn border_strong() -> gpui::Hsla {
+    theme::semantic(crate::app::theme_mode::is_dark())
+        .border_strong
+        .into()
 }
 
 pub fn success() -> gpui::Rgba {
-    theme::token("color-success", crate::app::theme_mode::is_dark())
+    theme::semantic(crate::app::theme_mode::is_dark()).success
 }
 
 pub fn warning() -> gpui::Rgba {
-    theme::token("color-warning", crate::app::theme_mode::is_dark())
+    theme::semantic(crate::app::theme_mode::is_dark()).warning
 }
 
 pub fn danger() -> gpui::Rgba {
-    theme::token("color-danger", crate::app::theme_mode::is_dark())
+    theme::semantic(crate::app::theme_mode::is_dark()).danger
+}
+
+pub fn info() -> gpui::Rgba {
+    theme::semantic(crate::app::theme_mode::is_dark()).info
+}
+
+/// Backdrop color for overlay/modal遮罩 (replaces individual hsla in overlay_shell)
+pub fn overlay_backdrop(dark: bool) -> gpui::Hsla {
+    theme::semantic(dark).overlay_backdrop
+}
+
+/// Keycap / subtle chip background (replaces launcher_keycap)
+pub fn bg_keycap(dark: bool) -> gpui::Hsla {
+    theme::semantic(dark).keycap_bg
+}
+
+/// Row hover background (replaces launcher_row_selected in plugin views)
+pub fn row_hover(dark: bool) -> gpui::Rgba {
+    theme::semantic(dark).row_hover
+}
+
+pub fn white() -> gpui::Rgba {
+    theme::white()
+}
+
+pub fn panel_heading_text(dark: bool) -> gpui::Rgba {
+    if dark {
+        theme::semantic(dark).text_primary
+    } else {
+        rgb(0x444458)
+    }
+}
+
+pub fn terminal_bg(dark: bool) -> gpui::Rgba {
+    if dark { rgb(0x0b1118) } else { rgb(0x111827) }
+}
+
+pub fn terminal_fg(dark: bool) -> gpui::Rgba {
+    if dark { rgb(0xd7e2ee) } else { rgb(0xe5e7eb) }
+}
+
+pub fn terminal_muted(dark: bool) -> gpui::Rgba {
+    if dark { rgb(0x7dd3fc) } else { rgb(0xbfdbfe) }
+}
+
+pub fn terminal_border(dark: bool) -> gpui::Rgba {
+    if dark { rgb(0x1f2937) } else { rgb(0x374151) }
 }
 
 pub fn accent_color(accent: PluginAccent) -> gpui::Rgba {
     theme::accent_color(accent_to_theme(accent))
 }
 
-fn accent_to_theme(accent: PluginAccent) -> theme::ThemeAccent {
+pub fn accent_to_theme(accent: PluginAccent) -> theme::ThemeAccent {
     match accent {
         PluginAccent::Blue => theme::ThemeAccent::Blue,
         PluginAccent::Cyan => theme::ThemeAccent::Cyan,
@@ -100,6 +153,19 @@ pub fn status_color(status: PluginStatus) -> gpui::Rgba {
         PluginStatus::Background => accent_color(PluginAccent::Cyan),
         PluginStatus::Preview => warning(),
     }
+}
+
+// ── Typography tokens ────────────────────────────────────────────────────
+
+/// Unified UI font stack (Latin via Inter, CJK via PingFang SC).
+/// Call sites must not hardcode font family names (conventions §8.3).
+pub fn font_ui() -> &'static str {
+    "Inter, PingFang SC"
+}
+
+/// Monospace font for code / logs / hex / mono blocks.
+pub fn font_mono() -> &'static str {
+    "SF Mono"
 }
 
 // ── Shared UI Components ─────────────────────────────────────────────────
@@ -178,7 +244,7 @@ pub fn mono_block(text: impl Into<SharedString>) -> impl IntoElement {
         .border_1()
         .border_color(border_light())
         .p_3()
-        .font_family("SF Mono")
+        .font_family(font_mono())
         .text_size(theme::font_size_mono())
         .line_height(px(18.0))
         .text_color(text_primary())
@@ -398,6 +464,7 @@ pub fn category_pill(label: impl Into<SharedString>, category: PluginCategory) -
 }
 
 pub fn row_card(selected: bool) -> gpui::Div {
+    let selected_border: gpui::Hsla = rgb(0xbfdbfe).into();
     div()
         .rounded(theme::radius_md())
         .bg(if selected {
@@ -407,7 +474,7 @@ pub fn row_card(selected: bool) -> gpui::Div {
         })
         .border_1()
         .border_color(if selected {
-            rgb(0xbfdbfe)
+            selected_border
         } else {
             border_light()
         })
@@ -416,9 +483,9 @@ pub fn row_card(selected: bool) -> gpui::Div {
 pub fn plugin_surface(dark: bool) -> gpui::Div {
     div()
         .size_full()
-        .bg(theme::token("color-bg-page", dark))
-        .font_family("PingFang SC")
-        .text_color(theme::token("color-text-primary", dark))
+        .bg(theme::semantic(dark).bg_page)
+        .font_family(font_ui())
+        .text_color(theme::semantic(dark).text_primary)
 }
 
 pub fn plugin_content() -> gpui::Div {
@@ -449,13 +516,13 @@ pub fn ui_button(
     let (bg_idle, text_col, border_col) = if is_primary {
         if danger {
             (
-                theme::token("color-danger", dark),
+                theme::semantic(dark).danger,
                 theme::white(),
-                theme::token("color-border-default", dark),
+                theme::semantic(dark).border_default,
             )
         } else {
             (
-                theme::token("color-primary", dark),
+                theme::semantic(dark).primary,
                 theme::white(),
                 if dark { rgb(0x1a1a1a) } else { rgb(0x00000010) },
             )
@@ -463,19 +530,19 @@ pub fn ui_button(
     } else if danger {
         (
             theme::white(),
-            theme::token("color-danger", dark),
-            theme::token("color-danger", dark),
+            theme::semantic(dark).danger,
+            theme::semantic(dark).danger,
         )
     } else {
         let idle = if dark {
-            theme::token("color-bg-elevated", true)
+            theme::semantic(true).bg_elevated
         } else {
             theme::white()
         };
         (
             idle,
-            theme::token("color-text-primary", dark),
-            theme::token("color-border-default", dark),
+            theme::semantic(dark).text_primary,
+            theme::semantic(dark).border_default,
         )
     };
 
@@ -568,7 +635,7 @@ pub fn ui_empty_state(message: impl Into<SharedString>, dark: bool) -> impl Into
         .child(
             div()
                 .text_size(px(14.0))
-                .text_color(theme::token("color-text-regular", dark))
+                .text_color(theme::semantic(dark).text_regular)
                 .child(message),
         )
 }
@@ -627,9 +694,9 @@ pub fn ui_divider(label: Option<impl Into<SharedString>>) -> impl IntoElement {
     }
 }
 
-pub fn focus_ring(active: bool, accent: PluginAccent) -> gpui::Rgba {
+pub fn focus_ring(active: bool, accent: PluginAccent) -> gpui::Hsla {
     if active {
-        accent_color(accent)
+        accent_color(accent).into()
     } else {
         border_light()
     }

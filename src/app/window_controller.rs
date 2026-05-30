@@ -49,6 +49,8 @@ pub struct WindowController {
     events: AppEventBus,
     launcher_window: Option<AnyWindowHandle>,
     plugin_windows: HashMap<String, AnyWindowHandle>,
+    #[cfg(target_os = "windows")]
+    keep_alive_window: Option<AnyWindowHandle>,
 }
 
 impl WindowController {
@@ -65,6 +67,8 @@ impl WindowController {
             events,
             launcher_window: None,
             plugin_windows: HashMap::new(),
+            #[cfg(target_os = "windows")]
+            keep_alive_window: None,
         }
     }
 
@@ -74,6 +78,37 @@ impl WindowController {
 
     pub fn app_catalog(&self) -> Arc<AppCatalog> {
         Arc::clone(&self.app_catalog)
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn ensure_keep_alive_window(&mut self, cx: &mut App) {
+        if self.keep_alive_window.is_some() {
+            return;
+        }
+
+        let options = WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                point(px(-10000.0), px(-10000.0)),
+                size(px(1.0), px(1.0)),
+            ))),
+            titlebar: None,
+            focus: false,
+            show: false,
+            kind: WindowKind::Normal,
+            is_movable: false,
+            is_resizable: false,
+            is_minimizable: false,
+            window_background: WindowBackgroundAppearance::Transparent,
+            window_decorations: Some(WindowDecorations::Client),
+            ..Default::default()
+        };
+
+        match cx.open_window(options, |_window, cx| cx.new(|_| KeepAliveWindow)) {
+            Ok(handle) => {
+                self.keep_alive_window = Some(handle.into());
+            }
+            Err(error) => tracing::warn!(error = %error, "open keep-alive window failed"),
+        }
     }
 
     pub fn toggle_launcher(controller: WindowControllerHandle, cx: &mut App) {
@@ -130,7 +165,7 @@ impl WindowController {
         let events = controller.borrow().events.clone();
         let initial_results = plugin_manager
             .borrow_mut()
-            .commands_with_clipboard(Launcher::latest_clipboard_context_kinds(&clipboard_service))
+            .commands_with_clipboard(&HashMap::new())
             .len();
         let window_size = size(
             px(Launcher::window_width()),
@@ -460,8 +495,8 @@ impl WindowController {
     }
 }
 
-fn plugin_reopens_in_active_space(manifest: Option<&crate::core::plugin::PluginManifest>) -> bool {
-    manifest.is_some_and(|manifest| manifest.visual.window.always_on_top)
+fn plugin_reopens_in_active_space(manifest: Option<&crate::core::plugin::Manifest>) -> bool {
+    manifest.is_some_and(|manifest| manifest.window.always_on_top)
 }
 
 fn log_plugin_window_step(
@@ -511,7 +546,7 @@ fn log_plugin_open_total(plugin_id: &str, trace: PluginOpenTrace) {
 
 fn plugin_window_options(
     title: &str,
-    manifest: Option<&crate::core::plugin::PluginManifest>,
+    manifest: Option<&crate::core::plugin::Manifest>,
     display: Option<std::rc::Rc<dyn gpui::PlatformDisplay>>,
     bounds: Bounds<gpui::Pixels>,
 ) -> WindowOptions {
@@ -527,7 +562,7 @@ fn plugin_window_options(
         };
     };
 
-    let always_on_top = manifest.visual.window.always_on_top;
+    let always_on_top = manifest.window.always_on_top;
     let client_drawn_window = manifest.id.as_ref() == "clipboard";
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -553,7 +588,7 @@ fn plugin_window_options(
 }
 
 fn plugin_bounds(
-    manifest: Option<&crate::core::plugin::PluginManifest>,
+    manifest: Option<&crate::core::plugin::Manifest>,
     cx: &App,
 ) -> (
     Option<std::rc::Rc<dyn gpui::PlatformDisplay>>,
@@ -562,7 +597,7 @@ fn plugin_bounds(
     let Some(manifest) = manifest else {
         return platform::display::centered_on_active_display(cx, size(px(980.0), px(640.0)));
     };
-    match manifest.visual.window.size {
+    match manifest.window.size {
         WindowSize::Fixed { width, height } => {
             platform::display::centered_on_active_display(cx, size(px(width), px(height)))
         }
@@ -577,6 +612,16 @@ fn plugin_bounds(
                 platform::display::centered_on_active_display(cx, size(px(1100.0), px(760.0)))
             }
         }
+    }
+}
+
+#[cfg(target_os = "windows")]
+struct KeepAliveWindow;
+
+#[cfg(target_os = "windows")]
+impl Render for KeepAliveWindow {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div().size_full()
     }
 }
 
