@@ -1,9 +1,7 @@
 use std::{
-    cell::RefCell,
     fs::{self, OpenOptions},
     io::{self, Write},
     path::Path,
-    rc::Rc,
     sync::{Arc, Mutex},
 };
 
@@ -72,19 +70,19 @@ pub fn run() -> Result<()> {
         Arc::clone(&app_index_service),
     )?;
 
-    let plugins = Rc::new(RefCell::new(plugins));
-    let window_controller = Rc::new(RefCell::new(WindowController::new(
-        Rc::clone(&plugins),
+    let plugins = Arc::new(Mutex::new(plugins));
+    let window_controller = Arc::new(Mutex::new(WindowController::new(
+        Arc::clone(&plugins),
         Arc::clone(&app_catalog),
         Arc::clone(&clipboard_service),
         events.clone(),
     )));
-    let power_manager = Rc::new(RefCell::new(PowerManager::load(paths.config("power.json"))));
+    let power_manager = Arc::new(Mutex::new(PowerManager::load(paths.config("power.json"))));
     let app = gpui::Application::new().with_assets(crate::app::assets::ProjectAssets);
-    let plugins_for_shutdown = Rc::clone(&plugins);
+    let plugins_for_shutdown = Arc::clone(&plugins);
     app.on_reopen({
-        let window_controller = Rc::clone(&window_controller);
-        move |cx| WindowController::show_launcher(Rc::clone(&window_controller), cx)
+        let window_controller = Arc::clone(&window_controller);
+        move |cx| WindowController::show_launcher(Arc::clone(&window_controller), cx)
     });
     let database_for_shutdown = Arc::clone(&database);
     app.run(move |cx| {
@@ -92,31 +90,37 @@ pub fn run() -> Result<()> {
         TextInput::register_bindings(cx);
 
         cx.on_action({
-            let window_controller = Rc::clone(&window_controller);
+            let window_controller = Arc::clone(&window_controller);
             move |_: &OpenLauncher, cx| {
-                WindowController::show_launcher(Rc::clone(&window_controller), cx)
+                WindowController::show_launcher(Arc::clone(&window_controller), cx)
             }
         });
         cx.on_action({
-            let window_controller = Rc::clone(&window_controller);
+            let window_controller = Arc::clone(&window_controller);
             move |_: &OpenClipboard, cx| {
-                WindowController::open_plugin(Rc::clone(&window_controller), "clipboard", cx)
+                WindowController::open_plugin(Arc::clone(&window_controller), "clipboard", cx)
             }
         });
         cx.on_action(|_: &Quit, cx| cx.quit());
 
         #[cfg(target_os = "windows")]
-        window_controller.borrow_mut().ensure_keep_alive_window(cx);
+        window_controller
+            .lock()
+            .expect("window controller poisoned")
+            .ensure_keep_alive_window(cx);
 
         set_menus(cx);
         app_catalog.start_background();
-        plugins.borrow_mut().start_background(cx);
+        plugins
+            .lock()
+            .expect("plugin manager poisoned")
+            .start_background(cx);
         let mut background = BackgroundSupervisor::new();
         background.start_theme_poll(Arc::clone(&theme_store), cx);
 
         register_in_app_bindings(cx);
         cx.on_action({
-            let window_controller = Rc::clone(&window_controller);
+            let window_controller = Arc::clone(&window_controller);
             move |action: &ShortcutAction, cx| {
                 let target = cx
                     .try_global::<ShortcutService>()
@@ -124,34 +128,37 @@ pub fn run() -> Result<()> {
                 if let Some(target) = target {
                     crate::core::shortcut::dispatch_target(
                         &target,
-                        Rc::clone(&window_controller),
+                        Arc::clone(&window_controller),
                         cx,
                     );
                 }
             }
         });
-        let mut shortcut_service = ShortcutService::new(Rc::clone(&plugins));
+        let mut shortcut_service = ShortcutService::new(Arc::clone(&plugins));
         if let Err(error) = shortcut_service.reload_from_plugins(cx) {
             tracing::warn!(error = %error, "shortcut registration failed");
         }
-        background.start_hotkey_events(Rc::clone(&window_controller), cx);
+        background.start_hotkey_events(Arc::clone(&window_controller), cx);
 
-        let initial_mode = power_manager.borrow().mode();
+        let initial_mode = power_manager.lock().expect("power manager poisoned").mode();
         match crate::platform::tray::install_tray(initial_mode) {
             Ok(()) => {
                 background.start_tray_poll(
-                    Rc::clone(&window_controller),
-                    Rc::clone(&power_manager),
+                    Arc::clone(&window_controller),
+                    Arc::clone(&power_manager),
                     cx,
                 );
-                background.start_power_poll(Rc::clone(&power_manager), cx);
+                background.start_power_poll(Arc::clone(&power_manager), cx);
             }
             Err(error) => tracing::warn!(error, "system tray install failed"),
         }
         cx.set_global(shortcut_service);
         cx.set_global(background);
     });
-    plugins_for_shutdown.borrow_mut().shutdown();
+    plugins_for_shutdown
+        .lock()
+        .expect("plugin manager poisoned")
+        .shutdown();
     database_for_shutdown.shutdown();
     Ok(())
 }

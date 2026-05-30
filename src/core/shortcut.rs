@@ -1,8 +1,7 @@
 use std::{
-    cell::RefCell,
     collections::{HashMap, HashSet},
-    rc::Rc,
     str::FromStr,
+    sync::{Arc, Mutex},
 };
 
 use anyhow::{Context, Result, anyhow};
@@ -149,7 +148,7 @@ impl From<ShortcutScope> for ShortcutScopeKey {
 
 #[derive(Default)]
 pub struct ShortcutService {
-    plugins: Option<Rc<RefCell<PluginManager>>>,
+    plugins: Option<Arc<Mutex<PluginManager>>>,
     shortcuts: Vec<ShortcutDescriptor>,
     resolved: Vec<ResolvedShortcut>,
     hotkey_ids: HashMap<u32, String>,
@@ -159,7 +158,7 @@ pub struct ShortcutService {
 impl Global for ShortcutService {}
 
 impl ShortcutService {
-    pub fn new(plugins: Rc<RefCell<PluginManager>>) -> Self {
+    pub fn new(plugins: Arc<Mutex<PluginManager>>) -> Self {
         Self {
             plugins: Some(plugins),
             ..Default::default()
@@ -173,12 +172,19 @@ impl ShortcutService {
             // (e.g. Alt+Space to toggle launcher) may be global.  This
             // prevents plugins from registering system-wide hotkeys that
             // conflict with other applications.
-            shortcuts.extend(plugins.borrow_mut().shortcuts().into_iter().map(|mut s| {
-                if s.owner_plugin_id != CORE_PLUGIN_ID {
-                    s.scope = ShortcutScope::App;
-                }
-                s
-            }));
+            shortcuts.extend(
+                plugins
+                    .lock()
+                    .expect("plugin manager poisoned")
+                    .shortcuts()
+                    .into_iter()
+                    .map(|mut s| {
+                        if s.owner_plugin_id != CORE_PLUGIN_ID {
+                            s.scope = ShortcutScope::App;
+                        }
+                        s
+                    }),
+            );
         }
         self.replace_shortcuts(shortcuts, cx)
     }
@@ -246,7 +252,8 @@ impl ShortcutService {
             .as_ref()
             .ok_or_else(|| anyhow!("plugin manager unavailable"))?;
         plugins
-            .borrow_mut()
+            .lock()
+            .expect("plugin manager poisoned")
             .set_shortcut(&owner, id, &normalized, enabled)
             .with_context(|| format!("保存快捷键失败: {id}"))?;
         self.refresh(cx)

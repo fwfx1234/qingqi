@@ -1,7 +1,5 @@
 use std::{
-    cell::RefCell,
     collections::HashSet,
-    rc::Rc,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -33,7 +31,7 @@ impl BackgroundSupervisor {
     pub fn start_tray_poll(
         &mut self,
         window_controller: WindowControllerHandle,
-        power_manager: Rc<RefCell<PowerManager>>,
+        power_manager: Arc<Mutex<PowerManager>>,
         cx: &mut App,
     ) {
         if !self.mark_started("tray-poll") {
@@ -50,14 +48,14 @@ impl BackgroundSupervisor {
                 if actions.is_empty() {
                     continue;
                 }
-                let window_controller = Rc::clone(&window_controller);
-                let pm = Rc::clone(&power_manager);
+                let window_controller = Arc::clone(&window_controller);
+                let pm = Arc::clone(&power_manager);
                 let _ = async_cx.update(move |cx| {
                     for action in actions {
                         handle_tray_action(
                             action,
-                            Rc::clone(&window_controller),
-                            Rc::clone(&pm),
+                            Arc::clone(&window_controller),
+                            Arc::clone(&pm),
                             cx,
                         );
                     }
@@ -86,7 +84,7 @@ impl BackgroundSupervisor {
                 if event.state != HotKeyState::Pressed {
                     continue;
                 }
-                let window_controller = Rc::clone(&window_controller);
+                let window_controller = Arc::clone(&window_controller);
                 let _ = async_cx.update(move |cx| {
                     let target = cx
                         .try_global::<crate::core::shortcut::ShortcutService>()
@@ -123,7 +121,7 @@ impl BackgroundSupervisor {
     }
 
     /// Poll power state every 5 s to handle WhenPluggedIn mode transitions.
-    pub fn start_power_poll(&mut self, power_manager: Rc<RefCell<PowerManager>>, cx: &mut App) {
+    pub fn start_power_poll(&mut self, power_manager: Arc<Mutex<PowerManager>>, cx: &mut App) {
         if !self.mark_started("power-poll") {
             return;
         }
@@ -134,9 +132,9 @@ impl BackgroundSupervisor {
                     .background_executor()
                     .timer(Duration::from_secs(5))
                     .await;
-                let pm = Rc::clone(&power_manager);
+                let pm = Arc::clone(&power_manager);
                 let _ = async_cx.update(move |_cx| {
-                    pm.borrow_mut().update();
+                    pm.lock().expect("bg controller poisoned").update();
                 });
             }
         });
@@ -156,7 +154,7 @@ impl BackgroundSupervisor {
 fn handle_tray_action(
     action: crate::platform::tray::TrayAction,
     window_controller: WindowControllerHandle,
-    power_manager: Rc<RefCell<PowerManager>>,
+    power_manager: Arc<Mutex<PowerManager>>,
     cx: &mut App,
 ) {
     use crate::platform::tray::TrayAction;
@@ -166,7 +164,10 @@ fn handle_tray_action(
             WindowController::show_launcher(window_controller, cx);
         }
         TrayAction::SetPreventSleep(mode) => {
-            power_manager.borrow_mut().set_mode(mode);
+            power_manager
+                .lock()
+                .expect("bg controller poisoned")
+                .set_mode(mode);
             let _ = crate::platform::tray::rebuild_menu(mode);
         }
         TrayAction::Restart => {

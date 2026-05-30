@@ -1,5 +1,4 @@
 use std::{
-    cell::RefCell,
     collections::{HashMap, HashSet},
     panic::{AssertUnwindSafe, catch_unwind},
     rc::Rc,
@@ -13,8 +12,8 @@ use std::{
 use gpui::{
     App, AppContext, BoxShadow, Context, Entity, Focusable, InteractiveElement, IntoElement,
     KeyDownEvent, ParentElement, Render, ScrollStrategy, StatefulInteractiveElement, Styled,
-    Subscription, Task, UniformListScrollHandle, Window, div, point, prelude::FluentBuilder,
-    px, size, uniform_list,
+    Subscription, Task, UniformListScrollHandle, Window, div, point, prelude::FluentBuilder, px,
+    size, uniform_list,
 };
 use gpui_component::scroll::Scrollbar;
 
@@ -75,7 +74,7 @@ struct PluginVisual {
 }
 
 pub struct Launcher {
-    plugin_manager: Rc<RefCell<PluginManager>>,
+    plugin_manager: Arc<Mutex<PluginManager>>,
     app_catalog: Arc<AppCatalog>,
     clipboard_service: Arc<Mutex<ClipboardService>>,
     plugin_visuals: HashMap<String, PluginVisual>,
@@ -115,13 +114,13 @@ impl Launcher {
     }
 
     pub fn new(
-        plugin_manager: Rc<RefCell<PluginManager>>,
+        plugin_manager: Arc<Mutex<PluginManager>>,
         app_catalog: Arc<AppCatalog>,
         clipboard_service: Arc<Mutex<ClipboardService>>,
         _cx: &App,
     ) -> Self {
         let (all_commands, plugin_visuals, boost_map) = {
-            let mut manager = plugin_manager.borrow_mut();
+            let mut manager = plugin_manager.lock().expect("plugin manager poisoned");
             let boost_map = Self::latest_boost_map(&clipboard_service, &*manager);
             let mut all_commands = app_catalog.search("", COMMAND_SEARCH_LIMIT);
             all_commands.extend(manager.commands_with_clipboard(&boost_map));
@@ -193,7 +192,11 @@ impl Launcher {
                 if event.kind == AppEventKind::CommandsChanged {
                     let _ = launcher.update(async_cx, |launcher, cx| {
                         if event.source.as_ref() != "app-catalog" {
-                            launcher.plugin_manager.borrow_mut().invalidate_commands();
+                            launcher
+                                .plugin_manager
+                                .lock()
+                                .expect("plugin manager poisoned")
+                                .invalidate_commands();
                         }
                         launcher.refresh_results_after_commands_changed(cx);
                         cx.notify();
@@ -204,8 +207,10 @@ impl Launcher {
     }
 
     fn refresh_results_after_commands_changed(&mut self, cx: &mut Context<Self>) {
-        self.clipboard_boost_map =
-            Self::latest_boost_map(&self.clipboard_service, &*self.plugin_manager.borrow());
+        self.clipboard_boost_map = Self::latest_boost_map(
+            &self.clipboard_service,
+            &*self.plugin_manager.lock().expect("plugin manager poisoned"),
+        );
         self.all_commands = self.default_commands_with_clipboard();
 
         let query = self.query(cx);
@@ -365,7 +370,8 @@ impl Launcher {
         let mut commands = self.app_catalog.search("", COMMAND_SEARCH_LIMIT);
         commands.extend(
             self.plugin_manager
-                .borrow_mut()
+                .lock()
+                .expect("plugin manager poisoned")
                 .commands_with_clipboard(&self.clipboard_boost_map),
         );
         commands
@@ -375,7 +381,8 @@ impl Launcher {
         let mut commands = self.app_catalog.search(query, COMMAND_SEARCH_LIMIT);
         commands.extend(
             self.plugin_manager
-                .borrow_mut()
+                .lock()
+                .expect("plugin manager poisoned")
                 .query_commands_with_clipboard(
                     query,
                     COMMAND_SEARCH_LIMIT,
@@ -415,7 +422,7 @@ impl Launcher {
     fn refresh_clipboard_context_async(&mut self, cx: &mut Context<Self>) {
         let service = Arc::clone(&self.clipboard_service);
         let boost_map = {
-            let plugin = self.plugin_manager.borrow();
+            let plugin = self.plugin_manager.lock().expect("plugin manager poisoned");
             Launcher::latest_boost_map(&service, &*plugin)
         };
         self.search_task = Some(cx.spawn(async move |launcher, async_cx| {
@@ -611,7 +618,8 @@ impl Launcher {
                     );
                     let select_started = Instant::now();
                     self.plugin_manager
-                        .borrow()
+                        .lock()
+                        .expect("plugin manager poisoned")
                         .record_usage_key_background(plugin_list_usage_key(&item).to_string(), cx);
                     let item_id = item.id.clone();
                     let result = catch_unwind(AssertUnwindSafe(|| {
@@ -646,7 +654,8 @@ impl Launcher {
     ) {
         let started = Instant::now();
         self.plugin_manager
-            .borrow()
+            .lock()
+            .expect("plugin manager poisoned")
             .record_command_launch_background(&item, cx);
         let activation = item.activation.clone();
         let Activation::Open { plugin_id } = &activation else {
@@ -697,7 +706,8 @@ impl Launcher {
                 let view_started = Instant::now();
                 let view_result = self
                     .plugin_manager
-                    .borrow_mut()
+                    .lock()
+                    .expect("plugin manager poisoned")
                     .open_inline_view(plugin_id, cx);
                 log_launcher_step(plugin_id, "open inline view", view_started, Some(trace));
                 match view_result {
@@ -731,7 +741,8 @@ impl Launcher {
                 let view_started = Instant::now();
                 let view_result = self
                     .plugin_manager
-                    .borrow_mut()
+                    .lock()
+                    .expect("plugin manager poisoned")
                     .open_list_view(plugin_id, cx);
                 log_launcher_step(plugin_id, "open list view", view_started, Some(trace));
                 match view_result {
@@ -968,14 +979,20 @@ impl Launcher {
 
     fn close_window(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(controller) = self.window_controller.as_ref() {
-            controller.borrow_mut().clear_launcher_window();
+            controller
+                .lock()
+                .expect("plugin manager poisoned")
+                .clear_launcher_window();
         }
         window.defer(cx, |window, _cx| window.remove_window());
     }
 
     fn close_window_app(&mut self, window: &mut Window, cx: &mut App) {
         if let Some(controller) = self.window_controller.as_ref() {
-            controller.borrow_mut().clear_launcher_window();
+            controller
+                .lock()
+                .expect("plugin manager poisoned")
+                .clear_launcher_window();
         }
         window.defer(cx, |window, _cx| window.remove_window());
     }
@@ -1183,7 +1200,8 @@ impl Render for Launcher {
                 let use_auto_height = match &self.mode {
                     LauncherMode::InlinePlugin { view, .. } => self
                         .plugin_manager
-                        .borrow()
+                        .lock()
+                        .expect("plugin manager poisoned")
                         .manifests()
                         .into_iter()
                         .any(|m| {
@@ -1468,7 +1486,8 @@ fn plugin_list_row(
                     if item_for_click.enabled {
                         launcher
                             .plugin_manager
-                            .borrow()
+                            .lock()
+                            .expect("plugin manager poisoned")
                             .record_usage_key_background(
                                 plugin_list_usage_key(&item_for_click).to_string(),
                                 entity_cx,
