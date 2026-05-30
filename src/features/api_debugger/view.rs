@@ -1039,7 +1039,7 @@ fn collection_tree(
                         .text_color(if dark {
                             theme::semantic().text_primary
                         } else {
-                            rgb(0x444458)
+                            theme::semantic().text_regular
                         })
                         .child("📂 集合"),
                 )

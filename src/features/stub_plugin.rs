@@ -1,4 +1,4 @@
-use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, Styled, Window, div, px, rgb};
+use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, Styled, Window, div, px};
 use std::sync::Arc;
 
 use crate::{
@@ -263,7 +263,7 @@ impl RenderOnce for StubPluginPage {
                         .map(|s| s.as_ref())
                         .unwrap_or("")
                 ),
-                rgb(0x475569),
+                ui::text_secondary(),
             ))
     }
 }

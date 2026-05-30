@@ -20,7 +20,7 @@ use crate::{
 use gpui::{
     App, AppContext, Entity, ExternalPaths, FontWeight, InteractiveElement, IntoElement,
     MouseButton, ParentElement, Pixels, Point, RenderOnce, SharedString,
-    StatefulInteractiveElement, Styled, Window, div, hsla, prelude::FluentBuilder, px, rgb,
+    StatefulInteractiveElement, Styled, Window, div, hsla, prelude::FluentBuilder, px,
 };
 use gpui_component::{Icon, IconName, Sizable};
 
@@ -1006,8 +1006,8 @@ fn top_bar(
     panel: Rc<RefCell<FtpSftpSshPanel>>,
 ) -> impl IntoElement {
     let status_color = match status {
-        ConnectionStatus::Connected => rgb(0x16a34a),
-        ConnectionStatus::Failed => rgb(0xef4444),
+        ConnectionStatus::Connected => theme::semantic().success,
+        ConnectionStatus::Failed => theme::semantic().danger,
         ConnectionStatus::Idle => ui::text_tertiary(),
     };
     let title = selected
@@ -1168,7 +1168,7 @@ fn sidebar(
                                 .rounded(px(8.0))
                                 .bg(accent)
                                 .text_size(px(18.0))
-                                .text_color(rgb(0xffffff))
+                                .text_color(theme::white())
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -1279,7 +1279,7 @@ fn connection_card(
         .items_center()
         .gap(px(8.0))
         .child(div().size(px(7.0)).rounded(px(999.0)).bg(if is_connected {
-            rgb(0x22c55e)
+            theme::semantic().success
         } else {
             ui::text_tertiary()
         }))
@@ -1299,7 +1299,7 @@ fn connection_card(
                 .justify_center()
                 .text_size(px(13.0))
                 .text_color(if selected {
-                    rgb(0xffffff)
+                    theme::white()
                 } else {
                     theme::accent_color(theme::ThemeAccent::Cyan)
                 })
@@ -1317,7 +1317,7 @@ fn connection_card(
                         .text_size(px(12.0))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(if selected {
-                            rgb(0xffffff)
+                            theme::white()
                         } else {
                             theme::semantic().text_primary
                         })
@@ -1347,13 +1347,13 @@ fn connection_card(
                         .px(px(7.0))
                         .rounded(px(6.0))
                         .bg(if selected {
-                            theme::rgba_with_alpha(rgb(0xffffff), 0.18)
+                            theme::rgba_with_alpha(theme::white(), 0.18)
                         } else {
                             theme::rgba_with_alpha(theme::semantic().bg_surface, 1.0)
                         })
                         .text_size(px(9.0))
                         .text_color(if selected {
-                            rgb(0xffffff)
+                            theme::white()
                         } else {
                             theme::accent_color(theme::ThemeAccent::Cyan)
                         })
@@ -1367,9 +1367,9 @@ fn connection_card(
                         div()
                             .text_size(px(12.0))
                             .text_color(if selected {
-                                rgb(0xffffff)
+                                theme::white()
                             } else {
-                                rgb(0xffcc44)
+                                theme::semantic().warning
                             })
                             .child("★"),
                     )
@@ -1379,7 +1379,7 @@ fn connection_card(
                         .id("ftp-profile-menu-trigger")
                         .text_size(px(12.0))
                         .text_color(if selected {
-                            rgb(0xffffff)
+                            theme::white()
                         } else {
                             ui::text_tertiary()
                         })
@@ -1888,9 +1888,9 @@ fn terminal_workspace(
     panel: Rc<RefCell<FtpSftpSshPanel>>,
 ) -> impl IntoElement {
     let connected = summary.is_some_and(|summary| summary.status == ConnectionStatus::Connected);
-    let terminal_bg = if dark { rgb(0x0b1118) } else { rgb(0x111827) };
-    let terminal_fg = if dark { rgb(0xd7e2ee) } else { rgb(0xe5e7eb) };
-    let terminal_muted = if dark { rgb(0x7dd3fc) } else { rgb(0xbfdbfe) };
+    let terminal_bg = ui::terminal_bg();
+    let terminal_fg = ui::terminal_fg();
+    let terminal_muted = ui::terminal_muted();
     div()
         .flex_1()
         .min_h(px(0.0))
@@ -1909,7 +1909,7 @@ fn terminal_workspace(
                     Icon::new(IconName::SquareTerminal)
                         .xsmall()
                         .text_color(if connected {
-                            rgb(0x0ea5e9)
+                            theme::semantic().info
                         } else {
                             ui::text_secondary()
                         }),
@@ -1917,7 +1917,7 @@ fn terminal_workspace(
                 .child(status_pill(
                     terminal_snapshot.status.label().to_string(),
                     if connected {
-                        rgb(0x0ea5e9)
+                        theme::semantic().info
                     } else {
                         ui::text_tertiary()
                     },
@@ -1991,7 +1991,7 @@ fn terminal_workspace(
                         .overflow_y_scroll()
                         .rounded(px(8.0))
                         .border_1()
-                        .border_color(if dark { rgb(0x1f2937) } else { rgb(0x374151) })
+                        .border_color(ui::terminal_border())
                         .bg(terminal_bg)
                         .px(px(10.0))
                         .py(px(8.0))
@@ -2082,7 +2082,7 @@ fn ftp_log_workspace(
                 .flex()
                 .items_center()
                 .gap(px(8.0))
-                .child(meta_badge(format!("{count} 条"), rgb(0x10b981), dark))
+                .child(meta_badge(format!("{count} 条"), theme::semantic().success, dark))
                 .child(
                     div()
                         .text_size(px(10.0))
@@ -2146,10 +2146,10 @@ fn empty_protocol_workspace(dark: bool, protocol: Option<RemoteProtocol>) -> imp
 
 fn protocol_log_row(_dark: bool, entry: ProtocolLogEntry) -> impl IntoElement {
     let color = match entry.kind {
-        ProtocolLogKind::Command => rgb(0x0ea5e9),
-        ProtocolLogKind::Response => rgb(0x10b981),
+        ProtocolLogKind::Command => theme::semantic().info,
+        ProtocolLogKind::Response => theme::semantic().success,
         ProtocolLogKind::Info => ui::text_secondary(),
-        ProtocolLogKind::Error => rgb(0xef4444),
+        ProtocolLogKind::Error => theme::semantic().danger,
     };
 
     div()
@@ -2252,7 +2252,7 @@ fn transfer_panel(
                             row.child(transfer_count_chip(
                                 "活跃",
                                 transfer_counts_snapshot.active,
-                                rgb(0x0ea5e9),
+                                theme::semantic().info,
                                 dark,
                                 true,
                             ))
@@ -2400,11 +2400,11 @@ fn draft_section(
         )
         .children(drafts.into_iter().map(|draft| {
             let state_color = match draft.state {
-                RemoteEditState::Synced => rgb(0x10b981),
-                RemoteEditState::ModifiedLocal => rgb(0xf59e0b),
-                RemoteEditState::UploadingBack => rgb(0x0ea5e9),
-                RemoteEditState::ConflictRisk => rgb(0xef4444),
-                RemoteEditState::UploadFailed => rgb(0xdc2626),
+                RemoteEditState::Synced => theme::semantic().success,
+                RemoteEditState::ModifiedLocal => theme::semantic().warning,
+                RemoteEditState::UploadingBack => theme::semantic().info,
+                RemoteEditState::ConflictRisk => theme::semantic().danger,
+                RemoteEditState::UploadFailed => theme::semantic().danger,
             };
             let draft_for_open = draft.clone();
             let draft_for_upload = draft.clone();
@@ -2512,9 +2512,9 @@ fn transfer_card(
     let fill_width = (280.0 * progress.clamp(0.0, 1.0)).max(if progress > 0.0 { 2.0 } else { 0.0 });
     let status_color = match item.status {
         TransferStatus::Queued => ui::text_secondary(),
-        TransferStatus::Running => rgb(0x0ea5e9),
-        TransferStatus::Completed => rgb(0x10b981),
-        TransferStatus::Failed => rgb(0xef4444),
+        TransferStatus::Running => theme::semantic().info,
+        TransferStatus::Completed => theme::semantic().success,
+        TransferStatus::Failed => theme::semantic().danger,
         TransferStatus::Cancelled => ui::text_tertiary(),
     };
     let transfer_id = item.id.clone();
