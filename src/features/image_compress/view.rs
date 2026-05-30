@@ -847,7 +847,7 @@ impl RenderOnce for ImageCompressElement {
                                         div()
                                             .text_size(px(11.0))
                                             .font_family("SF Mono")
-                                            .text_color(theme::token("color-text-regular", dark))
+                                            .text_color(theme::semantic(dark).text_regular)
                                             .child(format!("{quality}%")),
                                     )
                                     .child(
@@ -928,7 +928,7 @@ fn section_title(title: &str, tag: &str, dark: bool) -> impl IntoElement {
             div()
                 .text_size(px(16.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::token("color-text-primary", dark))
+                .text_color(theme::semantic(dark).text_primary)
                 .child(title.to_string()),
         )
         .child(
@@ -956,7 +956,7 @@ fn mode_chip(label: &str, active: bool, dark: bool) -> gpui::Div {
         .bg(if active {
             theme::rgba_with_alpha(ui::accent_color(PluginAccent::Amber), 0.12)
         } else {
-            theme::rgba_with_alpha(theme::token("color-bg-surface", dark), 0.82)
+            theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 0.82)
         })
         .border_1()
         .border_color(if active {
@@ -982,7 +982,7 @@ fn quality_button(label: &str, dark: bool) -> gpui::Div {
         .size(px(26.0))
         .rounded(px(8.0))
         .bg(theme::rgba_with_alpha(
-            theme::token("color-bg-surface", dark),
+            theme::semantic(dark).bg_surface,
             0.88,
         ))
         .border_1()
@@ -992,7 +992,7 @@ fn quality_button(label: &str, dark: bool) -> gpui::Div {
         .items_center()
         .justify_center()
         .text_size(px(12.0))
-        .text_color(theme::token("color-text-primary", dark))
+        .text_color(theme::semantic(dark).text_primary)
         .child(label.to_string())
 }
 
@@ -1035,7 +1035,7 @@ fn drop_zone(dark: bool, pending_count: usize) -> gpui::Div {
                     div()
                         .text_size(px(12.0))
                         .font_weight(gpui::FontWeight::MEDIUM)
-                        .text_color(theme::token("color-text-primary", dark))
+                        .text_color(theme::semantic(dark).text_primary)
                         .child("粘贴剪贴板或拖入图片"),
                 )
                 .child(
@@ -1048,7 +1048,7 @@ fn drop_zone(dark: bool, pending_count: usize) -> gpui::Div {
         .child(
             div()
                 .text_size(px(11.0))
-                .text_color(theme::token("color-warning", dark))
+                .text_color(theme::semantic(dark).warning)
                 .child(format!("待压缩 {pending_count} 张")),
         )
 }
@@ -1063,7 +1063,7 @@ fn image_table(
             .flex_1()
             .rounded(px(12.0))
             .bg(theme::rgba_with_alpha(
-                theme::token("color-bg-surface", dark),
+                theme::semantic(dark).bg_surface,
                 0.74,
             ))
             .border_1()
@@ -1075,7 +1075,7 @@ fn image_table(
             .flex_1()
             .rounded(px(12.0))
             .bg(theme::rgba_with_alpha(
-                theme::token("color-bg-surface", dark),
+                theme::semantic(dark).bg_surface,
                 0.78,
             ))
             .border_1()
@@ -1088,7 +1088,7 @@ fn image_table(
                     .h(px(34.0))
                     .px_3()
                     .bg(theme::rgba_with_alpha(
-                        theme::token("color-bg-subtle", dark),
+                        theme::semantic(dark).bg_subtle,
                         0.65,
                     ))
                     .border_b_1()
@@ -1171,7 +1171,7 @@ fn image_row(
                                 .child(
                                     div()
                                         .text_size(px(11.0))
-                                        .text_color(theme::token("color-text-primary", dark))
+                                        .text_color(theme::semantic(dark).text_primary)
                                         .child(item.source.file_name.clone()),
                                 )
                                 .children(if from_clipboard {
@@ -1393,7 +1393,7 @@ fn thumbnail(path: &Path, dark: bool) -> impl IntoElement {
         .size(px(THUMB_SIZE))
         .rounded(px(8.0))
         .bg(theme::rgba_with_alpha(
-            theme::token("color-bg-subtle", dark),
+            theme::semantic(dark).bg_subtle,
             0.8,
         ))
         .border_1()
@@ -1409,20 +1409,20 @@ fn thumbnail(path: &Path, dark: bool) -> impl IntoElement {
 fn status_tag(status: QueueStatus, dark: bool, reduction_ratio: Option<f32>) -> impl IntoElement {
     let (bg, text) = match status {
         QueueStatus::Success => (
-            theme::rgba_with_alpha(theme::token("color-success", dark), 0.1),
-            theme::token("color-success", dark),
+            theme::rgba_with_alpha(theme::semantic(dark).success, 0.1),
+            theme::semantic(dark).success,
         ),
         QueueStatus::Running => (
             theme::rgba_with_alpha(ui::accent_color(PluginAccent::Blue), 0.1),
             ui::accent_color(PluginAccent::Blue),
         ),
         QueueStatus::Pending => (
-            theme::rgba_with_alpha(theme::token("color-warning", dark), 0.1),
-            theme::token("color-warning", dark),
+            theme::rgba_with_alpha(theme::semantic(dark).warning, 0.1),
+            theme::semantic(dark).warning,
         ),
         QueueStatus::Failed => (
-            theme::rgba_with_alpha(theme::token("color-danger", dark), 0.1),
-            theme::token("color-danger", dark),
+            theme::rgba_with_alpha(theme::semantic(dark).danger, 0.1),
+            theme::semantic(dark).danger,
         ),
     };
 
@@ -1494,7 +1494,7 @@ fn footer_bar(
     div()
         .rounded(px(10.0))
         .bg(theme::rgba_with_alpha(
-            theme::token("color-bg-surface", dark),
+            theme::semantic(dark).bg_surface,
             0.7,
         ))
         .border_1()
@@ -1610,7 +1610,7 @@ fn footer_bar(
                     div()
                         .flex_1()
                         .text_size(px(11.0))
-                        .text_color(theme::token("color-text-regular", dark))
+                        .text_color(theme::semantic(dark).text_regular)
                         .child(message),
                 )
                 .child(
@@ -1642,7 +1642,7 @@ fn action_button(label: &str, dark: bool) -> gpui::Div {
         .px_2()
         .rounded(px(6.0))
         .bg(theme::rgba_with_alpha(
-            theme::token("color-bg-surface", dark),
+            theme::semantic(dark).bg_surface,
             0.88,
         ))
         .border_1()
@@ -1652,7 +1652,7 @@ fn action_button(label: &str, dark: bool) -> gpui::Div {
         .items_center()
         .justify_center()
         .text_size(px(10.0))
-        .text_color(theme::token("color-text-primary", dark))
+        .text_color(theme::semantic(dark).text_primary)
         .child(label.to_string())
 }
 

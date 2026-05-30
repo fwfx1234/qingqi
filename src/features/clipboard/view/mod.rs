@@ -1102,8 +1102,8 @@ fn render_tab_bar(
         .h(px(36.0))
         .px(px(16.0))
         .border_b_1()
-        .border_color(theme::token("color-border-default", dark))
-        .bg(theme::token("color-bg-page", dark))
+        .border_color(theme::semantic(dark).border_default)
+        .bg(theme::semantic(dark).bg_page)
         .flex()
         .items_center()
         .gap(px(4.0))
@@ -1116,14 +1116,14 @@ fn render_tab_bar(
                 .px(px(12.0))
                 .rounded(px(6.0))
                 .bg(if is_active {
-                    theme::token("color-bg-surface", dark).into()
+                    theme::semantic(dark).bg_surface.into()
                 } else {
                     hsla(0.0, 0.0, 0.0, 0.0)
                 })
                 .text_color(if is_active {
-                    theme::token("color-text-primary", dark)
+                    theme::semantic(dark).text_primary
                 } else {
-                    theme::token("color-text-secondary", dark)
+                    theme::semantic(dark).text_secondary
                 })
                 .font_weight(if is_active {
                     gpui::FontWeight::SEMIBOLD
@@ -1134,7 +1134,7 @@ fn render_tab_bar(
                 .cursor_pointer()
                 .hover(move |style| {
                     style.bg(if !is_active {
-                        theme::token("color-row-hover", dark).into()
+                        theme::semantic(dark).row_hover.into()
                     } else {
                         hsla(0.0, 0.0, 0.0, 0.0)
                     })
@@ -1194,8 +1194,8 @@ impl Render for ClipboardPanel {
             .size_full()
             .flex()
             .flex_col()
-            .bg(theme::token("color-bg-page", dark))
-            .text_color(theme::token("color-text-primary", dark))
+            .bg(theme::semantic(dark).bg_page)
+            .text_color(theme::semantic(dark).text_primary)
             .font_family("PingFang SC")
             .track_focus(
                 self.focus_handle

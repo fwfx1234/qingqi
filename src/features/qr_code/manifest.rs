@@ -20,19 +20,19 @@ pub fn manifest() -> PluginManifest {
             .collect(),
         background: false,
         dynamic_commands: false,
-        visual: PluginVisualSpec {
+        visual: Some(PluginVisualSpec {
             icon: IconRef::asset("qta/mdi6.qrcode.png"),
             accent: PluginAccent::Blue,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Inline,
             window: WindowSpec::ratio(0.76, 0.76),
-        },
-        stats: PluginStats {
+        }),
+        stats: Some(PluginStats {
             primary: "生成".into(),
             secondary: "剪贴板导入".into(),
             tertiary: "qrcode crate".into(),
-        },
+        }),
         command_hint: "输入文本生成二维码".into(),
         command_prefixes: ["qr", "qrcode"].into_iter().map(Into::into).collect(),
     }

@@ -43,7 +43,7 @@ pub(super) fn history_page(
                 .h_full()
                 .flex()
                 .flex_col()
-                .bg(theme::token("color-bg-subtle", dark))
+                .bg(theme::semantic(dark).bg_subtle)
                 .child(history_top_bar(
                     handle.clone(),
                     query_input,
@@ -85,8 +85,8 @@ pub(super) fn history_page(
                 .min_w(px(430.0))
                 .h_full()
                 .border_l_1()
-                .border_color(theme::token("color-border-default", dark))
-                .bg(theme::token("color-bg-page", dark))
+                .border_color(theme::semantic(dark).border_default)
+                .bg(theme::semantic(dark).bg_page)
                 .flex()
                 .flex_col()
                 .child(
@@ -117,8 +117,8 @@ fn history_top_bar(
         .h(px(62.0))
         .px(px(18.0))
         .border_b_1()
-        .border_color(theme::token("color-border-default", dark))
-        .bg(theme::token("color-bg-page", dark))
+        .border_color(theme::semantic(dark).border_default)
+        .bg(theme::semantic(dark).bg_page)
         .flex()
         .items_center()
         .child(div().w(px(220.0)))
@@ -139,7 +139,7 @@ fn history_top_bar(
                 .child(
                     div()
                         .text_size(px(13.0))
-                        .text_color(theme::token("color-text-secondary", dark))
+                        .text_color(theme::semantic(dark).text_secondary)
                         .child(format!("{item_count} 条")),
                 )
                 .child(top_bar_icon_button(handle, dark)),
@@ -152,20 +152,20 @@ fn top_bar_icon_button(handle: Entity<ClipboardPanel>, dark: bool) -> impl IntoE
         .size(px(30.0))
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::token("color-border-default", dark))
-        .bg(theme::token("color-bg-elevated", dark))
+        .border_color(theme::semantic(dark).border_default)
+        .bg(theme::semantic(dark).bg_elevated)
         .flex()
         .items_center()
         .justify_center()
         .hover(|style| {
             style
-                .bg(theme::token("color-row-hover", dark))
+                .bg(theme::semantic(dark).row_hover)
                 .cursor_pointer()
         })
         .child(
             Icon::new(IconName::Settings)
                 .with_size(ComponentSize::Small)
-                .text_color(theme::token("color-text-secondary", dark)),
+                .text_color(theme::semantic(dark).text_secondary),
         )
         .on_click(move |_, _, cx| {
             let _ = cx.update_entity(&handle, |panel, cx| {
@@ -181,7 +181,7 @@ fn history_filter_divider(dark: bool) -> impl IntoElement {
         .mt(px(14.0))
         .mb(px(10.0))
         .h(px(1.0))
-        .bg(theme::token("color-border-default", dark))
+        .bg(theme::semantic(dark).border_default)
 }
 
 fn search_field(query_input: Entity<TextInput>, dark: bool) -> gpui::Div {
@@ -190,8 +190,8 @@ fn search_field(query_input: Entity<TextInput>, dark: bool) -> gpui::Div {
         .h(px(32.0))
         .rounded(px(9.0))
         .border_1()
-        .border_color(theme::token("color-border-default", dark))
-        .bg(theme::token("color-bg-elevated", dark))
+        .border_color(theme::semantic(dark).border_default)
+        .bg(theme::semantic(dark).bg_elevated)
         .px(px(10.0))
         .flex()
         .items_center()
@@ -199,7 +199,7 @@ fn search_field(query_input: Entity<TextInput>, dark: bool) -> gpui::Div {
         .child(
             Icon::new(IconName::Search)
                 .with_size(ComponentSize::Medium)
-                .text_color(theme::token("color-text-placeholder", dark)),
+                .text_color(theme::semantic(dark).text_placeholder),
         )
         .child(div().flex_1().child(query_input.into_any_element()))
 }
@@ -223,18 +223,18 @@ fn render_filter_tabs(
                 .bg(if is_active {
                     theme::rgba_with_alpha(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue), 0.12)
                 } else {
-                    theme::token("color-bg-elevated", dark).into()
+                    theme::semantic(dark).bg_elevated.into()
                 })
                 .border_1()
                 .border_color(if is_active {
                     ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue)
                 } else {
-                    theme::token("color-border-default", dark)
+                    theme::semantic(dark).border_default
                 })
                 .text_color(if is_active {
                     ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue)
                 } else {
-                    theme::token("color-text-secondary", dark)
+                    theme::semantic(dark).text_secondary
                 })
                 .text_size(px(12.0))
                 .font_weight(if is_active {
@@ -245,7 +245,7 @@ fn render_filter_tabs(
                 .hover(move |style| {
                     style
                         .bg(if !is_active {
-                            theme::token("color-row-hover", dark).into()
+                            theme::semantic(dark).row_hover.into()
                         } else {
                             hsla(0.0, 0.0, 0.0, 0.0)
                         })
@@ -350,13 +350,13 @@ fn empty_state_text(query: &str, dark: bool, is_empty: bool) -> impl IntoElement
             div()
                 .text_size(px(14.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::token("color-text-primary", dark))
+                .text_color(theme::semantic(dark).text_primary)
                 .child(title),
         )
         .child(
             div()
                 .text_size(px(12.0))
-                .text_color(theme::token("color-text-secondary", dark))
+                .text_color(theme::semantic(dark).text_secondary)
                 .child(subtitle),
         )
 }
@@ -374,14 +374,14 @@ fn history_row(
     let icon_surface = if selected {
         theme::rgba_with_alpha(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue), 0.12)
     } else {
-        theme::token("color-bg-elevated", dark).into()
+        theme::semantic(dark).bg_elevated.into()
     };
     let row_bg = if selected {
         theme::rgba_with_alpha(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue), 0.06)
     } else {
         hsla(0.0, 0.0, 0.0, 0.0)
     };
-    let title_color = theme::token("color-text-primary", dark);
+    let title_color = theme::semantic(dark).text_primary;
     let pin_handle = handle.clone();
     let delete_handle = handle.clone();
 
@@ -398,7 +398,7 @@ fn history_row(
                 .bg(if selected {
                     theme::rgba_with_alpha(ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue), 0.08)
                 } else {
-                    theme::token("color-row-hover", dark).into()
+                    theme::semantic(dark).row_hover.into()
                 })
                 .cursor_pointer()
         })
@@ -437,7 +437,7 @@ fn history_row(
                     div()
                         .text_size(px(11.0))
                         .line_height(px(15.0))
-                        .text_color(theme::token("color-text-secondary", dark))
+                        .text_color(theme::semantic(dark).text_secondary)
                         .child(subtitle),
                 ),
         )
@@ -482,20 +482,20 @@ fn row_icon_button(
         .size(px(28.0))
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::token("color-border-default", dark))
-        .bg(theme::token("color-bg-elevated", dark))
+        .border_color(theme::semantic(dark).border_default)
+        .bg(theme::semantic(dark).bg_elevated)
         .flex()
         .items_center()
         .justify_center()
         .hover(|style| {
             style
-                .bg(theme::token("color-row-hover", dark))
+                .bg(theme::semantic(dark).row_hover)
                 .cursor_pointer()
         })
         .child(
             Icon::new(icon)
                 .with_size(ComponentSize::Small)
-                .text_color(theme::token("color-text-secondary", dark)),
+                .text_color(theme::semantic(dark).text_secondary),
         )
         .on_click(move |event, window, cx| {
             on_click(event, window, cx);
@@ -513,15 +513,15 @@ fn history_row_media(
             .size(px(42.0))
             .rounded(px(8.0))
             .border_1()
-            .border_color(theme::token("color-border-default", dark))
-            .bg(theme::token("color-bg-elevated", dark))
+            .border_color(theme::semantic(dark).border_default)
+            .bg(theme::semantic(dark).bg_elevated)
             .overflow_hidden()
             .child(
                 img(PathBuf::from(item.content.clone()))
                     .object_fit(ObjectFit::Cover)
                     .size_full()
                     .with_fallback(move || {
-                        icon_label("IMG", icon_surface, theme::token("color-warning", dark))
+                        icon_label("IMG", icon_surface, theme::semantic(dark).warning)
                             .into_any_element()
                     })
                     .into_any_element(),
@@ -607,12 +607,12 @@ fn history_item_icon(item: &ClipboardRecord) -> &'static str {
 fn history_item_icon_color(item: &ClipboardRecord, dark: bool) -> gpui::Rgba {
     match item.kind {
         history_store::ClipboardItemKind::Text => match item.badge_kind() {
-            history_store::ClipboardBadgeKind::Link => theme::token("color-success", dark),
+            history_store::ClipboardBadgeKind::Link => theme::semantic(dark).success,
             history_store::ClipboardBadgeKind::Json => ui::accent_color(crate::core::plugin_spec::PluginAccent::Blue),
-            history_store::ClipboardBadgeKind::Other => theme::token("color-text-secondary", dark),
+            history_store::ClipboardBadgeKind::Other => theme::semantic(dark).text_secondary,
         },
-        history_store::ClipboardItemKind::Image => theme::token("color-warning", dark),
-        history_store::ClipboardItemKind::Files => theme::token("color-danger", dark),
+        history_store::ClipboardItemKind::Image => theme::semantic(dark).warning,
+        history_store::ClipboardItemKind::Files => theme::semantic(dark).danger,
     }
 }
 
@@ -660,7 +660,7 @@ fn preview_text(preview_input: Entity<TextInput>, dark: bool) -> impl IntoElemen
         .size_full()
         .px(px(14.0))
         .py(px(12.0))
-        .text_color(theme::token("color-text-regular", dark))
+        .text_color(theme::semantic(dark).text_regular)
         .child(preview_input)
 }
 
@@ -675,7 +675,7 @@ fn preview_unavailable(message: &'static str, dark: bool) -> impl IntoElement {
         .items_center()
         .justify_center()
         .text_size(px(12.0))
-        .text_color(theme::token("color-text-placeholder", dark))
+        .text_color(theme::semantic(dark).text_placeholder)
         .child(message)
 }
 
@@ -695,8 +695,8 @@ fn detail_panel(
             .min_h(px(0.0))
             .rounded(px(8.0))
             .border_1()
-            .border_color(theme::token("color-border-default", dark))
-            .bg(theme::token("color-bg-surface", dark))
+            .border_color(theme::semantic(dark).border_default)
+            .bg(theme::semantic(dark).bg_surface)
             .overflow_hidden()
             .child(
                 selected_record
@@ -761,16 +761,16 @@ fn detail_action_button(
         .px(px(12.0))
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::token("color-border-default", dark))
-        .bg(theme::token("color-bg-surface", dark))
+        .border_color(theme::semantic(dark).border_default)
+        .bg(theme::semantic(dark).bg_surface)
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(12.0))
-        .text_color(theme::token("color-text-primary", dark))
+        .text_color(theme::semantic(dark).text_primary)
         .hover(|style| {
             style
-                .bg(theme::token("color-row-hover", dark))
+                .bg(theme::semantic(dark).row_hover)
                 .cursor_pointer()
         })
         .child(label)

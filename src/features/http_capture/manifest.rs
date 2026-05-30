@@ -20,19 +20,19 @@ pub fn manifest() -> PluginManifest {
             .collect(),
         background: true,
         dynamic_commands: false,
-        visual: PluginVisualSpec {
+        visual: Some(PluginVisualSpec {
             icon: IconRef::asset("icons/capture.svg"),
             accent: PluginAccent::Cyan,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Window,
             window: WindowSpec::ratio(0.86, 0.82),
-        },
-        stats: PluginStats {
+        }),
+        stats: Some(PluginStats {
             primary: "代理抓包".into(),
             secondary: "请求筛选".into(),
             tertiary: "HTTPS MITM".into(),
-        },
+        }),
         command_hint: "启动代理、观察流量、按方法/域名/状态过滤".into(),
         command_prefixes: ["cap", "capture", "httpcap"]
             .into_iter()

@@ -4,50 +4,65 @@ use gpui::{App, IntoElement, Window};
 
 use crate::{
     core::{
-        command::{CommandItem, ContextKind, ContextMatcher},
-        plugin::{
-            ConfiguredPluginRuntime, PanelPluginView, PluginCx, PluginManifest, PluginView,
-            recommended_plugin_command,
-        },
+        command::{Command, ContextKind, ContextMatcher},
+        plugin::{InlineView, Manifest, Plugin, PluginCx, PluginView, recommended_plugin_command},
         storage::AppPaths,
     },
     features::qr_code::{manifest, view},
 };
 
-pub type QrCodeRuntime = ConfiguredPluginRuntime<AppPaths>;
-
-pub fn runtime(paths: AppPaths) -> QrCodeRuntime {
-    ConfiguredPluginRuntime::with_state(manifest::manifest, paths)
-        .with_commands(commands)
-        .with_view(open_view)
+pub struct QrCodePlugin {
+    paths: AppPaths,
 }
 
-fn commands(manifest: PluginManifest) -> Vec<CommandItem> {
-    recommended_plugin_command(
-        manifest,
-        [
-            ContextMatcher::new(ContextKind::Url, 120),
-            ContextMatcher::clipboard(ContextKind::Url, 80),
-        ],
-    )
+pub fn runtime(paths: AppPaths) -> QrCodePlugin {
+    QrCodePlugin { paths }
 }
 
-fn open_view(paths: &mut AppPaths, _: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
-    Ok(PluginView::Inline(Box::new(
-        PanelPluginView::new(
-            manifest::PLUGIN_ID,
-            "二维码",
-            Rc::new(RefCell::new(view::QrPanel::new(paths.clone())?)),
-            |panel, _window: &mut Window, _cx: &mut App| {
-                view::QrCodeElement {
-                    panel: Rc::clone(panel),
-                }
-                .into_any_element()
-            },
+impl Plugin for QrCodePlugin {
+    fn manifest(&self) -> Manifest {
+        manifest::manifest()
+    }
+
+    fn commands(&self, _query: &str) -> Vec<Command> {
+        recommended_plugin_command(
+            self.manifest(),
+            [ContextMatcher::new(ContextKind::Url, 120)],
         )
-        .with_input_changed(|panel, text, cx| {
-            panel.borrow_mut().set_launch_input(text, cx);
-        })
-        .with_close(|panel| panel.borrow_mut().clear_view_state()),
-    )))
+    }
+
+    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+        Ok(PluginView::Inline(Box::new(QrCodeView {
+            panel: Rc::new(RefCell::new(view::QrPanel::new(self.paths.clone())?)),
+        })))
+    }
+}
+
+struct QrCodeView {
+    panel: Rc<RefCell<view::QrPanel>>,
+}
+
+impl InlineView for QrCodeView {
+    fn plugin_id(&self) -> &str {
+        manifest::PLUGIN_ID
+    }
+
+    fn title(&self) -> &str {
+        "二维码"
+    }
+
+    fn render(&mut self, _window: &mut Window, _cx: &mut App) -> gpui::AnyElement {
+        view::QrCodeElement {
+            panel: Rc::clone(&self.panel),
+        }
+        .into_any_element()
+    }
+
+    fn on_input_changed(&mut self, text: &str, cx: &mut App) {
+        self.panel.borrow_mut().set_launch_input(text, cx);
+    }
+
+    fn on_close(&mut self) {
+        self.panel.borrow_mut().clear_view_state();
+    }
 }

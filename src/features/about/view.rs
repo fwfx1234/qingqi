@@ -20,9 +20,9 @@ impl RenderOnce for AboutPage {
 
         div()
             .size_full()
-            .bg(theme::token("color-bg-page", dark))
+            .bg(theme::semantic(dark).bg_page)
             .font_family("PingFang SC")
-            .text_color(theme::token("color-text-primary", dark))
+            .text_color(theme::semantic(dark).text_primary)
             .flex()
             .items_center()
             .justify_center()
@@ -54,14 +54,14 @@ impl RenderOnce for AboutPage {
                     .child(
                         div()
                             .text_size(px(13.0))
-                            .text_color(theme::token("color-text-regular", dark))
+                            .text_color(theme::semantic(dark).text_regular)
                             .child(format!("版本 {APP_VERSION}")),
                     )
                     // ── Tech stack ────────────────────────────────────────
                     .child(
                         div()
                             .text_size(px(12.0))
-                            .text_color(theme::token("color-text-secondary", dark))
+                            .text_color(theme::semantic(dark).text_secondary)
                             .font_family("SF Mono")
                             .child("Rust + GPUI"),
                     )
@@ -71,16 +71,16 @@ impl RenderOnce for AboutPage {
                             .w(px(420.0))
                             .h(px(44.0))
                             .rounded(px(10.0))
-                            .bg(theme::token("color-bg-surface", dark))
+                            .bg(theme::semantic(dark).bg_surface)
                             .border_1()
-                            .border_color(theme::token("color-border-default", dark))
+                            .border_color(theme::semantic(dark).border_default)
                             .flex()
                             .items_center()
                             .justify_center()
                             .child(
                                 div()
                                     .text_size(px(12.0))
-                                    .text_color(theme::token("color-text-regular", dark))
+                                    .text_color(theme::semantic(dark).text_regular)
                                     .child("基于 Rust + GPUI 的桌面工具箱"),
                             ),
                     )
@@ -130,7 +130,7 @@ impl RenderOnce for AboutPage {
                     // ── Status bar ─────────────────────────────────────────
                     .child(ui::status_bar(
                         format!("Qingqi v{APP_VERSION} · Rust + GPUI"),
-                        theme::token("color-text-secondary", dark),
+                        theme::semantic(dark).text_secondary,
                     )),
             )
     }
@@ -140,9 +140,9 @@ fn section_card(dark: bool, title: &'static str, children: impl IntoElement) -> 
     div()
         .w(px(420.0))
         .rounded(px(10.0))
-        .bg(theme::token("color-bg-surface", dark))
+        .bg(theme::semantic(dark).bg_surface)
         .border_1()
-        .border_color(theme::token("color-border-default", dark))
+        .border_color(theme::semantic(dark).border_default)
         .p_4()
         .flex()
         .flex_col()
@@ -165,14 +165,14 @@ fn tech_row(dark: bool, label: &'static str, value: &'static str) -> impl IntoEl
         .child(
             div()
                 .text_size(px(13.0))
-                .text_color(theme::token("color-text-regular", dark))
+                .text_color(theme::semantic(dark).text_regular)
                 .child(label),
         )
         .child(
             div()
                 .text_size(px(13.0))
                 .font_family("SF Mono")
-                .text_color(theme::token("color-text-primary", dark))
+                .text_color(theme::semantic(dark).text_primary)
                 .child(value),
         )
 }
@@ -186,13 +186,13 @@ fn desc_row(dark: bool, label: &'static str, desc: &'static str) -> impl IntoEle
             div()
                 .text_size(px(13.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::token("color-text-primary", dark))
+                .text_color(theme::semantic(dark).text_primary)
                 .child(label),
         )
         .child(
             div()
                 .text_size(px(12.0))
-                .text_color(theme::token("color-text-regular", dark))
+                .text_color(theme::semantic(dark).text_regular)
                 .child(desc),
         )
 }

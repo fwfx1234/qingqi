@@ -1037,7 +1037,7 @@ fn collection_tree(
                         .text_size(px(16.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(if dark {
-                            theme::token("color-text-primary", dark)
+                            theme::semantic(dark).text_primary
                         } else {
                             rgb(0x444458)
                         })
@@ -1224,7 +1224,7 @@ fn request_tree_block(
                         .text_color(if request_active {
                             api_accent(dark)
                         } else {
-                            theme::token("color-text-regular", dark)
+                            theme::semantic(dark).text_regular
                         })
                         .truncate()
                         .child(request.title.clone()),
@@ -1291,7 +1291,7 @@ fn request_tree_block(
                             .text_color(if active {
                                 api_accent(dark)
                             } else {
-                                theme::token("color-text-regular", dark)
+                                theme::semantic(dark).text_regular
                             })
                             .truncate()
                             .child(scenario.name.clone()),
@@ -1329,7 +1329,7 @@ fn open_tabs_bar(
         .items_center()
         .gap(px(8.0))
         .bg(theme::rgba_with_alpha(
-            theme::token("color-bg-surface", dark),
+            theme::semantic(dark).bg_surface,
             if dark { 0.42 } else { 0.54 },
         ))
         .child(
@@ -1353,7 +1353,7 @@ fn open_tabs_bar(
                         .border_color(if active {
                             api_accent(dark)
                         } else {
-                            theme::rgba_with_alpha(theme::token("color-bg-surface", dark), 0.0)
+                            theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 0.0)
                                 .into()
                         })
                         .bg(if active {
@@ -1392,10 +1392,10 @@ fn open_tabs_bar(
                             div()
                                 .id(("api-tab-close", index))
                                 .text_size(px(10.0))
-                                .text_color(theme::token("color-text-secondary", dark))
+                                .text_color(theme::semantic(dark).text_secondary)
                                 .hover(move |style| {
                                     style
-                                        .text_color(theme::token("color-danger", dark))
+                                        .text_color(theme::semantic(dark).danger)
                                         .cursor_pointer()
                                 })
                                 .child("✕")
@@ -1421,7 +1421,7 @@ fn open_tabs_bar(
                 .px(px(12.0))
                 .rounded(px(999.0))
                 .bg(theme::rgba_with_alpha(
-                    theme::token("color-bg-surface", dark),
+                    theme::semantic(dark).bg_surface,
                     if dark { 0.48 } else { 0.74 },
                 ))
                 .text_size(px(11.0))
@@ -1472,7 +1472,7 @@ fn action_bar(
         .border_b_1()
         .border_color(ui::border_light())
         .bg(theme::rgba_with_alpha(
-            theme::token("color-bg-surface", dark),
+            theme::semantic(dark).bg_surface,
             if dark { 0.30 } else { 0.42 },
         ))
         .flex()
@@ -1506,7 +1506,7 @@ fn action_bar(
                 .child(
                     div()
                         .text_size(px(8.0))
-                        .text_color(theme::token("color-text-secondary", dark))
+                        .text_color(theme::semantic(dark).text_secondary)
                         .child("▾"),
                 )
                 .on_click({
@@ -1525,7 +1525,7 @@ fn action_bar(
                 .border_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
-                    theme::token("color-bg-surface", dark),
+                    theme::semantic(dark).bg_surface,
                     if dark { 0.38 } else { 0.66 },
                 ))
                 .px(px(12.0))
@@ -1582,7 +1582,7 @@ fn scenario_banner(scenario: ApiScenario, request: ApiRequest, dark: bool) -> im
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(theme::token("color-text-secondary", dark))
+                .text_color(theme::semantic(dark).text_secondary)
                 .child(format!("基于 {} {}", request.method.label(), request.title)),
         )
 }
@@ -1601,7 +1601,7 @@ fn editor_panel(
         .border_r_1()
         .border_color(ui::border_light())
         .bg(theme::rgba_with_alpha(
-            theme::token("color-bg-surface", dark),
+            theme::semantic(dark).bg_surface,
             if dark { 0.18 } else { 0.32 },
         ))
         .flex()
@@ -1612,7 +1612,7 @@ fn editor_panel(
                 .border_b_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
-                    theme::token("color-bg-surface", dark),
+                    theme::semantic(dark).bg_surface,
                     if dark { 0.28 } else { 0.45 },
                 ))
                 .flex()
@@ -1634,7 +1634,7 @@ fn editor_panel(
                                     api_accent(dark)
                                 } else {
                                     theme::rgba_with_alpha(
-                                        theme::token("color-bg-surface", dark),
+                                        theme::semantic(dark).bg_surface,
                                         0.0,
                                     )
                                     .into()
@@ -1681,7 +1681,7 @@ fn editor_panel(
                                 .border_1()
                                 .border_color(ui::border_light())
                                 .bg(theme::rgba_with_alpha(
-                                    theme::token("color-bg-surface", dark),
+                                    theme::semantic(dark).bg_surface,
                                     if dark { 0.38 } else { 0.62 },
                                 ))
                                 .overflow_hidden()
@@ -1704,7 +1704,7 @@ fn response_panel(
         .flex_1()
         .min_w(px(320.0))
         .bg(theme::rgba_with_alpha(
-            theme::token("color-bg-surface", dark),
+            theme::semantic(dark).bg_surface,
             if dark { 0.14 } else { 0.26 },
         ))
         .flex()
@@ -1716,7 +1716,7 @@ fn response_panel(
                 .border_b_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
-                    theme::token("color-bg-surface", dark),
+                    theme::semantic(dark).bg_surface,
                     if dark { 0.28 } else { 0.45 },
                 ))
                 .flex()
@@ -1737,7 +1737,7 @@ fn response_panel(
                 .border_b_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
-                    theme::token("color-bg-surface", dark),
+                    theme::semantic(dark).bg_surface,
                     if dark { 0.20 } else { 0.32 },
                 ))
                 .flex()
@@ -1759,7 +1759,7 @@ fn response_panel(
                                     theme::rgba_with_alpha(api_accent(dark), 0.08)
                                 } else {
                                     theme::rgba_with_alpha(
-                                        theme::token("color-bg-surface", dark),
+                                        theme::semantic(dark).bg_surface,
                                         0.0,
                                     )
                                 })
@@ -1793,7 +1793,7 @@ fn response_panel(
                 .scrollbar_width(px(4.0))
                 .p(px(14.0))
                 .bg(theme::rgba_with_alpha(
-                    theme::token("color-bg-surface", dark),
+                    theme::semantic(dark).bg_surface,
                     if dark { 0.12 } else { 0.22 },
                 ))
                 .child(
@@ -1801,7 +1801,7 @@ fn response_panel(
                         .font_family("SF Mono")
                         .text_size(px(11.0))
                         .line_height(px(18.0))
-                        .text_color(theme::token("color-text-regular", dark))
+                        .text_color(theme::semantic(dark).text_regular)
                         .child(response_text),
                 ),
         )
@@ -1869,7 +1869,7 @@ fn env_popup(
                                     div()
                                         .text_size(px(14.0))
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        .text_color(theme::token("color-text-primary", dark))
+                                        .text_color(theme::semantic(dark).text_primary)
                                         .truncate()
                                         .child(environment.name.clone()),
                                 )
@@ -1971,7 +1971,7 @@ fn env_manager_dialog(
                 .border_b_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
-                    theme::token("color-bg-surface", dark),
+                    theme::semantic(dark).bg_surface,
                     if dark { 0.34 } else { 0.52 },
                 ))
                 .flex()
@@ -1987,7 +1987,7 @@ fn env_manager_dialog(
                             div()
                                 .text_size(px(18.0))
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(theme::token("color-text-primary", dark))
+                                .text_color(theme::semantic(dark).text_primary)
                                 .child("环境管理"),
                         )
                         .child(
@@ -2014,7 +2014,7 @@ fn env_manager_dialog(
                         .border_r_1()
                         .border_color(ui::border_light())
                         .bg(theme::rgba_with_alpha(
-                            theme::token("color-bg-surface", dark),
+                            theme::semantic(dark).bg_surface,
                             if dark { 0.18 } else { 0.34 },
                         ))
                         .p(px(18.0))
@@ -2158,7 +2158,7 @@ fn env_manager_dialog(
                                                 .border_1()
                                                 .border_color(ui::border_light())
                                                 .bg(theme::rgba_with_alpha(
-                                                    theme::token("color-bg-surface", dark),
+                                                    theme::semantic(dark).bg_surface,
                                                     if dark { 0.32 } else { 0.52 },
                                                 ))
                                                 .font_family("SF Mono")
@@ -2218,7 +2218,7 @@ fn env_manager_dialog(
                                                     theme::rgba_with_alpha(api_accent(dark), 0.08)
                                                 } else {
                                                     theme::rgba_with_alpha(
-                                                        theme::token("color-bg-surface", dark),
+                                                        theme::semantic(dark).bg_surface,
                                                         if dark { 0.24 } else { 0.48 },
                                                     )
                                                 })
@@ -2292,7 +2292,7 @@ fn env_manager_dialog(
                                 .border_1()
                                 .border_color(ui::border_light())
                                 .bg(theme::rgba_with_alpha(
-                                    theme::token("color-bg-surface", dark),
+                                    theme::semantic(dark).bg_surface,
                                     if dark { 0.30 } else { 0.54 },
                                 ))
                                 .overflow_hidden()
@@ -2307,7 +2307,7 @@ fn env_manager_dialog(
                 .border_t_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
-                    theme::token("color-bg-surface", dark),
+                    theme::semantic(dark).bg_surface,
                     if dark { 0.28 } else { 0.46 },
                 ))
                 .flex()
@@ -2348,7 +2348,7 @@ fn env_manager_dialog(
                     div()
                         .text_size(px(12.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(theme::token("color-danger", dark))
+                        .text_color(theme::semantic(dark).danger)
                         .hover(move |style| style.cursor_pointer())
                         .child("🗑 删除此环境"),
                 ),
@@ -2368,7 +2368,7 @@ fn labeled_field(label: &'static str, input: Entity<TextInput>, dark: bool) -> i
                 .border_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
-                    theme::token("color-bg-surface", dark),
+                    theme::semantic(dark).bg_surface,
                     if dark { 0.34 } else { 0.58 },
                 ))
                 .overflow_hidden()
@@ -2547,7 +2547,7 @@ fn context_menu_item(
         .px(px(16.0))
         .py(px(11.0))
         .text_size(px(13.0))
-        .text_color(theme::token("color-text-regular", dark))
+        .text_color(theme::semantic(dark).text_regular)
         .hover(move |style| {
             style
                 .bg(theme::rgba_with_alpha(api_accent(dark), 0.06))
@@ -2573,7 +2573,7 @@ fn menu_separator(dark: bool) -> impl IntoElement {
 }
 
 fn transparent_surface(dark: bool) -> gpui::Hsla {
-    theme::rgba_with_alpha(theme::token("color-bg-surface", dark), 0.0)
+    theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 0.0)
 }
 
 fn frost_background(dark: bool) -> impl IntoElement {
@@ -2586,7 +2586,7 @@ fn frost_background(dark: bool) -> impl IntoElement {
 
 fn glass_surface(dark: bool) -> gpui::Rgba {
     if dark {
-        theme::rgba_with_alpha(theme::token("color-bg-surface", dark), 0.78).into()
+        theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 0.78).into()
     } else {
         theme::rgba_with_alpha(theme::white(), 0.86).into()
     }
@@ -2594,26 +2594,26 @@ fn glass_surface(dark: bool) -> gpui::Rgba {
 
 fn glass_border(dark: bool) -> gpui::Rgba {
     theme::rgba_with_alpha(
-        theme::token("color-border-default", dark),
+        theme::semantic(dark).border_default,
         if dark { 0.54 } else { 0.72 },
     )
     .into()
 }
 
 fn api_accent(dark: bool) -> gpui::Rgba {
-    theme::token("color-primary", dark)
+    theme::semantic(dark).primary
 }
 
 fn api_shadow(dark: bool) -> Vec<BoxShadow> {
     vec![
         BoxShadow {
-            color: theme::rgba_with_alpha(theme::token("color-shadow", dark), 0.08),
+            color: theme::rgba_with_alpha(theme::semantic(dark).shadow, 0.08),
             offset: point(px(0.0), px(14.0)),
             blur_radius: px(30.0),
             spread_radius: px(-18.0),
         },
         BoxShadow {
-            color: theme::rgba_with_alpha(theme::token("color-shadow", dark), 0.06),
+            color: theme::rgba_with_alpha(theme::semantic(dark).shadow, 0.06),
             offset: point(px(0.0), px(3.0)),
             blur_radius: px(12.0),
             spread_radius: px(-8.0),
@@ -2641,9 +2641,9 @@ fn icon_button(
         .size(px(28.0))
         .rounded(px(8.0))
         .border_1()
-        .border_color(theme::token("color-border-default", dark))
+        .border_color(theme::semantic(dark).border_default)
         .bg(theme::rgba_with_alpha(
-            theme::token("color-bg-surface", dark),
+            theme::semantic(dark).bg_surface,
             if dark { 0.52 } else { 0.78 },
         ))
         .hover(move |style| {
@@ -2681,11 +2681,11 @@ fn scenario_count_badge(count: usize, dark: bool) -> impl IntoElement {
         .px(px(6.0))
         .rounded(px(999.0))
         .bg(theme::rgba_with_alpha(
-            theme::token("color-text-secondary", dark),
+            theme::semantic(dark).text_secondary,
             0.08,
         ))
         .text_size(px(9.0))
-        .text_color(theme::token("color-text-secondary", dark))
+        .text_color(theme::semantic(dark).text_secondary)
         .child(count.to_string())
 }
 
@@ -2735,14 +2735,14 @@ fn response_metric(text: String, dark: bool) -> impl IntoElement {
         .px(px(8.0))
         .rounded(px(999.0))
         .bg(theme::rgba_with_alpha(
-            theme::token("color-text-secondary", dark),
+            theme::semantic(dark).text_secondary,
             0.08,
         ))
         .flex()
         .items_center()
         .text_size(px(10.0))
         .font_family("SF Mono")
-        .text_color(theme::token("color-text-secondary", dark))
+        .text_color(theme::semantic(dark).text_secondary)
         .child(text)
 }
 
@@ -2758,9 +2758,9 @@ fn soft_button(
         .px(px(12.0))
         .rounded(px(8.0))
         .border_1()
-        .border_color(theme::token("color-border-default", dark))
+        .border_color(theme::semantic(dark).border_default)
         .bg(theme::rgba_with_alpha(
-            theme::token("color-bg-surface", dark),
+            theme::semantic(dark).bg_surface,
             if dark { 0.42 } else { 0.72 },
         ))
         .hover(move |style| {
@@ -2772,7 +2772,7 @@ fn soft_button(
         .items_center()
         .justify_center()
         .text_size(px(11.0))
-        .text_color(theme::token("color-text-secondary", dark))
+        .text_color(theme::semantic(dark).text_secondary)
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
@@ -2841,11 +2841,11 @@ fn circle_badge(label: &str, color: u32, size: f32) -> impl IntoElement {
 
 fn status_badge(response: &ApiResponse, dark: bool) -> impl IntoElement {
     let color = if response.status_code == 0 {
-        theme::token("color-text-secondary", dark)
+        theme::semantic(dark).text_secondary
     } else if response.status_code >= 200 && response.status_code < 300 {
-        theme::token("color-success", dark)
+        theme::semantic(dark).success
     } else {
-        theme::token("color-danger", dark)
+        theme::semantic(dark).danger
     };
     div()
         .px(px(12.0))
@@ -2884,7 +2884,7 @@ fn action_link(
                 .text_color(if primary {
                     api_accent(dark)
                 } else {
-                    theme::token("color-text-primary", dark)
+                    theme::semantic(dark).text_primary
                 })
                 .cursor_pointer()
         })
@@ -2894,9 +2894,9 @@ fn action_link(
 
 fn status_color(status: ScenarioStatus, dark: bool) -> gpui::Rgba {
     match status {
-        ScenarioStatus::Passed => theme::token("color-success", dark),
-        ScenarioStatus::Pending => theme::token("color-warning", dark),
-        ScenarioStatus::Failed => theme::token("color-danger", dark),
+        ScenarioStatus::Passed => theme::semantic(dark).success,
+        ScenarioStatus::Pending => theme::semantic(dark).warning,
+        ScenarioStatus::Failed => theme::semantic(dark).danger,
     }
 }
 

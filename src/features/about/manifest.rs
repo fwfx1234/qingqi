@@ -20,19 +20,19 @@ pub fn manifest() -> PluginManifest {
             .collect(),
         background: false,
         dynamic_commands: false,
-        visual: PluginVisualSpec {
+        visual: Some(PluginVisualSpec {
             icon: IconRef::asset("icons/about.svg"),
             accent: PluginAccent::Amber,
             category: PluginCategory::About,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Inline,
             window: WindowSpec::ratio(0.58, 0.5),
-        },
-        stats: PluginStats {
+        }),
+        stats: Some(PluginStats {
             primary: "版本信息".into(),
             secondary: "项目概览".into(),
             tertiary: "Rust + GPUI".into(),
-        },
+        }),
         command_hint: "桌面工具箱版本、技术栈与模块概览".into(),
         command_prefixes: ["about"].into_iter().map(Into::into).collect(),
     }

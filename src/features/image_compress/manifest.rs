@@ -22,19 +22,19 @@ pub fn manifest() -> PluginManifest {
         .collect(),
         background: false,
         dynamic_commands: false,
-        visual: PluginVisualSpec {
+        visual: Some(PluginVisualSpec {
             icon: IconRef::asset("qta/mdi6.image-size-select-large.png"),
             accent: PluginAccent::Amber,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Inline,
             window: WindowSpec::ratio(0.82, 0.8),
-        },
-        stats: PluginStats {
+        }),
+        stats: Some(PluginStats {
             primary: "批量压缩".into(),
             secondary: "目录导出".into(),
             tertiary: "image crate".into(),
-        },
+        }),
         command_hint: "拖入图片后批量压缩导出".into(),
         command_prefixes: ["img", "image", "compress"]
             .into_iter()

@@ -35,11 +35,11 @@ impl ClipboardRuntime {
 }
 
 impl Plugin for ClipboardRuntime {
-    fn manifest(&self) -> crate::core::plugin::PluginManifest {
+    fn manifest(&self) -> crate::core::plugin::Manifest {
         manifest::manifest()
     }
 
-    fn commands(&self) -> Vec<CommandItem> {
+    fn commands(&self, _query: &str) -> Vec<CommandItem> {
         let manifest = self.manifest();
         vec![
             CommandItem::plugin_open(
@@ -47,10 +47,9 @@ impl Plugin for ClipboardRuntime {
                 manifest.name.as_ref(),
                 manifest.description.as_ref(),
                 manifest.keywords.iter().map(|s| s.as_ref()),
-                manifest.command_prefixes.iter().map(|s| s.as_ref()),
-                manifest.visual.icon.as_str(),
-            )
-            .with_recommend_matchers([ContextMatcher::clipboard(ContextKind::Clipboard, 30)]),
+                manifest.prefixes.iter().map(|s| s.as_ref()),
+                manifest.icon.as_str(),
+            ),
         ]
     }
 

@@ -132,9 +132,9 @@ impl RenderOnce for GpuiDemoPage {
 
         div()
             .size_full()
-            .bg(theme::token("color-bg-page", dark))
+            .bg(theme::semantic(dark).bg_page)
             .font_family("PingFang SC")
-            .text_color(theme::token("color-text-primary", dark))
+            .text_color(theme::semantic(dark).text_primary)
             .flex()
             .flex_col()
             .p_4()
@@ -158,7 +158,7 @@ impl RenderOnce for GpuiDemoPage {
             )
             .child(ui::status_bar(
                 "gpui-component 组件演示 — 点击按钮、切换 tab、调整 slider 查看交互效果",
-                theme::token("color-text-secondary", dark),
+                theme::semantic(dark).text_secondary,
             ))
     }
 }
@@ -166,9 +166,9 @@ impl RenderOnce for GpuiDemoPage {
 fn header(dark: bool, accent: PluginAccent) -> impl IntoElement {
     div()
         .rounded(theme::radius_lg())
-        .bg(theme::token("color-bg-surface", dark))
+        .bg(theme::semantic(dark).bg_surface)
         .border_1()
-        .border_color(theme::token("color-border-default", dark))
+        .border_color(theme::semantic(dark).border_default)
         .p_4()
         .flex()
         .items_center()
@@ -194,7 +194,7 @@ fn header(dark: bool, accent: PluginAccent) -> impl IntoElement {
                     div()
                         .text_size(px(12.0))
                         .line_height(px(18.0))
-                        .text_color(theme::token("color-text-regular", dark))
+                        .text_color(theme::semantic(dark).text_regular)
                         .child("用 gpui-component 真实组件替代静态描述，验证按钮、标签页、开关等控件的交互行为。"),
                 ),
         )
@@ -213,7 +213,7 @@ fn component_column(
             div()
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::token("color-text-secondary", dark))
+                .text_color(theme::semantic(dark).text_secondary)
                 .child("Button 变体"),
         )
         .child(
@@ -253,7 +253,7 @@ fn component_column(
                 .mt_1()
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::token("color-text-secondary", dark))
+                .text_color(theme::semantic(dark).text_secondary)
                 .child("Switch / Checkbox"),
         )
         .child(
@@ -277,7 +277,7 @@ fn component_column(
                 .mt_1()
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::token("color-text-secondary", dark))
+                .text_color(theme::semantic(dark).text_secondary)
                 .child(format!(
                     "Slider — {}",
                     slider.read(cx).value().start() as i32
@@ -294,7 +294,7 @@ fn layout_column(dark: bool, active_tab: usize) -> impl IntoElement {
             div()
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::token("color-text-secondary", dark))
+                .text_color(theme::semantic(dark).text_secondary)
                 .child("TabBar — Underline"),
         )
         .child(
@@ -306,9 +306,9 @@ fn layout_column(dark: bool, active_tab: usize) -> impl IntoElement {
         .child(
             div()
                 .rounded(theme::radius_md())
-                .bg(theme::token("color-bg-subtle-2", dark))
+                .bg(theme::semantic(dark).bg_subtle_2)
                 .border_1()
-                .border_color(theme::token("color-border-default", dark))
+                .border_color(theme::semantic(dark).border_default)
                 .p_3()
                 .text_size(px(13.0))
                 .child(format!(
@@ -321,7 +321,7 @@ fn layout_column(dark: bool, active_tab: usize) -> impl IntoElement {
                 .mt_1()
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::token("color-text-secondary", dark))
+                .text_color(theme::semantic(dark).text_secondary)
                 .child("TabBar — Segmented"),
         )
         .child(
@@ -335,7 +335,7 @@ fn layout_column(dark: bool, active_tab: usize) -> impl IntoElement {
                 .mt_1()
                 .rounded(theme::radius_md())
                 .border_1()
-                .border_color(theme::token("color-border-default", dark))
+                .border_color(theme::semantic(dark).border_default)
                 .overflow_hidden()
                 .child(sample_strip(dark, "左侧导航", 0.28))
                 .child(sample_strip(dark, "中间内容", 0.42))
@@ -384,9 +384,9 @@ fn panel(dark: bool, title: &'static str) -> gpui::Div {
     div()
         .flex_1()
         .rounded(theme::radius_lg())
-        .bg(theme::token("color-bg-surface", dark))
+        .bg(theme::semantic(dark).bg_surface)
         .border_1()
-        .border_color(theme::token("color-border-default", dark))
+        .border_color(theme::semantic(dark).border_default)
         .p_4()
         .flex()
         .flex_col()
@@ -408,9 +408,9 @@ fn demo_row(
 ) -> impl IntoElement {
     div()
         .rounded(theme::radius_md())
-        .bg(theme::token("color-bg-subtle-2", dark))
+        .bg(theme::semantic(dark).bg_subtle_2)
         .border_1()
-        .border_color(theme::token("color-border-default", dark))
+        .border_color(theme::semantic(dark).border_default)
         .p_3()
         .flex()
         .gap_2()
@@ -443,7 +443,7 @@ fn demo_row(
                     div()
                         .text_size(px(11.0))
                         .line_height(px(16.0))
-                        .text_color(theme::token("color-text-regular", dark))
+                        .text_color(theme::semantic(dark).text_regular)
                         .child(body),
                 ),
         )
@@ -454,13 +454,13 @@ fn sample_strip(dark: bool, label: &'static str, width_ratio: f32) -> impl IntoE
     div()
         .h(px(34.0))
         .w(px(width))
-        .bg(theme::token("color-bg-subtle", dark))
+        .bg(theme::semantic(dark).bg_subtle)
         .border_b_1()
-        .border_color(theme::token("color-border-default", dark))
+        .border_color(theme::semantic(dark).border_default)
         .flex()
         .items_center()
         .px_2()
         .text_size(px(11.0))
-        .text_color(theme::token("color-text-secondary", dark))
+        .text_color(theme::semantic(dark).text_secondary)
         .child(SharedString::from(label))
 }

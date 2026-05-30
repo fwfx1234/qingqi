@@ -1027,7 +1027,7 @@ fn top_bar(
         .flex()
         .items_center()
         .gap(px(8.0))
-        .bg(theme::token("color-bg-surface", dark))
+        .bg(theme::semantic(dark).bg_surface)
         .child(div().size(px(8.0)).rounded(px(999.0)).bg(status_color))
         .child(
             div()
@@ -1319,7 +1319,7 @@ fn connection_card(
                         .text_color(if selected {
                             rgb(0xffffff)
                         } else {
-                            theme::token("color-text-primary", dark)
+                            theme::semantic(dark).text_primary
                         })
                         .line_clamp(1)
                         .child(profile.name.clone()),
@@ -1349,7 +1349,7 @@ fn connection_card(
                         .bg(if selected {
                             theme::rgba_with_alpha(rgb(0xffffff), 0.18)
                         } else {
-                            theme::rgba_with_alpha(theme::token("color-bg-surface", dark), 1.0)
+                            theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 1.0)
                         })
                         .text_size(px(9.0))
                         .text_color(if selected {
@@ -1440,7 +1440,7 @@ fn file_workspace(
         .min_h(px(0.0))
         .border_r_1()
         .border_color(ui::border_light())
-        .bg(theme::token("color-bg-surface", dark))
+        .bg(theme::semantic(dark).bg_surface)
         .flex()
         .flex_col()
         .child(
@@ -1695,7 +1695,7 @@ fn remote_entry_row(
                 theme::rgba_with_alpha(theme::accent_color(theme::ThemeAccent::Cyan), 0.16)
             }
         } else {
-            theme::rgba_with_alpha(theme::token("color-bg-surface", dark), 1.0)
+            theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 1.0)
         })
         .hover(move |style| style.bg(row_hover_color(dark)).cursor_pointer())
         .on_mouse_down(MouseButton::Right, {
@@ -1834,7 +1834,7 @@ fn protocol_panel(
         .flex_1()
         .min_w(px(360.0))
         .min_h(px(0.0))
-        .bg(theme::token("color-bg-surface", dark))
+        .bg(theme::semantic(dark).bg_surface)
         .flex()
         .flex_col()
         .child(
@@ -1983,7 +1983,7 @@ fn terminal_workspace(
                 .flex_1()
                 .min_h(px(0.0))
                 .p(px(8.0))
-                .bg(theme::token("color-bg-subtle-2", dark))
+                .bg(theme::semantic(dark).bg_subtle_2)
                 .child(
                     div()
                         .id("ftp-scroll")
@@ -2025,7 +2025,7 @@ fn terminal_workspace(
                 .flex()
                 .items_center()
                 .gap(px(6.0))
-                .bg(theme::token("color-bg-surface", dark))
+                .bg(theme::semantic(dark).bg_surface)
                 .child(
                     div()
                         .font_family("SF Mono")
@@ -2167,7 +2167,7 @@ fn protocol_log_row(dark: bool, entry: ProtocolLogEntry) -> impl IntoElement {
 
 fn row_hover_color(dark: bool) -> gpui::Hsla {
     theme::rgba_with_alpha(
-        theme::token("color-row-hover", dark),
+        theme::semantic(dark).row_hover,
         if dark { 0.86 } else { 0.72 },
     )
 }
@@ -2203,7 +2203,7 @@ fn transfer_panel(
         .border_t_1()
         .border_color(ui::border_light())
         .h(if collapsed { px(32.0) } else { px(168.0) })
-        .bg(theme::token("color-bg-surface", dark))
+        .bg(theme::semantic(dark).bg_surface)
         .flex()
         .flex_col()
         .child(
@@ -2661,7 +2661,7 @@ fn profile_editor_overlay(
             .rounded(px(12.0))
             .border_1()
             .border_color(ui::border_light())
-            .bg(theme::token("color-bg-surface", dark))
+            .bg(theme::semantic(dark).bg_surface)
             .shadow_lg()
             .flex()
             .flex_col()
@@ -2815,7 +2815,7 @@ fn profile_editor_overlay(
                             .rounded(px(12.0))
                             .border_1()
                             .border_color(ui::border_light())
-                            .bg(theme::token("color-bg-surface", dark))
+                            .bg(theme::semantic(dark).bg_surface)
                             .px(px(12.0))
                             .py(px(10.0))
                             .flex()
@@ -3025,7 +3025,7 @@ fn profile_form_section(title: &'static str, dark: bool, body: gpui::Div) -> gpu
         .rounded(px(8.0))
         .border_1()
         .border_color(ui::border_light())
-        .bg(theme::token("color-bg-surface", dark))
+        .bg(theme::semantic(dark).bg_surface)
         .px(px(14.0))
         .py(px(10.0))
         .flex()
@@ -3035,7 +3035,7 @@ fn profile_form_section(title: &'static str, dark: bool, body: gpui::Div) -> gpu
             div()
                 .text_size(px(12.0))
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(theme::token("color-text-primary", dark))
+                .text_color(theme::semantic(dark).text_primary)
                 .child(title),
         )
         .child(body)
@@ -3054,7 +3054,7 @@ fn profile_label_value_row(label: &'static str, content: gpui::Div, dark: bool) 
             div()
                 .w(px(68.0))
                 .text_size(px(11.0))
-                .text_color(theme::token("color-text-primary", dark))
+                .text_color(theme::semantic(dark).text_primary)
                 .child(label),
         )
         .child(
@@ -3064,7 +3064,7 @@ fn profile_label_value_row(label: &'static str, content: gpui::Div, dark: bool) 
                 .rounded(px(8.0))
                 .border_1()
                 .border_color(ui::border_light())
-                .bg(theme::token("color-bg-elevated", dark))
+                .bg(theme::semantic(dark).bg_elevated)
                 .px(px(10.0))
                 .flex()
                 .items_center()
@@ -3090,7 +3090,7 @@ fn new_folder_overlay(
             .rounded(px(16.0))
             .border_1()
             .border_color(ui::border_light())
-            .bg(theme::token("color-bg-elevated", dark))
+            .bg(theme::semantic(dark).bg_elevated)
             .shadow_lg()
             .p(px(18.0))
             .flex()
@@ -3181,7 +3181,7 @@ fn profile_menu_overlay(
                 .rounded(px(12.0))
                 .border_1()
                 .border_color(ui::border_light())
-                .bg(theme::token("color-bg-elevated", dark))
+                .bg(theme::semantic(dark).bg_elevated)
                 .shadow_lg()
                 .p(px(6.0))
                 .flex()
@@ -3283,7 +3283,7 @@ fn file_menu_overlay(
                 .rounded(px(12.0))
                 .border_1()
                 .border_color(ui::border_light())
-                .bg(theme::token("color-bg-elevated", dark))
+                .bg(theme::semantic(dark).bg_elevated)
                 .shadow_lg()
                 .p(px(6.0))
                 .flex()
@@ -3386,7 +3386,7 @@ fn search_input_shell(input: Option<Entity<TextInput>>, dark: bool) -> impl Into
         .rounded(px(8.0))
         .border_1()
         .border_color(ui::border_light())
-        .bg(theme::token("color-bg-surface", dark))
+        .bg(theme::semantic(dark).bg_surface)
         .child(input.unwrap_or_else(|| panic!("search input should be initialized")))
 }
 
@@ -3517,7 +3517,7 @@ fn status_pill(label: String, color: gpui::Rgba, dark: bool) -> impl IntoElement
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(theme::token("color-text-primary", dark))
+                .text_color(theme::semantic(dark).text_primary)
                 .child(label),
         )
 }
@@ -3549,7 +3549,7 @@ fn small_action(label: &'static str, dark: bool) -> gpui::Div {
         .items_center()
         .justify_center()
         .text_size(px(10.0))
-        .text_color(theme::token("color-text-primary", dark))
+        .text_color(theme::semantic(dark).text_primary)
         .child(label)
 }
 
@@ -3564,7 +3564,7 @@ fn small_icon_action(icon: IconName, dark: bool) -> gpui::Div {
         .flex()
         .items_center()
         .justify_center()
-        .text_color(theme::token("color-text-primary", dark))
+        .text_color(theme::semantic(dark).text_primary)
         .child(Icon::new(icon).with_size(px(13.0)))
 }
 
@@ -3582,7 +3582,7 @@ fn small_icon_text_action(icon: IconName, label: &'static str, dark: bool) -> gp
         .justify_center()
         .gap(px(4.0))
         .text_size(px(10.0))
-        .text_color(theme::token("color-text-primary", dark))
+        .text_color(theme::semantic(dark).text_primary)
         .child(Icon::new(icon).with_size(px(12.0)))
         .child(label)
 }
@@ -3596,7 +3596,7 @@ fn menu_item(label: &'static str, dark: bool) -> gpui::Div {
         .flex()
         .items_center()
         .text_size(px(11.0))
-        .text_color(theme::token("color-text-primary", dark))
+        .text_color(theme::semantic(dark).text_primary)
         .child(label)
 }
 

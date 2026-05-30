@@ -349,7 +349,7 @@ impl RenderOnce for JsonParserElement {
                                 .h(px(34.0))
                                 .rounded(px(10.0))
                                 .bg(theme::rgba_with_alpha(
-                                    theme::token("color-bg-surface", dark),
+                                    theme::semantic(dark).bg_surface,
                                     0.86,
                                 ))
                                 .border_1()
@@ -399,7 +399,7 @@ fn editor_split(
     split
         .child(editor_pane(
             "输入",
-            theme::token("color-bg-surface", dark),
+            theme::semantic(dark).bg_surface,
             input,
             dark,
             layout_mode,
@@ -466,7 +466,7 @@ fn output_pane(
                 .flex_1()
                 .rounded(px(12.0))
                 .bg(theme::rgba_with_alpha(
-                    theme::token("color-bg-subtle", dark),
+                    theme::semantic(dark).bg_subtle,
                     0.76,
                 ))
                 .border_1()
@@ -483,16 +483,16 @@ fn status_bar(
     dark: bool,
 ) -> impl IntoElement {
     let status_color = match status_tone {
-        StatusTone::Neutral => theme::token("color-text-regular", dark),
-        StatusTone::Success => theme::token("color-success", dark),
-        StatusTone::Error => theme::token("color-danger", dark),
+        StatusTone::Neutral => theme::semantic(dark).text_regular,
+        StatusTone::Success => theme::semantic(dark).success,
+        StatusTone::Error => theme::semantic(dark).danger,
     };
 
     div()
         .h(px(32.0))
         .rounded(px(10.0))
         .bg(theme::rgba_with_alpha(
-            theme::token("color-bg-surface", dark),
+            theme::semantic(dark).bg_surface,
             0.7,
         ))
         .border_1()
@@ -513,7 +513,7 @@ fn status_bar(
                 div()
                     .text_size(px(11.0))
                     .font_family("SF Mono")
-                    .text_color(theme::token("color-danger", dark))
+                    .text_color(theme::semantic(dark).danger)
                     .child(error_loc_text),
             )
         })
@@ -547,7 +547,7 @@ fn mode_button(
     let background = if active {
         theme::rgba_with_alpha(theme::accent_color(theme::ThemeAccent::Green), 0.14)
     } else {
-        theme::rgba_with_alpha(theme::token("color-bg-surface", dark), 0.84)
+        theme::rgba_with_alpha(theme::semantic(dark).bg_surface, 0.84)
     };
     let border = if active {
         theme::rgba_with_alpha(theme::accent_color(theme::ThemeAccent::Green), 0.24)
@@ -557,7 +557,7 @@ fn mode_button(
     let text_color = if active {
         theme::accent_color(theme::ThemeAccent::Green)
     } else {
-        theme::token("color-text-primary", dark)
+        theme::semantic(dark).text_primary
     };
 
     div()
@@ -593,7 +593,7 @@ fn toolbar_button(
         .px_3()
         .rounded(px(8.0))
         .bg(theme::rgba_with_alpha(
-            theme::token("color-bg-surface", dark),
+            theme::semantic(dark).bg_surface,
             0.84,
         ))
         .border_1()
@@ -603,7 +603,7 @@ fn toolbar_button(
         .items_center()
         .justify_center()
         .text_size(px(11.0))
-        .text_color(theme::token("color-text-primary", dark))
+        .text_color(theme::semantic(dark).text_primary)
         .child(label)
         .on_click(move |_, window, cx| {
             run_action(action, &panel, cx);
@@ -621,7 +621,7 @@ fn module_header(dark: bool) -> impl IntoElement {
                 div()
                     .text_size(px(16.0))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme::token("color-text-primary", dark))
+                    .text_color(theme::semantic(dark).text_primary)
                     .child("📦 JSON 解析"),
             )
             .child(

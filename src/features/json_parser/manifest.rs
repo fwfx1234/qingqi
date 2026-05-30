@@ -20,19 +20,19 @@ pub fn manifest() -> PluginManifest {
             .collect(),
         background: false,
         dynamic_commands: false,
-        visual: PluginVisualSpec {
+        visual: Some(PluginVisualSpec {
             icon: IconRef::asset("icons/json.svg"),
             accent: PluginAccent::Green,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Inline,
             window: WindowSpec::ratio(0.82, 0.84),
-        },
-        stats: PluginStats {
+        }),
+        stats: Some(PluginStats {
             primary: "格式化".into(),
             secondary: "JSONPath".into(),
             tertiary: "serde_json".into(),
-        },
+        }),
         command_hint: "双栏输入/输出与 JSONPath 查询".into(),
         command_prefixes: ["json", "jq"].into_iter().map(Into::into).collect(),
     }

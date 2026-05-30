@@ -20,19 +20,19 @@ pub fn manifest() -> PluginManifest {
             .collect(),
         background: false,
         dynamic_commands: false,
-        visual: PluginVisualSpec {
+        visual: Some(PluginVisualSpec {
             icon: IconRef::asset("qta/mdi6.api.png"),
             accent: PluginAccent::Blue,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Window,
             window: WindowSpec::ratio(0.84, 0.84),
-        },
-        stats: PluginStats {
+        }),
+        stats: Some(PluginStats {
             primary: "HTTP".into(),
             secondary: "环境变量".into(),
             tertiary: "请求编排".into(),
-        },
+        }),
         command_hint: "集合树、环境切换、请求编辑与响应调试".into(),
         command_prefixes: ["api", "http"].into_iter().map(Into::into).collect(),
     }

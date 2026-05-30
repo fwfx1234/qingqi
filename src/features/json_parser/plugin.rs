@@ -4,49 +4,74 @@ use gpui::{App, IntoElement, Window};
 
 use crate::{
     core::{
-        command::{CommandItem, ContextKind, ContextMatcher},
-        plugin::{
-            ConfiguredPluginRuntime, PanelPluginView, PluginCx, PluginManifest, PluginView,
-            recommended_plugin_command,
-        },
+        command::{ClipboardPayload, Command, ContextKind, ContextMatcher},
+        plugin::{InlineView, Manifest, Plugin, PluginCx, PluginView, recommended_plugin_command},
     },
     features::json_parser::{manifest, view},
 };
 
-pub type JsonParserRuntime = ConfiguredPluginRuntime<()>;
+pub struct JsonParserPlugin;
 
-pub fn runtime() -> JsonParserRuntime {
-    ConfiguredPluginRuntime::new(manifest::manifest)
-        .with_commands(commands)
-        .with_view(open_view)
+pub fn runtime() -> JsonParserPlugin {
+    JsonParserPlugin
 }
 
-fn commands(manifest: PluginManifest) -> Vec<CommandItem> {
-    recommended_plugin_command(
-        manifest,
-        [
-            ContextMatcher::new(ContextKind::Json, 180),
-            ContextMatcher::clipboard(ContextKind::Json, 100),
-        ],
-    )
-}
+impl Plugin for JsonParserPlugin {
+    fn manifest(&self) -> Manifest {
+        manifest::manifest()
+    }
 
-fn open_view(_: &mut (), _: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
-    Ok(PluginView::Inline(Box::new(
-        PanelPluginView::new(
-            manifest::PLUGIN_ID,
-            "JSON 解析",
-            Rc::new(RefCell::new(view::JsonPanel::new())),
-            |panel, _window: &mut Window, _cx: &mut App| {
-                view::JsonParserElement {
-                    panel: Rc::clone(panel),
-                }
-                .into_any_element()
-            },
+    fn commands(&self, _query: &str) -> Vec<Command> {
+        recommended_plugin_command(
+            self.manifest(),
+            [ContextMatcher::new(ContextKind::Json, 180)],
         )
-        .with_input_changed(|panel, text, cx| {
-            panel.borrow_mut().set_launch_input(text, cx);
-        })
-        .with_close(|panel| panel.borrow_mut().clear()),
-    )))
+    }
+
+    fn clipboard_boost(&self, payload: &ClipboardPayload) -> Option<i32> {
+        let text = payload.text.as_deref()?;
+        let trimmed = text.trim();
+        if (trimmed.starts_with('{') || trimmed.starts_with('['))
+            && serde_json::from_str::<serde_json::Value>(trimmed).is_ok()
+        {
+            Some(100)
+        } else {
+            None
+        }
+    }
+
+    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+        Ok(PluginView::Inline(Box::new(JsonParserView {
+            panel: Rc::new(RefCell::new(view::JsonPanel::new())),
+        })))
+    }
+}
+
+struct JsonParserView {
+    panel: Rc<RefCell<view::JsonPanel>>,
+}
+
+impl InlineView for JsonParserView {
+    fn plugin_id(&self) -> &str {
+        manifest::PLUGIN_ID
+    }
+
+    fn title(&self) -> &str {
+        "JSON 解析"
+    }
+
+    fn render(&mut self, _window: &mut Window, _cx: &mut App) -> gpui::AnyElement {
+        view::JsonParserElement {
+            panel: Rc::clone(&self.panel),
+        }
+        .into_any_element()
+    }
+
+    fn on_input_changed(&mut self, text: &str, cx: &mut App) {
+        self.panel.borrow_mut().set_launch_input(text, cx);
+    }
+
+    fn on_close(&mut self) {
+        self.panel.borrow_mut().clear();
+    }
 }

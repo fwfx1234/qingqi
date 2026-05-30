@@ -1,18 +1,15 @@
 use crate::core::{
     icon::IconRef,
-    plugin::PluginManifest,
-    plugin_spec::{
-        PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
-        PluginWindowMode, WindowSpec,
-    },
+    plugin::Manifest,
+    plugin_spec::{PluginCategory, PluginStatus, ViewMode, WindowSpec},
 };
 
 pub const PLUGIN_ID: &str = "clipboard";
 
-pub fn manifest() -> PluginManifest {
-    PluginManifest {
+pub fn manifest() -> Manifest {
+    Manifest {
         id: PLUGIN_ID.into(),
-        name: "剪贴板历史".into(),
+        name: "剪贴板".into(),
         description: "搜索、复制和管理剪贴板文本历史".into(),
         keywords: [
             "剪贴板",
@@ -28,20 +25,15 @@ pub fn manifest() -> PluginManifest {
         .collect(),
         background: true,
         dynamic_commands: false,
-        visual: PluginVisualSpec {
-            icon: IconRef::asset("qta/mdi6.clipboard-text-outline.png"),
-            accent: PluginAccent::Blue,
-            category: PluginCategory::Tool,
-            status: PluginStatus::Background,
-            mode: PluginWindowMode::Window,
-            window: WindowSpec::fixed_topmost(1024.0, 558.0),
-        },
-        stats: PluginStats {
-            primary: "文本历史".into(),
-            secondary: "SQLite 持久化".into(),
-            tertiary: "后台轮询".into(),
-        },
-        command_hint: "复制、搜索、置顶、清理".into(),
-        command_prefixes: ["clip", "clipboard"].into_iter().map(Into::into).collect(),
+        icon: IconRef::asset("icons/clipboard.svg"),
+        mode: ViewMode::Window,
+        window: WindowSpec::fixed_topmost(1024.0, 558.0),
+        category: PluginCategory::Tool,
+        status: PluginStatus::Background,
+        prefixes: ["clip", "clipboard"].into_iter().map(Into::into).collect(),
+        visual: None,
+        stats: None,
+        command_hint: None,
+        command_prefixes: Vec::new(),
     }
 }

@@ -14,7 +14,7 @@ pub(super) fn settings_page(
         .flex()
         .flex_col()
         .overflow_hidden()
-        .bg(theme::token("color-bg-page", dark))
+        .bg(theme::semantic(dark).bg_page)
         .child(settings_header(handle.clone(), status_text, dark))
         .child(
             div()
@@ -36,8 +36,8 @@ fn settings_header(
         .pl(px(108.0))
         .pr(px(16.0))
         .border_b_1()
-        .border_color(theme::token("color-border-default", dark))
-        .bg(theme::token("color-bg-page", dark))
+        .border_color(theme::semantic(dark).border_default)
+        .bg(theme::semantic(dark).bg_page)
         .flex()
         .items_center()
         .gap(px(12.0))
@@ -64,7 +64,7 @@ fn settings_header(
                     div()
                         .text_size(px(14.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(theme::token("color-text-primary", dark))
+                        .text_color(theme::semantic(dark).text_primary)
                         .child("剪贴板设置"),
                 )
                 .child(
@@ -72,7 +72,7 @@ fn settings_header(
                         .max_w(px(420.0))
                         .text_size(px(11.0))
                         .line_clamp(1)
-                        .text_color(theme::token("color-text-secondary", dark))
+                        .text_color(theme::semantic(dark).text_secondary)
                         .child(status_text),
                 ),
         )
@@ -92,8 +92,8 @@ fn settings_panel(
         .min_w(px(0.0))
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::token("color-border-default", dark))
-        .bg(theme::token("color-bg-surface", dark))
+        .border_color(theme::semantic(dark).border_default)
+        .bg(theme::semantic(dark).bg_surface)
         .p_4()
         .flex()
         .flex_col()
@@ -112,7 +112,7 @@ fn settings_panel(
                 .child(
                     div()
                         .text_size(px(12.0))
-                        .text_color(theme::token("color-text-secondary", dark))
+                        .text_color(theme::semantic(dark).text_secondary)
                         .child("设置会直接写入 SQLite，供后台采集和后续热键接管使用"),
                 ),
         )
@@ -296,8 +296,8 @@ fn settings_row(
         .p_3()
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::token("color-border-default", dark))
-        .bg(theme::token("color-bg-page", dark))
+        .border_color(theme::semantic(dark).border_default)
+        .bg(theme::semantic(dark).bg_page)
         .flex()
         .items_center()
         .justify_between()
@@ -321,7 +321,7 @@ fn settings_row(
                         .text_size(px(12.0))
                         .line_height(px(18.0))
                         .line_clamp(2)
-                        .text_color(theme::token("color-text-secondary", dark))
+                        .text_color(theme::semantic(dark).text_secondary)
                         .child(detail.into()),
                 ),
         )
@@ -342,8 +342,8 @@ fn input_shell(input: Entity<TextInput>, dark: bool) -> impl IntoElement {
     div()
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::token("color-border-default", dark))
-        .bg(theme::token("color-bg-surface", dark))
+        .border_color(theme::semantic(dark).border_default)
+        .bg(theme::semantic(dark).bg_surface)
         .child(input.into_any_element())
 }
 

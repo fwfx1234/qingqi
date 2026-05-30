@@ -20,19 +20,19 @@ pub fn manifest() -> PluginManifest {
             .collect(),
         background: false,
         dynamic_commands: false,
-        visual: PluginVisualSpec {
+        visual: Some(PluginVisualSpec {
             icon: IconRef::asset("qta/mdi6.download.png"),
             accent: PluginAccent::Green,
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Window,
             window: WindowSpec::ratio(0.86, 0.82),
-        },
-        stats: PluginStats {
+        }),
+        stats: Some(PluginStats {
             primary: "多任务下载".into(),
             secondary: "断点续传".into(),
             tertiary: "reqwest".into(),
-        },
+        }),
         command_hint: "输入 URL 或粘贴链接开始下载".into(),
         command_prefixes: ["down", "download"].into_iter().map(Into::into).collect(),
     }
