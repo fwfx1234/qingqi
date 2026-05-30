@@ -1747,11 +1747,11 @@ fn action_icon(icon: &str, dark: bool) -> gpui::Div {
         .child(icon.to_string())
 }
 
-fn components::table_header_cell(label: &str, width: f32) -> gpui::Div {
+fn table_header_cell(label: &str, width: f32) -> gpui::Div {
     div().w(px(width)).child(label.to_string())
 }
 
-fn components::table_header_flex(label: &str, grow: f32) -> gpui::Div {
+fn table_header_flex(label: &str, grow: f32) -> gpui::Div {
     let cell = div().child(label.to_string());
     if grow >= 2.0 {
         cell.flex_1()

@@ -393,8 +393,7 @@ impl Render for CapturePanel {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .text_size(px(16.0))
-                            .child("📡"),
+                            .child(ui::icon_element("antenna.svg", ui::text_secondary(), 18.0)),
                     )
                     .child(
                         div()

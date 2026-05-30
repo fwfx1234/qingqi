@@ -1406,40 +1406,11 @@ fn section_label(label: &str, dark: bool) -> impl IntoElement {
 }
 
 fn primary_action_button(label: &str, _dark: bool) -> gpui::Div {
-    div()
-        .h(px(34.0))
-        .px_3()
-        .rounded(px(8.0))
-        .bg(ui::accent_color(
-            crate::core::plugin_spec::PluginAccent::Blue,
-        ))
-        .hover(|style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(12.0))
-        .text_color(theme::white())
-        .child(label.to_string())
+    components::button(label.to_string(), components::ButtonVariant::Primary, Some(crate::core::plugin_spec::PluginAccent::Blue), _dark)
 }
 
 fn action_button(label: &str, dark: bool) -> gpui::Div {
-    div()
-        .h(px(32.0))
-        .px_3()
-        .rounded(px(8.0))
-        .bg(theme::rgba_with_alpha(
-            theme::token("color-bg-surface", dark),
-            0.88,
-        ))
-        .border_1()
-        .border_color(ui::border_light())
-        .hover(move |style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .text_color(theme::token("color-text-primary", dark))
-        .child(label.to_string())
+    components::button(label.to_string(), components::ButtonVariant::Secondary, None, dark)
 }
 
 fn utility_button(label: &str, active: bool, dark: bool) -> gpui::Div {
@@ -1532,15 +1503,5 @@ fn module_title(title: &str, tag: &str, dark: bool) -> impl IntoElement {
 }
 
 fn ghost_button(label: &str, dark: bool) -> gpui::Div {
-    div()
-        .h(px(32.0))
-        .px_3()
-        .rounded(px(8.0))
-        .hover(move |style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .text_color(ui::text_secondary())
-        .child(label.to_string())
+    components::button(label.to_string(), components::ButtonVariant::Ghost, None, dark)
 }

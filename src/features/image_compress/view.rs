@@ -1023,8 +1023,7 @@ fn drop_zone(dark: bool, pending_count: usize) -> gpui::Div {
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(20.0))
-                .child("📁"),
+                .child(ui::icon_element("folder.svg", ui::text_secondary(), 20.0)),
         )
         .child(
             div()
@@ -1447,11 +1446,11 @@ fn status_tag(status: QueueStatus, dark: bool, reduction_ratio: Option<f32>) -> 
         .child(label)
 }
 
-fn components::table_header_cell(label: &str, width: f32) -> impl IntoElement {
+fn table_header_cell(label: &str, width: f32) -> impl IntoElement {
     div().w(px(width)).child(label.to_string())
 }
 
-fn components::table_header_flex(label: &str, grow: f32) -> impl IntoElement {
+fn table_header_flex(label: &str, grow: f32) -> impl IntoElement {
     let cell = div().child(label.to_string());
     if grow >= 2.0 {
         cell.flex_1().into_any_element()
@@ -1626,52 +1625,15 @@ fn footer_bar(
 }
 
 fn primary_button(label: &str, accent: PluginAccent, dark: bool) -> gpui::Div {
-    div()
-        .h(px(32.0))
-        .px_3()
-        .rounded(px(8.0))
-        .bg(ui::accent_color(accent))
-        .hover(move |style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .text_color(if dark { theme::white() } else { theme::white() })
-        .child(label.to_string())
+    components::button(label.to_string(), components::ButtonVariant::Primary, Some(accent), dark)
 }
 
 fn secondary_button(label: &str, dark: bool) -> gpui::Div {
-    div()
-        .h(px(32.0))
-        .px_3()
-        .rounded(px(8.0))
-        .bg(theme::rgba_with_alpha(
-            theme::token("color-bg-surface", dark),
-            0.88,
-        ))
-        .border_1()
-        .border_color(ui::border_light())
-        .hover(move |style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .text_color(theme::token("color-text-primary", dark))
-        .child(label.to_string())
+    components::button(label.to_string(), components::ButtonVariant::Secondary, None, dark)
 }
 
 fn ghost_button(label: &str, dark: bool) -> gpui::Div {
-    div()
-        .h(px(32.0))
-        .px_3()
-        .rounded(px(8.0))
-        .hover(move |style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .text_color(ui::text_secondary())
-        .child(label.to_string())
+    components::button(label.to_string(), components::ButtonVariant::Ghost, None, dark)
 }
 
 fn action_button(label: &str, dark: bool) -> gpui::Div {

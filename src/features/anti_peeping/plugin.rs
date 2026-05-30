@@ -6,10 +6,13 @@ use gpui::{
     WindowBounds, WindowKind, WindowOptions, div, img, prelude::FluentBuilder, px,
 };
 
-use crate::core::{
-    command::CommandItem,
-    plugin::{Plugin, PluginCx, PluginManifest, PluginView, WindowView},
-    storage::AppPaths,
+use crate::{
+    app::ui,
+    core::{
+        command::CommandItem,
+        plugin::{Plugin, PluginCx, PluginManifest, PluginView, WindowView},
+        storage::AppPaths,
+    },
 };
 
 use super::manifest;
@@ -104,7 +107,7 @@ impl Plugin for AntiPeepingRuntime {
         manifest::manifest()
     }
 
-    fn commands(&self) -> Vec<CommandItem> {
+    fn commands(&self, _query: &str) -> Vec<CommandItem> {
         let m = self.manifest();
         vec![CommandItem::plugin_open(
             m.id.as_ref(),
@@ -175,14 +178,14 @@ impl WindowView for AntiPeepingView {
             .child(
                 div()
                     .text_size(px(13.0))
-                    .text_color(gpui::hsla(0.0, 0.0, 0.5, 0.7))
+                    .text_color(ui::text_secondary())
                     .child(if active {
                         "防窥屏已开启 — 所有屏幕已遮盖，按 Esc 键退出"
                     } else {
                         "防窥屏已关闭"
                     }),
             )
-            .child(div().h(px(1.0)).bg(gpui::hsla(0.0, 0.0, 0.0, 0.1)))
+            .child(div().h(px(1.0)).bg(ui::border_light()))
             .child(
                 div()
                     .text_size(px(12.0))
@@ -192,7 +195,7 @@ impl WindowView for AntiPeepingView {
             .child(
                 div()
                     .text_size(px(11.0))
-                    .text_color(gpui::hsla(0.0, 0.0, 0.5, 0.6))
+                    .text_color(ui::text_tertiary())
                     .child("留空则显示纯黑色遮罩，输入图片文件路径可使用自定义图片"),
             )
             .child(div().flex().gap(px(8.0)).items_center().child({
@@ -207,8 +210,8 @@ impl WindowView for AntiPeepingView {
                     .py(px(6.0))
                     .rounded(px(6.0))
                     .border_1()
-                    .border_color(gpui::hsla(0.0, 0.0, 0.0, 0.15))
-                    .bg(gpui::hsla(0.0, 0.0, 0.0, 0.04))
+                    .border_color(ui::border_light())
+                    .bg(ui::bg_subtle())
                     .text_size(px(12.0))
                     .child(label)
             }))
@@ -221,7 +224,7 @@ impl WindowView for AntiPeepingView {
                     .px(px(16.0))
                     .py(px(8.0))
                     .rounded(px(6.0))
-                    .bg(gpui::hsla(0.58, 0.9, 0.55, 1.0))
+                    .bg(ui::success())
                     .text_size(px(13.0))
                     .font_weight(gpui::FontWeight::MEDIUM)
                     .text_color(gpui::white())
