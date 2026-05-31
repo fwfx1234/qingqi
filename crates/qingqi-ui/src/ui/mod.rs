@@ -233,9 +233,13 @@ pub fn icon_element(icon: &str, tint: gpui::Rgba, size_px: f32) -> impl IntoElem
         } else {
             resolved
         };
-        img(std::path::PathBuf::from(path))
-            .size(px(size_px))
-            .into_any_element()
+        if assets::embedded(&path).is_some() {
+            img(path).size(px(size_px)).into_any_element()
+        } else {
+            img(std::path::PathBuf::from(path))
+                .size(px(size_px))
+                .into_any_element()
+        }
     } else {
         svg()
             .path(resolved)

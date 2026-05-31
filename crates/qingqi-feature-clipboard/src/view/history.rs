@@ -4,7 +4,7 @@ use std::sync::Arc;
 use gpui::{UniformListScrollHandle, hsla, uniform_list};
 use gpui_component::{
     Icon, IconName, Sizable, Size as ComponentSize,
-    scroll::{Scrollbar, ScrollbarShow},
+    scroll::{ScrollableElement, Scrollbar, ScrollbarShow},
 };
 
 pub(super) fn keyboard_filters() -> [ClipboardFilter; 5] {
@@ -693,6 +693,7 @@ fn preview_text(preview_input: Entity<TextInput>, _dark: bool) -> impl IntoEleme
         .size_full()
         .px(px(8.0))
         .py(px(6.0))
+        .overflow_y_scrollbar()
         .text_color(theme::semantic().text_regular)
         .child(preview_input)
 }

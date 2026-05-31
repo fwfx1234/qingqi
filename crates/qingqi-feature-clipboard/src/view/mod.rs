@@ -29,6 +29,9 @@ use settings::{format_ignore_patterns, settings_page};
 
 const HISTORY_PAGE_SIZE: usize = 120;
 const HISTORY_PREFETCH_THRESHOLD: usize = 40;
+const PREVIEW_SOFT_WRAP_COLUMNS: usize = 56;
+const PREVIEW_TEXT_LINE_HEIGHT: f32 = 17.0;
+const PREVIEW_TEXT_MAX_VISIBLE_LINES: usize = 80;
 
 fn clipboard_window_chrome_config() -> ui::WindowChromeConfig {
     ui::WindowChromeConfig::new()
@@ -465,13 +468,26 @@ impl ClipboardView {
     }
 
     fn sync_preview_input(&self, cx: &mut Context<Self>) {
-        let text = self
+        let raw_text = self
             .items
             .get(self.selected)
             .map(preview_text_for_record_for_panel)
             .unwrap_or_default();
+        let text = soft_wrap_preview_text(&raw_text, PREVIEW_SOFT_WRAP_COLUMNS);
+        let line_count = preview_display_line_count(&text);
+        let height = (line_count.min(PREVIEW_TEXT_MAX_VISIBLE_LINES) as f32
+            * PREVIEW_TEXT_LINE_HEIGHT)
+            .max(PREVIEW_TEXT_LINE_HEIGHT);
         if let Some(input) = self.preview_input.as_ref() {
             input.update(cx, |input, input_cx| {
+                input.set_style(
+                    TextInputStyle {
+                        height,
+                        font_size: 11.0,
+                        padding: 0.0,
+                    },
+                    input_cx,
+                );
                 if input.text() != text {
                     input.set_text(text.clone(), input_cx);
                 }
@@ -1313,6 +1329,74 @@ fn preview_text_for_record_for_panel(item: &ClipboardRecord) -> String {
     }
 }
 
+fn preview_display_line_count(text: &str) -> usize {
+    text.split('\n').count().max(1)
+}
+
+fn soft_wrap_preview_text(text: &str, max_columns: usize) -> String {
+    if max_columns == 0 {
+        return text.to_string();
+    }
+
+    let mut wrapped = String::with_capacity(text.len() + text.len() / max_columns);
+    for (line_index, line) in text
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .split('\n')
+        .enumerate()
+    {
+        if line_index > 0 {
+            wrapped.push('\n');
+        }
+        append_soft_wrapped_line(&mut wrapped, line, max_columns);
+    }
+    wrapped
+}
+
+fn append_soft_wrapped_line(out: &mut String, line: &str, max_columns: usize) {
+    let mut column = 0;
+    let mut last_breakable: Option<usize> = None;
+    for ch in line.chars() {
+        if column >= max_columns {
+            out.push('\n');
+            column = 0;
+            last_breakable = None;
+        }
+        out.push(ch);
+        column += 1;
+        if matches!(
+            ch,
+            ' ' | '\t'
+                | ','
+                | ';'
+                | ':'
+                | '/'
+                | '\\'
+                | '&'
+                | '?'
+                | '='
+                | '-'
+                | '_'
+                | '.'
+                | '}'
+                | ']'
+                | ')'
+        ) {
+            last_breakable = Some(out.len());
+        }
+        if column >= max_columns
+            && let Some(pos) = last_breakable.take()
+            && pos < out.len()
+        {
+            let tail = out[pos..].to_string();
+            out.truncate(pos);
+            out.push('\n');
+            out.push_str(tail.trim_start());
+            column = tail.trim_start().chars().count();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1370,5 +1454,17 @@ mod tests {
         assert!(config.capture_image);
         assert!(config.capture_files);
         assert_eq!(config.max_text_chars, 20_000);
+    }
+
+    #[test]
+    fn soft_wrap_preview_text_breaks_long_lines() {
+        let wrapped = soft_wrap_preview_text("abcdefghijklmnopqrstuvwxyz", 8);
+        assert_eq!(wrapped, "abcdefgh\nijklmnop\nqrstuvwx\nyz");
+    }
+
+    #[test]
+    fn soft_wrap_preview_text_preserves_existing_newlines() {
+        let wrapped = soft_wrap_preview_text("alpha\nbeta gamma delta", 10);
+        assert_eq!(wrapped, "alpha\nbeta \ngamma \ndelta");
     }
 }

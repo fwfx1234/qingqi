@@ -258,20 +258,6 @@ CREATE TABLE IF NOT EXISTS clipboard_config (
     updated_at TEXT NOT NULL
 );
 ";
-const ADD_BADGE_COLUMN_SQL: &str =
-    "ALTER TABLE clipboard_history ADD COLUMN badge TEXT NOT NULL DEFAULT ''";
-const ADD_CAPTURE_IMAGE_COLUMN_SQL: &str =
-    "ALTER TABLE clipboard_config ADD COLUMN capture_image INTEGER NOT NULL DEFAULT 1";
-const ADD_CAPTURE_FILES_COLUMN_SQL: &str =
-    "ALTER TABLE clipboard_config ADD COLUMN capture_files INTEGER NOT NULL DEFAULT 1";
-const ADD_IGNORE_PATTERNS_COLUMN_SQL: &str =
-    "ALTER TABLE clipboard_config ADD COLUMN ignore_patterns_json TEXT NOT NULL DEFAULT '[]'";
-const ADD_HOTKEY_COLUMN_SQL: &str =
-    "ALTER TABLE clipboard_config ADD COLUMN hotkey TEXT NOT NULL DEFAULT 'Alt+V'";
-const REBUILD_FTS_SOURCE_SQL: &str =
-    "SELECT id, item_type, content, preview, badge FROM clipboard_history";
-const INSERT_FTS_ROW_SQL: &str =
-    "INSERT INTO clipboard_history_fts(rowid, search_text) VALUES (?1, ?2)";
 const SELECT_FTS_RECORD_SQL: &str = "
 SELECT id, preview, badge FROM clipboard_history
 WHERE item_type = ?1 AND content = ?2
@@ -635,32 +621,6 @@ impl ClipboardHistoryStore {
     fn ensure_schema(&self) -> Result<()> {
         let conn = self.connection()?;
         conn.execute_batch(SCHEMA_SQL)?;
-        let _ = conn.execute(ADD_BADGE_COLUMN_SQL, []);
-        let _ = conn.execute(ADD_CAPTURE_IMAGE_COLUMN_SQL, []);
-        let _ = conn.execute(ADD_CAPTURE_FILES_COLUMN_SQL, []);
-        let _ = conn.execute(ADD_IGNORE_PATTERNS_COLUMN_SQL, []);
-        let _ = conn.execute(ADD_HOTKEY_COLUMN_SQL, []);
-        self.rebuild_fts(&conn)?;
-        Ok(())
-    }
-
-    fn rebuild_fts(&self, conn: &rusqlite::Connection) -> Result<()> {
-        conn.execute(CLEAR_FTS_SQL, [])?;
-        let mut stmt = conn.prepare(REBUILD_FTS_SOURCE_SQL)?;
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                ClipboardItemKind::from_db(&row.get::<_, String>(1)?),
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
-            ))
-        })?;
-        for row in rows {
-            let (id, kind, content, preview, badge) = row?;
-            let search_text = search_text_for_record(kind, &content, &preview, &badge);
-            conn.execute(INSERT_FTS_ROW_SQL, params![id, search_text])?;
-        }
         Ok(())
     }
 
@@ -957,19 +917,25 @@ mod tests {
     }
 
     #[test]
-    fn data_source_recreates_incompatible_database() {
-        let path = temp_db("incompatible.db");
-        let conn = rusqlite::Connection::open(&path).expect("open incompatible db");
-        conn.execute_batch(
-            "
-            CREATE TABLE clipboard_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                content TEXT NOT NULL
-            );
-            ",
-        )
-        .expect("create incompatible schema");
-        drop(conn);
+    fn data_source_reopens_existing_database_without_clearing_history() {
+        let path = temp_db("persist.db");
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(
+            path.parent().unwrap().to_path_buf(),
+        )));
+        database
+            .register_database(qingqi_plugin::database::DatabaseSpec::path(
+                "clipboard/history",
+                path.clone(),
+            ))
+            .unwrap();
+        let store = ClipboardDataSource::open(database, "clipboard/history")
+            .expect("data source should open");
+        assert!(
+            store
+                .add_text("persisted text", &ClipboardConfig::default())
+                .expect("add text before reopen")
+        );
+        drop(store);
 
         let database = Arc::new(DatabaseService::new(AppPaths::for_test(
             path.parent().unwrap().to_path_buf(),
@@ -980,20 +946,15 @@ mod tests {
                 path,
             ))
             .unwrap();
-        let store =
-            ClipboardDataSource::open(database, "clipboard/history").expect("data source opens");
+        let store = ClipboardDataSource::open(database, "clipboard/history")
+            .expect("data source should reopen");
 
-        assert!(
-            store
-                .add_text("after reset", &ClipboardConfig::default())
-                .expect("add text after reset")
-        );
         assert_eq!(
             store
                 .latest()
-                .expect("latest after reset")
+                .expect("latest after reopen")
                 .map(|record| record.content),
-            Some(String::from("after reset"))
+            Some(String::from("persisted text"))
         );
     }
 

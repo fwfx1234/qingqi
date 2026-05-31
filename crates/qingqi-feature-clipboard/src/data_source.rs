@@ -105,15 +105,6 @@ CREATE TABLE IF NOT EXISTS clipboard_config (
     updated_at TEXT NOT NULL
 );
 ";
-const DROP_SCHEMA_SQL: &str = "
-DROP TABLE IF EXISTS clipboard_history_fts;
-DROP TABLE IF EXISTS clipboard_config;
-DROP TABLE IF EXISTS clipboard_history;
-";
-const REBUILD_FTS_SOURCE_SQL: &str =
-    "SELECT id, item_type, content, preview, badge FROM clipboard_history";
-const INSERT_FTS_ROW_SQL: &str =
-    "INSERT INTO clipboard_history_fts(rowid, search_text) VALUES (?1, ?2)";
 const SELECT_FTS_RECORD_SQL: &str = "
 SELECT id, preview, badge FROM clipboard_history
 WHERE item_type = ?1 AND content = ?2
@@ -147,18 +138,9 @@ impl ClipboardDataSource {
     pub fn open(database: Arc<DatabaseService>, key: &str) -> Result<Self> {
         let pool = database.pool(key)?;
         let store = Self { pool };
-        if let Err(error) = store.ensure_schema() {
-            tracing::warn!(
-                error = %error,
-                "clipboard database schema is incompatible; recreating with latest schema"
-            );
-            store
-                .reset_schema()
-                .context("cannot reset incompatible clipboard database")?;
-            store
-                .ensure_schema()
-                .context("cannot initialize clipboard database schema after reset")?;
-        }
+        store
+            .ensure_schema()
+            .context("cannot initialize clipboard database schema")?;
         Ok(store)
     }
 
@@ -453,48 +435,6 @@ impl ClipboardDataSource {
     fn ensure_schema(&self) -> Result<()> {
         let conn = self.connection()?;
         conn.execute_batch(SCHEMA_SQL)?;
-        self.validate_schema(&conn)?;
-        self.rebuild_fts(&conn)?;
-        Ok(())
-    }
-
-    fn reset_schema(&self) -> Result<()> {
-        let conn = self.connection()?;
-        conn.execute_batch(DROP_SCHEMA_SQL)?;
-        Ok(())
-    }
-
-    fn validate_schema(&self, conn: &rusqlite::Connection) -> Result<()> {
-        conn.prepare(
-            "SELECT id, item_type, content, preview, pinned, created_at, badge
-             FROM clipboard_history LIMIT 0",
-        )?;
-        conn.prepare(
-            "SELECT id, capture_text, capture_image, capture_files, max_text_chars,
-                    ignore_patterns_json, hotkey, updated_at
-             FROM clipboard_config LIMIT 0",
-        )?;
-        conn.prepare("SELECT rowid, search_text FROM clipboard_history_fts LIMIT 0")?;
-        Ok(())
-    }
-
-    fn rebuild_fts(&self, conn: &rusqlite::Connection) -> Result<()> {
-        conn.execute(CLEAR_FTS_SQL, [])?;
-        let mut stmt = conn.prepare(REBUILD_FTS_SOURCE_SQL)?;
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                ClipboardItemKind::from_db(&row.get::<_, String>(1)?),
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
-            ))
-        })?;
-        for row in rows {
-            let (id, kind, content, preview, badge) = row?;
-            let search_text = search_text_for_record(kind, &content, &preview, &badge);
-            conn.execute(INSERT_FTS_ROW_SQL, params![id, search_text])?;
-        }
         Ok(())
     }
 

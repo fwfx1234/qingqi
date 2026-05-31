@@ -300,9 +300,11 @@ fn default_icon() -> Result<Icon, String> {
 fn load_tray_svg_icon() -> Option<Icon> {
     // macOS 菜单栏标准逻辑尺寸为 22pt，使用 2x 位图保证 Retina 清晰
     const SIZE: u32 = 44;
-    let path =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../qingqi/assets/tray-icon.svg");
-    let rgba = crate::svg_icon::rasterize_path(path.as_path(), SIZE).ok()?;
+    let rgba = crate::svg_icon::rasterize_square(
+        include_bytes!("../../qingqi/assets/tray-icon.svg"),
+        SIZE,
+    )
+    .ok()?;
     icon_from_rgba_template(rgba, SIZE, SIZE).ok()
 }
 
