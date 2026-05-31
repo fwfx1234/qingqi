@@ -1,6 +1,7 @@
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::{
     collections::{HashMap, HashSet},
-    os::unix::process::CommandExt,
     process::{Command as ProcessCommand, Stdio},
     sync::{
         Arc, Mutex,
