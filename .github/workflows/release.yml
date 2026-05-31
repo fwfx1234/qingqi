@@ -10,8 +10,8 @@ permissions:
   contents: write
 
 jobs:
-  build-macos-app:
-    name: Build macOS App (${{ runner.arch }})
+  build-macos:
+    name: Build macOS
     runs-on: macos-latest
 
     steps:
@@ -23,7 +23,7 @@ jobs:
 
       - name: Bundle macOS app
         run: |
-          cargo bundle --release
+          cargo bundle -p qingqi --release
           APP_PATH="$(ls -d target/release/bundle/osx/*.app | head -n 1)"
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "dist/Qingqi-macos-${{ runner.arch }}.zip"
@@ -39,3 +39,34 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/Qingqi-macos-${{ runner.arch }}.zip
+
+  build-windows:
+    name: Build Windows (x86_64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Package binary with assets
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/qingqi
+          Copy-Item target/release/qingqi.exe dist/qingqi/
+          Copy-Item -Recurse crates/qingqi/assets dist/qingqi/
+          Compress-Archive -Path dist/qingqi/* -DestinationPath dist/Qingqi-windows-x86_64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qingqi-windows-x86_64
+          path: dist/Qingqi-windows-x86_64.zip
+
+      - name: Release upload
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Qingqi-windows-x86_64.zip

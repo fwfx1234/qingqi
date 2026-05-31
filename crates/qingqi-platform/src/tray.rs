@@ -40,7 +40,7 @@ pub fn install_tray(mode: PreventSleepMode) -> Result<(), String> {
     {
         let menu = build_menu(mode)?;
         let icon = default_icon()?;
-        let builder = TrayIconBuilder::new()
+        let mut builder = TrayIconBuilder::new()
             .with_menu(Box::new(menu))
             .with_menu_on_left_click(false)
             .with_tooltip("Qingqi");
