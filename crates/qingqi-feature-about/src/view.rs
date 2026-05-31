@@ -1,23 +1,13 @@
-use gpui::{IntoElement, ParentElement, RenderOnce, Styled, Window, div, px};
+use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px};
 
-use qingqi_ui::{theme, theme_mode, ui};
+use qingqi_ui::{theme, ui};
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub struct AboutPage;
+pub struct AboutView;
 
-impl IntoElement for AboutPage {
-    type Element = gpui::Component<Self>;
-
-    fn into_element(self) -> Self::Element {
-        gpui::Component::new(self)
-    }
-}
-
-impl RenderOnce for AboutPage {
-    fn render(self, _window: &mut Window, _cx: &mut gpui::App) -> impl IntoElement {
-        let _dark = qingqi_ui::theme_mode::is_dark();
-
+impl Render for AboutView {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .size_full()
             .bg(theme::semantic().bg_page)
@@ -128,8 +118,6 @@ impl RenderOnce for AboutPage {
 }
 
 fn section_card(title: &'static str, children: impl IntoElement) -> impl IntoElement {
-    let _dark = theme_mode::is_dark();
-    let _dark = theme_mode::is_dark();
     div()
         .w(px(420.0))
         .rounded(px(10.0))
@@ -153,7 +141,6 @@ fn section_card(title: &'static str, children: impl IntoElement) -> impl IntoEle
 }
 
 fn tech_row(label: &'static str, value: &'static str) -> impl IntoElement {
-    let _dark = theme_mode::is_dark();
     div()
         .flex()
         .items_center()
@@ -174,7 +161,6 @@ fn tech_row(label: &'static str, value: &'static str) -> impl IntoElement {
 }
 
 fn desc_row(label: &'static str, desc: &'static str) -> impl IntoElement {
-    let _dark = theme_mode::is_dark();
     div()
         .flex()
         .flex_col()

@@ -1,8 +1,8 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 use gpui::{
-    App, AppContext, BoxShadow, Component, Entity, InteractiveElement, IntoElement, MouseButton,
-    ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window, div, hsla, point,
+    App, AppContext, BoxShadow, Context, Entity, InteractiveElement, IntoElement, MouseButton,
+    ParentElement, Render, StatefulInteractiveElement, Styled, Window, div, hsla, point,
     prelude::FluentBuilder, px, rgb,
 };
 use uuid::Uuid;
@@ -805,59 +805,46 @@ impl ApiDebuggerView {
     }
 }
 
-pub struct ApiDebuggerElement {
-    pub panel: Rc<RefCell<ApiDebuggerView>>,
-}
-
-impl IntoElement for ApiDebuggerElement {
-    type Element = Component<Self>;
-
-    fn into_element(self) -> Self::Element {
-        Component::new(self)
-    }
-}
-
-impl RenderOnce for ApiDebuggerElement {
-    fn render(self, window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        self.panel.borrow_mut().sync_service_updates();
+impl Render for ApiDebuggerView {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.sync_service_updates();
 
         let dark = qingqi_ui::theme_mode::is_dark();
         let stacked = window.bounds().size.width < px(STACK_BREAKPOINT_PX);
 
-        let panel = self.panel.borrow();
-        let groups = panel.groups.clone();
-        let environments = panel.environments.clone();
-        let open_tabs = panel.open_tabs.clone();
-        let active_tab = panel.active_tab.clone();
-        let selected_request = panel.selected_request;
-        let selected_scenario = panel.selected_scenario;
-        let selected_environment = panel.selected_environment;
-        let editor_tab = panel.editor_tab;
-        let response_tab = panel.response_tab;
-        let env_detail_tab = panel.env_detail_tab;
-        let show_env_popup = panel.show_env_popup;
-        let show_env_manager = panel.show_env_manager;
-        let show_collection_menu = panel.show_collection_menu;
-        let collection_menu_title = panel.collection_menu_title.clone();
-        let collection_menu_position = panel.collection_menu_position;
-        let path_input = panel.path_input.clone();
-        let editor_input = panel.editor_input();
-        let env_name_input = panel.env_name_input.clone();
-        let env_base_url_input = panel.env_base_url_input.clone();
-        let env_variables_input = panel.env_variables_input.clone();
-        let env_headers_input = panel.env_headers_input.clone();
-        let response = panel.response.clone();
-        let response_text = panel.response_text();
-        let notice = panel.notice.clone();
-        let current_request = panel.selected_request().clone();
-        let current_environment = panel.selected_environment().clone();
-        let current_scenario = panel.current_scenario().cloned();
+        let entity = cx.entity();
+        let groups = self.groups.clone();
+        let environments = self.environments.clone();
+        let open_tabs = self.open_tabs.clone();
+        let active_tab = self.active_tab.clone();
+        let selected_request = self.selected_request;
+        let selected_scenario = self.selected_scenario;
+        let selected_environment = self.selected_environment;
+        let editor_tab = self.editor_tab;
+        let response_tab = self.response_tab;
+        let env_detail_tab = self.env_detail_tab;
+        let show_env_popup = self.show_env_popup;
+        let show_env_manager = self.show_env_manager;
+        let show_collection_menu = self.show_collection_menu;
+        let collection_menu_title = self.collection_menu_title.clone();
+        let collection_menu_position = self.collection_menu_position;
+        let path_input = self.path_input.clone();
+        let editor_input = self.editor_input();
+        let env_name_input = self.env_name_input.clone();
+        let env_base_url_input = self.env_base_url_input.clone();
+        let env_variables_input = self.env_variables_input.clone();
+        let env_headers_input = self.env_headers_input.clone();
+        let response = self.response.clone();
+        let response_text = self.response_text();
+        let notice = self.notice.clone();
+        let current_request = self.selected_request().clone();
+        let current_environment = self.selected_environment().clone();
+        let current_scenario = self.current_scenario().cloned();
         let tab_titles = open_tabs
             .iter()
-            .map(|tab| panel.tab_title(tab))
+            .map(|tab| self.tab_title(tab))
             .collect::<Vec<_>>();
-        let in_flight = panel.service.is_in_flight();
-        drop(panel);
+        let in_flight = self.service.is_in_flight();
 
         ui::plugin_surface()
             .font_family("Inter, PingFang SC")
@@ -868,13 +855,13 @@ impl RenderOnce for ApiDebuggerElement {
                 div()
                     .size_full()
                     .relative()
-                    .p(px(if stacked { 10.0 } else { 14.0 }))
+                    .p(px(if stacked { 8.0 } else { 10.0 }))
                     .flex()
-                    .gap(px(if stacked { 10.0 } else { 12.0 }))
+                    .gap(px(if stacked { 8.0 } else { 10.0 }))
                     .when(stacked, |layout| layout.flex_col())
                     .when(!stacked, |layout| layout.flex_row())
                     .child(collection_tree(
-                        Rc::clone(&self.panel),
+                        entity.clone(),
                         groups,
                         selected_request,
                         selected_scenario,
@@ -884,16 +871,16 @@ impl RenderOnce for ApiDebuggerElement {
                         div()
                             .flex_1()
                             .min_w(px(0.0))
-                            .rounded(px(18.0))
+                            .rounded(px(12.0))
                             .border_1()
                             .border_color(glass_border(dark))
                             .bg(glass_surface(dark))
-                            .shadow(api_shadow(dark))
+                            .shadow(api_shadow())
                             .overflow_hidden()
                             .flex()
                             .flex_col()
                             .child(open_tabs_bar(
-                                Rc::clone(&self.panel),
+                                entity.clone(),
                                 open_tabs,
                                 active_tab,
                                 tab_titles,
@@ -901,7 +888,7 @@ impl RenderOnce for ApiDebuggerElement {
                                 dark,
                             ))
                             .child(action_bar(
-                                Rc::clone(&self.panel),
+                                entity.clone(),
                                 current_request.clone(),
                                 current_environment.clone(),
                                 path_input,
@@ -918,13 +905,13 @@ impl RenderOnce for ApiDebuggerElement {
                             .child(
                                 content_split(stacked)
                                     .child(editor_panel(
-                                        Rc::clone(&self.panel),
+                                        entity.clone(),
                                         editor_tab,
                                         editor_input,
                                         dark,
                                     ))
                                     .child(response_panel(
-                                        Rc::clone(&self.panel),
+                                        entity.clone(),
                                         response_tab,
                                         response,
                                         response_text,
@@ -939,13 +926,13 @@ impl RenderOnce for ApiDebuggerElement {
                     dark,
                     "api-env-popup-backdrop",
                     {
-                        let panel = Rc::clone(&self.panel);
-                        move |_, _cx| {
-                            panel.borrow_mut().show_env_popup = false;
+                        let entity = entity.clone();
+                        move |_, cx| {
+                            entity.update(cx, |view, _cx| view.show_env_popup = false);
                         }
                     },
                     env_popup(
-                        Rc::clone(&self.panel),
+                        entity.clone(),
                         environments.clone(),
                         selected_environment,
                         dark,
@@ -960,15 +947,16 @@ impl RenderOnce for ApiDebuggerElement {
                     dark,
                     "api-env-manager-backdrop",
                     {
-                        let panel = Rc::clone(&self.panel);
-                        move |_, _cx| {
-                            let mut panel = panel.borrow_mut();
-                            panel.show_env_manager = false;
-                            panel.show_env_popup = false;
+                        let entity = entity.clone();
+                        move |_, cx| {
+                            entity.update(cx, |view, _cx| {
+                                view.show_env_manager = false;
+                                view.show_env_popup = false;
+                            });
                         }
                     },
                     env_manager_dialog(
-                        Rc::clone(&self.panel),
+                        entity.clone(),
                         selected_environment,
                         env_detail_tab,
                         environments,
@@ -985,7 +973,7 @@ impl RenderOnce for ApiDebuggerElement {
             })
             .child(if show_collection_menu {
                 context_menu_overlay(
-                    Rc::clone(&self.panel),
+                    entity.clone(),
                     collection_menu_title,
                     collection_menu_position,
                     dark,
@@ -998,7 +986,7 @@ impl RenderOnce for ApiDebuggerElement {
 }
 
 fn collection_tree(
-    panel: Rc<RefCell<ApiDebuggerView>>,
+    view: Entity<ApiDebuggerView>,
     groups: Vec<ApiGroup>,
     selected_request: usize,
     selected_scenario: Option<usize>,
@@ -1006,21 +994,21 @@ fn collection_tree(
 ) -> impl IntoElement {
     let mut request_index = 0usize;
     div()
-        .w(px(274.0))
+        .w(px(250.0))
         .min_h(px(220.0))
         .flex_none()
-        .rounded(px(18.0))
+        .rounded(px(12.0))
         .border_1()
         .border_color(glass_border(dark))
         .bg(glass_surface(dark))
-        .shadow(api_shadow(dark))
+        .shadow(api_shadow())
         .overflow_hidden()
         .flex()
         .flex_col()
         .child(
             div()
-                .h(px(52.0))
-                .px(px(16.0))
+                .h(px(44.0))
+                .px(px(12.0))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .flex()
@@ -1028,7 +1016,7 @@ fn collection_tree(
                 .justify_between()
                 .child(
                     div()
-                        .text_size(px(16.0))
+                        .text_size(px(14.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(if dark {
                             theme::semantic().text_primary
@@ -1038,11 +1026,11 @@ fn collection_tree(
                         .child("📂 集合"),
                 )
                 .child(icon_button("api-tree-add", "+", dark, {
-                    let panel = Rc::clone(&panel);
-                    move |_, _cx| {
-                        panel
-                            .borrow_mut()
-                            .open_collection_menu("集合", Some((442.0, 86.0)));
+                    let view = view.clone();
+                    move |_, cx| {
+                        view.update(cx, |view, _cx| {
+                            view.open_collection_menu("集合", Some((418.0, 86.0)));
+                        });
                     }
                 })),
         )
@@ -1053,12 +1041,12 @@ fn collection_tree(
                 .min_h(px(0.0))
                 .overflow_y_scroll()
                 .scrollbar_width(px(3.0))
-                .py(px(6.0))
+                .py(px(4.0))
                 .children(groups.into_iter().map(|group| {
                     let start = request_index;
                     request_index += group.requests.len();
                     group_section(
-                        Rc::clone(&panel),
+                        view.clone(),
                         group,
                         start,
                         selected_request,
@@ -1070,7 +1058,7 @@ fn collection_tree(
 }
 
 fn group_section(
-    panel: Rc<RefCell<ApiDebuggerView>>,
+    view: Entity<ApiDebuggerView>,
     group: ApiGroup,
     request_start: usize,
     selected_request: usize,
@@ -1079,72 +1067,75 @@ fn group_section(
 ) -> impl IntoElement {
     let group_name = group.name.clone();
     div()
-        .px(px(8.0))
-        .py(px(4.0))
+        .px(px(6.0))
+        .py(px(2.0))
         .flex()
         .flex_col()
-        .gap(px(3.0))
+        .gap(px(2.0))
         .child(
             div()
                 .id(("api-group-row", request_start))
-                .px(px(6.0))
-                .py(px(5.0))
-                .rounded(px(7.0))
+                .px(px(4.0))
+                .py(px(3.0))
+                .rounded(px(5.0))
                 .hover({
-                    let dark = dark;
                     move |style| {
                         style
-                            .bg(theme::rgba_with_alpha(api_accent(dark), 0.05))
+                            .bg(theme::rgba_with_alpha(api_accent(), 0.05))
                             .cursor_context_menu()
                     }
                 })
                 .flex()
                 .items_center()
-                .gap(px(6.0))
+                .gap(px(4.0))
                 .child(
                     div()
-                        .text_size(px(10.0))
+                        .text_size(px(9.0))
                         .text_color(ui::text_tertiary())
                         .child("▾"),
                 )
                 .child(
                     div()
                         .flex_1()
-                        .text_size(px(13.0))
+                        .text_size(px(11.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(ui::text_secondary())
                         .truncate()
                         .child(group.name.clone()),
                 )
-                .child(group_count(group.requests.len(), dark))
+                .child(group_count(group.requests.len()))
                 .child(
                     div()
-                        .px(px(4.0))
-                        .text_size(px(11.0))
+                        .px(px(3.0))
+                        .text_size(px(10.0))
                         .text_color(ui::text_tertiary())
                         .child("⋯"),
                 )
                 .on_mouse_down(MouseButton::Right, {
-                    let panel = Rc::clone(&panel);
+                    let view = view.clone();
                     let group_name = group_name.clone();
                     move |event, window, cx| {
-                        panel.borrow_mut().open_collection_menu(
-                            group_name.clone(),
-                            Some((event.position.x.into(), event.position.y.into())),
-                        );
+                        view.update(cx, |view, _cx| {
+                            view.open_collection_menu(
+                                group_name.clone(),
+                                Some((event.position.x.into(), event.position.y.into())),
+                            );
+                        });
                         cx.stop_propagation();
                         window.refresh();
                     }
                 })
                 .on_click({
-                    let panel = Rc::clone(&panel);
+                    let view = view.clone();
                     let group_name = group_name.clone();
                     move |event, _window, cx| {
                         if event.is_right_click() {
-                            panel.borrow_mut().open_collection_menu(
-                                group_name.clone(),
-                                Some((event.position().x.into(), event.position().y.into())),
-                            );
+                            view.update(cx, |view, _cx| {
+                                view.open_collection_menu(
+                                    group_name.clone(),
+                                    Some((event.position().x.into(), event.position().y.into())),
+                                );
+                            });
                             cx.stop_propagation();
                         }
                     }
@@ -1157,7 +1148,7 @@ fn group_section(
                 .enumerate()
                 .map(move |(offset, request)| {
                     request_tree_block(
-                        Rc::clone(&panel),
+                        view.clone(),
                         request_start + offset,
                         request,
                         selected_request,
@@ -1169,7 +1160,7 @@ fn group_section(
 }
 
 fn request_tree_block(
-    panel: Rc<RefCell<ApiDebuggerView>>,
+    view: Entity<ApiDebuggerView>,
     request_index: usize,
     request: ApiRequest,
     selected_request: usize,
@@ -1186,37 +1177,37 @@ fn request_tree_block(
         .child(
             div()
                 .id(("api-request-row", request_index))
-                .min_h(px(34.0))
-                .px(px(10.0))
-                .py(px(5.0))
-                .rounded(px(9.0))
+                .min_h(px(30.0))
+                .px(px(8.0))
+                .py(px(3.0))
+                .rounded(px(6.0))
                 .border_1()
                 .border_color(if request_active {
-                    theme::rgba_with_alpha(api_accent(dark), 0.16)
+                    theme::rgba_with_alpha(api_accent(), 0.16)
                 } else {
-                    transparent_surface(dark)
+                    transparent_surface()
                 })
                 .bg(if request_active {
-                    theme::rgba_with_alpha(api_accent(dark), 0.08)
+                    theme::rgba_with_alpha(api_accent(), 0.08)
                 } else {
-                    transparent_surface(dark)
+                    transparent_surface()
                 })
                 .hover(move |style| {
                     style
-                        .bg(theme::rgba_with_alpha(api_accent(dark), 0.05))
+                        .bg(theme::rgba_with_alpha(api_accent(), 0.05))
                         .cursor_context_menu()
                 })
                 .flex()
                 .items_center()
-                .gap(px(6.0))
+                .gap(px(4.0))
                 .child(method_badge(request.method, dark))
                 .child(
                     div()
                         .flex_1()
                         .min_w(px(0.0))
-                        .text_size(px(12.0))
+                        .text_size(px(11.0))
                         .text_color(if request_active {
-                            api_accent(dark)
+                            api_accent()
                         } else {
                             theme::semantic().text_regular
                         })
@@ -1227,20 +1218,22 @@ fn request_tree_block(
                     row.child(scenario_count_badge(scenario_count, dark))
                 })
                 .on_click({
-                    let panel = Rc::clone(&panel);
+                    let view = view.clone();
                     move |_, window, cx| {
-                        panel.borrow_mut().select_request(request_index, cx);
+                        view.update(cx, |view, cx| view.select_request(request_index, cx));
                         window.refresh();
                     }
                 })
                 .on_mouse_down(MouseButton::Right, {
-                    let panel = Rc::clone(&panel);
+                    let view = view.clone();
                     let request_title = request_title.clone();
                     move |event, window, cx| {
-                        panel.borrow_mut().open_collection_menu(
-                            request_title.clone(),
-                            Some((event.position.x.into(), event.position.y.into())),
-                        );
+                        view.update(cx, |view, _cx| {
+                            view.open_collection_menu(
+                                request_title.clone(),
+                                Some((event.position.x.into(), event.position.y.into())),
+                            );
+                        });
                         cx.stop_propagation();
                         window.refresh();
                     }
@@ -1252,38 +1245,38 @@ fn request_tree_block(
                     selected_request == request_index && selected_scenario == Some(scenario_index);
                 div()
                     .id(("api-scenario-row", request_index * 100 + scenario_index))
-                    .min_h(px(27.0))
-                    .px(px(9.0))
-                    .py(px(3.0))
-                    .pl(px(28.0))
-                    .rounded(px(8.0))
+                    .min_h(px(24.0))
+                    .px(px(7.0))
+                    .py(px(2.0))
+                    .pl(px(24.0))
+                    .rounded(px(5.0))
                     .border_1()
                     .border_color(if active {
-                        theme::rgba_with_alpha(api_accent(dark), 0.16)
+                        theme::rgba_with_alpha(api_accent(), 0.16)
                     } else {
-                        transparent_surface(dark)
+                        transparent_surface()
                     })
                     .bg(if active {
-                        theme::rgba_with_alpha(api_accent(dark), 0.08)
+                        theme::rgba_with_alpha(api_accent(), 0.08)
                     } else {
-                        transparent_surface(dark)
+                        transparent_surface()
                     })
                     .hover(move |style| {
                         style
-                            .bg(theme::rgba_with_alpha(api_accent(dark), 0.05))
+                            .bg(theme::rgba_with_alpha(api_accent(), 0.05))
                             .cursor_pointer()
                     })
                     .flex()
                     .items_center()
-                    .gap(px(6.0))
+                    .gap(px(4.0))
                     .child(status_dot(scenario.status, dark))
                     .child(
                         div()
                             .flex_1()
                             .min_w(px(0.0))
-                            .text_size(px(11.0))
+                            .text_size(px(10.0))
                             .text_color(if active {
-                                api_accent(dark)
+                                api_accent()
                             } else {
                                 theme::semantic().text_regular
                             })
@@ -1292,11 +1285,11 @@ fn request_tree_block(
                     )
                     .child(scenario_status_pill(scenario.status, dark))
                     .on_click({
-                        let panel = Rc::clone(&panel);
+                        let view = view.clone();
                         move |_, window, cx| {
-                            panel
-                                .borrow_mut()
-                                .select_scenario(request_index, scenario_index, cx);
+                            view.update(cx, |view, cx| {
+                                view.select_scenario(request_index, scenario_index, cx);
+                            });
                             window.refresh();
                         }
                     })
@@ -1305,23 +1298,23 @@ fn request_tree_block(
 }
 
 fn open_tabs_bar(
-    panel: Rc<RefCell<ApiDebuggerView>>,
+    view: Entity<ApiDebuggerView>,
     tabs: Vec<OpenTab>,
     active_tab: OpenTab,
     titles: Vec<String>,
     environment: ApiEnvironment,
     dark: bool,
 ) -> impl IntoElement {
-    let tabs_panel = Rc::clone(&panel);
-    let env_panel = Rc::clone(&panel);
+    let tabs_view = view.clone();
+    let env_view = view.clone();
     div()
-        .h(px(48.0))
-        .px(px(12.0))
+        .h(px(38.0))
+        .px(px(10.0))
         .border_b_1()
         .border_color(ui::border_light())
         .flex()
         .items_center()
-        .gap(px(8.0))
+        .gap(px(6.0))
         .bg(theme::rgba_with_alpha(
             theme::semantic().bg_surface,
             if dark { 0.42 } else { 0.54 },
@@ -1332,47 +1325,47 @@ fn open_tabs_bar(
                 .min_w(px(0.0))
                 .flex()
                 .items_center()
-                .gap(px(6.0))
+                .gap(px(4.0))
                 .overflow_x_hidden()
                 .children(tabs.into_iter().enumerate().map(move |(index, tab)| {
                     let active = tab == active_tab;
-                    let click_panel = Rc::clone(&tabs_panel);
-                    let close_panel = Rc::clone(&tabs_panel);
+                    let click_view = tabs_view.clone();
+                    let close_view = tabs_view.clone();
                     div()
                         .id(("api-open-tab", index))
-                        .h(px(34.0))
-                        .px(px(12.0))
-                        .rounded(px(10.0))
+                        .h(px(28.0))
+                        .px(px(10.0))
+                        .rounded(px(6.0))
                         .border_b_1()
                         .border_color(if active {
-                            api_accent(dark)
+                            api_accent()
                         } else {
                             theme::rgba_with_alpha(theme::semantic().bg_surface, 0.0).into()
                         })
                         .bg(if active {
-                            theme::rgba_with_alpha(api_accent(dark), 0.08)
+                            theme::rgba_with_alpha(api_accent(), 0.08)
                         } else {
-                            transparent_surface(dark)
+                            transparent_surface()
                         })
-                        .text_size(px(11.0))
+                        .text_size(px(10.0))
                         .font_weight(if active {
                             gpui::FontWeight::SEMIBOLD
                         } else {
                             gpui::FontWeight::NORMAL
                         })
                         .text_color(if active {
-                            api_accent(dark)
+                            api_accent()
                         } else {
                             ui::text_tertiary()
                         })
                         .hover(move |style| {
                             style
-                                .bg(theme::rgba_with_alpha(api_accent(dark), 0.05))
+                                .bg(theme::rgba_with_alpha(api_accent(), 0.05))
                                 .cursor_pointer()
                         })
                         .flex()
                         .items_center()
-                        .gap(px(6.0))
+                        .gap(px(4.0))
                         .child(
                             div().max_w(px(180.0)).truncate().child(
                                 titles
@@ -1384,22 +1377,26 @@ fn open_tabs_bar(
                         .child(
                             div()
                                 .id(("api-tab-close", index))
-                                .text_size(px(10.0))
+                                .text_size(px(9.0))
                                 .text_color(theme::semantic().text_secondary)
                                 .hover(move |style| {
                                     style.text_color(theme::semantic().danger).cursor_pointer()
                                 })
                                 .child("✕")
                                 .on_click({
+                                    let view = close_view.clone();
                                     move |_, window, cx| {
-                                        close_panel.borrow_mut().close_open_tab(index, cx);
+                                        view.update(cx, |view, cx| view.close_open_tab(index, cx));
                                         window.refresh();
                                     }
                                 }),
                         )
                         .on_click({
+                            let view = click_view.clone();
                             move |_, window, cx| {
-                                click_panel.borrow_mut().select_open_tab(tab.clone(), cx);
+                                view.update(cx, |view, cx| {
+                                    view.select_open_tab(tab.clone(), cx);
+                                });
                                 window.refresh();
                             }
                         })
@@ -1408,23 +1405,23 @@ fn open_tabs_bar(
         .child(
             div()
                 .id("api-current-env")
-                .h(px(30.0))
-                .px(px(12.0))
+                .h(px(26.0))
+                .px(px(10.0))
                 .rounded(px(999.0))
                 .bg(theme::rgba_with_alpha(
                     theme::semantic().bg_surface,
                     if dark { 0.48 } else { 0.74 },
                 ))
-                .text_size(px(11.0))
+                .text_size(px(10.0))
                 .text_color(ui::text_secondary())
                 .hover(move |style| {
                     style
-                        .bg(theme::rgba_with_alpha(api_accent(dark), 0.06))
+                        .bg(theme::rgba_with_alpha(api_accent(), 0.06))
                         .cursor_pointer()
                 })
                 .flex()
                 .items_center()
-                .gap(px(6.0))
+                .gap(px(4.0))
                 .child(
                     div()
                         .size(px(7.0))
@@ -1434,15 +1431,16 @@ fn open_tabs_bar(
                 .child(environment.name.clone())
                 .child(
                     div()
-                        .text_size(px(9.0))
+                        .text_size(px(8.0))
                         .text_color(ui::text_tertiary())
                         .child("▾"),
                 )
                 .on_click({
-                    move |_, window, _cx| {
-                        let mut panel = env_panel.borrow_mut();
-                        panel.show_env_popup = true;
-                        panel.show_env_manager = false;
+                    move |_, window, cx| {
+                        env_view.update(cx, |view, _cx| {
+                            view.show_env_popup = true;
+                            view.show_env_manager = false;
+                        });
                         window.refresh();
                     }
                 }),
@@ -1450,7 +1448,7 @@ fn open_tabs_bar(
 }
 
 fn action_bar(
-    panel: Rc<RefCell<ApiDebuggerView>>,
+    view: Entity<ApiDebuggerView>,
     request: ApiRequest,
     environment: ApiEnvironment,
     path_input: Entity<TextInput>,
@@ -1458,8 +1456,8 @@ fn action_bar(
     dark: bool,
 ) -> impl IntoElement {
     div()
-        .px(px(12.0))
-        .py(px(9.0))
+        .px(px(10.0))
+        .py(px(7.0))
         .border_b_1()
         .border_color(ui::border_light())
         .bg(theme::rgba_with_alpha(
@@ -1468,13 +1466,13 @@ fn action_bar(
         ))
         .flex()
         .items_center()
-        .gap(px(8.0))
+        .gap(px(6.0))
         .child(
             div()
                 .id("api-method-selector")
-                .h(px(38.0))
-                .px(px(12.0))
-                .rounded(px(11.0))
+                .h(px(32.0))
+                .px(px(10.0))
+                .rounded(px(8.0))
                 .border_1()
                 .border_color(theme::rgba_with_alpha(rgb(request.method.color()), 0.16))
                 .bg(theme::rgba_with_alpha(rgb(request.method.color()), 0.08))
@@ -1485,25 +1483,25 @@ fn action_bar(
                 })
                 .flex()
                 .items_center()
-                .gap(px(5.0))
+                .gap(px(3.0))
                 .child(
                     div()
                         .font_family("SF Mono")
                         .font_weight(gpui::FontWeight::BOLD)
-                        .text_size(px(13.0))
+                        .text_size(px(11.0))
                         .text_color(rgb(request.method.color()))
                         .child(request.method.label()),
                 )
                 .child(
                     div()
-                        .text_size(px(8.0))
+                        .text_size(px(7.0))
                         .text_color(theme::semantic().text_secondary)
                         .child("▾"),
                 )
                 .on_click({
-                    let panel = Rc::clone(&panel);
+                    let view = view.clone();
                     move |_, window, cx| {
-                        panel.borrow_mut().cycle_method(cx);
+                        view.update(cx, |view, cx| view.cycle_method(cx));
                         window.refresh();
                     }
                 }),
@@ -1511,22 +1509,22 @@ fn action_bar(
         .child(
             div()
                 .flex_1()
-                .h(px(38.0))
-                .rounded(px(11.0))
+                .h(px(32.0))
+                .rounded(px(8.0))
                 .border_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
                     theme::semantic().bg_surface,
                     if dark { 0.38 } else { 0.66 },
                 ))
-                .px(px(12.0))
+                .px(px(10.0))
                 .flex()
                 .items_center()
-                .gap(px(6.0))
+                .gap(px(4.0))
                 .child(
                     div()
                         .font_family("SF Mono")
-                        .text_size(px(11.0))
+                        .text_size(px(10.0))
                         .text_color(ui::text_tertiary())
                         .child(environment.base_url),
                 )
@@ -1541,10 +1539,10 @@ fn action_bar(
             },
             dark,
             {
-                let panel = Rc::clone(&panel);
+                let view = view.clone();
                 move |_, cx| {
-                    if !panel.borrow().service.is_in_flight() {
-                        panel.borrow_mut().send_request(cx);
+                    if !view.read(cx).service.is_in_flight() {
+                        view.update(cx, |view, cx| view.send_request(cx));
                     }
                 }
             },
@@ -1553,39 +1551,39 @@ fn action_bar(
 
 fn scenario_banner(scenario: ApiScenario, request: ApiRequest, dark: bool) -> impl IntoElement {
     div()
-        .px(px(14.0))
-        .py(px(10.0))
+        .px(px(10.0))
+        .py(px(7.0))
         .border_b_1()
         .border_color(ui::border_light())
-        .bg(theme::rgba_with_alpha(api_accent(dark), 0.06))
+        .bg(theme::rgba_with_alpha(api_accent(), 0.06))
         .flex()
         .items_center()
-        .gap(px(8.0))
+        .gap(px(6.0))
         .child(
             div()
-                .text_size(px(12.0))
+                .text_size(px(11.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(api_accent(dark))
+                .text_color(api_accent())
                 .child(format!("📋 {}", scenario.name)),
         )
         .child(scenario_status_label(scenario.status, dark))
         .child(div().flex_1())
         .child(
             div()
-                .text_size(px(10.0))
+                .text_size(px(9.0))
                 .text_color(theme::semantic().text_secondary)
                 .child(format!("基于 {} {}", request.method.label(), request.title)),
         )
 }
 
 fn editor_panel(
-    panel: Rc<RefCell<ApiDebuggerView>>,
+    view: Entity<ApiDebuggerView>,
     editor_tab: EditorTab,
     editor_input: Entity<TextInput>,
     dark: bool,
 ) -> impl IntoElement {
     let label = editor_tab.label();
-    let tabs_panel = Rc::clone(&panel);
+    let tabs_view = view.clone();
     div()
         .flex_1()
         .min_w(px(320.0))
@@ -1599,7 +1597,7 @@ fn editor_panel(
         .flex_col()
         .child(
             div()
-                .px(px(12.0))
+                .px(px(10.0))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
@@ -1608,41 +1606,42 @@ fn editor_panel(
                 ))
                 .flex()
                 .items_center()
-                .gap(px(4.0))
+                .gap(px(3.0))
                 .children(
                     editor_tabs()
                         .into_iter()
                         .enumerate()
                         .map(move |(index, tab)| {
                             let active = tab == editor_tab;
-                            let tab_panel = Rc::clone(&tabs_panel);
+                            let tab_view = tabs_view.clone();
                             div()
                                 .id(("api-editor-tab", index))
-                                .px(px(11.0))
-                                .py(px(8.0))
+                                .px(px(9.0))
+                                .py(px(5.0))
                                 .border_b_1()
                                 .border_color(if active {
-                                    api_accent(dark)
+                                    api_accent()
                                 } else {
                                     theme::rgba_with_alpha(theme::semantic().bg_surface, 0.0).into()
                                 })
-                                .text_size(px(10.0))
+                                .text_size(px(9.0))
                                 .text_color(if active {
-                                    api_accent(dark)
+                                    api_accent()
                                 } else {
                                     ui::text_tertiary()
                                 })
                                 .hover(move |style| {
-                                    style.text_color(api_accent(dark)).cursor_pointer()
+                                    style.text_color(api_accent()).cursor_pointer()
                                 })
                                 .child(tab.label())
                                 .on_click({
                                     move |_, _window, cx| {
-                                        let mut panel = tab_panel.borrow_mut();
-                                        panel.sync_models(cx);
-                                        panel.persist_current_tab_state(cx);
-                                        panel.editor_tab = tab;
-                                        panel.persist_current_tab_state(cx);
+                                        tab_view.update(cx, |view, cx| {
+                                            view.sync_models(cx);
+                                            view.persist_current_tab_state(cx);
+                                            view.editor_tab = tab;
+                                            view.persist_current_tab_state(cx);
+                                        });
                                     }
                                 })
                         }),
@@ -1655,16 +1654,16 @@ fn editor_panel(
                 .min_h(px(0.0))
                 .overflow_y_scroll()
                 .scrollbar_width(px(4.0))
-                .p(px(12.0))
+                .p(px(8.0))
                 .child(
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(10.0))
+                        .gap(px(8.0))
                         .child(section_micro_label(label, dark))
                         .child(
                             div()
-                                .rounded(px(12.0))
+                                .rounded(px(8.0))
                                 .border_1()
                                 .border_color(ui::border_light())
                                 .bg(theme::rgba_with_alpha(
@@ -1679,14 +1678,14 @@ fn editor_panel(
 }
 
 fn response_panel(
-    panel: Rc<RefCell<ApiDebuggerView>>,
+    view: Entity<ApiDebuggerView>,
     response_tab: ResponseTab,
     response: ApiResponse,
     response_text: String,
     notice: String,
     dark: bool,
 ) -> impl IntoElement {
-    let tabs_panel = Rc::clone(&panel);
+    let tabs_view = view.clone();
     div()
         .flex_1()
         .min_w(px(320.0))
@@ -1698,8 +1697,8 @@ fn response_panel(
         .flex_col()
         .child(
             div()
-                .px(px(14.0))
-                .py(px(10.0))
+                .px(px(10.0))
+                .py(px(7.0))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
@@ -1708,7 +1707,7 @@ fn response_panel(
                 ))
                 .flex()
                 .items_center()
-                .gap(px(12.0))
+                .gap(px(8.0))
                 .child(status_badge(&response, dark))
                 .child(div().flex_1())
                 .child(response_metric(
@@ -1719,8 +1718,8 @@ fn response_panel(
         )
         .child(
             div()
-                .px(px(12.0))
-                .py(px(8.0))
+                .px(px(10.0))
+                .py(px(5.0))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
@@ -1729,39 +1728,41 @@ fn response_panel(
                 ))
                 .flex()
                 .items_center()
-                .gap(px(6.0))
+                .gap(px(4.0))
                 .children(
                     response_tabs()
                         .into_iter()
                         .enumerate()
                         .map(move |(index, tab)| {
                             let active = tab == response_tab;
-                            let tab_panel = Rc::clone(&tabs_panel);
+                            let tab_view = tabs_view.clone();
                             div()
                                 .id(("api-response-tab", index))
-                                .px(px(12.0))
-                                .py(px(6.0))
-                                .rounded(px(8.0))
+                                .px(px(10.0))
+                                .py(px(4.0))
+                                .rounded(px(5.0))
                                 .bg(if active {
-                                    theme::rgba_with_alpha(api_accent(dark), 0.08)
+                                    theme::rgba_with_alpha(api_accent(), 0.08)
                                 } else {
                                     theme::rgba_with_alpha(theme::semantic().bg_surface, 0.0)
                                 })
-                                .text_size(px(11.0))
+                                .text_size(px(10.0))
                                 .text_color(if active {
-                                    api_accent(dark)
+                                    api_accent()
                                 } else {
                                     ui::text_tertiary()
                                 })
                                 .hover(move |style| {
                                     style
-                                        .bg(theme::rgba_with_alpha(api_accent(dark), 0.06))
+                                        .bg(theme::rgba_with_alpha(api_accent(), 0.06))
                                         .cursor_pointer()
                                 })
                                 .child(tab.label())
                                 .on_click({
-                                    move |_, window, _cx| {
-                                        tab_panel.borrow_mut().response_tab = tab;
+                                    move |_, window, cx| {
+                                        tab_view.update(cx, |view, _cx| {
+                                            view.response_tab = tab;
+                                        });
                                         window.refresh();
                                     }
                                 })
@@ -1775,7 +1776,7 @@ fn response_panel(
                 .min_h(px(0.0))
                 .overflow_y_scroll()
                 .scrollbar_width(px(4.0))
-                .p(px(14.0))
+                .p(px(10.0))
                 .bg(theme::rgba_with_alpha(
                     theme::semantic().bg_surface,
                     if dark { 0.12 } else { 0.22 },
@@ -1783,37 +1784,37 @@ fn response_panel(
                 .child(
                     div()
                         .font_family("SF Mono")
-                        .text_size(px(11.0))
-                        .line_height(px(18.0))
+                        .text_size(px(10.0))
+                        .line_height(px(16.0))
                         .text_color(theme::semantic().text_regular)
                         .child(response_text),
                 ),
         )
         .child(
             div()
-                .px(px(14.0))
-                .py(px(8.0))
+                .px(px(10.0))
+                .py(px(5.0))
                 .border_t_1()
                 .border_color(ui::border_light())
-                .text_size(px(11.0))
+                .text_size(px(10.0))
                 .text_color(ui::text_secondary())
                 .child(notice),
         )
 }
 
 fn env_popup(
-    panel: Rc<RefCell<ApiDebuggerView>>,
+    view: Entity<ApiDebuggerView>,
     environments: Vec<ApiEnvironment>,
     selected_environment: usize,
     dark: bool,
 ) -> impl IntoElement {
     div()
         .w(px(318.0))
-        .rounded(px(16.0))
+        .rounded(px(12.0))
         .border_1()
         .border_color(glass_border(dark))
         .bg(glass_surface(dark))
-        .shadow(api_shadow(dark))
+        .shadow(api_shadow())
         .overflow_hidden()
         .flex()
         .flex_col()
@@ -1825,20 +1826,20 @@ fn env_popup(
                     let active = index == selected_environment;
                     div()
                         .id(("api-env-popup-row", index))
-                        .min_h(px(76.0))
-                        .px(px(18.0))
-                        .py(px(12.0))
+                        .min_h(px(64.0))
+                        .px(px(14.0))
+                        .py(px(8.0))
                         .flex()
                         .items_center()
-                        .gap(px(12.0))
+                        .gap(px(8.0))
                         .bg(if active {
-                            theme::rgba_with_alpha(api_accent(dark), 0.06)
+                            theme::rgba_with_alpha(api_accent(), 0.06)
                         } else {
-                            transparent_surface(dark)
+                            transparent_surface()
                         })
                         .hover(move |style| {
                             style
-                                .bg(theme::rgba_with_alpha(api_accent(dark), 0.04))
+                                .bg(theme::rgba_with_alpha(api_accent(), 0.04))
                                 .cursor_pointer()
                         })
                         .child(circle_badge(&environment.badge, environment.color, 34.0))
@@ -1848,10 +1849,10 @@ fn env_popup(
                                 .min_w(px(0.0))
                                 .flex()
                                 .flex_col()
-                                .gap(px(4.0))
+                                .gap(px(3.0))
                                 .child(
                                     div()
-                                        .text_size(px(14.0))
+                                        .text_size(px(12.0))
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                         .text_color(theme::semantic().text_primary)
                                         .truncate()
@@ -1860,7 +1861,7 @@ fn env_popup(
                                 .child(
                                     div()
                                         .font_family("SF Mono")
-                                        .text_size(px(11.0))
+                                        .text_size(px(10.0))
                                         .text_color(ui::text_tertiary())
                                         .truncate()
                                         .child(environment.base_url.clone()),
@@ -1869,16 +1870,18 @@ fn env_popup(
                         .when(active, |row| {
                             row.child(
                                 div()
-                                    .text_size(px(14.0))
+                                    .text_size(px(12.0))
                                     .font_weight(gpui::FontWeight::BOLD)
-                                    .text_color(api_accent(dark))
+                                    .text_color(api_accent())
                                     .child("✓"),
                             )
                         })
                         .on_click({
-                            let panel = Rc::clone(&panel);
+                            let view = view.clone();
                             move |_, window, cx| {
-                                panel.borrow_mut().select_environment(index, cx);
+                                view.update(cx, |view, cx| {
+                                    view.select_environment(index, cx);
+                                });
                                 window.refresh();
                             }
                         })
@@ -1887,16 +1890,16 @@ fn env_popup(
         .child(
             div()
                 .id("api-env-manage")
-                .px(px(18.0))
-                .py(px(12.0))
+                .px(px(14.0))
+                .py(px(8.0))
                 .border_t_1()
                 .border_color(ui::border_light())
-                .text_size(px(12.0))
+                .text_size(px(11.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(api_accent(dark))
+                .text_color(api_accent())
                 .hover(move |style| {
                     style
-                        .bg(theme::rgba_with_alpha(api_accent(dark), 0.05))
+                        .bg(theme::rgba_with_alpha(api_accent(), 0.05))
                         .cursor_pointer()
                 })
                 .flex()
@@ -1904,11 +1907,12 @@ fn env_popup(
                 .justify_center()
                 .child("⚙ 管理环境")
                 .on_click({
-                    let panel = Rc::clone(&panel);
-                    move |_, window, _cx| {
-                        let mut panel = panel.borrow_mut();
-                        panel.show_env_popup = false;
-                        panel.show_env_manager = true;
+                    let view = view.clone();
+                    move |_, window, cx| {
+                        view.update(cx, |view, _cx| {
+                            view.show_env_popup = false;
+                            view.show_env_manager = true;
+                        });
                         window.refresh();
                     }
                 }),
@@ -1916,7 +1920,7 @@ fn env_popup(
 }
 
 fn env_manager_dialog(
-    panel: Rc<RefCell<ApiDebuggerView>>,
+    view: Entity<ApiDebuggerView>,
     selected_environment: usize,
     env_detail_tab: EnvDetailTab,
     environments: Vec<ApiEnvironment>,
@@ -1935,23 +1939,23 @@ fn env_manager_dialog(
     } else {
         env_headers_input
     };
-    let env_tabs_panel = Rc::clone(&panel);
+    let env_tabs_view = view.clone();
 
     div()
         .w(px(1040.0))
         .max_w(px(1180.0))
-        .rounded(px(20.0))
+        .rounded(px(16.0))
         .border_1()
         .border_color(glass_border(dark))
         .bg(glass_surface(dark))
-        .shadow(api_shadow(dark))
+        .shadow(api_shadow())
         .overflow_hidden()
         .flex()
         .flex_col()
         .child(
             div()
-                .h(px(62.0))
-                .px(px(24.0))
+                .h(px(52.0))
+                .px(px(18.0))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
@@ -1965,26 +1969,26 @@ fn env_manager_dialog(
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(10.0))
+                        .gap(px(8.0))
                         .child(div().text_size(px(18.0)).child("🌐"))
                         .child(
                             div()
-                                .text_size(px(18.0))
+                                .text_size(px(14.0))
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .text_color(theme::semantic().text_primary)
                                 .child("环境管理"),
                         )
                         .child(
                             div()
-                                .text_size(px(13.0))
+                                .text_size(px(11.0))
                                 .text_color(ui::text_secondary())
                                 .child(format!("{} 个环境", environments.len())),
                         ),
                 )
                 .child(soft_button("api-env-close", "关闭", dark, {
-                    let panel = Rc::clone(&panel);
-                    move |_, _cx| {
-                        panel.borrow_mut().show_env_manager = false;
+                    let view = view.clone();
+                    move |_, cx| {
+                        view.update(cx, |view, _cx| view.show_env_manager = false);
                     }
                 })),
         )
@@ -1994,17 +1998,17 @@ fn env_manager_dialog(
                 .min_h(px(500.0))
                 .child(
                     div()
-                        .w(px(292.0))
+                        .w(px(260.0))
                         .border_r_1()
                         .border_color(ui::border_light())
                         .bg(theme::rgba_with_alpha(
                             theme::semantic().bg_surface,
                             if dark { 0.18 } else { 0.34 },
                         ))
-                        .p(px(18.0))
+                        .p(px(12.0))
                         .flex()
                         .flex_col()
-                        .gap(px(14.0))
+                        .gap(px(10.0))
                         .child(
                             div()
                                 .flex()
@@ -2012,9 +2016,11 @@ fn env_manager_dialog(
                                 .justify_between()
                                 .child(section_micro_label("环境", dark))
                                 .child(soft_button("api-env-add", "+ 新建", dark, {
-                                    let panel = Rc::clone(&panel);
-                                    move |_, _cx| {
-                                        panel.borrow_mut().create_new_environment();
+                                    let view = view.clone();
+                                    move |_, cx| {
+                                        view.update(cx, |view, _cx| {
+                                            view.create_new_environment();
+                                        });
                                     }
                                 })),
                         )
@@ -2027,39 +2033,39 @@ fn env_manager_dialog(
                                 .scrollbar_width(px(4.0))
                                 .flex()
                                 .flex_col()
-                                .gap(px(10.0))
+                                .gap(px(8.0))
                                 .children(environments.into_iter().enumerate().map(
                                     |(index, environment)| {
                                         let active = index == selected_environment;
                                         div()
                                             .id(("api-env-list-row", index))
-                                            .min_h(px(82.0))
-                                            .px(px(12.0))
-                                            .py(px(10.0))
-                                            .rounded(px(12.0))
+                                            .min_h(px(70.0))
+                                            .px(px(10.0))
+                                            .py(px(8.0))
+                                            .rounded(px(8.0))
                                             .border_1()
                                             .border_color(if active {
-                                                theme::rgba_with_alpha(api_accent(dark), 0.18)
+                                                theme::rgba_with_alpha(api_accent(), 0.18)
                                                     .into()
                                             } else {
-                                                transparent_surface(dark)
+                                                transparent_surface()
                                             })
                                             .bg(if active {
-                                                theme::rgba_with_alpha(api_accent(dark), 0.08)
+                                                theme::rgba_with_alpha(api_accent(), 0.08)
                                             } else {
-                                                transparent_surface(dark)
+                                                transparent_surface()
                                             })
                                             .hover(move |style| {
                                                 style
                                                     .bg(theme::rgba_with_alpha(
-                                                        api_accent(dark),
+                                                        api_accent(),
                                                         0.05,
                                                     ))
                                                     .cursor_pointer()
                                             })
                                             .flex()
                                             .items_center()
-                                            .gap(px(12.0))
+                                            .gap(px(8.0))
                                             .child(circle_badge(
                                                 &environment.badge,
                                                 environment.color,
@@ -2071,10 +2077,10 @@ fn env_manager_dialog(
                                                     .min_w(px(0.0))
                                                     .flex()
                                                     .flex_col()
-                                                    .gap(px(5.0))
+                                                    .gap(px(4.0))
                                                     .child(
                                                         div()
-                                                            .text_size(px(14.0))
+                                                            .text_size(px(12.0))
                                                             .font_weight(gpui::FontWeight::SEMIBOLD)
                                                             .text_color(
                                                                 theme::semantic().text_primary,
@@ -2085,19 +2091,21 @@ fn env_manager_dialog(
                                                     .child(
                                                         div()
                                                             .font_family("SF Mono")
-                                                            .text_size(px(11.0))
+                                                            .text_size(px(10.0))
                                                             .text_color(ui::text_tertiary())
                                                             .truncate()
                                                             .child(environment.base_url.clone()),
                                                     ),
                                             )
                                             .on_click({
-                                                let panel = Rc::clone(&panel);
+                                                let view = view.clone();
                                                 move |_, window, cx| {
-                                                    panel
-                                                        .borrow_mut()
-                                                        .select_environment(index, cx);
-                                                    panel.borrow_mut().show_env_manager = true;
+                                                    view.update(cx, |view, cx| {
+                                                        view.select_environment(index, cx);
+                                                    });
+                                                    view.update(cx, |view, _cx| {
+                                                        view.show_env_manager = true;
+                                                    });
                                                     window.refresh();
                                                 }
                                             })
@@ -2109,10 +2117,10 @@ fn env_manager_dialog(
                     div()
                         .flex_1()
                         .min_w(px(0.0))
-                        .p(px(24.0))
+                        .p(px(16.0))
                         .flex()
                         .flex_col()
-                        .gap(px(16.0))
+                        .gap(px(12.0))
                         .child(
                             div()
                                 .flex()
@@ -2122,10 +2130,10 @@ fn env_manager_dialog(
                                     div()
                                         .flex()
                                         .flex_col()
-                                        .gap(px(5.0))
+                                        .gap(px(4.0))
                                         .child(
                                             div()
-                                                .text_size(px(18.0))
+                                                .text_size(px(14.0))
                                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                                 .text_color(theme::semantic().text_primary)
                                                 .child(current_environment.name.clone()),
@@ -2133,7 +2141,7 @@ fn env_manager_dialog(
                                         .child(
                                             div()
                                                 .h(px(24.0))
-                                                .px(px(10.0))
+                                                .px(px(8.0))
                                                 .rounded(px(999.0))
                                                 .border_1()
                                                 .border_color(ui::border_light())
@@ -2142,7 +2150,7 @@ fn env_manager_dialog(
                                                     if dark { 0.32 } else { 0.52 },
                                                 ))
                                                 .font_family("SF Mono")
-                                                .text_size(px(12.0))
+                                                .text_size(px(11.0))
                                                 .text_color(ui::text_secondary())
                                                 .flex()
                                                 .items_center()
@@ -2152,19 +2160,21 @@ fn env_manager_dialog(
                                 .child(
                                     div()
                                         .flex()
-                                        .gap(px(8.0))
+                                        .gap(px(6.0))
                                         .child(soft_button("api-env-dup", "📋 复制", dark, {
-                                            let panel = Rc::clone(&panel);
+                                            let view = view.clone();
                                             move |_, cx| {
-                                                panel
-                                                    .borrow_mut()
-                                                    .duplicate_current_environment(cx);
+                                                view.update(cx, |view, cx| {
+                                                    view.duplicate_current_environment(cx);
+                                                });
                                             }
                                         }))
                                         .child(soft_button("api-env-del", "🗑 删除", dark, {
-                                            let panel = Rc::clone(&panel);
+                                            let view = view.clone();
                                             move |_, cx| {
-                                                panel.borrow_mut().delete_current_environment(cx);
+                                                view.update(cx, |view, cx| {
+                                                    view.delete_current_environment(cx);
+                                                });
                                             }
                                         })),
                                 ),
@@ -2175,92 +2185,95 @@ fn env_manager_dialog(
                             div()
                                 .flex()
                                 .items_center()
-                                .gap(px(10.0))
+                                .gap(px(8.0))
                                 .children(
                                     [EnvDetailTab::Variables, EnvDetailTab::Headers]
                                         .into_iter()
                                         .enumerate()
                                         .map(move |(index, tab)| {
                                             let active = tab == env_detail_tab;
-                                            let tab_panel = Rc::clone(&env_tabs_panel);
+                                            let tab_view = env_tabs_view.clone();
                                             div()
                                                 .id(("api-env-detail-tab", index))
-                                                .px(px(14.0))
-                                                .py(px(8.0))
-                                                .rounded(px(10.0))
+                                                .px(px(10.0))
+                                                .py(px(5.0))
+                                                .rounded(px(6.0))
                                                 .border_1()
                                                 .border_color(if active {
-                                                    theme::rgba_with_alpha(api_accent(dark), 0.18)
+                                                    theme::rgba_with_alpha(api_accent(), 0.18)
                                                 } else {
                                                     ui::border_light()
                                                 })
                                                 .bg(if active {
-                                                    theme::rgba_with_alpha(api_accent(dark), 0.08)
+                                                    theme::rgba_with_alpha(api_accent(), 0.08)
                                                 } else {
                                                     theme::rgba_with_alpha(
                                                         theme::semantic().bg_surface,
                                                         if dark { 0.24 } else { 0.48 },
                                                     )
                                                 })
-                                                .text_size(px(12.0))
+                                                .text_size(px(11.0))
                                                 .font_weight(if active {
                                                     gpui::FontWeight::SEMIBOLD
                                                 } else {
                                                     gpui::FontWeight::NORMAL
                                                 })
                                                 .text_color(if active {
-                                                    api_accent(dark)
+                                                    api_accent()
                                                 } else {
                                                     ui::text_secondary()
                                                 })
                                                 .hover(move |style| {
                                                     style
                                                         .bg(theme::rgba_with_alpha(
-                                                            api_accent(dark),
+                                                            api_accent(),
                                                             0.06,
                                                         ))
                                                         .cursor_pointer()
                                                 })
                                                 .child(tab.label())
                                                 .on_click({
-                                                    move |_, window, _cx| {
-                                                        tab_panel.borrow_mut().env_detail_tab = tab;
+                                                    move |_, window, cx| {
+                                                        tab_view.update(cx, |view, _cx| {
+                                                            view.env_detail_tab = tab;
+                                                        });
                                                         window.refresh();
                                                     }
                                                 })
                                         }),
                                 )
                                 .child(soft_button("api-env-add-row", "+ 新增变量", dark, {
-                                    let panel = Rc::clone(&panel);
+                                    let view = view.clone();
                                     move |_, cx| {
-                                        let current = if panel.borrow().env_detail_tab
-                                            == EnvDetailTab::Variables
-                                        {
-                                            panel.borrow().env_variables_input.read(cx).text()
-                                        } else {
-                                            panel.borrow().env_headers_input.read(cx).text()
-                                        };
-                                        let appended = if current.trim().is_empty() {
-                                            String::from("KEY=VALUE")
-                                        } else {
-                                            format!("{current}\nKEY=VALUE")
-                                        };
-                                        if panel.borrow().env_detail_tab == EnvDetailTab::Variables
-                                        {
-                                            panel.borrow().env_variables_input.update(
-                                                cx,
-                                                |input, input_cx| {
-                                                    input.set_text(appended.clone(), input_cx)
-                                                },
-                                            );
-                                        } else {
-                                            panel.borrow().env_headers_input.update(
-                                                cx,
-                                                |input, input_cx| {
-                                                    input.set_text(appended.clone(), input_cx)
-                                                },
-                                            );
-                                        }
+                                        view.update(cx, |view, cx| {
+                                            let current = if view.env_detail_tab
+                                                == EnvDetailTab::Variables
+                                            {
+                                                view.env_variables_input.read(cx).text()
+                                            } else {
+                                                view.env_headers_input.read(cx).text()
+                                            };
+                                            let appended = if current.trim().is_empty() {
+                                                String::from("KEY=VALUE")
+                                            } else {
+                                                format!("{current}\nKEY=VALUE")
+                                            };
+                                            if view.env_detail_tab == EnvDetailTab::Variables {
+                                                view.env_variables_input.update(
+                                                    cx,
+                                                    |input, input_cx| {
+                                                        input.set_text(appended.clone(), input_cx)
+                                                    },
+                                                );
+                                            } else {
+                                                view.env_headers_input.update(
+                                                    cx,
+                                                    |input, input_cx| {
+                                                        input.set_text(appended.clone(), input_cx)
+                                                    },
+                                                );
+                                            }
+                                        });
                                     }
                                 })),
                         )
@@ -2268,7 +2281,7 @@ fn env_manager_dialog(
                             div()
                                 .flex_1()
                                 .min_h(px(0.0))
-                                .rounded(px(14.0))
+                                .rounded(px(10.0))
                                 .border_1()
                                 .border_color(ui::border_light())
                                 .bg(theme::rgba_with_alpha(
@@ -2282,8 +2295,8 @@ fn env_manager_dialog(
         )
         .child(
             div()
-                .h(px(58.0))
-                .px(px(24.0))
+                .h(px(48.0))
+                .px(px(18.0))
                 .border_t_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
@@ -2292,41 +2305,48 @@ fn env_manager_dialog(
                 ))
                 .flex()
                 .items_center()
-                .gap(px(16.0))
+                .gap(px(12.0))
                 .child(action_link(
                     "api-env-save",
                     "💾 保存更改",
                     true,
-                    dark,
                     {
-                        let panel = Rc::clone(&panel);
+                        let view = view.clone();
                         move |_, cx| {
-                            panel.borrow_mut().save_environment_changes(cx);
+                            view.update(cx, |view, cx| {
+                                view.save_environment_changes(cx);
+                            });
                         }
                     },
                 ))
-                .child(action_link("api-env-reset", "↩ 重置", false, dark, {
-                    let panel = Rc::clone(&panel);
+                .child(action_link("api-env-reset", "↩ 重置", false, {
+                    let view = view.clone();
                     move |_, cx| {
-                        panel.borrow_mut().reset_environment_changes(cx);
+                        view.update(cx, |view, cx| {
+                            view.reset_environment_changes(cx);
+                        });
                     }
                 }))
                 .child(div().flex_1())
-                .child(action_link("api-env-export", "📤 导出", false, dark, {
-                    let panel = Rc::clone(&panel);
-                    move |_, _cx| {
-                        panel.borrow_mut().notice = String::from("环境导出入口已预留");
+                .child(action_link("api-env-export", "📤 导出", false, {
+                    let view = view.clone();
+                    move |_, cx| {
+                        view.update(cx, |view, _cx| {
+                            view.notice = String::from("环境导出入口已预留");
+                        });
                     }
                 }))
-                .child(action_link("api-env-import", "📥 导入", false, dark, {
-                    let panel = Rc::clone(&panel);
-                    move |_, _cx| {
-                        panel.borrow_mut().notice = String::from("环境导入入口已预留");
+                .child(action_link("api-env-import", "📥 导入", false, {
+                    let view = view.clone();
+                    move |_, cx| {
+                        view.update(cx, |view, _cx| {
+                            view.notice = String::from("环境导入入口已预留");
+                        });
                     }
                 }))
                 .child(
                     div()
-                        .text_size(px(12.0))
+                        .text_size(px(11.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme::semantic().danger)
                         .hover(move |style| style.cursor_pointer())
@@ -2339,12 +2359,12 @@ fn labeled_field(label: &'static str, input: Entity<TextInput>, dark: bool) -> i
     div()
         .flex()
         .flex_col()
-        .gap(px(8.0))
+        .gap(px(6.0))
         .child(section_micro_label(label, dark))
         .child(
             div()
-                .h(px(38.0))
-                .rounded(px(10.0))
+                .h(px(32.0))
+                .rounded(px(6.0))
                 .border_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
@@ -2391,12 +2411,12 @@ fn overlay_shell(
 }
 
 fn context_menu_overlay(
-    panel: Rc<RefCell<ApiDebuggerView>>,
+    view: Entity<ApiDebuggerView>,
     title: String,
     position: Option<(f32, f32)>,
     dark: bool,
 ) -> impl IntoElement {
-    let (x, y) = position.unwrap_or((272.0, 96.0));
+    let (x, y) = position.unwrap_or((248.0, 96.0));
     div()
         .size_full()
         .absolute()
@@ -2411,9 +2431,9 @@ fn context_menu_overlay(
                 .left_0()
                 .bg(hsla(0.0, 0.0, 0.0, 0.001))
                 .on_click({
-                    let panel = Rc::clone(&panel);
-                    move |_, window, _cx| {
-                        panel.borrow_mut().close_collection_menu();
+                    let view = view.clone();
+                    move |_, window, cx| {
+                        view.update(cx, |view, _cx| view.close_collection_menu());
                         window.refresh();
                     }
                 }),
@@ -2424,36 +2444,36 @@ fn context_menu_overlay(
                 .top(px(y))
                 .left(px(x))
                 .w(px(230.0))
-                .rounded(px(14.0))
+                .rounded(px(10.0))
                 .border_1()
                 .border_color(glass_border(dark))
                 .bg(glass_surface(dark))
-                .shadow(api_shadow(dark))
+                .shadow(api_shadow())
                 .overflow_hidden()
                 .flex()
                 .flex_col()
                 .child(
                     div()
-                        .px(px(16.0))
-                        .py(px(13.0))
+                        .px(px(12.0))
+                        .py(px(9.0))
                         .border_b_1()
                         .border_color(ui::border_light())
-                        .text_size(px(15.0))
+                        .text_size(px(13.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(api_accent(dark))
+                        .text_color(api_accent())
                         .child(format!("📂 {title}")),
                 )
                 .child(context_menu_item(
                     "api-collection-menu-new-request",
                     "📄 新建端点",
                     "⌘N",
-                    dark,
                     {
-                        let panel = Rc::clone(&panel);
-                        move |_, _cx| {
-                            let mut panel = panel.borrow_mut();
-                            panel.notice = String::from("集合编辑功能会在下一轮补齐");
-                            panel.close_collection_menu();
+                        let view = view.clone();
+                        move |_, cx| {
+                            view.update(cx, |view, _cx| {
+                                view.notice = String::from("集合编辑功能会在下一轮补齐");
+                                view.close_collection_menu();
+                            });
                         }
                     },
                 ))
@@ -2461,13 +2481,13 @@ fn context_menu_overlay(
                     "api-collection-menu-new-group",
                     "📂 新建分组",
                     "⇧⌘N",
-                    dark,
                     {
-                        let panel = Rc::clone(&panel);
-                        move |_, _cx| {
-                            let mut panel = panel.borrow_mut();
-                            panel.notice = String::from("新建分组功能会在下一轮补齐");
-                            panel.close_collection_menu();
+                        let view = view.clone();
+                        move |_, cx| {
+                            view.update(cx, |view, _cx| {
+                                view.notice = String::from("新建分组功能会在下一轮补齐");
+                                view.close_collection_menu();
+                            });
                         }
                     },
                 ))
@@ -2475,41 +2495,44 @@ fn context_menu_overlay(
                     "api-collection-menu-export",
                     "📤 导出为 OpenAPI",
                     "",
-                    dark,
                     {
-                        let panel = Rc::clone(&panel);
-                        move |_, _cx| {
-                            let mut panel = panel.borrow_mut();
-                            panel.notice = String::from("OpenAPI 导出入口已预留");
-                            panel.close_collection_menu();
+                        let view = view.clone();
+                        move |_, cx| {
+                            view.update(cx, |view, _cx| {
+                                view.notice = String::from("OpenAPI 导出入口已预留");
+                                view.close_collection_menu();
+                            });
                         }
                     },
                 ))
-                .child(menu_separator(dark))
+                .child(menu_separator())
                 .child(context_menu_item(
                     "api-collection-menu-duplicate",
                     "📋 复制路径",
                     "",
-                    dark,
                     {
-                        let panel = Rc::clone(&panel);
-                        move |_, _cx| {
-                            let mut panel = panel.borrow_mut();
-                            panel.notice = String::from("复制集合项功能会在下一轮补齐");
-                            panel.close_collection_menu();
+                        let view = view.clone();
+                        move |_, cx| {
+                            view.update(cx, |view, _cx| {
+                                view.notice = String::from("复制集合项功能会在下一轮补齐");
+                                view.close_collection_menu();
+                            });
                         }
                     },
                 ))
-                .child(menu_separator(dark))
+                .child(menu_separator())
                 .child(context_menu_item(
                     "api-collection-menu-delete",
                     "🗑 删除",
                     "",
-                    dark,
-                    move |_, _cx| {
-                        let mut panel = panel.borrow_mut();
-                        panel.notice = String::from("删除集合项功能会在下一轮补齐");
-                        panel.close_collection_menu();
+                    {
+                        let view = view.clone();
+                        move |_, cx| {
+                            view.update(cx, |view, _cx| {
+                                view.notice = String::from("删除集合项功能会在下一轮补齐");
+                                view.close_collection_menu();
+                            });
+                        }
                     },
                 )),
         )
@@ -2519,28 +2542,27 @@ fn context_menu_item(
     id: &'static str,
     label: &'static str,
     shortcut: &'static str,
-    dark: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement {
     div()
         .id(id)
-        .px(px(16.0))
-        .py(px(11.0))
-        .text_size(px(13.0))
+        .px(px(12.0))
+        .py(px(8.0))
+        .text_size(px(11.0))
         .text_color(theme::semantic().text_regular)
         .hover(move |style| {
             style
-                .bg(theme::rgba_with_alpha(api_accent(dark), 0.06))
+                .bg(theme::rgba_with_alpha(api_accent(), 0.06))
                 .cursor_pointer()
         })
         .flex()
         .items_center()
-        .gap(px(10.0))
+        .gap(px(8.0))
         .child(div().flex_1().child(label))
         .when(!shortcut.is_empty(), |row| {
             row.child(
                 div()
-                    .text_size(px(11.0))
+                    .text_size(px(10.0))
                     .text_color(ui::text_tertiary())
                     .child(shortcut),
             )
@@ -2548,11 +2570,11 @@ fn context_menu_item(
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
-fn menu_separator(_dark: bool) -> impl IntoElement {
+fn menu_separator() -> impl IntoElement {
     div().h(px(1.0)).bg(ui::border_light())
 }
 
-fn transparent_surface(_dark: bool) -> gpui::Hsla {
+fn transparent_surface() -> gpui::Hsla {
     theme::rgba_with_alpha(theme::semantic().bg_surface, 0.0)
 }
 
@@ -2580,11 +2602,11 @@ fn glass_border(dark: bool) -> gpui::Rgba {
     .into()
 }
 
-fn api_accent(_dark: bool) -> gpui::Rgba {
+fn api_accent() -> gpui::Rgba {
     theme::semantic().primary
 }
 
-fn api_shadow(_dark: bool) -> Vec<BoxShadow> {
+fn api_shadow() -> Vec<BoxShadow> {
     vec![
         BoxShadow {
             color: theme::rgba_with_alpha(theme::semantic().shadow, 0.08),
@@ -2618,8 +2640,8 @@ fn icon_button(
 ) -> impl IntoElement {
     div()
         .id(id)
-        .size(px(28.0))
-        .rounded(px(8.0))
+        .size(px(24.0))
+        .rounded(px(5.0))
         .border_1()
         .border_color(theme::semantic().border_default)
         .bg(theme::rgba_with_alpha(
@@ -2628,43 +2650,43 @@ fn icon_button(
         ))
         .hover(move |style| {
             style
-                .bg(theme::rgba_with_alpha(api_accent(dark), 0.08))
+                .bg(theme::rgba_with_alpha(api_accent(), 0.08))
                 .cursor_pointer()
         })
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(16.0))
-        .text_color(api_accent(dark))
+        .text_size(px(12.0))
+        .text_color(api_accent())
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
-fn group_count(count: usize, dark: bool) -> impl IntoElement {
+fn group_count(count: usize) -> impl IntoElement {
     div()
-        .min_w(px(22.0))
+        .min_w(px(20.0))
         .h(px(18.0))
-        .px(px(6.0))
+        .px(px(5.0))
         .rounded(px(999.0))
-        .bg(theme::rgba_with_alpha(api_accent(dark), 0.08))
+        .bg(theme::rgba_with_alpha(api_accent(), 0.08))
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(10.0))
-        .text_color(api_accent(dark))
+        .text_size(px(9.0))
+        .text_color(api_accent())
         .child(count.to_string())
 }
 
 fn scenario_count_badge(count: usize, _dark: bool) -> impl IntoElement {
     div()
         .h(px(18.0))
-        .px(px(6.0))
+        .px(px(5.0))
         .rounded(px(999.0))
         .bg(theme::rgba_with_alpha(
             theme::semantic().text_secondary,
             0.08,
         ))
-        .text_size(px(9.0))
+        .text_size(px(8.0))
         .text_color(theme::semantic().text_secondary)
         .child(count.to_string())
 }
@@ -2678,22 +2700,22 @@ fn status_dot(status: ScenarioStatus, dark: bool) -> impl IntoElement {
 
 fn scenario_status_pill(status: ScenarioStatus, dark: bool) -> impl IntoElement {
     div()
-        .h(px(18.0))
-        .px(px(6.0))
+        .h(px(16.0))
+        .px(px(5.0))
         .rounded(px(999.0))
         .bg(theme::rgba_with_alpha(status_color(status, dark), 0.1))
-        .text_size(px(9.0))
+        .text_size(px(8.0))
         .text_color(status_color(status, dark))
         .child(status.label())
 }
 
 fn scenario_status_label(status: ScenarioStatus, dark: bool) -> impl IntoElement {
     div()
-        .h(px(22.0))
-        .px(px(8.0))
+        .h(px(20.0))
+        .px(px(6.0))
         .rounded(px(999.0))
         .bg(theme::rgba_with_alpha(status_color(status, dark), 0.1))
-        .text_size(px(10.0))
+        .text_size(px(9.0))
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(status_color(status, dark))
         .flex()
@@ -2703,7 +2725,7 @@ fn scenario_status_label(status: ScenarioStatus, dark: bool) -> impl IntoElement
 
 fn section_micro_label(label: impl Into<String>, _dark: bool) -> impl IntoElement {
     div()
-        .text_size(px(10.0))
+        .text_size(px(9.0))
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(ui::text_tertiary())
         .child(label.into())
@@ -2711,8 +2733,8 @@ fn section_micro_label(label: impl Into<String>, _dark: bool) -> impl IntoElemen
 
 fn response_metric(text: String, _dark: bool) -> impl IntoElement {
     div()
-        .h(px(24.0))
-        .px(px(8.0))
+        .h(px(20.0))
+        .px(px(6.0))
         .rounded(px(999.0))
         .bg(theme::rgba_with_alpha(
             theme::semantic().text_secondary,
@@ -2720,7 +2742,7 @@ fn response_metric(text: String, _dark: bool) -> impl IntoElement {
         ))
         .flex()
         .items_center()
-        .text_size(px(10.0))
+        .text_size(px(9.0))
         .font_family("SF Mono")
         .text_color(theme::semantic().text_secondary)
         .child(text)
@@ -2734,9 +2756,9 @@ fn soft_button(
 ) -> impl IntoElement {
     div()
         .id(id)
-        .h(px(30.0))
-        .px(px(12.0))
-        .rounded(px(8.0))
+        .h(px(26.0))
+        .px(px(10.0))
+        .rounded(px(5.0))
         .border_1()
         .border_color(theme::semantic().border_default)
         .bg(theme::rgba_with_alpha(
@@ -2745,13 +2767,13 @@ fn soft_button(
         ))
         .hover(move |style| {
             style
-                .bg(theme::rgba_with_alpha(api_accent(dark), 0.08))
+                .bg(theme::rgba_with_alpha(api_accent(), 0.08))
                 .cursor_pointer()
         })
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(11.0))
+        .text_size(px(10.0))
         .text_color(theme::semantic().text_secondary)
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
@@ -2765,20 +2787,20 @@ fn primary_button(
 ) -> impl IntoElement {
     div()
         .id(id)
-        .h(px(38.0))
-        .px(px(20.0))
-        .rounded(px(12.0))
+        .h(px(32.0))
+        .px(px(16.0))
+        .rounded(px(8.0))
         .bg(theme::rgba_with_alpha(
-            api_accent(dark),
+            api_accent(),
             if dark { 0.22 } else { 0.12 },
         ))
         .border_1()
-        .border_color(theme::rgba_with_alpha(api_accent(dark), 0.18))
-        .text_color(api_accent(dark))
+        .border_color(theme::rgba_with_alpha(api_accent(), 0.18))
+        .text_color(api_accent())
         .hover(move |style| {
             style
                 .bg(theme::rgba_with_alpha(
-                    api_accent(dark),
+                    api_accent(),
                     if dark { 0.30 } else { 0.18 },
                 ))
                 .cursor_pointer()
@@ -2786,7 +2808,7 @@ fn primary_button(
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(13.0))
+        .text_size(px(11.0))
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
@@ -2794,7 +2816,7 @@ fn primary_button(
 
 fn method_badge(method: HttpMethod, _dark: bool) -> impl IntoElement {
     div()
-        .px(px(6.0))
+        .px(px(4.0))
         .py(px(2.0))
         .rounded(px(5.0))
         .bg(theme::rgba_with_alpha(rgb(method.color()), 0.1))
@@ -2828,11 +2850,11 @@ fn status_badge(response: &ApiResponse, _dark: bool) -> impl IntoElement {
         theme::semantic().danger
     };
     div()
-        .px(px(12.0))
-        .py(px(5.0))
-        .rounded(px(9.0))
+        .px(px(8.0))
+        .py(px(3.0))
+        .rounded(px(6.0))
         .bg(theme::rgba_with_alpha(color, 0.10))
-        .text_size(px(12.0))
+        .text_size(px(11.0))
         .font_family("SF Mono")
         .font_weight(gpui::FontWeight::BOLD)
         .text_color(color)
@@ -2843,26 +2865,25 @@ fn action_link(
     id: &'static str,
     label: &'static str,
     primary: bool,
-    dark: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement {
     div()
         .id(id)
-        .text_size(px(12.0))
+        .text_size(px(11.0))
         .font_weight(if primary {
             gpui::FontWeight::SEMIBOLD
         } else {
             gpui::FontWeight::NORMAL
         })
         .text_color(if primary {
-            api_accent(dark)
+            api_accent()
         } else {
             ui::text_secondary()
         })
         .hover(move |style| {
             style
                 .text_color(if primary {
-                    api_accent(dark)
+                    api_accent()
                 } else {
                     theme::semantic().text_primary
                 })
@@ -2888,9 +2909,9 @@ fn single_input(cx: &mut App, value: &str, placeholder: &str) -> Entity<TextInpu
         input.set_chrome(false, cx);
         input.set_style(
             TextInputStyle {
-                height: 38.0,
-                font_size: 12.0,
-                padding: 10.0,
+                height: 32.0,
+                font_size: 11.0,
+                padding: 8.0,
             },
             cx,
         );
@@ -2910,8 +2931,8 @@ fn multiline_input(cx: &mut App, value: &str, placeholder: &str) -> Entity<TextI
         input.set_style(
             TextInputStyle {
                 height: 220.0,
-                font_size: 12.0,
-                padding: 12.0,
+                font_size: 11.0,
+                padding: 10.0,
             },
             cx,
         );

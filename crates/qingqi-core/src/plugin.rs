@@ -321,7 +321,7 @@ impl PluginManager {
         });
     }
 
-    fn usage_map(&self) -> HashMap<String, CommandUsage> {
+    pub fn usage_map(&self) -> HashMap<String, CommandUsage> {
         self.usage_store.usage_map().unwrap_or_else(|error| {
             tracing::warn!(error = %error, "command usage read failed");
             HashMap::new()
@@ -356,17 +356,16 @@ impl PluginManager {
         }
 
         let usage_store = self.usage_store.clone();
-        cx.spawn(async move |async_cx| {
-            async_cx
-                .background_executor()
-                .spawn(async move {
-                    if let Err(error) = usage_store.record_launch(&usage_key) {
-                        tracing::warn!(usage_key, error = %error, "command usage record failed");
-                    }
-                })
-                .await;
-        })
-        .detach();
+        // Spawn directly on the background executor — no GPUI event-loop hop.
+        // This guarantees the SQLite write starts immediately and completes
+        // in a few ms, well before the next launcher open reads usage_map().
+        cx.background_executor()
+            .spawn(async move {
+                if let Err(error) = usage_store.record_launch(&usage_key) {
+                    tracing::warn!(usage_key, error = %error, "command usage record failed");
+                }
+            })
+            .detach();
     }
 
     fn refresh_command_cache(&mut self) {

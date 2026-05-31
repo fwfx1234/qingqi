@@ -32,6 +32,7 @@ use crate::{
         plugin_spec::{PluginStatus, ViewMode, WindowSize},
     },
 };
+use qingqi_core::command_usage::CommandUsage;
 use qingqi_core::plugin::{
     InlineView, ListView, PluginListItem, PluginManager, command_kind_priority,
 };
@@ -120,7 +121,7 @@ impl Launcher {
         clipboard_context: Arc<dyn ClipboardContext>,
         _cx: &App,
     ) -> Self {
-        let (all_commands, plugin_visuals, boost_map) = {
+        let (all_commands, plugin_visuals, boost_map, usage) = {
             let mut manager = plugin_manager.lock().unwrap_or_else(|e| {
                 tracing::error!("plugin manager poisoned, recovering");
                 e.into_inner()
@@ -141,9 +142,10 @@ impl Launcher {
                     )
                 })
                 .collect();
-            (all_commands, plugin_visuals, boost_map)
+            let usage = manager.usage_map();
+            (all_commands, plugin_visuals, boost_map, usage)
         };
-        let results = Self::default_results(&all_commands, &plugin_visuals);
+        let results = Launcher::build_default_results(&all_commands, &plugin_visuals, &usage);
         Self {
             plugin_manager,
             app_catalog,
@@ -213,6 +215,24 @@ impl Launcher {
         }));
     }
 
+    /// Called when the launcher window is shown — re-reads usage data and
+    /// rebuilds the result list so the sort always reflects latest counts.
+    pub fn refresh_on_show(&mut self, cx: &mut App) {
+        self.all_commands = self.default_commands_with_clipboard();
+        let query = self.query(cx);
+        if query.trim().is_empty() {
+            self.results = self.default_results(&self.all_commands, &self.plugin_visuals);
+            self.selected = self.selected.min(self.results.len().saturating_sub(1));
+        } else {
+            self.results = Rc::new(self.query_commands(&query));
+            self.selected = 0;
+            self.results_visible_start = 0;
+            self.results_scroll
+                .scroll_to_item(0, ScrollStrategy::Top);
+        }
+        cx.refresh_windows();
+    }
+
     fn refresh_results_after_commands_changed(&mut self, cx: &mut Context<Self>) {
         self.clipboard_boost_map = Self::latest_boost_map(
             self.clipboard_context.as_ref(),
@@ -228,7 +248,7 @@ impl Launcher {
             self.last_query = query.clone();
             self.pending_query = query.clone();
             if query.trim().is_empty() {
-                self.results = Self::default_results(&self.all_commands, &self.plugin_visuals);
+                self.results = self.default_results(&self.all_commands, &self.plugin_visuals);
             } else {
                 self.results = Rc::new(self.query_commands(&query));
             }
@@ -292,20 +312,38 @@ impl Launcher {
     }
 
     fn default_results(
+        &self,
         commands: &[Command],
         visuals: &HashMap<String, PluginVisual>,
+    ) -> Rc<Vec<Command>> {
+        let usage = self
+            .plugin_manager
+            .lock()
+            .map(|pm| pm.usage_map())
+            .unwrap_or_default();
+        Self::build_default_results(commands, visuals, &usage)
+    }
+
+    fn build_default_results(
+        commands: &[Command],
+        visuals: &HashMap<String, PluginVisual>,
+        usage: &HashMap<String, CommandUsage>,
     ) -> Rc<Vec<Command>> {
         let mut results: Vec<Command> = commands
             .iter()
             .filter(|item| Self::is_default_command(item, visuals))
             .cloned()
             .collect();
-        // Sort plugins before apps when no usage data exists yet.
-        // Within the same CommandKind, keep the original ordering (score-based
-        // for plugins, alphabetical for apps).
+        // Sort by usage first (most-used at top), falling back to kind + title.
         results.sort_by(|a, b| {
-            command_kind_priority(a.kind)
-                .cmp(&command_kind_priority(b.kind))
+            let a_u = usage.get(&a.usage_key).cloned().unwrap_or_default();
+            let b_u = usage.get(&b.usage_key).cloned().unwrap_or_default();
+            b_u.use_count
+                .cmp(&a_u.use_count)
+                .then_with(|| b_u.last_used_at.cmp(&a_u.last_used_at))
+                .then_with(|| {
+                    command_kind_priority(a.kind).cmp(&command_kind_priority(b.kind))
+                })
                 .then_with(|| a.title.cmp(&b.title))
         });
         Rc::new(results)
@@ -345,7 +383,7 @@ impl Launcher {
         let query_empty = query.trim().is_empty();
 
         if query_empty {
-            self.results = Self::default_results(&self.all_commands, &self.plugin_visuals);
+            self.results = self.default_results(&self.all_commands, &self.plugin_visuals);
             self.selected = self.selected.min(self.results.len().saturating_sub(1));
             self.results_visible_start = visible_start_for_selection(self.selected);
             self.results_scroll
@@ -420,12 +458,21 @@ impl Launcher {
                     .map(|matched| (matched.score, command))
             })
             .collect::<Vec<_>>();
+        let usage = self
+            .plugin_manager
+            .lock()
+            .map(|pm| pm.usage_map())
+            .unwrap_or_default();
         scored.sort_by(|(left_score, left), (right_score, right)| {
+            let left_u = usage.get(&left.usage_key).cloned().unwrap_or_default();
+            let right_u = usage.get(&right.usage_key).cloned().unwrap_or_default();
             right_score
                 .cmp(left_score)
                 .then_with(|| {
                     command_kind_priority(left.kind).cmp(&command_kind_priority(right.kind))
                 })
+                .then_with(|| right_u.use_count.cmp(&left_u.use_count))
+                .then_with(|| right_u.last_used_at.cmp(&left_u.last_used_at))
                 .then_with(|| left.title.cmp(&right.title))
         });
         scored.into_iter().map(|(_, command)| command).collect()
@@ -448,7 +495,7 @@ impl Launcher {
                 if current_query.trim().is_empty() {
                     launcher.all_commands = launcher.default_commands_with_clipboard();
                     launcher.results =
-                        Self::default_results(&launcher.all_commands, &launcher.plugin_visuals);
+                        launcher.default_results(&launcher.all_commands, &launcher.plugin_visuals);
                 } else {
                     launcher.results = Rc::new(launcher.query_commands(&current_query));
                 }
@@ -984,7 +1031,7 @@ impl Launcher {
         let query = self.query(cx);
         self.all_commands = self.default_commands_with_clipboard();
         if query.trim().is_empty() {
-            self.results = Self::default_results(&self.all_commands, &self.plugin_visuals);
+            self.results = self.default_results(&self.all_commands, &self.plugin_visuals);
             self.selected = self.selected.min(self.results.len().saturating_sub(1));
             self.results_visible_start = visible_start_for_selection(self.selected);
         } else {
@@ -1300,7 +1347,6 @@ fn launcher_quick_tab(
     label: &'static str,
     icon_label: &'static str,
 ) -> impl IntoElement {
-    let _dark = theme_mode::is_dark();
     div()
         .h(px(24.0))
         .px(px(8.0))
@@ -1355,7 +1401,6 @@ fn plugin_list(
     selected: usize,
     query: String,
 ) -> impl IntoElement {
-    let _dark = theme_mode::is_dark();
     let count = items.len();
     if count == 0 {
         return div()
@@ -1790,7 +1835,6 @@ fn launcher_icon(
 }
 
 fn launcher_icon_tint(plugin_id: &str) -> gpui::Rgba {
-    let _dark = theme_mode::is_dark();
     theme::launcher_plugin_icon_tint(plugin_id)
 }
 

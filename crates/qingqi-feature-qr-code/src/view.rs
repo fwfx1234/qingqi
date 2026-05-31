@@ -1,14 +1,12 @@
 use std::{
-    cell::RefCell,
     path::PathBuf,
-    rc::Rc,
     sync::{Arc, Mutex},
 };
 
 use anyhow::Result;
 use gpui::{
-    App, AppContext, AsyncApp, Component, Entity, ExternalPaths, InteractiveElement, IntoElement,
-    ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window, div, hsla, px,
+    App, AppContext, Context, Entity, ExternalPaths, InteractiveElement, IntoElement,
+    ParentElement, Render, StatefulInteractiveElement, Styled, Window, div, hsla, px,
 };
 
 use crate::{
@@ -84,7 +82,7 @@ impl QrView {
         })
     }
 
-    pub fn ensure_inputs(&mut self, cx: &mut App) {
+    pub fn ensure_inputs(&mut self, cx: &mut Context<Self>) {
         if self.input.is_none() {
             self.input = Some(cx.new(|cx| {
                 let mut input = TextInput::new(cx, "输入文本或 URL", "");
@@ -157,7 +155,7 @@ impl QrView {
             .unwrap_or_default()
     }
 
-    fn set_input_text(&mut self, text: impl Into<String>, cx: &mut App) {
+    pub fn set_input_text(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
         self.ensure_inputs(cx);
         if let Some(input) = self.input.as_ref() {
             let text = text.into();
@@ -165,7 +163,7 @@ impl QrView {
         }
     }
 
-    fn set_scan_path(&mut self, text: impl Into<String>, cx: &mut App) {
+    fn set_scan_path(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
         self.ensure_inputs(cx);
         if let Some(input) = self.scan_path_input.as_ref() {
             let text = text.into();
@@ -173,7 +171,7 @@ impl QrView {
         }
     }
 
-    pub fn set_launch_input(&mut self, text: &str, cx: &mut App) {
+    pub fn set_launch_input(&mut self, text: &str, cx: &mut Context<Self>) {
         self.set_input_text(text.to_string(), cx);
         if text.trim().is_empty() {
             self.qr_matrix.clear();
@@ -182,60 +180,58 @@ impl QrView {
             self.tone = StatusTone::Neutral;
             return;
         }
-        self.generate_from_text(text, cx.to_async());
+        self.generate_from_text(text, cx);
     }
 
-    pub fn generate_from_text(&mut self, text: &str, async_cx: AsyncApp) {
+    pub fn generate_from_text(&mut self, text: &str, cx: &mut Context<Self>) {
         self.message = String::from("正在生成二维码...");
         self.tone = StatusTone::Neutral;
         let service = self.service.clone();
         let pending = Arc::clone(&self.pending_action);
         let text = text.to_string();
-        async_cx
-            .spawn(async move |async_cx| {
-                let result = async_cx
-                    .background_executor()
-                    .spawn(async move { service.preview(&text).map_err(|error| error.to_string()) })
-                    .await;
-                if let Ok(mut slot) = pending.lock() {
-                    *slot = Some(QrBackgroundResult::Preview(result));
-                }
-                let _ = async_cx.refresh();
-            })
-            .detach();
+        cx.spawn(async move |this, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move { service.preview(&text).map_err(|error| error.to_string()) })
+                .await;
+            if let Ok(mut slot) = pending.lock() {
+                *slot = Some(QrBackgroundResult::Preview(result));
+            }
+            let _ = this.update(async_cx, |_, cx| cx.notify());
+        })
+        .detach();
     }
 
-    pub fn refresh_history(&mut self, cx: &App, async_cx: AsyncApp) {
+    pub fn refresh_history(&mut self, cx: &mut Context<Self>) {
         self.message = String::from("正在读取历史...");
         self.tone = StatusTone::Neutral;
         let query = self.history_query(cx);
         let service = self.service.clone();
         let pending = Arc::clone(&self.pending_action);
-        async_cx
-            .spawn(async move |async_cx| {
-                let result = async_cx
-                    .background_executor()
-                    .spawn(async move {
-                        service
-                            .list_history(&query)
-                            .map_err(|error| error.to_string())
-                    })
-                    .await;
-                if let Ok(mut slot) = pending.lock() {
-                    *slot = Some(QrBackgroundResult::History(result));
-                }
-                let _ = async_cx.refresh();
-            })
-            .detach();
+        cx.spawn(async move |this, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    service
+                        .list_history(&query)
+                        .map_err(|error| error.to_string())
+                })
+                .await;
+            if let Ok(mut slot) = pending.lock() {
+                *slot = Some(QrBackgroundResult::History(result));
+            }
+            let _ = this.update(async_cx, |_, cx| cx.notify());
+        })
+        .detach();
     }
 
-    pub fn toggle_history(&mut self, cx: &App) {
+    pub fn toggle_history(&mut self, cx: &mut Context<Self>) {
         self.show_history = !self.show_history;
         if self.show_history {
             self.show_scan = false;
         }
         if self.show_history {
-            self.refresh_history(cx, cx.to_async());
+            self.refresh_history(cx);
         }
     }
 
@@ -246,7 +242,7 @@ impl QrView {
         }
     }
 
-    pub fn save_current(&mut self, cx: &App, async_cx: AsyncApp) {
+    pub fn save_current(&mut self, cx: &mut Context<Self>) {
         let text = self.input_text(cx);
         let target_dir = match qingqi_platform::shell::choose_directory("选择保存文件夹") {
             Ok(Some(path)) => path,
@@ -266,26 +262,25 @@ impl QrView {
         self.tone = StatusTone::Neutral;
         let service = self.service.clone();
         let pending = Arc::clone(&self.pending_action);
-        async_cx
-            .spawn(async move |async_cx| {
-                let save_text = text.clone();
-                let result = async_cx
-                    .background_executor()
-                    .spawn(async move {
-                        service
-                            .save_to_dir(&save_text, &target_dir)
-                            .map_err(|error| error.to_string())
-                    })
-                    .await;
-                if let Ok(mut slot) = pending.lock() {
-                    *slot = Some(QrBackgroundResult::Save { text, result });
-                }
-                let _ = async_cx.refresh();
-            })
-            .detach();
+        cx.spawn(async move |this, async_cx| {
+            let save_text = text.clone();
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    service
+                        .save_to_dir(&save_text, &target_dir)
+                        .map_err(|error| error.to_string())
+                })
+                .await;
+            if let Ok(mut slot) = pending.lock() {
+                *slot = Some(QrBackgroundResult::Save { text, result });
+            }
+            let _ = this.update(async_cx, |_, cx| cx.notify());
+        })
+        .detach();
     }
 
-    pub fn copy_current(&mut self, cx: &mut App) {
+    pub fn copy_current(&mut self, cx: &mut Context<Self>) {
         let text = self.input_text(cx);
         if text.trim().is_empty() {
             self.message = String::from("无可复制内容");
@@ -293,10 +288,10 @@ impl QrView {
             return;
         }
         qingqi_platform::clipboard::write_text(cx, text.clone());
-        self.record_copy_async(text, String::from("已复制内容"), cx.to_async());
+        self.record_copy_async(text, String::from("已复制内容"), cx);
     }
 
-    pub fn fill_from_clipboard(&mut self, cx: &mut App) {
+    pub fn fill_from_clipboard(&mut self, cx: &mut Context<Self>) {
         let text = qingqi_platform::clipboard::read_text(cx).unwrap_or_default();
         if text.trim().is_empty() {
             self.message = String::from("剪贴板没有可用文本");
@@ -304,10 +299,10 @@ impl QrView {
             return;
         }
         self.set_input_text(text.clone(), cx);
-        self.generate_from_text(&text, cx.to_async());
+        self.generate_from_text(&text, cx);
     }
 
-    pub fn clear_input(&mut self, cx: &mut App) {
+    pub fn clear_input(&mut self, cx: &mut Context<Self>) {
         self.ensure_inputs(cx);
         if let Some(input) = self.input.as_ref() {
             input.update(cx, |input, input_cx| input.clear(input_cx));
@@ -318,7 +313,7 @@ impl QrView {
         self.tone = StatusTone::Neutral;
     }
 
-    pub fn choose_scan_image(&mut self, cx: &mut App) {
+    pub fn choose_scan_image(&mut self, cx: &mut Context<Self>) {
         match qingqi_platform::shell::choose_file("选择二维码图片") {
             Ok(Some(path)) => {
                 let path = path.to_string_lossy().to_string();
@@ -336,7 +331,7 @@ impl QrView {
         }
     }
 
-    pub fn scan_selected_path(&mut self, cx: &mut App) {
+    pub fn scan_selected_path(&mut self, cx: &mut Context<Self>) {
         let path = self.scan_path(cx);
         if path.trim().is_empty() {
             self.scan_result.clear();
@@ -346,36 +341,35 @@ impl QrView {
             return;
         }
 
-        self.scan_path_text(path, cx.to_async());
+        self.scan_path_text(path, cx);
     }
 
-    pub fn scan_path_text(&mut self, path: String, async_cx: AsyncApp) {
+    pub fn scan_path_text(&mut self, path: String, cx: &mut Context<Self>) {
         self.message = String::from("正在扫描二维码...");
         self.tone = StatusTone::Neutral;
         let service = self.service.clone();
         let pending = Arc::clone(&self.pending_action);
-        async_cx
-            .spawn(async move |async_cx| {
-                let result = async_cx
-                    .background_executor()
-                    .spawn(async move {
-                        service
-                            .scan_image_input(&path)
-                            .map(|(text, normalized_path)| {
-                                (text, normalized_path.to_string_lossy().to_string())
-                            })
-                            .map_err(|error| error.to_string())
-                    })
-                    .await;
-                if let Ok(mut slot) = pending.lock() {
-                    *slot = Some(QrBackgroundResult::Scan(result));
-                }
-                let _ = async_cx.refresh();
-            })
-            .detach();
+        cx.spawn(async move |this, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    service
+                        .scan_image_input(&path)
+                        .map(|(text, normalized_path)| {
+                            (text, normalized_path.to_string_lossy().to_string())
+                        })
+                        .map_err(|error| error.to_string())
+                })
+                .await;
+            if let Ok(mut slot) = pending.lock() {
+                *slot = Some(QrBackgroundResult::Scan(result));
+            }
+            let _ = this.update(async_cx, |_, cx| cx.notify());
+        })
+        .detach();
     }
 
-    pub fn copy_scan_result(&mut self, cx: &mut App) {
+    pub fn copy_scan_result(&mut self, cx: &mut Context<Self>) {
         if self.scan_result.trim().is_empty() {
             self.message = String::from("暂无扫描结果");
             self.tone = StatusTone::Error;
@@ -386,11 +380,11 @@ impl QrView {
         self.record_copy_async(
             self.scan_result.clone(),
             String::from("已复制扫描结果"),
-            cx.to_async(),
+            cx,
         );
     }
 
-    pub fn use_scan_result(&mut self, cx: &mut App) {
+    pub fn use_scan_result(&mut self, cx: &mut Context<Self>) {
         if self.scan_result.trim().is_empty() {
             self.message = String::from("暂无扫描结果");
             self.tone = StatusTone::Error;
@@ -398,12 +392,12 @@ impl QrView {
         }
         let text = self.scan_result.clone();
         self.set_input_text(text.clone(), cx);
-        self.generate_from_text(&text, cx.to_async());
+        self.generate_from_text(&text, cx);
         self.message = String::from("已将扫描结果用作生成内容");
         self.tone = StatusTone::Success;
     }
 
-    pub fn export_history(&mut self, _cx: &App, async_cx: AsyncApp) {
+    pub fn export_history(&mut self, cx: &mut Context<Self>) {
         let target_dir = match qingqi_platform::shell::choose_directory("选择导出文件夹") {
             Ok(Some(path)) => path,
             Ok(None) => {
@@ -422,113 +416,109 @@ impl QrView {
         self.tone = StatusTone::Neutral;
         let service = self.service.clone();
         let pending = Arc::clone(&self.pending_action);
-        async_cx
-            .spawn(async move |async_cx| {
-                let result = async_cx
-                    .background_executor()
-                    .spawn(async move {
-                        service
-                            .export_history_to_dir(&target_dir)
-                            .map_err(|error| error.to_string())
-                    })
-                    .await;
-                if let Ok(mut slot) = pending.lock() {
-                    *slot = Some(QrBackgroundResult::Export(result));
-                }
-                let _ = async_cx.refresh();
-            })
-            .detach();
+        cx.spawn(async move |this, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    service
+                        .export_history_to_dir(&target_dir)
+                        .map_err(|error| error.to_string())
+                })
+                .await;
+            if let Ok(mut slot) = pending.lock() {
+                *slot = Some(QrBackgroundResult::Export(result));
+            }
+            let _ = this.update(async_cx, |_, cx| cx.notify());
+        })
+        .detach();
     }
 
-    pub fn clear_history(&mut self, async_cx: AsyncApp) {
+    pub fn clear_history(&mut self, cx: &mut Context<Self>) {
         self.message = String::from("正在清空历史...");
         self.tone = StatusTone::Neutral;
         let service = self.service.clone();
         let pending = Arc::clone(&self.pending_action);
-        async_cx
-            .spawn(async move |async_cx| {
-                let result = async_cx
-                    .background_executor()
-                    .spawn(
-                        async move { service.clear_history().map_err(|error| error.to_string()) },
-                    )
-                    .await;
-                if let Ok(mut slot) = pending.lock() {
-                    *slot = Some(QrBackgroundResult::ClearHistory(result));
-                }
-                let _ = async_cx.refresh();
-            })
-            .detach();
+        cx.spawn(async move |this, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(
+                    async move { service.clear_history().map_err(|error| error.to_string()) },
+                )
+                .await;
+            if let Ok(mut slot) = pending.lock() {
+                *slot = Some(QrBackgroundResult::ClearHistory(result));
+            }
+            let _ = this.update(async_cx, |_, cx| cx.notify());
+        })
+        .detach();
     }
 
-    pub fn remove_history_item(&mut self, id: &str, async_cx: AsyncApp) {
+    pub fn remove_history_item(&mut self, id: &str, cx: &mut Context<Self>) {
         self.message = String::from("正在删除历史...");
         self.tone = StatusTone::Neutral;
         let service = self.service.clone();
         let pending = Arc::clone(&self.pending_action);
         let id = id.to_string();
-        async_cx
-            .spawn(async move |async_cx| {
-                let result = async_cx
-                    .background_executor()
-                    .spawn(async move {
-                        service
-                            .remove_history(&id)
-                            .map_err(|error| error.to_string())
-                    })
-                    .await;
-                if let Ok(mut slot) = pending.lock() {
-                    *slot = Some(QrBackgroundResult::RemoveHistory(result));
-                }
-                let _ = async_cx.refresh();
-            })
-            .detach();
+        cx.spawn(async move |this, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    service
+                        .remove_history(&id)
+                        .map_err(|error| error.to_string())
+                })
+                .await;
+            if let Ok(mut slot) = pending.lock() {
+                *slot = Some(QrBackgroundResult::RemoveHistory(result));
+            }
+            let _ = this.update(async_cx, |_, cx| cx.notify());
+        })
+        .detach();
     }
 
-    pub fn copy_history_item(&mut self, item: &QrHistoryRecord, cx: &mut App) {
+    pub fn copy_history_item(&mut self, item: &QrHistoryRecord, cx: &mut Context<Self>) {
         qingqi_platform::clipboard::write_text(cx, item.content.clone());
         self.record_copy_async(
             item.content.clone(),
             String::from("已复制历史内容"),
-            cx.to_async(),
+            cx,
         );
     }
 
-    pub fn use_history_item(&mut self, item: &QrHistoryRecord, cx: &mut App) {
+    pub fn use_history_item(&mut self, item: &QrHistoryRecord, cx: &mut Context<Self>) {
         self.set_input_text(item.content.clone(), cx);
-        self.generate_from_text(&item.content, cx.to_async());
+        self.generate_from_text(&item.content, cx);
         self.message = format!("已载入{}记录", item.kind.label());
         self.tone = StatusTone::Success;
     }
 
-    fn record_copy_async(&mut self, text: String, success_message: String, async_cx: AsyncApp) {
+    fn record_copy_async(&mut self, text: String, success_message: String, cx: &mut Context<Self>) {
         self.message = String::from("正在写入历史...");
         self.tone = StatusTone::Neutral;
         let service = self.service.clone();
         let pending = Arc::clone(&self.pending_action);
-        async_cx
-            .spawn(async move |async_cx| {
-                let result = async_cx
-                    .background_executor()
-                    .spawn(async move {
-                        service
-                            .record_copy(&text)
-                            .map(|_| ())
-                            .map_err(|error| error.to_string())
-                    })
-                    .await;
-                if let Ok(mut slot) = pending.lock() {
-                    *slot = Some(QrBackgroundResult::RecordCopy {
-                        success_message,
-                        result,
-                    });
-                }
-                let _ = async_cx.refresh();
-            })
-            .detach();
+        cx.spawn(async move |this, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    service
+                        .record_copy(&text)
+                        .map(|_| ())
+                        .map_err(|error| error.to_string())
+                })
+                .await;
+            if let Ok(mut slot) = pending.lock() {
+                *slot = Some(QrBackgroundResult::RecordCopy {
+                    success_message,
+                    result,
+                });
+            }
+            let _ = this.update(async_cx, |_, cx| cx.notify());
+        })
+        .detach();
     }
 
-    fn collect_pending(&mut self, cx: &mut App) {
+    fn collect_pending(&mut self, cx: &mut Context<Self>) {
         let pending = self
             .pending_action
             .lock()
@@ -565,8 +555,8 @@ impl QrView {
                 Ok(path) => {
                     self.message = format!("已保存到: {}", path.display());
                     self.tone = StatusTone::Success;
-                    self.generate_from_text(&text, cx.to_async());
-                    self.refresh_history(cx, cx.to_async());
+                    self.generate_from_text(&text, cx);
+                    self.refresh_history(cx);
                 }
                 Err(error) => {
                     self.message = format!("保存失败: {error}");
@@ -580,7 +570,7 @@ impl QrView {
                     self.scan_error.clear();
                     self.message = String::from("扫描成功");
                     self.tone = StatusTone::Success;
-                    self.refresh_history(cx, cx.to_async());
+                    self.refresh_history(cx);
                 }
                 Err(error) => {
                     self.scan_result.clear();
@@ -593,7 +583,7 @@ impl QrView {
                 Ok(path) => {
                     self.message = format!("已导出到: {}", path.display());
                     self.tone = StatusTone::Success;
-                    self.refresh_history(cx, cx.to_async());
+                    self.refresh_history(cx);
                 }
                 Err(error) => {
                     self.message = format!("导出失败: {error}");
@@ -615,7 +605,7 @@ impl QrView {
                 Ok(true) => {
                     self.message = String::from("已删除历史记录");
                     self.tone = StatusTone::Success;
-                    self.refresh_history(cx, cx.to_async());
+                    self.refresh_history(cx);
                 }
                 Ok(false) => {
                     self.message = String::from("未找到对应的历史记录");
@@ -633,7 +623,7 @@ impl QrView {
                 Ok(()) => {
                     self.message = success_message;
                     self.tone = StatusTone::Success;
-                    self.refresh_history(cx, cx.to_async());
+                    self.refresh_history(cx);
                 }
                 Err(error) => {
                     self.message = format!("写入历史失败: {error}");
@@ -655,48 +645,33 @@ impl QrView {
     }
 }
 
-pub struct QrCodeElement {
-    pub panel: Rc<RefCell<QrView>>,
-}
+impl Render for QrView {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.collect_pending(cx);
+        self.ensure_inputs(cx);
 
-impl IntoElement for QrCodeElement {
-    type Element = Component<Self>;
-
-    fn into_element(self) -> Self::Element {
-        Component::new(self)
-    }
-}
-
-impl RenderOnce for QrCodeElement {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        {
-            let mut panel = self.panel.borrow_mut();
-            panel.collect_pending(cx);
-            panel.ensure_inputs(cx);
-        }
-
-        let panel = self.panel.borrow();
+        let entity = cx.entity();
         let dark = qingqi_ui::theme_mode::is_dark();
-        let input = panel.input.clone().expect("qr input should exist");
-        let history_query = panel
+        let input = self.input.clone().expect("qr input should exist");
+        let history_query = self
             .history_query_input
             .clone()
             .expect("history query input should exist");
-        let scan_path_input = panel
+        let scan_path_input = self
             .scan_path_input
             .clone()
             .expect("scan path input should exist");
-        let qr_matrix = panel.qr_matrix.clone();
-        let qr_size = panel.qr_size;
-        let message = panel.message.clone();
-        let tone = panel.tone;
-        let show_scan = panel.show_scan;
-        let show_history = panel.show_history;
-        let history = panel.history.clone();
-        let scan_result = panel.scan_result.clone();
-        let scan_error = panel.scan_error.clone();
+        let qr_matrix = self.qr_matrix.clone();
+        let qr_size = self.qr_size;
+        let message = self.message.clone();
+        let tone = self.tone;
+        let show_scan = self.show_scan;
+        let show_history = self.show_history;
+        let history = self.history.clone();
+        let scan_result = self.scan_result.clone();
+        let scan_error = self.scan_error.clone();
+        let history_count = history.len();
         let input_text = input.read(cx).text();
-        drop(panel);
 
         ui::plugin_surface()
             .relative()
@@ -720,21 +695,25 @@ impl RenderOnce for QrCodeElement {
                                         utility_button("扫描", show_scan, dark)
                                             .id("qr-scan-btn")
                                             .on_click({
-                                                let panel = Rc::clone(&self.panel);
-                                                move |_, window, _cx| {
-                                                    panel.borrow_mut().toggle_scan();
-                                                    window.refresh();
+                                                let entity = entity.clone();
+                                                move |_, _window, cx| {
+                                                    entity.update(cx, |this, ctx| {
+                                                        this.toggle_scan();
+                                                        ctx.notify();
+                                                    });
                                                 }
                                             }),
                                     )
                                     .child(
-                                        icon_button(show_history, dark, history.len())
+                                        icon_button(show_history, dark, history_count)
                                             .id("qr-history-btn")
                                             .on_click({
-                                                let panel = Rc::clone(&self.panel);
-                                                move |_, window, cx| {
-                                                    panel.borrow_mut().toggle_history(cx);
-                                                    window.refresh();
+                                                let entity = entity.clone();
+                                                move |_, _window, cx| {
+                                                    entity.update(cx, |this, ctx| {
+                                                        this.toggle_history(ctx);
+                                                        ctx.notify();
+                                                    });
                                                 }
                                             }),
                                     ),
@@ -771,12 +750,12 @@ impl RenderOnce for QrCodeElement {
                                                 primary_action_button("另存为", dark)
                                                     .id("qr-save-btn")
                                                     .on_click({
-                                                        let panel = Rc::clone(&self.panel);
-                                                        move |_, window, cx| {
-                                                            panel
-                                                                .borrow_mut()
-                                                                .save_current(cx, cx.to_async());
-                                                            window.refresh();
+                                                        let entity = entity.clone();
+                                                        move |_, _window, cx| {
+                                                            entity.update(cx, |this, ctx| {
+                                                                this.save_current(ctx);
+                                                                ctx.notify();
+                                                            });
                                                         }
                                                     }),
                                             )
@@ -784,10 +763,12 @@ impl RenderOnce for QrCodeElement {
                                                 action_button("复制内容", dark)
                                                     .id("qr-copy-btn")
                                                     .on_click({
-                                                        let panel = Rc::clone(&self.panel);
-                                                        move |_, window, cx| {
-                                                            panel.borrow_mut().copy_current(cx);
-                                                            window.refresh();
+                                                        let entity = entity.clone();
+                                                        move |_, _window, cx| {
+                                                            entity.update(cx, |this, ctx| {
+                                                                this.copy_current(ctx);
+                                                                ctx.notify();
+                                                            });
                                                         }
                                                     }),
                                             )
@@ -795,12 +776,12 @@ impl RenderOnce for QrCodeElement {
                                                 action_button("从剪贴板", dark)
                                                     .id("qr-paste-btn")
                                                     .on_click({
-                                                        let panel = Rc::clone(&self.panel);
-                                                        move |_, window, cx| {
-                                                            panel
-                                                                .borrow_mut()
-                                                                .fill_from_clipboard(cx);
-                                                            window.refresh();
+                                                        let entity = entity.clone();
+                                                        move |_, _window, cx| {
+                                                            entity.update(cx, |this, ctx| {
+                                                                this.fill_from_clipboard(ctx);
+                                                                ctx.notify();
+                                                            });
                                                         }
                                                     }),
                                             )
@@ -809,15 +790,15 @@ impl RenderOnce for QrCodeElement {
                                                 ghost_button("生成", dark)
                                                     .id("qr-generate-btn")
                                                     .on_click({
-                                                        let panel = Rc::clone(&self.panel);
-                                                        move |_, window, cx| {
-                                                            let text =
-                                                                panel.borrow().input_text(cx);
-                                                            panel.borrow_mut().generate_from_text(
-                                                                &text,
-                                                                cx.to_async(),
-                                                            );
-                                                            window.refresh();
+                                                        let entity = entity.clone();
+                                                        move |_, _window, cx| {
+                                                            entity.update(cx, |this, ctx| {
+                                                                let text = this.input_text(ctx);
+                                                                this.generate_from_text(
+                                                                    &text, ctx,
+                                                                );
+                                                                ctx.notify();
+                                                            });
                                                         }
                                                     }),
                                             )
@@ -825,10 +806,12 @@ impl RenderOnce for QrCodeElement {
                                                 ghost_button("清空", dark)
                                                     .id("qr-clear-btn")
                                                     .on_click({
-                                                        let panel = Rc::clone(&self.panel);
-                                                        move |_, window, cx| {
-                                                            panel.borrow_mut().clear_input(cx);
-                                                            window.refresh();
+                                                        let entity = entity.clone();
+                                                        move |_, _window, cx| {
+                                                            entity.update(cx, |this, ctx| {
+                                                                this.clear_input(ctx);
+                                                                ctx.notify();
+                                                            });
                                                         }
                                                     }),
                                             ),
@@ -842,9 +825,9 @@ impl RenderOnce for QrCodeElement {
                 overlay_shell(
                     dark,
                     "qr-scan-overlay",
-                    Rc::clone(&self.panel),
+                    entity.clone(),
                     scan_panel(
-                        Rc::clone(&self.panel),
+                        entity.clone(),
                         scan_path_input,
                         scan_result,
                         scan_error,
@@ -856,9 +839,9 @@ impl RenderOnce for QrCodeElement {
                 overlay_shell(
                     dark,
                     "qr-history-overlay",
-                    Rc::clone(&self.panel),
+                    entity.clone(),
                     history_panel(
-                        Rc::clone(&self.panel),
+                        entity.clone(),
                         history_query,
                         history,
                         dark,
@@ -939,7 +922,7 @@ fn preview_panel(dark: bool, qr_matrix: Vec<bool>, qr_size: usize) -> impl IntoE
 }
 
 fn scan_panel(
-    panel: Rc<RefCell<QrView>>,
+    entity: Entity<QrView>,
     scan_path_input: Entity<TextInput>,
     scan_result: String,
     scan_error: String,
@@ -992,27 +975,41 @@ fn scan_panel(
                             action_button("选择图片", dark)
                                 .id("qr-scan-choose")
                                 .on_click({
-                                    let panel = Rc::clone(&panel);
-                                    move |_, window, cx| {
-                                        panel.borrow_mut().choose_scan_image(cx);
-                                        window.refresh();
+                                    let entity = entity.clone();
+                                    move |_, _window, cx| {
+                                        entity.update(cx, |this, ctx| {
+                                            this.choose_scan_image(ctx);
+                                            ctx.notify();
+                                        });
                                     }
                                 }),
                         )
-                        .child(action_button("扫描", dark).id("qr-scan-run").on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
-                                panel.borrow_mut().scan_selected_path(cx);
-                                window.refresh();
-                            }
-                        }))
-                        .child(action_button("关闭", dark).id("qr-scan-close").on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().show_scan = false;
-                                window.refresh();
-                            }
-                        })),
+                        .child(
+                            action_button("扫描", dark)
+                                .id("qr-scan-run")
+                                .on_click({
+                                    let entity = entity.clone();
+                                    move |_, _window, cx| {
+                                        entity.update(cx, |this, ctx| {
+                                            this.scan_selected_path(ctx);
+                                            ctx.notify();
+                                        });
+                                    }
+                                }),
+                        )
+                        .child(
+                            action_button("关闭", dark)
+                                .id("qr-scan-close")
+                                .on_click({
+                                    let entity = entity.clone();
+                                    move |_, _window, cx| {
+                                        entity.update(cx, |this, ctx| {
+                                            this.show_scan = false;
+                                            ctx.notify();
+                                        });
+                                    }
+                                }),
+                        ),
                 ),
         )
         .child(
@@ -1030,19 +1027,23 @@ fn scan_panel(
                         .border_color(theme::semantic().border_default)
                         .drag_over::<ExternalPaths>(move |style, _, _, _| {
                             style.bg(theme::rgba_with_alpha(
-                                theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan),
+                                theme::accent_color(
+                                    qingqi_plugin::plugin_spec::PluginAccent::Cyan,
+                                ),
                                 if dark { 0.18 } else { 0.10 },
                             ))
                         })
                         .on_drop({
-                            let panel = Rc::clone(&panel);
-                            move |paths: &ExternalPaths, window, cx| {
+                            let entity = entity.clone();
+                            move |paths: &ExternalPaths, _window, cx| {
                                 if let Some(path) = paths.paths().first() {
-                                    panel.borrow_mut().scan_path_text(
-                                        path.to_string_lossy().to_string(),
-                                        cx.to_async(),
-                                    );
-                                    window.refresh();
+                                    entity.update(cx, |this, ctx| {
+                                        this.scan_path_text(
+                                            path.to_string_lossy().to_string(),
+                                            ctx,
+                                        );
+                                        ctx.notify();
+                                    });
                                 }
                             }
                         })
@@ -1076,10 +1077,12 @@ fn scan_panel(
                     action_button("复制结果", dark)
                         .id("qr-scan-copy")
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
-                                panel.borrow_mut().copy_scan_result(cx);
-                                window.refresh();
+                            let entity = entity.clone();
+                            move |_, _window, cx| {
+                                entity.update(cx, |this, ctx| {
+                                    this.copy_scan_result(ctx);
+                                    ctx.notify();
+                                });
                             }
                         }),
                 )
@@ -1087,10 +1090,12 @@ fn scan_panel(
                     action_button("用作生成内容", dark)
                         .id("qr-scan-use")
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
-                                panel.borrow_mut().use_scan_result(cx);
-                                window.refresh();
+                            let entity = entity.clone();
+                            move |_, _window, cx| {
+                                entity.update(cx, |this, ctx| {
+                                    this.use_scan_result(ctx);
+                                    ctx.notify();
+                                });
                             }
                         }),
                 ),
@@ -1098,7 +1103,7 @@ fn scan_panel(
 }
 
 fn history_panel(
-    panel: Rc<RefCell<QrView>>,
+    entity: Entity<QrView>,
     history_query: Entity<TextInput>,
     history: Vec<QrHistoryRecord>,
     dark: bool,
@@ -1155,10 +1160,12 @@ fn history_panel(
                             action_button("导出", dark)
                                 .id("qr-history-export")
                                 .on_click({
-                                    let panel = Rc::clone(&panel);
-                                    move |_, window, cx| {
-                                        panel.borrow_mut().export_history(cx, cx.to_async());
-                                        window.refresh();
+                                    let entity = entity.clone();
+                                    move |_, _window, cx| {
+                                        entity.update(cx, |this, ctx| {
+                                            this.export_history(ctx);
+                                            ctx.notify();
+                                        });
                                     }
                                 }),
                         )
@@ -1166,10 +1173,12 @@ fn history_panel(
                             action_button("清空", dark)
                                 .id("qr-history-clear")
                                 .on_click({
-                                    let panel = Rc::clone(&panel);
-                                    move |_, window, cx| {
-                                        panel.borrow_mut().clear_history(cx.to_async());
-                                        window.refresh();
+                                    let entity = entity.clone();
+                                    move |_, _window, cx| {
+                                        entity.update(cx, |this, ctx| {
+                                            this.clear_history(ctx);
+                                            ctx.notify();
+                                        });
                                     }
                                 }),
                         )
@@ -1177,10 +1186,12 @@ fn history_panel(
                             action_button("关闭", dark)
                                 .id("qr-history-close")
                                 .on_click({
-                                    let panel = Rc::clone(&panel);
-                                    move |_, window, _cx| {
-                                        panel.borrow_mut().show_history = false;
-                                        window.refresh();
+                                    let entity = entity.clone();
+                                    move |_, _window, cx| {
+                                        entity.update(cx, |this, ctx| {
+                                            this.show_history = false;
+                                            ctx.notify();
+                                        });
                                     }
                                 }),
                         ),
@@ -1210,10 +1221,12 @@ fn history_panel(
                             action_button("筛选", dark)
                                 .id("qr-history-filter")
                                 .on_click({
-                                    let panel = Rc::clone(&panel);
-                                    move |_, window, cx| {
-                                        panel.borrow_mut().refresh_history(cx, cx.to_async());
-                                        window.refresh();
+                                    let entity = entity.clone();
+                                    move |_, _window, cx| {
+                                        entity.update(cx, |this, ctx| {
+                                            this.refresh_history(ctx);
+                                            ctx.notify();
+                                        });
                                     }
                                 }),
                         ),
@@ -1238,7 +1251,9 @@ fn history_panel(
                     history
                         .into_iter()
                         .enumerate()
-                        .map(|(index, item)| history_row(Rc::clone(&panel), item, index, dark)),
+                        .map(|(index, item)| {
+                            history_row(entity.clone(), item, index, dark)
+                        }),
                 )
                 .into_any_element()
         })
@@ -1247,7 +1262,7 @@ fn history_panel(
 fn overlay_shell(
     dark: bool,
     backdrop_id: &'static str,
-    panel: Rc<RefCell<QrView>>,
+    entity: Entity<QrView>,
     content: impl IntoElement,
 ) -> impl IntoElement {
     div()
@@ -1263,11 +1278,15 @@ fn overlay_shell(
                 .left_0()
                 .bg(hsla(0.0, 0.0, 0.0, if dark { 0.42 } else { 0.24 }))
                 .id(backdrop_id)
-                .on_click(move |_, window, _cx| {
-                    let mut panel = panel.borrow_mut();
-                    panel.show_scan = false;
-                    panel.show_history = false;
-                    window.refresh();
+                .on_click({
+                    let entity = entity.clone();
+                    move |_, _window, cx| {
+                        entity.update(cx, |this, ctx| {
+                            this.show_scan = false;
+                            this.show_history = false;
+                            ctx.notify();
+                        });
+                    }
                 }),
         )
         .child(
@@ -1284,7 +1303,7 @@ fn overlay_shell(
 }
 
 fn history_row(
-    panel: Rc<RefCell<QrView>>,
+    entity: Entity<QrView>,
     item: QrHistoryRecord,
     index: usize,
     dark: bool,
@@ -1329,11 +1348,13 @@ fn history_row(
             action_button("用", dark)
                 .id(("qr-history-use", index))
                 .on_click({
-                    let panel = Rc::clone(&panel);
+                    let entity = entity.clone();
                     let item = item.clone();
-                    move |_, window, cx| {
-                        panel.borrow_mut().use_history_item(&item, cx);
-                        window.refresh();
+                    move |_, _window, cx| {
+                        entity.update(cx, |this, ctx| {
+                            this.use_history_item(&item, ctx);
+                            ctx.notify();
+                        });
                     }
                 }),
         )
@@ -1341,11 +1362,13 @@ fn history_row(
             action_button("复制", dark)
                 .id(("qr-history-copy", index))
                 .on_click({
-                    let panel = Rc::clone(&panel);
+                    let entity = entity.clone();
                     let item = item.clone();
-                    move |_, window, cx| {
-                        panel.borrow_mut().copy_history_item(&item, cx);
-                        window.refresh();
+                    move |_, _window, cx| {
+                        entity.update(cx, |this, ctx| {
+                            this.copy_history_item(&item, ctx);
+                            ctx.notify();
+                        });
                     }
                 }),
         )
@@ -1353,13 +1376,13 @@ fn history_row(
             action_button("删除", dark)
                 .id(("qr-history-delete", index))
                 .on_click({
-                    let panel = Rc::clone(&panel);
+                    let entity = entity.clone();
                     let item_id = item.id.clone();
-                    move |_, window, cx| {
-                        panel
-                            .borrow_mut()
-                            .remove_history_item(&item_id, cx.to_async());
-                        window.refresh();
+                    move |_, _window, cx| {
+                        entity.update(cx, |this, ctx| {
+                            this.remove_history_item(&item_id, ctx);
+                            ctx.notify();
+                        });
                     }
                 }),
         )

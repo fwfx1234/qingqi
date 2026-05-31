@@ -172,6 +172,7 @@ impl WindowController {
                 cx.activate(true);
                 match handle.update(cx, |_, window, _| window.activate_window()) {
                     Ok(_) => {
+                        let _ = handle.update(cx, |launcher, _window, cx| launcher.refresh_on_show(cx));
                         cx.activate(true);
                         return;
                     }

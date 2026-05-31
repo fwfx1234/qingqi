@@ -6,7 +6,7 @@ use std::{
 use gpui::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
     KeyDownEvent, ObjectFit, ParentElement, Render, ScrollStrategy, StatefulInteractiveElement,
-    Styled, StyledImage, Subscription, Task, UniformListScrollHandle, Window, div, hsla, img, px,
+    BoxShadow, Styled, StyledImage, Subscription, Task, UniformListScrollHandle, Window, div, hsla, img, point, px,
 };
 
 use crate::{
@@ -27,6 +27,17 @@ use settings::{format_ignore_patterns, settings_page};
 
 const HISTORY_PAGE_SIZE: usize = 120;
 const HISTORY_PREFETCH_THRESHOLD: usize = 40;
+
+fn glass_shadow() -> Vec<BoxShadow> {
+    vec![
+        BoxShadow {
+            color: theme::rgba_with_alpha(theme::semantic().shadow, 0.06),
+            offset: point(px(0.0), px(4.0)),
+            blur_radius: px(12.0),
+            spread_radius: px(-6.0),
+        },
+    ]
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ClipboardTab {
@@ -131,8 +142,8 @@ impl ClipboardView {
                 let mut input = TextInput::new(cx, "搜索内容...", query);
                 input.set_style(
                     TextInputStyle {
-                        height: 26.0,
-                        font_size: 12.0,
+                        height: 24.0,
+                        font_size: 11.0,
                         padding: 0.0,
                     },
                     cx,
@@ -153,7 +164,7 @@ impl ClipboardView {
                 input.set_style(
                     TextInputStyle {
                         height: 9999.0,
-                        font_size: 12.0,
+                        font_size: 11.0,
                         padding: 0.0,
                     },
                     cx,
@@ -173,9 +184,9 @@ impl ClipboardView {
                 input.set_chrome(false, cx);
                 input.set_style(
                     TextInputStyle {
-                        height: 96.0,
-                        font_size: 12.0,
-                        padding: 10.0,
+                        height: 72.0,
+                        font_size: 11.0,
+                        padding: 6.0,
                     },
                     cx,
                 );
@@ -190,9 +201,9 @@ impl ClipboardView {
                 let mut input = TextInput::new(cx, "例如 20000，0 表示不限", value);
                 input.set_style(
                     TextInputStyle {
-                        height: 34.0,
-                        font_size: 12.0,
-                        padding: 9.0,
+                        height: 28.0,
+                        font_size: 11.0,
+                        padding: 6.0,
                     },
                     cx,
                 );
@@ -208,9 +219,9 @@ impl ClipboardView {
                 let mut input = TextInput::new(cx, "例如 Alt+V", value);
                 input.set_style(
                     TextInputStyle {
-                        height: 34.0,
-                        font_size: 12.0,
-                        padding: 9.0,
+                        height: 28.0,
+                        font_size: 11.0,
+                        padding: 6.0,
                     },
                     cx,
                 );
@@ -1089,22 +1100,22 @@ fn render_tab_bar(
     ];
 
     div()
-        .h(px(36.0))
-        .px(px(16.0))
+        .h(px(30.0))
+        .px(px(8.0))
         .border_b_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_page)
+        .border_color(ui::border_light())
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
         .flex()
         .items_center()
-        .gap(px(4.0))
+        .gap(px(2.0))
         .children(tabs.into_iter().enumerate().map(|(idx, (tab, label))| {
             let is_active = active == tab;
             let h = handle.clone();
             div()
                 .id(("clipboard-tab", idx as u64))
-                .h(px(28.0))
-                .px(px(12.0))
-                .rounded(px(6.0))
+                .h(px(24.0))
+                .px(px(8.0))
+                .rounded(px(4.0))
                 .bg(if is_active {
                     theme::semantic().bg_surface.into()
                 } else {
@@ -1120,7 +1131,7 @@ fn render_tab_bar(
                 } else {
                     gpui::FontWeight::NORMAL
                 })
-                .text_size(px(12.0))
+                .text_size(px(10.0))
                 .cursor_pointer()
                 .hover(move |style| {
                     style.bg(if !is_active {
@@ -1171,7 +1182,7 @@ impl Render for ClipboardView {
             tracing::warn!("clipboard inputs not initialised; rendering placeholder");
             return div()
                 .size_full()
-                .bg(theme::semantic().bg_page)
+                .bg(theme::semantic().bg_glass)
                 .child("剪贴板组件加载中...")
                 .into_any_element();
         };
@@ -1187,7 +1198,7 @@ impl Render for ClipboardView {
                 tracing::warn!("clipboard settings inputs not initialised; rendering placeholder");
                 return div()
                     .size_full()
-                    .bg(theme::semantic().bg_page)
+                    .bg(theme::semantic().bg_glass)
                     .child("剪贴板设置加载中...")
                     .into_any_element();
             }
@@ -1200,7 +1211,9 @@ impl Render for ClipboardView {
             .size_full()
             .flex()
             .flex_col()
-            .bg(theme::semantic().bg_page)
+            .bg(theme::semantic().bg_glass)
+            .rounded(px(12.0))
+            .overflow_hidden()
             .text_color(theme::semantic().text_primary)
             .font_family(ui::font_ui());
         let root = if let Some(ref fh) = self.focus_handle {

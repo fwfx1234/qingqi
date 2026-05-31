@@ -1,5 +1,5 @@
 use gpui::{
-    AnyElement, App, AppContext, Component, Entity, IntoElement, ParentElement, RenderOnce,
+    AnyElement, App, AppContext, Context, Entity, IntoElement, ParentElement, Render,
     SharedString, Styled, Window, div, px,
 };
 use gpui_component::{
@@ -13,13 +13,10 @@ use gpui_component::{
 };
 use std::sync::Arc;
 
+use crate::manifest;
 use qingqi_plugin::{
-    icon::IconRef,
-    plugin::{InlineView, Manifest, Plugin, PluginCx, PluginId, PluginView},
-    plugin_spec::{
-        PluginAccent, PluginCategory, PluginStats, PluginStatus, PluginVisualSpec,
-        PluginWindowMode, WindowSpec,
-    },
+    plugin::{InlineView, Plugin, PluginCx, PluginId, PluginView},
+    plugin_spec::PluginAccent,
 };
 use qingqi_ui::{theme, ui, ui::components};
 
@@ -29,62 +26,48 @@ impl GpuiDemoPlugin {
     pub fn new() -> Self {
         Self
     }
-
-    pub fn manifest_static() -> Manifest {
-        Manifest {
-            id: "gpui-demo".into(),
-            name: "GPUI 学习演示".into(),
-            description: "GPUI 组件、布局和交互的 Rust 实验场".into(),
-            keywords: ["gpui", "rust", "学习", "demo", "组件", "演示", "教程"]
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-            icon: IconRef::asset("icons/school.svg"),
-            prefixes: vec!["gpui".into(), "demo".into()],
-            mode: PluginWindowMode::Inline,
-            window: WindowSpec::ratio(0.8, 0.8),
-            category: PluginCategory::Tool,
-            status: PluginStatus::Preview,
-            background: false,
-            dynamic_commands: false,
-            visual: Some(PluginVisualSpec {
-                icon: IconRef::asset("icons/school.svg"),
-                accent: PluginAccent::Purple,
-                category: PluginCategory::Tool,
-                status: PluginStatus::Preview,
-                mode: PluginWindowMode::Inline,
-                window: WindowSpec::ratio(0.8, 0.8),
-            }),
-            stats: Some(PluginStats {
-                primary: "控件范式".into(),
-                secondary: "布局样例".into(),
-                tertiary: "持续沉淀".into(),
-            }),
-            command_hint: Some("用于沉淀 Qingqi 的 GPUI 组件、布局和交互范式".into()),
-            command_prefixes: ["gpui", "demo"].into_iter().map(Into::into).collect(),
-        }
-    }
 }
 
 impl Plugin for GpuiDemoPlugin {
-    fn manifest(&self) -> Manifest {
-        Self::manifest_static()
+    fn manifest(&self) -> qingqi_plugin::plugin::Manifest {
+        manifest::manifest()
     }
 
     fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
-        let slider = cx.app.new(|_| {
-            SliderState::new()
-                .min(0.0)
-                .max(100.0)
-                .step(1.0)
-                .default_value(65.0)
+        let panel = cx.app.new(|cx| {
+            let slider = cx.new(|_| {
+                SliderState::new()
+                    .min(0.0)
+                    .max(100.0)
+                    .step(1.0)
+                    .default_value(65.0)
+            });
+            GpuiDemoView {
+                active_tab: 0,
+                dark_switch: false,
+                checkbox_checked: true,
+                slider,
+            }
         });
-        Ok(PluginView::Inline(Box::new(GpuiDemoView {
-            active_tab: 0,
-            dark_switch: false,
-            checkbox_checked: true,
-            slider,
-        })))
+        Ok(PluginView::Inline(Box::new(GpuiDemoInline { panel })))
+    }
+}
+
+struct GpuiDemoInline {
+    panel: Entity<GpuiDemoView>,
+}
+
+impl InlineView for GpuiDemoInline {
+    fn plugin_id(&self) -> PluginId {
+        manifest::PLUGIN_ID.into()
+    }
+
+    fn title(&self) -> Arc<str> {
+        "GPUI 学习演示".into()
+    }
+
+    fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
+        self.panel.clone().into_any_element()
     }
 }
 
@@ -95,45 +78,12 @@ struct GpuiDemoView {
     slider: Entity<SliderState>,
 }
 
-impl InlineView for GpuiDemoView {
-    fn plugin_id(&self) -> PluginId {
-        "gpui-demo".into()
-    }
-
-    fn title(&self) -> Arc<str> {
-        "GPUI 学习演示".into()
-    }
-
-    fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
-        GpuiDemoPage {
-            active_tab: self.active_tab,
-            dark_switch: self.dark_switch,
-            checkbox_checked: self.checkbox_checked,
-            slider: self.slider.clone(),
-        }
-        .into_any_element()
-    }
-}
-
-struct GpuiDemoPage {
-    active_tab: usize,
-    dark_switch: bool,
-    checkbox_checked: bool,
-    slider: Entity<SliderState>,
-}
-
-impl IntoElement for GpuiDemoPage {
-    type Element = Component<Self>;
-
-    fn into_element(self) -> Self::Element {
-        Component::new(self)
-    }
-}
-
-impl RenderOnce for GpuiDemoPage {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let dark = qingqi_ui::theme_mode::is_dark();
+impl Render for GpuiDemoView {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = PluginAccent::Purple;
+
+        // Pre-read slider value so helper functions do not need App
+        let slider_value = self.slider.read(cx).value().start() as i32;
 
         div()
             .size_full()
@@ -144,7 +94,7 @@ impl RenderOnce for GpuiDemoPage {
             .flex_col()
             .p_4()
             .gap_3()
-            .child(header(dark, accent))
+            .child(header(accent))
             .child(
                 div()
                     .flex_1()
@@ -152,14 +102,13 @@ impl RenderOnce for GpuiDemoPage {
                     .gap_3()
                     .overflow_hidden()
                     .child(component_column(
-                        dark,
                         self.dark_switch,
                         self.checkbox_checked,
-                        self.slider,
-                        cx,
+                        slider_value,
+                        &self.slider,
                     ))
-                    .child(layout_column(dark, self.active_tab))
-                    .child(state_column(dark, accent)),
+                    .child(layout_column(self.active_tab))
+                    .child(state_column(accent)),
             )
             .child(ui::status_bar(
                 "gpui-component 组件演示 — 点击按钮、切换 tab、调整 slider 查看交互效果",
@@ -168,7 +117,7 @@ impl RenderOnce for GpuiDemoPage {
     }
 }
 
-fn header(_dark: bool, accent: PluginAccent) -> impl IntoElement {
+fn header(accent: PluginAccent) -> impl IntoElement {
     div()
         .rounded(theme::radius_lg())
         .bg(theme::semantic().bg_surface)
@@ -210,13 +159,12 @@ fn header(_dark: bool, accent: PluginAccent) -> impl IntoElement {
 }
 
 fn component_column(
-    dark: bool,
     dark_switch: bool,
     checkbox_checked: bool,
-    slider: Entity<SliderState>,
-    cx: &App,
+    slider_value: i32,
+    slider: &Entity<SliderState>,
 ) -> impl IntoElement {
-    panel(dark, "基础控件")
+    panel("基础控件")
         .child(
             div()
                 .text_size(px(12.0))
@@ -288,16 +236,16 @@ fn component_column(
                 .text_color(theme::semantic().text_secondary)
                 .child(format!(
                     "Slider — {}",
-                    slider.read(cx).value().start() as i32
+                    slider_value
                 )),
         )
-        .child(Slider::new(&slider).horizontal())
+        .child(Slider::new(slider).horizontal())
 }
 
-fn layout_column(dark: bool, active_tab: usize) -> impl IntoElement {
+fn layout_column(active_tab: usize) -> impl IntoElement {
     let tabs = vec!["概览", "设置", "历史"];
 
-    panel(dark, "布局模式")
+    panel("布局模式")
         .child(
             div()
                 .text_size(px(12.0))
@@ -345,34 +293,30 @@ fn layout_column(dark: bool, active_tab: usize) -> impl IntoElement {
                 .border_1()
                 .border_color(theme::semantic().border_default)
                 .overflow_hidden()
-                .child(sample_strip(dark, "左侧导航", 0.28))
-                .child(sample_strip(dark, "中间内容", 0.42))
-                .child(sample_strip(dark, "右侧详情", 0.30)),
+                .child(sample_strip("左侧导航", 0.28))
+                .child(sample_strip("中间内容", 0.42))
+                .child(sample_strip("右侧详情", 0.30)),
         )
 }
 
-fn state_column(dark: bool, accent: PluginAccent) -> impl IntoElement {
-    panel(dark, "状态与服务")
+fn state_column(accent: PluginAccent) -> impl IntoElement {
+    panel("状态与服务")
         .child(demo_row(
-            dark,
             accent,
             "Runtime",
             "长生命周期，持有 service、cache、background handle",
         ))
         .child(demo_row(
-            dark,
             accent,
             "Session",
             "窗口生命周期，只持有 UI entity state",
         ))
         .child(demo_row(
-            dark,
             accent,
             "Service",
             "可单测业务逻辑，不依赖 GPUI",
         ))
         .child(demo_row(
-            dark,
             accent,
             "Store",
             "持久化和分页查询，锁短、连接可控",
@@ -388,7 +332,7 @@ fn state_column(dark: bool, accent: PluginAccent) -> impl IntoElement {
         )
 }
 
-fn panel(_dark: bool, title: &'static str) -> gpui::Div {
+fn panel(title: &'static str) -> gpui::Div {
     div()
         .flex_1()
         .rounded(theme::radius_lg())
@@ -411,7 +355,6 @@ fn panel(_dark: bool, title: &'static str) -> gpui::Div {
 }
 
 fn demo_row(
-    _dark: bool,
     accent: PluginAccent,
     title: &'static str,
     body: &'static str,
@@ -459,7 +402,7 @@ fn demo_row(
         )
 }
 
-fn sample_strip(_dark: bool, label: &'static str, width_ratio: f32) -> impl IntoElement {
+fn sample_strip(label: &'static str, width_ratio: f32) -> impl IntoElement {
     let width = 240.0 * width_ratio;
     div()
         .h(px(34.0))

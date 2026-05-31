@@ -1,6 +1,6 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
-use gpui::{AnyElement, App, IntoElement, Window};
+use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 
 use crate::{manifest, service::ApiService, view};
 use qingqi_plugin::{
@@ -97,17 +97,16 @@ impl Plugin for ApiDebuggerPlugin {
     fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let service = self.service();
         self.ensure_watcher(Arc::clone(&service), cx.events.clone(), cx.app);
-        Ok(PluginView::Window(Box::new(ApiDebuggerView {
-            panel: Rc::new(RefCell::new(view::ApiDebuggerView::new(service, cx.app))),
-        })))
+        let view = cx.app.new(|cx| view::ApiDebuggerView::new(service, cx));
+        Ok(PluginView::Window(Box::new(ApiDebuggerWindow { view })))
     }
 }
 
-struct ApiDebuggerView {
-    panel: Rc<RefCell<view::ApiDebuggerView>>,
+struct ApiDebuggerWindow {
+    view: Entity<view::ApiDebuggerView>,
 }
 
-impl WindowView for ApiDebuggerView {
+impl WindowView for ApiDebuggerWindow {
     fn plugin_id(&self) -> PluginId {
         manifest::PLUGIN_ID.into()
     }
@@ -117,9 +116,6 @@ impl WindowView for ApiDebuggerView {
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
-        view::ApiDebuggerElement {
-            panel: Rc::clone(&self.panel),
-        }
-        .into_any_element()
+        self.view.clone().into_any_element()
     }
 }

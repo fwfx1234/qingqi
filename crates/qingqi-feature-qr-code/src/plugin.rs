@@ -1,7 +1,6 @@
 use std::sync::Arc;
-use std::{cell::RefCell, rc::Rc};
 
-use gpui::{App, IntoElement, Window};
+use gpui::{App, AppContext, Entity, IntoElement, Window};
 
 use crate::{manifest, view};
 use qingqi_plugin::{
@@ -32,15 +31,18 @@ impl Plugin for QrCodePlugin {
         )
     }
 
-    fn open(&mut self, _cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
-        Ok(PluginView::Inline(Box::new(QrCodeView {
-            panel: Rc::new(RefCell::new(view::QrView::new(self.paths.clone())?)),
-        })))
+    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+        let mut view = view::QrView::new(self.paths.clone())?;
+        let panel = cx.app.new(|cx| {
+            view.ensure_inputs(cx);
+            view
+        });
+        Ok(PluginView::Inline(Box::new(QrCodeView { panel })))
     }
 }
 
 struct QrCodeView {
-    panel: Rc<RefCell<view::QrView>>,
+    panel: Entity<view::QrView>,
 }
 
 impl InlineView for QrCodeView {
@@ -53,17 +55,17 @@ impl InlineView for QrCodeView {
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> gpui::AnyElement {
-        view::QrCodeElement {
-            panel: Rc::clone(&self.panel),
-        }
-        .into_any_element()
+        self.panel.clone().into_any_element()
     }
 
     fn on_input_changed(&mut self, text: &str, cx: &mut App) {
-        self.panel.borrow_mut().set_launch_input(text, cx);
+        self.panel.update(cx, |this, cx| {
+            this.set_launch_input(text, cx);
+        });
     }
 
     fn on_close(&mut self) {
-        self.panel.borrow_mut().clear_view_state();
+        // Entity is freshly created each time open() is called,
+        // so explicit state clearing is not needed.
     }
 }

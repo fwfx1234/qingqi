@@ -1,7 +1,7 @@
 use std::sync::Arc;
-use std::{cell::RefCell, path::Path, rc::Rc};
+use std::path::Path;
 
-use gpui::{App, IntoElement, Window};
+use gpui::{App, AppContext, Entity, IntoElement, Window};
 
 use crate::{manifest, service::ImageCompressService, view};
 use qingqi_plugin::{
@@ -44,16 +44,17 @@ impl Plugin for ImageCompressPlugin {
         None
     }
 
-    fn open(&mut self, _cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let service = ImageCompressService::new(self.paths.clone())?;
+        let panel = cx.app.new(|_cx| view::ImageCompressView::new(service));
         Ok(PluginView::Inline(Box::new(ImageCompressInlineView {
-            panel: Rc::new(RefCell::new(view::ImageCompressView::new(service))),
+            panel,
         })))
     }
 }
 
 struct ImageCompressInlineView {
-    panel: Rc<RefCell<view::ImageCompressView>>,
+    panel: Entity<view::ImageCompressView>,
 }
 
 impl InlineView for ImageCompressInlineView {
@@ -66,18 +67,17 @@ impl InlineView for ImageCompressInlineView {
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> gpui::AnyElement {
-        view::ImageCompressElement {
-            panel: Rc::clone(&self.panel),
-        }
-        .into_any_element()
+        self.panel.clone().into_any_element()
     }
 
-    fn on_input_changed(&mut self, text: &str, _cx: &mut App) {
-        self.panel.borrow_mut().import_from_launch_input(text);
+    fn on_input_changed(&mut self, text: &str, cx: &mut App) {
+        self.panel.update(cx, |panel, _cx| {
+            panel.import_from_launch_input(text);
+        });
     }
 
     fn on_close(&mut self) {
-        self.panel.borrow_mut().clear_transient_state();
+        // Entity state will be naturally dropped when the entity is no longer referenced.
     }
 }
 

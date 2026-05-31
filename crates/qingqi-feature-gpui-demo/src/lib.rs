@@ -1,3 +1,4 @@
+pub mod manifest;
 pub mod plugin;
 
 use qingqi_plugin::{database::DatabaseSpec, plugin::Plugin};

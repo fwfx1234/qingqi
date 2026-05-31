@@ -113,20 +113,14 @@ impl ShortcutService {
     pub fn reload_from_plugins(&mut self, cx: &mut App) -> Result<()> {
         let mut shortcuts = vec![core_open_launcher_shortcut()];
         if let Some(plugins) = self.plugins.as_ref() {
-            // Force all plugin shortcuts to App scope — only core shortcuts
-            // (e.g. Alt+Space to toggle launcher) may be global.  This
-            // prevents plugins from registering system-wide hotkeys that
-            // conflict with other applications.
+            // Respect each plugin's declared shortcut scope. Plugins that
+            // explicitly declare Global (e.g. clipboard Alt+V) will be
+            // registered as system-wide hotkeys; App-scoped shortcuts are
+            // bound as in-window key bindings only.
             shortcuts.extend(
                 qingqi_core::lock_or_recover(&plugins, "plugin-manager")
                     .shortcuts()
-                    .into_iter()
-                    .map(|mut s| {
-                        if s.owner_plugin_id != CORE_PLUGIN_ID {
-                            s.scope = ShortcutScope::App;
-                        }
-                        s
-                    }),
+                    .into_iter(),
             );
         }
         self.replace_shortcuts(shortcuts, cx)

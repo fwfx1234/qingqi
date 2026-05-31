@@ -1,7 +1,5 @@
 use std::{
-    cell::RefCell,
     path::{Path, PathBuf},
-    rc::Rc,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -10,10 +8,10 @@ use std::{
     time::Duration,
 };
 
-use anyhow::Context;
+use anyhow::Context as _;
 
 use gpui::{
-    App, Component, InteractiveElement, IntoElement, ParentElement, RenderOnce,
+    App, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
     StatefulInteractiveElement, Styled, Window, div, img, px,
 };
 
@@ -744,39 +742,26 @@ fn normalize_image_input_path(value: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
-pub struct ImageCompressElement {
-    pub panel: Rc<RefCell<ImageCompressView>>,
-}
-
-impl IntoElement for ImageCompressElement {
-    type Element = Component<Self>;
-
-    fn into_element(self) -> Self::Element {
-        Component::new(self)
-    }
-}
-
-impl RenderOnce for ImageCompressElement {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+impl Render for ImageCompressView {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Drain background worker results before rendering.
-        self.panel.borrow_mut().collect_results();
+        self.collect_results();
 
-        let panel = self.panel.borrow();
         let dark = qingqi_ui::theme_mode::is_dark();
-        let items = panel.items.clone();
-        let mode = panel.mode;
-        let quality = panel.quality;
-        let overwrite_original = panel.overwrite_original;
-        let message = panel.message.clone();
-        let pending_count = panel.pending_count();
-        let running_count = panel.running_count();
-        let running = panel.is_running();
-        let average_ratio = panel.average_ratio();
-        let success_count = panel.success_count();
-        let output_dir = panel.output_dir.display().to_string();
-        let batch_total = panel.batch_total;
-        let batch_completed = panel.batch_completed();
-        drop(panel);
+        let items = self.items.clone();
+        let mode = self.mode;
+        let quality = self.quality;
+        let overwrite_original = self.overwrite_original;
+        let message = self.message.clone();
+        let pending_count = self.pending_count();
+        let running_count = self.running_count();
+        let running = self.is_running();
+        let average_ratio = self.average_ratio();
+        let success_count = self.success_count();
+        let output_dir = self.output_dir.display().to_string();
+        let batch_total = self.batch_total;
+        let batch_completed = self.batch_completed();
+        let handle = cx.entity();
 
         ui::plugin_surface().child(
             ui::plugin_content().child(
@@ -816,11 +801,11 @@ impl RenderOnce for ImageCompressElement {
                                         )
                                         .id("image-compress-mode-lossless")
                                         .on_click({
-                                            let panel = Rc::clone(&self.panel);
-                                            move |_, window, _cx| {
-                                                panel
-                                                    .borrow_mut()
-                                                    .set_mode(CompressionMode::VisuallyLossless);
+                                            let handle = handle.clone();
+                                            move |_, window, cx| {
+                                                handle.update(cx, |this, _cx| {
+                                                    this.set_mode(CompressionMode::VisuallyLossless);
+                                                });
                                                 window.refresh();
                                             }
                                         }),
@@ -833,11 +818,11 @@ impl RenderOnce for ImageCompressElement {
                                         )
                                         .id("image-compress-mode-standard")
                                         .on_click({
-                                            let panel = Rc::clone(&self.panel);
-                                            move |_, window, _cx| {
-                                                panel
-                                                    .borrow_mut()
-                                                    .set_mode(CompressionMode::Standard);
+                                            let handle = handle.clone();
+                                            move |_, window, cx| {
+                                                handle.update(cx, |this, _cx| {
+                                                    this.set_mode(CompressionMode::Standard);
+                                                });
                                                 window.refresh();
                                             }
                                         }),
@@ -853,9 +838,11 @@ impl RenderOnce for ImageCompressElement {
                                         quality_button("−", dark)
                                             .id("image-compress-quality-down")
                                             .on_click({
-                                                let panel = Rc::clone(&self.panel);
-                                                move |_, window, _cx| {
-                                                    panel.borrow_mut().adjust_quality(-5);
+                                                let handle = handle.clone();
+                                                move |_, window, cx| {
+                                                    handle.update(cx, |this, _cx| {
+                                                        this.adjust_quality(-5);
+                                                    });
                                                     window.refresh();
                                                 }
                                             }),
@@ -864,9 +851,11 @@ impl RenderOnce for ImageCompressElement {
                                         quality_button("+", dark)
                                             .id("image-compress-quality-up")
                                             .on_click({
-                                                let panel = Rc::clone(&self.panel);
-                                                move |_, window, _cx| {
-                                                    panel.borrow_mut().adjust_quality(5);
+                                                let handle = handle.clone();
+                                                move |_, window, cx| {
+                                                    handle.update(cx, |this, _cx| {
+                                                        this.adjust_quality(5);
+                                                    });
                                                     window.refresh();
                                                 }
                                             }),
@@ -874,14 +863,16 @@ impl RenderOnce for ImageCompressElement {
                             ),
                     )
                     .child(
-                        drop_zone(dark, pending_count)
+                        drop_zone(pending_count)
                             .child(
                                 primary_button("📋 粘贴剪贴板", PluginAccent::Amber, dark)
                                     .id("image-compress-paste")
                                     .on_click({
-                                        let panel = Rc::clone(&self.panel);
+                                        let handle = handle.clone();
                                         move |_, window, cx| {
-                                            panel.borrow_mut().paste_from_clipboard(cx);
+                                            handle.update(cx, |this, cx| {
+                                                this.paste_from_clipboard(cx);
+                                            });
                                             window.refresh();
                                         }
                                     }),
@@ -890,15 +881,17 @@ impl RenderOnce for ImageCompressElement {
                                 secondary_button("📂 选择图片", dark)
                                     .id("image-compress-choose")
                                     .on_click({
-                                        let panel = Rc::clone(&self.panel);
-                                        move |_, window, _cx| {
-                                            panel.borrow_mut().choose_images();
+                                        let handle = handle.clone();
+                                        move |_, window, cx| {
+                                            handle.update(cx, |this, _cx| {
+                                                this.choose_images();
+                                            });
                                             window.refresh();
                                         }
                                     }),
                             ),
                     )
-                    .child(image_table(items, dark, Rc::clone(&self.panel)))
+                    .child(image_table(items, dark, handle.clone()))
                     .child(footer_bar(
                         dark,
                         message,
@@ -911,7 +904,7 @@ impl RenderOnce for ImageCompressElement {
                         running,
                         batch_total,
                         batch_completed,
-                        Rc::clone(&self.panel),
+                        handle.clone(),
                     )),
             ),
         )
@@ -992,7 +985,7 @@ fn quality_button(label: &str, _dark: bool) -> gpui::Div {
         .child(label.to_string())
 }
 
-fn drop_zone(_dark: bool, pending_count: usize) -> gpui::Div {
+fn drop_zone(pending_count: usize) -> gpui::Div {
     div()
         .rounded(px(12.0))
         .bg(theme::rgba_with_alpha(
@@ -1052,7 +1045,7 @@ fn drop_zone(_dark: bool, pending_count: usize) -> gpui::Div {
 fn image_table(
     items: Vec<QueueItem>,
     dark: bool,
-    panel: Rc<RefCell<ImageCompressView>>,
+    handle: Entity<ImageCompressView>,
 ) -> impl IntoElement {
     let content = if items.is_empty() {
         div()
@@ -1107,7 +1100,7 @@ fn image_table(
                         items
                             .into_iter()
                             .enumerate()
-                            .map(|(index, item)| image_row(item, index, dark, Rc::clone(&panel))),
+                            .map(|(index, item)| image_row(item, index, dark, handle.clone())),
                     ),
             )
             .into_any_element()
@@ -1120,7 +1113,7 @@ fn image_row(
     item: QueueItem,
     index: usize,
     dark: bool,
-    panel: Rc<RefCell<ImageCompressView>>,
+    handle: Entity<ImageCompressView>,
 ) -> impl IntoElement {
     let from_clipboard = item.from_clipboard;
     let is_success = item.status == QueueStatus::Success;
@@ -1230,28 +1223,29 @@ fn image_row(
                                 action_button("复制", dark)
                                     .id(("image-compress-copy", index))
                                     .on_click({
-                                        let panel = Rc::clone(&panel);
+                                        let handle = handle.clone();
                                         move |_, window, cx| {
-                                            let output_path = panel
-                                                .borrow()
-                                                .items
-                                                .get(index)
-                                                .and_then(|i| i.output_path.clone());
-                                            if let Some(path) = output_path {
-                                                match ImageCompressService::output_bytes(&path) {
-                                                    Ok(bytes) => {
-                                                        let fmt = qingqi_platform::clipboard::image_format_from_path(&path)
-                                                            .unwrap_or(gpui::ImageFormat::Png);
-                                                        qingqi_platform::clipboard::write_image(cx, fmt, bytes);
-                                                        panel.borrow_mut().message =
-                                                            String::from("已复制压缩图片到剪贴板");
-                                                    }
-                                                    Err(e) => {
-                                                        panel.borrow_mut().message =
-                                                            format!("复制失败: {e}");
+                                            handle.update(cx, |this, cx| {
+                                                let output_path = this
+                                                    .items
+                                                    .get(index)
+                                                    .and_then(|i| i.output_path.clone());
+                                                if let Some(path) = output_path {
+                                                    match ImageCompressService::output_bytes(&path) {
+                                                        Ok(bytes) => {
+                                                            let fmt = qingqi_platform::clipboard::image_format_from_path(&path)
+                                                                .unwrap_or(gpui::ImageFormat::Png);
+                                                            qingqi_platform::clipboard::write_image(cx, fmt, bytes);
+                                                            this.message =
+                                                                String::from("已复制压缩图片到剪贴板");
+                                                        }
+                                                        Err(e) => {
+                                                            this.message =
+                                                                format!("复制失败: {e}");
+                                                        }
                                                     }
                                                 }
-                                            }
+                                            });
                                             window.refresh();
                                         }
                                     }),
@@ -1265,9 +1259,11 @@ fn image_row(
                                 action_button("定位", dark)
                                     .id(("image-compress-reveal", index))
                                     .on_click({
-                                        let panel = Rc::clone(&panel);
-                                        move |_, window, _cx| {
-                                            panel.borrow_mut().reveal_entry(index);
+                                        let handle = handle.clone();
+                                        move |_, window, cx| {
+                                            handle.update(cx, |this, _cx| {
+                                                this.reveal_entry(index);
+                                            });
                                             window.refresh();
                                         }
                                     }),
@@ -1281,11 +1277,11 @@ fn image_row(
                                 action_button("覆盖", dark)
                                     .id(("image-compress-overwrite", index))
                                     .on_click({
-                                        let panel = Rc::clone(&panel);
+                                        let handle = handle.clone();
                                         move |_, window, cx| {
-                                            panel
-                                                .borrow_mut()
-                                                .overwrite_entry_background(index, cx.to_async());
+                                            handle.update(cx, |this, cx| {
+                                                this.overwrite_entry_background(index, cx.to_async());
+                                            });
                                             window.refresh();
                                         }
                                     }),
@@ -1299,37 +1295,38 @@ fn image_row(
                                 action_button("另存", dark)
                                     .id(("image-compress-save-as", index))
                                     .on_click({
-                                        let panel = Rc::clone(&panel);
-                                        move |_, window, _cx| {
-                                            let output_path = panel
-                                                .borrow()
-                                                .items
-                                                .get(index)
-                                                .and_then(|i| i.output_path.clone());
-                                            if let Some(src) = output_path {
-                                                if let Some(target) = rfd::FileDialog::new()
-                                                    .set_title("另存为")
-                                                    .set_file_name(
-                                                        src.file_name()
-                                                            .and_then(|n| n.to_str())
-                                                            .unwrap_or("compressed.png"),
-                                                    )
-                                                    .save_file()
-                                                {
-                                                    let mut p = panel.borrow_mut();
-                                                    match std::fs::copy(&src, &target) {
-                                                        Ok(_) => {
-                                                            p.message = format!(
-                                                                "已保存到 {}",
-                                                                target.display()
-                                                            );
-                                                        }
-                                                        Err(e) => {
-                                                            p.message = format!("保存失败: {e}")
+                                        let handle = handle.clone();
+                                        move |_, window, cx| {
+                                            handle.update(cx, |this, _cx| {
+                                                let output_path = this
+                                                    .items
+                                                    .get(index)
+                                                    .and_then(|i| i.output_path.clone());
+                                                if let Some(src) = output_path {
+                                                    if let Some(target) = rfd::FileDialog::new()
+                                                        .set_title("另存为")
+                                                        .set_file_name(
+                                                            src.file_name()
+                                                                .and_then(|n| n.to_str())
+                                                                .unwrap_or("compressed.png"),
+                                                        )
+                                                        .save_file()
+                                                    {
+                                                        match std::fs::copy(&src, &target) {
+                                                            Ok(_) => {
+                                                                this.message = format!(
+                                                                    "已保存到 {}",
+                                                                    target.display()
+                                                                );
+                                                            }
+                                                            Err(e) => {
+                                                                this.message =
+                                                                    format!("保存失败: {e}")
+                                                            }
                                                         }
                                                     }
                                                 }
-                                            }
+                                            });
                                             window.refresh();
                                         }
                                     }),
@@ -1343,11 +1340,11 @@ fn image_row(
                                 action_button("重试", dark)
                                     .id(("image-compress-retry", index))
                                     .on_click({
-                                        let panel = Rc::clone(&panel);
+                                        let handle = handle.clone();
                                         move |_, window, cx| {
-                                            panel
-                                                .borrow_mut()
-                                                .retry_entry_background(index, cx.to_async());
+                                            handle.update(cx, |this, cx| {
+                                                this.retry_entry_background(index, cx.to_async());
+                                            });
                                             window.refresh();
                                         }
                                     }),
@@ -1366,9 +1363,11 @@ fn image_row(
                                     .hover(move |style| style.cursor_pointer())
                                     .child("✕")
                                     .on_click({
-                                        let panel = Rc::clone(&panel);
-                                        move |_, window, _cx| {
-                                            panel.borrow_mut().remove_item(index);
+                                        let handle = handle.clone();
+                                        move |_, window, cx| {
+                                            handle.update(cx, |this, _cx| {
+                                                this.remove_item(index);
+                                            });
                                             window.refresh();
                                         }
                                     }),
@@ -1460,7 +1459,7 @@ fn footer_bar(
     running: bool,
     batch_total: usize,
     batch_completed: usize,
-    panel: Rc<RefCell<ImageCompressView>>,
+    handle: Entity<ImageCompressView>,
 ) -> impl IntoElement {
     let summary = if running && batch_total > 0 {
         format!(
@@ -1506,9 +1505,11 @@ fn footer_bar(
                     )
                     .id("image-compress-run")
                     .on_click({
-                        let panel = Rc::clone(&panel);
+                        let handle = handle.clone();
                         move |_, window, cx| {
-                            panel.borrow_mut().run_compression(cx);
+                            handle.update(cx, |this, cx| {
+                                this.run_compression(cx);
+                            });
                             window.refresh();
                         }
                     }),
@@ -1518,9 +1519,11 @@ fn footer_bar(
                         secondary_button("⏹ 取消", dark)
                             .id("image-compress-cancel")
                             .on_click({
-                                let panel = Rc::clone(&panel);
-                                move |_, window, _cx| {
-                                    panel.borrow_mut().request_cancel();
+                                let handle = handle.clone();
+                                move |_, window, cx| {
+                                    handle.update(cx, |this, _cx| {
+                                        this.request_cancel();
+                                    });
                                     window.refresh();
                                 }
                             }),
@@ -1539,9 +1542,11 @@ fn footer_bar(
                     )
                     .id("image-compress-toggle-overwrite")
                     .on_click({
-                        let panel = Rc::clone(&panel);
-                        move |_, window, _cx| {
-                            panel.borrow_mut().toggle_overwrite();
+                        let handle = handle.clone();
+                        move |_, window, cx| {
+                            handle.update(cx, |this, _cx| {
+                                this.toggle_overwrite();
+                            });
                             window.refresh();
                         }
                     }),
@@ -1550,9 +1555,11 @@ fn footer_bar(
                     secondary_button("💾 选择目录", dark)
                         .id("image-compress-output-dir")
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().choose_output_dir();
+                            let handle = handle.clone();
+                            move |_, window, cx| {
+                                handle.update(cx, |this, _cx| {
+                                    this.choose_output_dir();
+                                });
                                 window.refresh();
                             }
                         }),
@@ -1561,9 +1568,11 @@ fn footer_bar(
                     secondary_button("📂 打开目录", dark)
                         .id("image-compress-open-dir")
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().open_output_dir();
+                            let handle = handle.clone();
+                            move |_, window, cx| {
+                                handle.update(cx, |this, _cx| {
+                                    this.open_output_dir();
+                                });
                                 window.refresh();
                             }
                         }),
@@ -1572,9 +1581,11 @@ fn footer_bar(
                     ghost_button("🗑 清空", dark)
                         .id("image-compress-clear")
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().clear_items();
+                            let handle = handle.clone();
+                            move |_, window, cx| {
+                                handle.update(cx, |this, _cx| {
+                                    this.clear_items();
+                                });
                                 window.refresh();
                             }
                         }),

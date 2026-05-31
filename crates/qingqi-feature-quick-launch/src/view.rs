@@ -128,9 +128,9 @@ impl QuickLaunchView {
             let mut input = TextInput::new(cx, "搜索动作", "");
             input.set_style(
                 TextInputStyle {
-                    height: 36.0,
-                    font_size: 13.0,
-                    padding: 10.0,
+                    height: 28.0,
+                    font_size: 12.0,
+                    padding: 6.0,
                 },
                 cx,
             );
@@ -904,9 +904,9 @@ impl QuickLaunchView {
                     let mut input = TextInput::new(cx, format!("输入 {}", spec.name), "");
                     input.set_style(
                         TextInputStyle {
-                            height: 34.0,
-                            font_size: 12.0,
-                            padding: 9.0,
+                            height: 28.0,
+                            font_size: 11.0,
+                            padding: 6.0,
                         },
                         cx,
                     );
@@ -1112,10 +1112,10 @@ impl Render for QuickLaunchView {
             .bg(theme::semantic().bg_page)
             .text_color(theme::semantic().text_primary)
             .font_family(ui::font_ui())
-            .p_4()
+            .p_2p5()
             .flex()
             .flex_col()
-            .gap_3()
+            .gap_1p5()
             .on_key_down(cx.listener(|view, event: &KeyDownEvent, _window, cx| {
                 match event.keystroke.key.as_str() {
                     "escape" => {
@@ -1167,13 +1167,13 @@ impl Render for QuickLaunchView {
                     .justify_between()
                     .child(
                         div()
-                            .text_size(px(18.0))
+                            .text_size(px(14.0))
                             .font_weight(gpui::FontWeight::BOLD)
                             .child("快速启动"),
                     )
                     .child(
                         div()
-                            .text_size(px(12.0))
+                            .text_size(px(10.0))
                             .text_color(theme::semantic().text_secondary)
                             .child(message),
                     ),
@@ -1317,15 +1317,15 @@ fn search_row(
     dark: bool,
 ) -> impl IntoElement {
     div()
-        .h(px(38.0))
+        .h(px(30.0))
         .flex()
         .items_center()
-        .gap_2()
+        .gap_1()
         .child(
             div()
                 .flex_1()
-                .h(px(36.0))
-                .rounded(px(6.0))
+                .h(px(28.0))
+                .rounded(px(4.0))
                 .border_1()
                 .border_color(theme::semantic().border_default)
                 .bg(theme::semantic().bg_surface)
@@ -1379,24 +1379,24 @@ fn management_row(
     let enabled_label = if action.enabled { "停用" } else { "启用" };
 
     div()
-        .rounded(px(8.0))
+        .rounded(px(6.0))
         .border_1()
         .border_color(theme::semantic().border_default)
         .bg(theme::semantic().bg_surface)
-        .px_3()
-        .py_2()
+        .px(px(8.0))
+        .py_1()
         .flex()
         .items_center()
-        .gap_3()
+        .gap_1p5()
         .child(
             div()
                 .flex_1()
                 .flex()
                 .flex_col()
-                .gap(px(2.0))
+                .gap(px(1.0))
                 .child(
                     div()
-                        .text_size(px(13.0))
+                        .text_size(px(11.0))
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .child(format!("已选中: {}", action.name)),
                 )
@@ -1404,7 +1404,7 @@ fn management_row(
                     div()
                         .flex()
                         .items_center()
-                        .gap_2()
+                        .gap_1()
                         .child(kind_chip(action.kind.label().to_string(), dark))
                         .child(if action.feedback_mode != FeedbackMode::Notification {
                             subtle_chip(feedback_label(action.feedback_mode).to_string(), dark)
@@ -1421,7 +1421,7 @@ fn management_row(
                         })
                         .child(
                             div()
-                                .text_size(px(11.0))
+                                .text_size(px(10.0))
                                 .text_color(theme::semantic().text_secondary)
                                 .child(subtitle_for(&action)),
                         ),
@@ -1462,21 +1462,21 @@ fn empty_state(has_query: bool, _dark: bool) -> impl IntoElement {
 
     div()
         .w_full()
-        .min_h(px(220.0))
+        .min_h(px(160.0))
         .flex()
         .flex_col()
         .items_center()
         .justify_center()
-        .gap_2()
+        .gap_1()
         .child(
             div()
-                .size(px(44.0))
-                .rounded(px(12.0))
+                .size(px(36.0))
+                .rounded(px(8.0))
                 .bg(theme::semantic().bg_subtle)
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(20.0))
+                .text_size(px(16.0))
                 .text_color(ui::accent_color(
                     qingqi_plugin::plugin_spec::PluginAccent::Blue,
                 ))
@@ -1484,13 +1484,13 @@ fn empty_state(has_query: bool, _dark: bool) -> impl IntoElement {
         )
         .child(
             div()
-                .text_size(px(14.0))
+                .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::BOLD)
                 .child(title),
         )
         .child(
             div()
-                .text_size(px(12.0))
+                .text_size(px(10.0))
                 .text_color(theme::semantic().text_secondary)
                 .child(subtitle),
         )
@@ -1520,8 +1520,8 @@ fn action_row(
 
     div()
         .id(("quick-launch-row", index))
-        .h(px(64.0))
-        .px_3()
+        .h(px(48.0))
+        .px(px(8.0))
         .border_b_1()
         .border_color(theme::semantic().border_default)
         .bg(row_bg)
@@ -1534,16 +1534,16 @@ fn action_row(
         })
         .flex()
         .items_center()
-        .gap_3()
+        .gap_1p5()
         .child(
             div()
-                .size(px(36.0))
-                .rounded(px(8.0))
+                .size(px(30.0))
+                .rounded(px(6.0))
                 .bg(theme::semantic().bg_subtle)
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(16.0))
+                .text_size(px(14.0))
                 .text_color(ui::accent_color(
                     qingqi_plugin::plugin_spec::PluginAccent::Blue,
                 ))
@@ -1554,13 +1554,13 @@ fn action_row(
                 .flex_1()
                 .flex()
                 .flex_col()
-                .gap(px(2.0))
+                .gap(px(1.0))
                 .child(
                     div()
                         .flex()
                         .items_center()
-                        .gap_2()
-                        .child(div().text_size(px(14.0)).child(action.name.clone()))
+                        .gap_1()
+                        .child(div().text_size(px(12.0)).child(action.name.clone()))
                         .child(kind_chip(action.kind.label().to_string(), dark))
                         .child(if parameter_count > 0 {
                             subtle_chip(format!("{parameter_count} 参数"), dark).into_any_element()
@@ -1594,7 +1594,7 @@ fn action_row(
                 )
                 .child(
                     div()
-                        .text_size(px(11.0))
+                        .text_size(px(10.0))
                         .font_family("SF Mono")
                         .text_color(theme::semantic().text_regular)
                         .child(subtitle_for(&action)),
@@ -1662,7 +1662,7 @@ fn action_editor_sheet(
     };
 
     div()
-        .w(px(560.0))
+        .w(px(480.0))
         .rounded(theme::radius_sheet())
         .border_1()
         .border_color(theme::semantic().border_default)
@@ -1672,8 +1672,8 @@ fn action_editor_sheet(
         .flex_col()
         .child(
             div()
-                .px_4()
-                .py_3()
+                .px_3()
+                .py_2()
                 .border_b_1()
                 .border_color(theme::semantic().border_default)
                 .flex()
@@ -1681,7 +1681,7 @@ fn action_editor_sheet(
                 .justify_between()
                 .child(
                     div()
-                        .text_size(px(16.0))
+                        .text_size(px(14.0))
                         .font_weight(gpui::FontWeight::BOLD)
                         .child(title),
                 )
@@ -1693,13 +1693,13 @@ fn action_editor_sheet(
                 })),
         )
         .child(
-            div().px_4().py_3().max_h(px(560.0)).child(
+            div().px_3().py_2().max_h(px(480.0)).child(
                 div()
                     .id("quick-launch-editor-scroll")
                     .overflow_y_scroll()
                     .flex()
                     .flex_col()
-                    .gap_3()
+                    .gap_1p5()
                     .child(editor_field("名称", editor.name_input, dark))
                     .child(
                         div()
@@ -1715,7 +1715,7 @@ fn action_editor_sheet(
                             .child(
                                 div()
                                     .flex()
-                                    .gap_2()
+                                    .gap_1()
                                     .child(segment_button(
                                         "脚本",
                                         editor.kind == ActionKind::Script,
@@ -1771,7 +1771,7 @@ fn action_editor_sheet(
                             .child(
                                 div()
                                     .flex()
-                                    .gap_2()
+                                    .gap_1()
                                     .child(segment_button(
                                         "Shell",
                                         editor.script_type == ScriptType::Shell,
@@ -1855,7 +1855,7 @@ fn action_editor_sheet(
                             .child(
                                 div()
                                     .flex()
-                                    .gap_2()
+                                    .gap_1()
                                     .child(segment_button(
                                         "文件",
                                         editor.script_source == ScriptSource::Path,
@@ -1917,7 +1917,7 @@ fn action_editor_sheet(
                     })
                     .child(
                         div()
-                            .text_size(px(11.0))
+                            .text_size(px(10.0))
                             .text_color(theme::semantic().text_secondary)
                             .child(target_hint),
                     )
@@ -1964,7 +1964,7 @@ fn action_editor_sheet(
                             .child(
                                 div()
                                     .flex()
-                                    .gap_2()
+                                    .gap_1()
                                     .child(segment_button(
                                         "静默",
                                         editor.feedback_mode == FeedbackMode::Silent,
@@ -2032,21 +2032,21 @@ fn action_editor_sheet(
                             .flex()
                             .items_center()
                             .justify_between()
-                            .rounded(px(8.0))
+                            .rounded(px(6.0))
                             .border_1()
                             .border_color(theme::semantic().border_default)
                             .bg(theme::semantic().bg_surface)
-                            .px_3()
-                            .py_2()
+                            .px(px(8.0))
+                            .py_1()
                             .child(
                                 div()
                                     .flex()
                                     .flex_col()
-                                    .gap(px(2.0))
-                                    .child(div().text_size(px(12.0)).child("启用"))
+                                    .gap(px(1.0))
+                                    .child(div().text_size(px(10.0)).child("启用"))
                                     .child(
                                         div()
-                                            .text_size(px(11.0))
+                                            .text_size(px(10.0))
                                             .text_color(theme::semantic().text_secondary)
                                             .child(if editor.enabled {
                                                 "创建后会注册到启动器"
@@ -2084,13 +2084,13 @@ fn action_editor_sheet(
         )
         .child(
             div()
-                .px_4()
-                .py_3()
+                .px_3()
+                .py_2()
                 .border_t_1()
                 .border_color(theme::semantic().border_default)
                 .flex()
                 .justify_end()
-                .gap_2()
+                .gap_1()
                 .child(action_button("取消", dark, {
                     let handle = handle.clone();
                     move |_, cx| {
@@ -2121,13 +2121,13 @@ fn editor_field(label: &'static str, input: Entity<TextInput>, _dark: bool) -> i
         .gap_1()
         .child(
             div()
-                .text_size(px(12.0))
+                .text_size(px(10.0))
                 .text_color(theme::semantic().text_secondary)
                 .child(label),
         )
         .child(
             div()
-                .rounded(px(8.0))
+                .rounded(px(6.0))
                 .border_1()
                 .border_color(theme::semantic().border_default)
                 .bg(theme::semantic().bg_surface)
@@ -2149,7 +2149,7 @@ fn editor_picker_field(
         .gap_1()
         .child(
             div()
-                .text_size(px(12.0))
+                .text_size(px(10.0))
                 .text_color(theme::semantic().text_secondary)
                 .child(label),
         )
@@ -2157,11 +2157,11 @@ fn editor_picker_field(
             div()
                 .flex()
                 .items_center()
-                .gap_2()
+                .gap_1()
                 .child(
                     div()
                         .flex_1()
-                        .rounded(px(8.0))
+                        .rounded(px(6.0))
                         .border_1()
                         .border_color(theme::semantic().border_default)
                         .bg(theme::semantic().bg_surface)
@@ -2179,7 +2179,7 @@ fn pending_sheet(
     dark: bool,
 ) -> impl IntoElement {
     div()
-        .w(px(520.0))
+        .w(px(440.0))
         .rounded(theme::radius_sheet())
         .border_1()
         .border_color(theme::semantic().border_default)
@@ -2189,8 +2189,8 @@ fn pending_sheet(
         .flex_col()
         .child(
             div()
-                .px_4()
-                .py_3()
+                .px_3()
+                .py_2()
                 .border_b_1()
                 .border_color(theme::semantic().border_default)
                 .flex()
@@ -2200,16 +2200,16 @@ fn pending_sheet(
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(2.0))
+                        .gap(px(1.0))
                         .child(
                             div()
-                                .text_size(px(16.0))
+                                .text_size(px(14.0))
                                 .font_weight(gpui::FontWeight::BOLD)
                                 .child(format!("执行 {}", pending.action_name)),
                         )
                         .child(
                             div()
-                                .text_size(px(12.0))
+                                .text_size(px(10.0))
                                 .text_color(theme::semantic().text_secondary)
                                 .child("该动作包含参数占位符，先填写再执行"),
                         ),
@@ -2222,7 +2222,7 @@ fn pending_sheet(
                 })),
         )
         .child(
-            div().px_4().py_3().flex().flex_col().gap_3().children(
+            div().px_3().py_2().flex().flex_col().gap_1p5().children(
                 pending
                     .fields
                     .into_iter()
@@ -2232,13 +2232,13 @@ fn pending_sheet(
         )
         .child(
             div()
-                .px_4()
-                .py_3()
+                .px_3()
+                .py_2()
                 .border_t_1()
                 .border_color(theme::semantic().border_default)
                 .flex()
                 .justify_end()
-                .gap_2()
+                .gap_1()
                 .child(action_button("稍后", dark, {
                     let handle = handle.clone();
                     move |_, cx| {
@@ -2259,13 +2259,13 @@ fn parameter_row(field: PendingParameterField, index: usize, _dark: bool) -> imp
         .gap_1()
         .child(
             div()
-                .text_size(px(12.0))
+                .text_size(px(10.0))
                 .text_color(theme::semantic().text_secondary)
                 .child(field.name),
         )
         .child(
             div()
-                .rounded(px(8.0))
+                .rounded(px(6.0))
                 .border_1()
                 .border_color(theme::semantic().border_default)
                 .bg(theme::semantic().bg_surface)
@@ -2279,7 +2279,7 @@ fn history_sheet(
     dark: bool,
 ) -> impl IntoElement {
     div()
-        .w(px(680.0))
+        .w(px(560.0))
         .rounded(theme::radius_sheet())
         .border_1()
         .border_color(theme::semantic().border_default)
@@ -2289,8 +2289,8 @@ fn history_sheet(
         .flex_col()
         .child(
             div()
-                .px_4()
-                .py_3()
+                .px_3()
+                .py_2()
                 .border_b_1()
                 .border_color(theme::semantic().border_default)
                 .flex()
@@ -2300,16 +2300,16 @@ fn history_sheet(
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(2.0))
+                        .gap(px(1.0))
                         .child(
                             div()
-                                .text_size(px(16.0))
+                                .text_size(px(14.0))
                                 .font_weight(gpui::FontWeight::BOLD)
                                 .child(format!("{} 的运行历史", history.action_name)),
                         )
                         .child(
                             div()
-                                .text_size(px(12.0))
+                                .text_size(px(10.0))
                                 .text_color(theme::semantic().text_secondary)
                                 .child(format!("最近 {} 条记录", history.runs.len())),
                         ),
@@ -2318,7 +2318,7 @@ fn history_sheet(
                     div()
                         .flex()
                         .items_center()
-                        .gap_2()
+                        .gap_1()
                         .child(action_button("刷新", dark, {
                             let handle = handle.clone();
                             move |_, cx| {
@@ -2338,21 +2338,21 @@ fn history_sheet(
         )
         .child(if history.runs.is_empty() {
             div()
-                .min_h(px(180.0))
+                .min_h(px(140.0))
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(12.0))
+                .text_size(px(10.0))
                 .text_color(theme::semantic().text_secondary)
                 .child("还没有运行记录")
                 .into_any_element()
         } else {
             div()
-                .px_3()
-                .py_3()
+                .px_2()
+                .py_2()
                 .flex()
                 .flex_col()
-                .gap_2()
+                .gap_1p5()
                 .children(history.runs.into_iter().enumerate().map(|(index, run)| {
                     history_row(
                         handle.clone(),
@@ -2387,20 +2387,20 @@ fn history_row(
 
     div()
         .id(("quick-launch-history-row", index))
-        .rounded(px(10.0))
+        .rounded(px(6.0))
         .border_1()
         .border_color(theme::semantic().border_default)
         .bg(theme::semantic().bg_surface)
-        .px_3()
-        .py_3()
+        .px_2()
+        .py_2()
         .flex()
         .flex_col()
-        .gap_2()
+        .gap_1()
         .child(
             div()
                 .flex()
                 .items_center()
-                .gap_2()
+                .gap_1()
                 .child(status_chip(
                     run_status_label(run.status).to_string(),
                     tone,
@@ -2408,14 +2408,14 @@ fn history_row(
                 ))
                 .child(
                     div()
-                        .text_size(px(11.0))
+                        .text_size(px(10.0))
                         .text_color(theme::semantic().text_secondary)
                         .child(run.started_at.clone()),
                 )
                 .child(div().flex_1())
                 .child(
                     div()
-                        .text_size(px(11.0))
+                        .text_size(px(10.0))
                         .text_color(theme::semantic().text_secondary)
                         .child(format!("{} ms", run.duration_ms)),
                 )
@@ -2425,16 +2425,16 @@ fn history_row(
                     div().into_any_element()
                 }),
         )
-        .child(div().text_size(px(12.0)).child(run.message.clone()))
+        .child(div().text_size(px(10.0)).child(run.message.clone()))
         .child(
             div()
                 .flex()
                 .items_end()
-                .gap_3()
+                .gap_2()
                 .child(
                     div()
                         .flex_1()
-                        .text_size(px(11.0))
+                        .text_size(px(10.0))
                         .font_family("SF Mono")
                         .text_color(if run.stderr.trim().is_empty() {
                             theme::semantic().text_regular
@@ -2475,7 +2475,7 @@ fn result_sheet(
     let rerun_handle = handle.clone();
 
     div()
-        .w(px(600.0))
+        .w(px(500.0))
         .rounded(theme::radius_sheet())
         .border_1()
         .border_color(theme::semantic().border_default)
@@ -2485,8 +2485,8 @@ fn result_sheet(
         .flex_col()
         .child(
             div()
-                .px_4()
-                .py_3()
+                .px_3()
+                .py_2()
                 .border_b_1()
                 .border_color(theme::semantic().border_default)
                 .flex()
@@ -2494,7 +2494,7 @@ fn result_sheet(
                 .justify_between()
                 .child(
                     div()
-                        .text_size(px(16.0))
+                        .text_size(px(14.0))
                         .font_weight(gpui::FontWeight::BOLD)
                         .child("执行结果"),
                 )
@@ -2506,22 +2506,22 @@ fn result_sheet(
                 })),
         )
         .child(
-            div().px_4().py_3().max_h(px(520.0)).child(
+            div().px_3().py_2().max_h(px(420.0)).child(
                 div()
                     .id("quick-launch-result-scroll")
                     .overflow_y_scroll()
                     .flex()
                     .flex_col()
-                    .gap_3()
+                    .gap_1p5()
                     .child(
                         div()
                             .flex()
                             .items_start()
-                            .gap_3()
+                            .gap_2()
                             .child(
                                 div()
-                                    .size(px(28.0))
-                                    .rounded(px(14.0))
+                                    .size(px(24.0))
+                                    .rounded(px(12.0))
                                     .bg(if ok {
                                         hsla(0.36, 0.72, 0.42, 0.16)
                                     } else {
@@ -2530,7 +2530,7 @@ fn result_sheet(
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .text_size(px(16.0))
+                                    .text_size(px(14.0))
                                     .font_weight(gpui::FontWeight::BOLD)
                                     .text_color(tone)
                                     .child(if ok { "✓" } else { "!" }),
@@ -2540,16 +2540,16 @@ fn result_sheet(
                                     .flex_1()
                                     .flex()
                                     .flex_col()
-                                    .gap(px(2.0))
+                                    .gap(px(1.0))
                                     .child(
                                         div()
-                                            .text_size(px(14.0))
+                                            .text_size(px(12.0))
                                             .font_weight(gpui::FontWeight::MEDIUM)
                                             .child(result.action_name),
                                     )
                                     .child(
                                         div()
-                                            .text_size(px(11.0))
+                                            .text_size(px(10.0))
                                             .text_color(theme::semantic().text_secondary)
                                             .child(status_line),
                                     ),
@@ -2557,7 +2557,7 @@ fn result_sheet(
                     )
                     .child(
                         div()
-                            .text_size(px(11.0))
+                            .text_size(px(10.0))
                             .text_color(theme::semantic().text_secondary)
                             .child(result.run.message.clone()),
                     )
@@ -2583,8 +2583,8 @@ fn result_sheet(
         )
         .child(
             div()
-                .px_4()
-                .py_3()
+                .px_3()
+                .py_2()
                 .border_t_1()
                 .border_color(theme::semantic().border_default)
                 .flex()
@@ -2620,7 +2620,7 @@ fn result_block(
                 .justify_between()
                 .child(
                     div()
-                        .text_size(px(11.0))
+                        .text_size(px(10.0))
                         .text_color(theme::semantic().text_secondary)
                         .child(title),
                 )
@@ -2630,18 +2630,18 @@ fn result_block(
         )
         .child(
             div()
-                .rounded(px(8.0))
+                .rounded(px(6.0))
                 .border_1()
                 .border_color(theme::semantic().border_default)
                 .bg(theme::semantic().bg_surface)
-                .max_h(px(180.0))
+                .max_h(px(140.0))
                 .child(
                     div()
                         .id(title)
                         .overflow_y_scroll()
-                        .px_3()
-                        .py_2()
-                        .text_size(px(11.0))
+                        .px_2()
+                        .py_1()
+                        .text_size(px(10.0))
                         .font_family("SF Mono")
                         .text_color(text_color)
                         .child(result_block_text(&content)),
@@ -2694,8 +2694,8 @@ fn menu_overlay_shell(
                 .absolute()
                 .top(menu.position.y)
                 .left(menu.position.x)
-                .w(px(180.0))
-                .rounded(px(10.0))
+                .w(px(160.0))
+                .rounded(px(6.0))
                 .border_1()
                 .border_color(theme::semantic().border_default)
                 .bg(theme::semantic().bg_elevated)
@@ -2715,16 +2715,16 @@ fn primary_action_button(
 ) -> impl IntoElement {
     div()
         .id(label)
-        .h(px(30.0))
-        .min_w(px(82.0))
-        .px_3()
-        .rounded(px(6.0))
+        .h(px(26.0))
+        .min_w(px(68.0))
+        .px(px(8.0))
+        .rounded(px(4.0))
         .bg(theme::semantic().primary)
         .hover(move |style| style.bg(theme::semantic().primary_active).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(12.0))
+        .text_size(px(10.0))
         .text_color(theme::white())
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
@@ -2737,10 +2737,10 @@ fn action_button(
 ) -> impl IntoElement {
     div()
         .id(label)
-        .h(px(30.0))
-        .min_w(px(68.0))
-        .px_3()
-        .rounded(px(6.0))
+        .h(px(26.0))
+        .min_w(px(56.0))
+        .px(px(8.0))
+        .rounded(px(4.0))
         .border_1()
         .border_color(theme::semantic().border_default)
         .bg(theme::semantic().bg_surface)
@@ -2748,7 +2748,7 @@ fn action_button(
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(12.0))
+        .text_size(px(10.0))
         .text_color(theme::semantic().text_primary)
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
@@ -2761,8 +2761,8 @@ fn icon_action_button(
 ) -> impl IntoElement {
     div()
         .id(label)
-        .size(px(30.0))
-        .rounded(px(6.0))
+        .size(px(26.0))
+        .rounded(px(4.0))
         .border_1()
         .border_color(theme::semantic().border_default)
         .bg(theme::semantic().bg_surface)
@@ -2770,7 +2770,7 @@ fn icon_action_button(
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(14.0))
+        .text_size(px(12.0))
         .text_color(theme::semantic().text_primary)
         .child(label)
         .on_click(move |event, window, cx| on_click(event, window, cx))
@@ -2845,7 +2845,7 @@ fn action_menu_items(
         })
         .into_any_element(),
     );
-    items.push(action_menu_separator(dark).into_any_element());
+    items.push(action_menu_separator().into_any_element());
     items.push(
         action_menu_item("删除", true, dark, move |_, cx| {
             let action = action.clone();
@@ -2867,14 +2867,14 @@ fn action_menu_item(
 ) -> impl IntoElement {
     div()
         .id(label)
-        .h(px(30.0))
+        .h(px(26.0))
         .w_full()
-        .px_3()
-        .rounded(px(6.0))
+        .px(px(8.0))
+        .rounded(px(4.0))
         .hover(move |style| style.bg(ui::row_hover()).cursor_pointer())
         .flex()
         .items_center()
-        .text_size(px(12.0))
+        .text_size(px(10.0))
         .text_color(if destructive {
             theme::semantic().danger
         } else {
@@ -2884,7 +2884,7 @@ fn action_menu_item(
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
-fn action_menu_separator(_dark: bool) -> impl IntoElement {
+fn action_menu_separator() -> impl IntoElement {
     div()
         .w_full()
         .h(px(1.0))
@@ -2894,8 +2894,8 @@ fn action_menu_separator(_dark: bool) -> impl IntoElement {
 
 fn menu_position(click: Point<Pixels>, window: &Window) -> Point<Pixels> {
     let viewport = window.bounds().size;
-    let width = px(180.0);
-    let height = px(176.0);
+    let width = px(160.0);
+    let height = px(144.0);
     let margin = px(12.0);
     let max_x = (viewport.width - width - margin).max(margin);
     let max_y = (viewport.height - height - margin).max(margin);
@@ -2911,7 +2911,7 @@ fn delete_confirm_sheet(
     dark: bool,
 ) -> impl IntoElement {
     div()
-        .w(px(420.0))
+        .w(px(380.0))
         .rounded(theme::radius_sheet())
         .border_1()
         .border_color(theme::semantic().border_default)
@@ -2921,21 +2921,21 @@ fn delete_confirm_sheet(
         .flex_col()
         .child(
             div()
-                .px_4()
-                .py_4()
+                .px_3()
+                .py_3()
                 .flex()
                 .flex_col()
-                .gap_2()
+                .gap_1()
                 .child(
                     div()
-                        .text_size(px(16.0))
+                        .text_size(px(14.0))
                         .font_weight(gpui::FontWeight::BOLD)
                         .child("删除动作"),
                 )
                 .child(
                     div()
-                        .text_size(px(12.0))
-                        .line_height(px(18.0))
+                        .text_size(px(10.0))
+                        .line_height(px(14.0))
                         .text_color(theme::semantic().text_secondary)
                         .child(format!(
                             "确定要删除动作 “{}” 吗？此操作不可撤销。",
@@ -2945,13 +2945,13 @@ fn delete_confirm_sheet(
         )
         .child(
             div()
-                .px_4()
-                .py_3()
+                .px_3()
+                .py_2()
                 .border_t_1()
                 .border_color(theme::semantic().border_default)
                 .flex()
                 .justify_end()
-                .gap_2()
+                .gap_1()
                 .child(action_button("取消", dark, {
                     let handle = handle.clone();
                     move |_, cx| {
@@ -2976,10 +2976,10 @@ fn destructive_action_button(
 ) -> impl IntoElement {
     div()
         .id(label)
-        .h(px(30.0))
-        .min_w(px(68.0))
-        .px_3()
-        .rounded(px(6.0))
+        .h(px(26.0))
+        .min_w(px(56.0))
+        .px(px(8.0))
+        .rounded(px(4.0))
         .bg(theme::semantic().danger)
         .hover(move |style| {
             style
@@ -2992,7 +2992,7 @@ fn destructive_action_button(
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(12.0))
+        .text_size(px(10.0))
         .text_color(theme::white())
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
@@ -3000,14 +3000,14 @@ fn destructive_action_button(
 
 fn kind_chip(label: String, _dark: bool) -> impl IntoElement {
     div()
-        .h(px(20.0))
-        .px(px(8.0))
-        .rounded(px(4.0))
+        .h(px(18.0))
+        .px(px(6.0))
+        .rounded(px(3.0))
         .bg(theme::semantic().primary_bg)
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(10.0))
+        .text_size(px(9.0))
         .text_color(ui::accent_color(
             qingqi_plugin::plugin_spec::PluginAccent::Blue,
         ))
@@ -3016,23 +3016,23 @@ fn kind_chip(label: String, _dark: bool) -> impl IntoElement {
 
 fn subtle_chip(label: String, _dark: bool) -> impl IntoElement {
     div()
-        .h(px(20.0))
-        .px(px(8.0))
-        .rounded(px(4.0))
+        .h(px(18.0))
+        .px(px(6.0))
+        .rounded(px(3.0))
         .bg(theme::semantic().bg_page)
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(10.0))
+        .text_size(px(9.0))
         .text_color(theme::semantic().text_secondary)
         .child(label)
 }
 
 fn status_chip(label: String, tone: gpui::Rgba, dark: bool) -> impl IntoElement {
     div()
-        .h(px(20.0))
-        .px(px(8.0))
-        .rounded(px(4.0))
+        .h(px(18.0))
+        .px(px(6.0))
+        .rounded(px(3.0))
         .bg(if dark {
             hsla(0.0, 0.0, 1.0, 0.08)
         } else {
@@ -3041,7 +3041,7 @@ fn status_chip(label: String, tone: gpui::Rgba, dark: bool) -> impl IntoElement 
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(10.0))
+        .text_size(px(9.0))
         .text_color(tone)
         .child(label)
 }
@@ -3056,14 +3056,14 @@ fn latest_run_status_chip(
     };
     let tone = run_status_color(summary.status, dark);
     div()
-        .h(px(20.0))
-        .px(px(8.0))
-        .rounded(px(4.0))
+        .h(px(18.0))
+        .px(px(6.0))
+        .rounded(px(3.0))
         .bg(hsla(0.0, 0.0, if dark { 1.0 } else { 0.0 }, 0.06))
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(10.0))
+        .text_size(px(9.0))
         .text_color(tone)
         .child(summary.chip_label())
         .into_any_element()
@@ -3077,9 +3077,9 @@ fn segment_button(
 ) -> impl IntoElement {
     div()
         .id(label)
-        .h(px(30.0))
-        .px_3()
-        .rounded(px(6.0))
+        .h(px(26.0))
+        .px(px(8.0))
+        .rounded(px(4.0))
         .border_1()
         .border_color(if active {
             theme::semantic().primary
@@ -3103,7 +3103,7 @@ fn segment_button(
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(12.0))
+        .text_size(px(10.0))
         .text_color(if active {
             ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
         } else {
@@ -3244,9 +3244,9 @@ fn sheet_input(
         let mut input = TextInput::new(cx, placeholder.clone(), value.clone());
         input.set_style(
             TextInputStyle {
-                height: 34.0,
-                font_size: 12.0,
-                padding: 9.0,
+                height: 28.0,
+                font_size: 11.0,
+                padding: 6.0,
             },
             cx,
         );
@@ -3257,15 +3257,15 @@ fn sheet_input(
 fn editor_target_style(kind: ActionKind, script_source: ScriptSource) -> TextInputStyle {
     if kind == ActionKind::Script && script_source == ScriptSource::Inline {
         TextInputStyle {
-            height: 132.0,
-            font_size: 12.0,
-            padding: 9.0,
+            height: 100.0,
+            font_size: 11.0,
+            padding: 6.0,
         }
     } else {
         TextInputStyle {
-            height: 34.0,
-            font_size: 12.0,
-            padding: 9.0,
+            height: 28.0,
+            font_size: 11.0,
+            padding: 6.0,
         }
     }
 }
@@ -3295,9 +3295,9 @@ fn multiline_sheet_input(
         let mut input = TextInput::new(cx, placeholder.clone(), value.clone());
         input.set_style(
             TextInputStyle {
-                height: 96.0,
-                font_size: 12.0,
-                padding: 9.0,
+                height: 72.0,
+                font_size: 11.0,
+                padding: 6.0,
             },
             cx,
         );

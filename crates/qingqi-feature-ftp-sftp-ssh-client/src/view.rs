@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, path::Path, rc::Rc, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 use crate::{
     model::{
@@ -11,9 +11,9 @@ use crate::{
     transfer::transfer_counts,
 };
 use gpui::{
-    App, AppContext, Entity, ExternalPaths, FontWeight, InteractiveElement, IntoElement,
-    MouseButton, ParentElement, Pixels, Point, RenderOnce, SharedString,
-    StatefulInteractiveElement, Styled, Window, div, hsla, prelude::FluentBuilder, px,
+    App, AppContext, Context, Entity, ExternalPaths, FontWeight, InteractiveElement, IntoElement,
+    MouseButton, ParentElement, Pixels, Point, Render, SharedString, StatefulInteractiveElement,
+    Styled, Window, div, hsla, prelude::FluentBuilder, px,
 };
 use gpui_component::{Icon, IconName, Sizable};
 use qingqi_ui::{
@@ -159,16 +159,16 @@ impl FtpSftpSshView {
         self.service_revision = revision;
     }
 
-    fn ensure_inputs(&mut self, cx: &mut App) {
+    fn ensure_inputs(&mut self, cx: &mut Context<Self>) {
         if self.search_input.is_none() {
             self.search_input = Some(cx.new(|cx| {
                 let mut input = TextInput::new(cx, "搜索连接 / 主机 / 协议", "");
                 input.set_chrome(false, cx);
                 input.set_style(
                     TextInputStyle {
-                        height: 34.0,
-                        font_size: 12.0,
-                        padding: 9.0,
+                        height: 30.0,
+                        font_size: 11.0,
+                        padding: 7.0,
                     },
                     cx,
                 );
@@ -182,9 +182,9 @@ impl FtpSftpSshView {
                 input.set_monospace(true, cx);
                 input.set_style(
                     TextInputStyle {
-                        height: 28.0,
-                        font_size: 12.0,
-                        padding: 7.0,
+                        height: 24.0,
+                        font_size: 11.0,
+                        padding: 6.0,
                     },
                     cx,
                 );
@@ -196,7 +196,7 @@ impl FtpSftpSshView {
         }
     }
 
-    fn ensure_editor_inputs(&mut self, cx: &mut App) {
+    fn ensure_editor_inputs(&mut self, cx: &mut Context<Self>) {
         if self.editor_inputs.is_some() {
             return;
         }
@@ -221,14 +221,14 @@ impl FtpSftpSshView {
         self.selected_profile_cache.clone()
     }
 
-    fn search_text(&self, cx: &App) -> String {
+    fn search_text(&self, cx: &Context<Self>) -> String {
         self.search_input
             .as_ref()
             .map(|input| input.read(cx).text())
             .unwrap_or_default()
     }
 
-    fn filtered_profiles(&self, cx: &App) -> Vec<RemoteProfile> {
+    fn filtered_profiles(&self, cx: &Context<Self>) -> Vec<RemoteProfile> {
         let query = self.search_text(cx).trim().to_ascii_lowercase();
         let mut profiles = self.profiles();
         if query.is_empty() {
@@ -263,7 +263,7 @@ impl FtpSftpSshView {
         })
     }
 
-    fn begin_new_profile(&mut self, cx: &mut App) {
+    fn begin_new_profile(&mut self, cx: &mut Context<Self>) {
         self.log_ui_action("begin_new_profile");
         self.refresh_cached_profiles_if_needed();
         self.editor_mode = ProfileEditorMode::New;
@@ -275,7 +275,7 @@ impl FtpSftpSshView {
         self.editor_notice = String::from("正在新建连接配置");
     }
 
-    fn open_profile_editor(&mut self, id: i64, cx: &mut App) {
+    fn open_profile_editor(&mut self, id: i64, cx: &mut Context<Self>) {
         self.log_ui_action_with_profile("open_profile_editor", id);
         self.refresh_cached_profiles_if_needed();
         self.profile_menu = None;
@@ -297,7 +297,7 @@ impl FtpSftpSshView {
         self.profile_menu = None;
     }
 
-    fn select_profile_for_editor(&mut self, id: i64, cx: &mut App) {
+    fn select_profile_for_editor(&mut self, id: i64, cx: &mut Context<Self>) {
         match self.service.select_profile(id) {
             Ok(()) => {
                 self.refresh_cached_profiles_if_needed();
@@ -314,7 +314,7 @@ impl FtpSftpSshView {
         }
     }
 
-    fn reset_editor(&mut self, cx: &mut App) {
+    fn reset_editor(&mut self, cx: &mut Context<Self>) {
         self.log_ui_action("reset_editor");
         self.refresh_cached_profiles_if_needed();
         match self.editor_mode {
@@ -332,7 +332,7 @@ impl FtpSftpSshView {
         }
     }
 
-    fn save_editor(&mut self, cx: &mut App) {
+    fn save_editor(&mut self, cx: &mut Context<Self>) {
         self.log_ui_action("save_editor");
         self.ensure_editor_inputs(cx);
         let draft = self.editor_draft(cx);
@@ -353,7 +353,7 @@ impl FtpSftpSshView {
         }
     }
 
-    fn test_editor(&mut self, cx: &mut App) {
+    fn test_editor(&mut self, cx: &mut Context<Self>) {
         self.log_ui_action("test_editor");
         self.ensure_editor_inputs(cx);
         match self.service.test_profile_draft(self.editor_draft(cx)) {
@@ -362,7 +362,7 @@ impl FtpSftpSshView {
         }
     }
 
-    fn delete_profile_from_editor(&mut self, id: i64, cx: &mut App) {
+    fn delete_profile_from_editor(&mut self, id: i64, cx: &mut Context<Self>) {
         self.log_ui_action_with_profile("delete_profile_from_editor", id);
         match self.service.delete_profile(id) {
             Ok(true) => {
@@ -386,7 +386,7 @@ impl FtpSftpSshView {
         }
     }
 
-    fn duplicate_profile(&mut self, profile: &RemoteProfile, cx: &mut App) {
+    fn duplicate_profile(&mut self, profile: &RemoteProfile, cx: &mut Context<Self>) {
         self.log_ui_action_with_profile("duplicate_profile", profile.id);
         let mut draft = RemoteProfileDraft::from_profile(profile);
         draft.name = format!("{} 副本", profile.name);
@@ -405,7 +405,7 @@ impl FtpSftpSshView {
         self.profile_menu = None;
     }
 
-    fn set_editor_protocol(&mut self, protocol: RemoteProtocol, cx: &mut App) {
+    fn set_editor_protocol(&mut self, protocol: RemoteProtocol, cx: &mut Context<Self>) {
         self.ensure_editor_inputs(cx);
         let old_protocol = self.editor_protocol;
         self.editor_protocol = protocol;
@@ -442,7 +442,7 @@ impl FtpSftpSshView {
         self.editor_show_advanced = !self.editor_show_advanced;
     }
 
-    fn load_editor_draft(&mut self, draft: RemoteProfileDraft, cx: &mut App) {
+    fn load_editor_draft(&mut self, draft: RemoteProfileDraft, cx: &mut Context<Self>) {
         self.ensure_editor_inputs(cx);
         self.editor_protocol = draft.protocol;
         self.editor_auth_method = draft.auth_method;
@@ -454,7 +454,7 @@ impl FtpSftpSshView {
         }
     }
 
-    fn editor_draft(&self, cx: &App) -> RemoteProfileDraft {
+    fn editor_draft(&self, cx: &Context<Self>) -> RemoteProfileDraft {
         let Some(inputs) = self.editor_inputs.as_ref() else {
             return RemoteProfileDraft::blank();
         };
@@ -586,7 +586,7 @@ impl FtpSftpSshView {
         self.file_menu = None;
     }
 
-    fn open_folder_sheet(&mut self, cx: &mut App) {
+    fn open_folder_sheet(&mut self, cx: &mut Context<Self>) {
         self.log_ui_action("open_folder_sheet");
         self.folder_sheet_open = true;
         if let Some(input) = self.new_folder_input.as_ref() {
@@ -599,7 +599,7 @@ impl FtpSftpSshView {
         self.folder_sheet_open = false;
     }
 
-    fn create_new_folder(&mut self, cx: &mut App) {
+    fn create_new_folder(&mut self, cx: &mut Context<Self>) {
         self.log_ui_action("create_new_folder");
         let Some(input) = self.new_folder_input.as_ref() else {
             return;
@@ -623,7 +623,7 @@ impl FtpSftpSshView {
         self.folder_sheet_open = false;
     }
 
-    fn send_terminal(&mut self, cx: &mut App) {
+    fn send_terminal(&mut self, cx: &mut Context<Self>) {
         self.log_ui_action("send_terminal");
         let Some(input) = self.terminal_input.as_ref() else {
             return;
@@ -774,20 +774,8 @@ impl ProfileEditorInputs {
     }
 }
 
-pub struct FtpSftpSshElement {
-    pub panel: Rc<RefCell<FtpSftpSshView>>,
-}
-
-impl IntoElement for FtpSftpSshElement {
-    type Element = gpui::Component<Self>;
-
-    fn into_element(self) -> Self::Element {
-        gpui::Component::new(self)
-    }
-}
-
-impl RenderOnce for FtpSftpSshElement {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+impl Render for FtpSftpSshView {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let dark = qingqi_ui::theme_mode::is_dark();
         let accent = theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan);
         let accent_soft = if dark {
@@ -796,65 +784,35 @@ impl RenderOnce for FtpSftpSshElement {
             theme::accent_soft(qingqi_plugin::plugin_spec::PluginAccent::Cyan)
         };
 
-        {
-            let mut panel = self.panel.borrow_mut();
-            panel.refresh_cached_profiles_if_needed();
-            panel.ensure_inputs(cx);
-            panel.ensure_editor_inputs(cx);
-        }
+        self.refresh_cached_profiles_if_needed();
+        self.ensure_inputs(cx);
+        self.ensure_editor_inputs(cx);
 
-        let (
-            profiles,
-            selected_profile,
-            session_summaries,
-            remote_items,
-            current_path,
-            message,
-            status,
-            right_panel_mode,
-            terminal_snapshot,
-            protocol_log,
-            drafts,
-            current_transfers,
-            all_transfers,
-            editor,
-            editor_open,
-            folder_sheet_open,
-            show_global_transfers,
-            transfer_collapsed,
-            search_input,
-            terminal_input,
-            new_folder_input,
-            profile_menu,
-            file_menu,
-        ) = {
-            let panel = self.panel.borrow();
-            (
-                panel.filtered_profiles(cx),
-                panel.selected_profile(),
-                panel.service.session_summaries(),
-                panel.service.remote_items(),
-                panel.service.current_remote_path(),
-                panel.service.message(),
-                panel.service.status(),
-                panel.service.active_right_panel_mode(),
-                panel.service.active_terminal_snapshot(),
-                panel.service.active_protocol_log(),
-                panel.service.remote_edit_drafts(),
-                panel.service.transfer_items(),
-                panel.service.all_transfer_items(),
-                panel.editor_snapshot(),
-                panel.editor_open,
-                panel.folder_sheet_open,
-                panel.show_global_transfers,
-                panel.transfer_collapsed,
-                panel.search_input.clone(),
-                panel.terminal_input.clone(),
-                panel.new_folder_input.clone(),
-                panel.profile_menu.clone(),
-                panel.file_menu.clone(),
-            )
-        };
+        let entity = cx.entity();
+
+        let profiles = self.filtered_profiles(cx);
+        let selected_profile = self.selected_profile();
+        let session_summaries = self.service.session_summaries();
+        let remote_items = self.service.remote_items();
+        let current_path = self.service.current_remote_path();
+        let message = self.service.message();
+        let status = self.service.status();
+        let right_panel_mode = self.service.active_right_panel_mode();
+        let terminal_snapshot = self.service.active_terminal_snapshot();
+        let protocol_log = self.service.active_protocol_log();
+        let drafts = self.service.remote_edit_drafts();
+        let current_transfers = self.service.transfer_items();
+        let all_transfers = self.service.all_transfer_items();
+        let editor = self.editor_snapshot();
+        let editor_open = self.editor_open;
+        let folder_sheet_open = self.folder_sheet_open;
+        let show_global_transfers = self.show_global_transfers;
+        let transfer_collapsed = self.transfer_collapsed;
+        let search_input = self.search_input.clone();
+        let terminal_input = self.terminal_input.clone();
+        let new_folder_input = self.new_folder_input.clone();
+        let profile_menu = self.profile_menu.clone();
+        let file_menu = self.file_menu.clone();
 
         let summaries_by_id = session_summaries
             .iter()
@@ -877,18 +835,19 @@ impl RenderOnce for FtpSftpSshElement {
             .font_family(ui::font_ui())
             .relative()
             .on_key_down({
-                let panel = Rc::clone(&self.panel);
-                move |event, window, _cx| {
+                let entity = entity.clone();
+                move |event, window, cx| {
                     if event.keystroke.key == "escape" {
                         tracing::info!(
                             target: "ftp_sftp_ssh.ui",
                             action = "key_escape",
                             "ftp/sftp/ssh ui key event"
                         );
-                        let mut panel = panel.borrow_mut();
-                        panel.close_menus();
-                        panel.close_editor();
-                        panel.close_folder_sheet();
+                        entity.update(cx, |view, _cx| {
+                            view.close_menus();
+                            view.close_editor();
+                            view.close_folder_sheet();
+                        });
                         window.refresh();
                     }
                 }
@@ -905,7 +864,7 @@ impl RenderOnce for FtpSftpSshElement {
                         search_input,
                         selected_id,
                         &summaries_by_id,
-                        Rc::clone(&self.panel),
+                        entity.clone(),
                     ))
                     .child(
                         div()
@@ -921,7 +880,7 @@ impl RenderOnce for FtpSftpSshElement {
                                 selected_profile.as_ref(),
                                 active_summary.as_ref(),
                                 status,
-                                Rc::clone(&self.panel),
+                                entity.clone(),
                             ))
                             .child(
                                 div()
@@ -938,7 +897,7 @@ impl RenderOnce for FtpSftpSshElement {
                                         remote_items,
                                         current_path,
                                         can_drop,
-                                        Rc::clone(&self.panel),
+                                        entity.clone(),
                                     ))
                                     .child(protocol_panel(
                                         dark,
@@ -948,7 +907,7 @@ impl RenderOnce for FtpSftpSshElement {
                                         terminal_snapshot,
                                         protocol_log,
                                         terminal_input,
-                                        Rc::clone(&self.panel),
+                                        entity.clone(),
                                     )),
                             )
                             .child(transfer_panel(
@@ -959,7 +918,7 @@ impl RenderOnce for FtpSftpSshElement {
                                 all_transfers,
                                 show_global_transfers,
                                 transfer_collapsed,
-                                Rc::clone(&self.panel),
+                                entity.clone(),
                             ))
                             .child(status_bar(dark, accent, message)),
                     ),
@@ -969,14 +928,14 @@ impl RenderOnce for FtpSftpSshElement {
                     dark,
                     editor,
                     selected_profile,
-                    Rc::clone(&self.panel),
+                    entity.clone(),
                 ))
             })
             .when(folder_sheet_open, |root| {
                 root.child(new_folder_overlay(
                     dark,
                     new_folder_input,
-                    Rc::clone(&self.panel),
+                    entity.clone(),
                 ))
             })
             .when(profile_menu.is_some(), |root| {
@@ -984,11 +943,11 @@ impl RenderOnce for FtpSftpSshElement {
                     dark,
                     profile_menu,
                     &summaries_by_id,
-                    Rc::clone(&self.panel),
+                    entity.clone(),
                 ))
             })
             .when(file_menu.is_some(), |root| {
-                root.child(file_menu_overlay(dark, file_menu, Rc::clone(&self.panel)))
+                root.child(file_menu_overlay(dark, file_menu, entity.clone()))
             })
     }
 }
@@ -1000,7 +959,7 @@ fn top_bar(
     selected: Option<&RemoteProfile>,
     summary: Option<&SessionSummary>,
     status: ConnectionStatus,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
     let status_color = match status {
         ConnectionStatus::Connected => theme::semantic().success,
@@ -1017,43 +976,43 @@ fn top_bar(
     let selected_id = selected.map(|profile| profile.id);
 
     div()
-        .h(px(44.0))
-        .px(px(12.0))
+        .h(px(38.0))
+        .px(px(10.0))
         .border_b_1()
         .border_color(ui::border_light())
         .flex()
         .items_center()
-        .gap(px(8.0))
+        .gap(px(6.0))
         .bg(theme::semantic().bg_surface)
-        .child(div().size(px(8.0)).rounded(px(999.0)).bg(status_color))
+        .child(div().size(px(7.0)).rounded(px(999.0)).bg(status_color))
         .child(
             div()
                 .flex()
                 .items_center()
-                .gap(px(8.0))
+                .gap(px(6.0))
                 .child(
                     div()
-                        .text_size(px(13.0))
+                        .text_size(px(11.0))
                         .font_weight(FontWeight::SEMIBOLD)
                         .line_clamp(1)
                         .child(title),
                 )
                 .child(
                     div()
-                        .text_size(px(11.0))
+                        .text_size(px(10.0))
                         .text_color(ui::text_secondary())
                         .line_clamp(1)
                         .child(detail),
                 )
                 .child(
                     div()
-                        .text_size(px(11.0))
+                        .text_size(px(10.0))
                         .text_color(ui::text_secondary())
                         .child("·"),
                 )
                 .child(
                     div()
-                        .text_size(px(11.0))
+                        .text_size(px(10.0))
                         .text_color(status_color)
                         .line_clamp(1)
                         .child(status.label()),
@@ -1073,10 +1032,10 @@ fn top_bar(
                 button.opacity(0.58)
             })
             .on_click({
-                let panel = Rc::clone(&panel);
-                move |_, window, _cx| {
+                let panel = panel.clone();
+                move |_, window, cx| {
                     if let Some(profile_id) = selected_id {
-                        panel.borrow_mut().connect_profile(profile_id);
+                        cx.update_entity(&panel, |view, _cx| view.connect_profile(profile_id));
                     }
                     window.refresh();
                 }
@@ -1087,9 +1046,9 @@ fn top_bar(
                 .id("ftp-refresh")
                 .when(!is_connected, |button| button.opacity(0.42))
                 .on_click({
-                    let panel = Rc::clone(&panel);
-                    move |_, window, _cx| {
-                        panel.borrow_mut().refresh_dir();
+                    let panel = panel.clone();
+                    move |_, window, cx| {
+                        cx.update_entity(&panel, |view, _cx| view.refresh_dir());
                         window.refresh();
                     }
                 }),
@@ -1099,10 +1058,10 @@ fn top_bar(
                 .id("ftp-disconnect-selected")
                 .when(!is_connected, |button| button.opacity(0.42))
                 .on_click({
-                    let panel = Rc::clone(&panel);
-                    move |_, window, _cx| {
+                    let panel = panel.clone();
+                    move |_, window, cx| {
                         if let Some(profile_id) = selected_id {
-                            panel.borrow_mut().disconnect_profile(profile_id);
+                            cx.update_entity(&panel, |view, _cx| view.disconnect_profile(profile_id));
                         }
                         window.refresh();
                     }
@@ -1117,11 +1076,11 @@ fn sidebar(
     search_input: Option<Entity<TextInput>>,
     selected_id: Option<i64>,
     summaries_by_id: &HashMap<i64, SessionSummary>,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
     let open_count = profiles.len();
     div()
-        .w(px(236.0))
+        .w(px(220.0))
         .min_h(px(0.0))
         .border_r_1()
         .border_color(ui::border_light())
@@ -1130,12 +1089,12 @@ fn sidebar(
         .flex_col()
         .child(
             div()
-                .px(px(12.0))
-                .pt(px(10.0))
-                .pb(px(8.0))
+                .px(px(10.0))
+                .pt(px(8.0))
+                .pb(px(6.0))
                 .flex()
                 .flex_col()
-                .gap(px(10.0))
+                .gap(px(8.0))
                 .child(
                     div()
                         .flex()
@@ -1145,26 +1104,26 @@ fn sidebar(
                             div()
                                 .flex()
                                 .items_center()
-                                .gap(px(8.0))
+                                .gap(px(6.0))
                                 .child(
                                     div()
-                                        .text_size(px(14.0))
+                                        .text_size(px(12.0))
                                         .font_weight(FontWeight::SEMIBOLD)
                                         .child("连接管理"),
                                 )
                                 .child(
                                     div()
-                                        .text_size(px(11.0))
+                                        .text_size(px(10.0))
                                         .text_color(ui::text_secondary())
                                         .child(format!("{open_count} 个")),
                                 ),
                         )
                         .child(
                             div()
-                                .size(px(30.0))
-                                .rounded(px(8.0))
+                                .size(px(26.0))
+                                .rounded(px(6.0))
                                 .bg(accent)
-                                .text_size(px(18.0))
+                                .text_size(px(16.0))
                                 .text_color(theme::white())
                                 .flex()
                                 .items_center()
@@ -1173,9 +1132,9 @@ fn sidebar(
                                 .child("+")
                                 .id("ftp-open-new-profile-sidebar")
                                 .on_click({
-                                    let panel = Rc::clone(&panel);
+                                    let panel = panel.clone();
                                     move |_, window, cx| {
-                                        panel.borrow_mut().begin_new_profile(cx);
+                                        cx.update_entity(&panel, |view, _cx| view.begin_new_profile(_cx));
                                         window.refresh();
                                     }
                                 }),
@@ -1189,19 +1148,19 @@ fn sidebar(
                 .min_h(px(0.0))
                 .id("ftp-scroll")
                 .overflow_y_scroll()
-                .px(px(8.0))
-                .py(px(6.0))
+                .px(px(6.0))
+                .py(px(4.0))
                 .flex()
                 .flex_col()
-                .gap(px(4.0))
+                .gap(px(3.0))
                 .when(profiles.is_empty(), |list| {
                     list.child(
                         div()
-                            .h(px(180.0))
+                            .h(px(140.0))
                             .flex()
                             .items_center()
                             .justify_center()
-                            .text_size(px(12.0))
+                            .text_size(px(11.0))
                             .text_color(ui::text_secondary())
                             .child("暂无连接"),
                     )
@@ -1209,14 +1168,14 @@ fn sidebar(
                 .children(profiles.into_iter().map(|profile| {
                     let summary = summaries_by_id.get(&profile.id).cloned();
                     let selected = selected_id == Some(profile.id);
-                    connection_card(dark, profile, summary, selected, Rc::clone(&panel))
+                    connection_card(dark, profile, summary, selected, panel.clone())
                 })),
         )
         .child(
             div()
-                .h(px(30.0))
-                .px(px(12.0))
-                .text_size(px(11.0))
+                .h(px(26.0))
+                .px(px(10.0))
+                .text_size(px(10.0))
                 .text_color(ui::text_tertiary())
                 .flex()
                 .items_center()
@@ -1229,7 +1188,7 @@ fn connection_card(
     profile: RemoteProfile,
     summary: Option<SessionSummary>,
     selected: bool,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
     let is_connected = summary
         .as_ref()
@@ -1239,8 +1198,8 @@ fn connection_card(
     div()
         .id(("ftp-profile-row", profile_id as u64))
         .w_full()
-        .h(px(42.0))
-        .rounded(px(8.0))
+        .h(px(36.0))
+        .rounded(px(6.0))
         .bg(theme::rgba_with_alpha(
             theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan),
             if selected { 1.0 } else { 0.0 },
@@ -1250,40 +1209,39 @@ fn connection_card(
         })
         .when(selected, |row| row.hover(|style| style.cursor_pointer()))
         .on_click({
-            let panel = Rc::clone(&panel);
-            move |event, window, _cx| {
-                let mut panel = panel.borrow_mut();
-                panel.select_profile(profile_id);
-                if event.click_count() >= 2 && !event.is_right_click() {
-                    panel.connect_profile(profile_id);
-                }
+            let panel = panel.clone();
+            move |event, window, cx| {
+                cx.update_entity(&panel, |view, _cx| {
+                    view.select_profile(profile_id);
+                    if event.click_count() >= 2 && !event.is_right_click() {
+                        view.connect_profile(profile_id);
+                    }
+                });
                 window.refresh();
             }
         })
         .on_mouse_down(MouseButton::Right, {
-            let panel = Rc::clone(&panel);
+            let panel = panel.clone();
             let profile = profile.clone();
             move |event, window, cx| {
-                panel
-                    .borrow_mut()
-                    .open_profile_menu(profile.clone(), event.position);
+                cx.update_entity(&panel, |view, _cx| view.open_profile_menu(profile.clone(), event.position));
                 cx.stop_propagation();
                 window.refresh();
             }
         })
-        .px(px(8.0))
+        .px(px(6.0))
         .flex()
         .items_center()
-        .gap(px(8.0))
-        .child(div().size(px(7.0)).rounded(px(999.0)).bg(if is_connected {
+        .gap(px(6.0))
+        .child(div().size(px(6.0)).rounded(px(999.0)).bg(if is_connected {
             theme::semantic().success
         } else {
             ui::text_tertiary()
         }))
         .child(
             div()
-                .size(px(24.0))
-                .rounded(px(6.0))
+                .size(px(20.0))
+                .rounded(px(4.0))
                 .bg(if selected {
                     hsla(0.0, 0.0, 1.0, 0.18)
                 } else if dark {
@@ -1294,7 +1252,7 @@ fn connection_card(
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(13.0))
+                .text_size(px(11.0))
                 .text_color(if selected {
                     theme::white()
                 } else {
@@ -1308,10 +1266,10 @@ fn connection_card(
                 .min_w(px(0.0))
                 .flex()
                 .flex_col()
-                .gap(px(3.0))
+                .gap(px(2.0))
                 .child(
                     div()
-                        .text_size(px(12.0))
+                        .text_size(px(11.0))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(if selected {
                             theme::white()
@@ -1323,7 +1281,7 @@ fn connection_card(
                 )
                 .child(
                     div()
-                        .text_size(px(10.0))
+                        .text_size(px(9.0))
                         .text_color(if selected {
                             hsla(0.0, 0.0, 1.0, 0.78).into()
                         } else {
@@ -1337,18 +1295,18 @@ fn connection_card(
             div()
                 .flex()
                 .items_center()
-                .gap(px(6.0))
+                .gap(px(4.0))
                 .child(
                     div()
-                        .h(px(18.0))
-                        .px(px(7.0))
-                        .rounded(px(6.0))
+                        .h(px(16.0))
+                        .px(px(5.0))
+                        .rounded(px(4.0))
                         .bg(if selected {
                             theme::rgba_with_alpha(theme::white(), 0.18)
                         } else {
                             theme::rgba_with_alpha(theme::semantic().bg_surface, 1.0)
                         })
-                        .text_size(px(9.0))
+                        .text_size(px(8.0))
                         .text_color(if selected {
                             theme::white()
                         } else {
@@ -1362,7 +1320,7 @@ fn connection_card(
                 .when(profile.pinned, |row| {
                     row.child(
                         div()
-                            .text_size(px(12.0))
+                            .text_size(px(10.0))
                             .text_color(if selected {
                                 theme::white()
                             } else {
@@ -1374,7 +1332,7 @@ fn connection_card(
                 .child(
                     div()
                         .id("ftp-profile-menu-trigger")
-                        .text_size(px(12.0))
+                        .text_size(px(10.0))
                         .text_color(if selected {
                             theme::white()
                         } else {
@@ -1383,13 +1341,11 @@ fn connection_card(
                         .hover(move |style| style.cursor_pointer())
                         .child("⋯")
                         .on_click({
-                            let panel = Rc::clone(&panel);
+                            let panel = panel.clone();
                             let profile = profile.clone();
                             move |event, window, cx| {
                                 cx.stop_propagation();
-                                panel
-                                    .borrow_mut()
-                                    .open_profile_menu(profile.clone(), event.position());
+                                cx.update_entity(&panel, |view, _cx| view.open_profile_menu(profile.clone(), event.position()));
                                 window.refresh();
                             }
                         }),
@@ -1406,7 +1362,7 @@ fn file_workspace(
     remote_items: Vec<RemoteFileItem>,
     current_path: String,
     can_drop: bool,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
     let supports_files = selected.is_some_and(|profile| profile.protocol.supports_file_browser());
     let path_text = if current_path.is_empty() {
@@ -1432,8 +1388,8 @@ fn file_workspace(
         .count();
 
     div()
-        .w(px(460.0))
-        .min_w(px(330.0))
+        .w(px(440.0))
+        .min_w(px(300.0))
         .min_h(px(0.0))
         .border_r_1()
         .border_color(ui::border_light())
@@ -1442,8 +1398,8 @@ fn file_workspace(
         .flex_col()
         .child(
             div()
-                .h(px(44.0))
-                .px(px(12.0))
+                .h(px(38.0))
+                .px(px(10.0))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .flex()
@@ -1453,7 +1409,7 @@ fn file_workspace(
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(10.0))
+                        .gap(px(7.0))
                         .child(
                             div()
                                 .text_size(px(14.0))
@@ -1468,35 +1424,35 @@ fn file_workspace(
                         )
                         .child(
                             div()
-                                .text_size(px(13.0))
+                                .text_size(px(11.0))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .child("远程目录"),
                         ),
                 )
                 .child(
                     div()
-                        .text_size(px(12.0))
+                        .text_size(px(11.0))
                         .text_color(ui::text_secondary())
                         .child(format!("{item_count} 项")),
                 ),
         )
         .child(
             div()
-                .h(px(38.0))
-                .px(px(12.0))
+                .h(px(32.0))
+                .px(px(10.0))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .flex()
                 .items_center()
-                .gap(px(8.0))
+                .gap(px(6.0))
                 .child(
                     small_icon_action(IconName::ArrowUp, dark)
                         .id("ftp-navigate-up")
                         .when(!connected || !supports_files, |button| button.opacity(0.42))
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().navigate_up();
+                            let panel = panel.clone();
+                            move |_, window, cx| {
+                                cx.update_entity(&panel, |view, _cx| view.navigate_up());
                                 window.refresh();
                             }
                         }),
@@ -1506,11 +1462,11 @@ fn file_workspace(
                         .id("ftp-home-dir")
                         .when(!connected || !supports_files, |button| button.opacity(0.42))
                         .on_click({
-                            let panel = Rc::clone(&panel);
+                            let panel = panel.clone();
                             let home_path = selected.map(|profile| profile.remote_dir.clone());
-                            move |_, window, _cx| {
+                            move |_, window, cx| {
                                 if let Some(path) = home_path.as_ref() {
-                                    panel.borrow_mut().navigate_dir(path);
+                                    cx.update_entity(&panel, |view, _cx| view.navigate_dir(path));
                                 }
                                 window.refresh();
                             }
@@ -1521,7 +1477,7 @@ fn file_workspace(
                         .flex_1()
                         .min_w(px(0.0))
                         .font_family("SF Mono")
-                        .text_size(px(12.0))
+                        .text_size(px(11.0))
                         .line_clamp(1)
                         .child(path_text.clone()),
                 )
@@ -1530,9 +1486,9 @@ fn file_workspace(
                         .id("ftp-refresh-inline")
                         .when(!connected || !supports_files, |button| button.opacity(0.42))
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().refresh_dir();
+                            let panel = panel.clone();
+                            move |_, window, cx| {
+                                cx.update_entity(&panel, |view, _cx| view.refresh_dir());
                                 window.refresh();
                             }
                         }),
@@ -1542,9 +1498,9 @@ fn file_workspace(
                         .id("ftp-upload-files")
                         .when(!connected || !supports_files, |button| button.opacity(0.42))
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().upload_files();
+                            let panel = panel.clone();
+                            move |_, window, cx| {
+                                cx.update_entity(&panel, |view, _cx| view.upload_files());
                                 window.refresh();
                             }
                         }),
@@ -1554,9 +1510,9 @@ fn file_workspace(
                         .id("ftp-upload-folder")
                         .when(!connected || !supports_files, |button| button.opacity(0.42))
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().upload_folder();
+                            let panel = panel.clone();
+                            move |_, window, cx| {
+                                cx.update_entity(&panel, |view, _cx| view.upload_folder());
                                 window.refresh();
                             }
                         }),
@@ -1566,9 +1522,9 @@ fn file_workspace(
                         .id("ftp-create-folder")
                         .when(!connected || !supports_files, |button| button.opacity(0.42))
                         .on_click({
-                            let panel = Rc::clone(&panel);
+                            let panel = panel.clone();
                             move |_, window, cx| {
-                                panel.borrow_mut().open_folder_sheet(cx);
+                                cx.update_entity(&panel, |view, _cx| view.open_folder_sheet(_cx));
                                 window.refresh();
                             }
                         }),
@@ -1576,8 +1532,8 @@ fn file_workspace(
         )
         .child(
             div()
-                .h(px(30.0))
-                .px(px(12.0))
+                .h(px(26.0))
+                .px(px(10.0))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .bg(ui::bg_keycap())
@@ -1587,14 +1543,14 @@ fn file_workspace(
                     div()
                         .flex_1()
                         .min_w(px(0.0))
-                        .text_size(px(11.0))
+                        .text_size(px(10.0))
                         .text_color(ui::text_secondary())
                         .child("名称"),
                 )
                 .child(
                     div()
-                        .w(px(72.0))
-                        .text_size(px(11.0))
+                        .w(px(64.0))
+                        .text_size(px(10.0))
                         .text_color(ui::text_secondary())
                         .child("大小"),
                 ),
@@ -1612,14 +1568,14 @@ fn file_workspace(
                     ))
                 })
                 .on_drop({
-                    let panel = Rc::clone(&panel);
-                    move |paths: &ExternalPaths, window, _cx| {
+                    let panel = panel.clone();
+                    move |paths: &ExternalPaths, window, cx| {
                         let raw = paths
                             .paths()
                             .iter()
                             .map(|path| path.to_string_lossy().into_owned())
                             .collect::<Vec<_>>();
-                        let svc = Arc::clone(&panel.borrow().service);
+                        let svc = Arc::clone(&panel.read(cx).service);
                         let _ = svc.upload_paths(raw);
                         window.refresh();
                     }
@@ -1632,11 +1588,11 @@ fn file_workspace(
                     list.child(
                         div()
                             .flex_1()
-                            .min_h(px(220.0))
+                            .min_h(px(180.0))
                             .flex()
                             .items_center()
                             .justify_center()
-                            .text_size(px(12.0))
+                            .text_size(px(11.0))
                             .text_color(ui::text_secondary())
                             .child(upload_hint.clone()),
                     )
@@ -1644,16 +1600,16 @@ fn file_workspace(
                 .children(
                     remote_items
                         .into_iter()
-                        .map(|item| remote_entry_row(dark, item, Rc::clone(&panel))),
+                        .map(|item| remote_entry_row(dark, item, panel.clone())),
                 ),
         )
         .child(
             div()
-                .h(px(24.0))
-                .px(px(12.0))
+                .h(px(22.0))
+                .px(px(10.0))
                 .border_t_1()
                 .border_color(ui::border_light())
-                .text_size(px(11.0))
+                .text_size(px(10.0))
                 .text_color(if can_drop {
                     accent
                 } else {
@@ -1669,7 +1625,7 @@ fn file_workspace(
 fn remote_entry_row(
     dark: bool,
     item: RemoteFileItem,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
     let is_text_file = !item.is_dir && looks_like_text_file_name(&item.name);
     let primary_label = if item.is_dir { "进入" } else { "下载" };
@@ -1682,7 +1638,7 @@ fn remote_entry_row(
             "ftp-item-{}",
             item.name.replace('/', "_")
         )))
-        .h(px(34.0))
+        .h(px(30.0))
         .border_b_1()
         .border_color(ui::border_light())
         .bg(if item.path.is_empty() {
@@ -1704,28 +1660,26 @@ fn remote_entry_row(
         })
         .hover(move |style| style.bg(row_hover_color(dark)).cursor_pointer())
         .on_mouse_down(MouseButton::Right, {
-            let panel = Rc::clone(&panel);
+            let panel = panel.clone();
             let item = item.clone();
             move |event, window, cx| {
-                panel
-                    .borrow_mut()
-                    .open_file_menu(item.clone(), event.position);
+                cx.update_entity(&panel, |view, _cx| view.open_file_menu(item.clone(), event.position));
                 cx.stop_propagation();
                 window.refresh();
             }
         })
-        .px(px(12.0))
+        .px(px(10.0))
         .flex()
         .items_center()
-        .gap(px(8.0))
+        .gap(px(6.0))
         .child(
             div()
-                .w(px(18.0))
+                .w(px(16.0))
                 .flex()
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(13.0))
+                .text_size(px(12.0))
                 .text_color(if item.is_dir {
                     theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan)
                 } else {
@@ -1748,15 +1702,15 @@ fn remote_entry_row(
         .child(
             div().flex_1().min_w(px(0.0)).flex().items_center().child(
                 div()
-                    .text_size(px(12.0))
+                    .text_size(px(11.0))
                     .line_clamp(1)
                     .child(item.name.clone()),
             ),
         )
         .child(
             div()
-                .w(px(72.0))
-                .text_size(px(11.0))
+                .w(px(64.0))
+                .text_size(px(10.0))
                 .text_color(ui::text_secondary())
                 .items_center()
                 .child(if item.is_dir {
@@ -1769,18 +1723,18 @@ fn remote_entry_row(
             div()
                 .flex()
                 .items_center()
-                .gap(px(6.0))
+                .gap(px(4.0))
                 .when(!item.path.is_empty(), |row| {
                     row.child(
                         small_action(primary_label, dark)
                             .id("ftp-remote-primary-action")
                             .on_click({
-                                let panel = Rc::clone(&panel);
-                                move |_, window, _cx| {
+                                let panel = panel.clone();
+                                move |_, window, cx| {
                                     if item_for_primary.is_dir {
-                                        panel.borrow_mut().navigate_dir(&item_for_primary.path);
+                                        cx.update_entity(&panel, |view, _cx| view.navigate_dir(&item_for_primary.path));
                                     } else {
-                                        panel.borrow_mut().download_file(&item_for_primary);
+                                        cx.update_entity(&panel, |view, _cx| view.download_file(&item_for_primary));
                                     }
                                     window.refresh();
                                 }
@@ -1792,9 +1746,9 @@ fn remote_entry_row(
                         small_action("文本", dark)
                             .id("ftp-remote-open-text")
                             .on_click({
-                                let panel = Rc::clone(&panel);
-                                move |_, window, _cx| {
-                                    panel.borrow_mut().open_text_file(&item_for_text);
+                                let panel = panel.clone();
+                                move |_, window, cx| {
+                                    cx.update_entity(&panel, |view, _cx| view.open_text_file(&item_for_text));
                                     window.refresh();
                                 }
                             }),
@@ -1805,11 +1759,9 @@ fn remote_entry_row(
                         small_icon_action(IconName::Ellipsis, dark)
                             .id("ftp-remote-menu")
                             .on_click({
-                                let panel = Rc::clone(&panel);
-                                move |event, window, _cx| {
-                                    panel
-                                        .borrow_mut()
-                                        .open_file_menu(item_for_menu.clone(), event.position());
+                                let panel = panel.clone();
+                                move |event, window, cx| {
+                                    cx.update_entity(&panel, |view, _cx| view.open_file_menu(item_for_menu.clone(), event.position()));
                                     window.refresh();
                                 }
                             }),
@@ -1826,7 +1778,7 @@ fn protocol_panel(
     terminal_snapshot: TerminalSnapshot,
     protocol_log: Vec<ProtocolLogEntry>,
     terminal_input: Option<Entity<TextInput>>,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
     let title = match right_panel_mode {
         RightPanelMode::Terminal => "SSH 终端",
@@ -1844,17 +1796,17 @@ fn protocol_panel(
         .flex_col()
         .child(
             div()
-                .h(px(44.0))
-                .px(px(12.0))
+                .h(px(38.0))
+                .px(px(10.0))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .flex()
                 .items_center()
                 .justify_between()
                 .child(
-                    div().flex().flex_col().gap(px(2.0)).child(
+                    div().flex().flex_col().gap(px(1.0)).child(
                         div()
-                            .text_size(px(12.0))
+                            .text_size(px(11.0))
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(title),
                     ),
@@ -1874,11 +1826,11 @@ fn protocol_panel(
                 summary,
                 terminal_snapshot,
                 terminal_input,
-                Rc::clone(&panel),
+                panel.clone(),
             )
             .into_any_element(),
             RightPanelMode::FtpLog => {
-                ftp_log_workspace(dark, protocol_log, summary, Rc::clone(&panel)).into_any_element()
+                ftp_log_workspace(dark, protocol_log, summary, panel.clone()).into_any_element()
             }
             RightPanelMode::Empty => empty_protocol_workspace(dark, protocol).into_any_element(),
         })
@@ -1890,7 +1842,7 @@ fn terminal_workspace(
     summary: Option<&SessionSummary>,
     terminal_snapshot: TerminalSnapshot,
     terminal_input: Option<Entity<TextInput>>,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
     let connected = summary.is_some_and(|summary| summary.status == ConnectionStatus::Connected);
     let terminal_bg = ui::terminal_bg();
@@ -1903,13 +1855,13 @@ fn terminal_workspace(
         .flex_col()
         .child(
             div()
-                .px(px(16.0))
-                .h(px(34.0))
+                .px(px(10.0))
+                .h(px(30.0))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .flex()
                 .items_center()
-                .gap(px(8.0))
+                .gap(px(6.0))
                 .child(
                     Icon::new(IconName::SquareTerminal)
                         .xsmall()
@@ -1933,10 +1885,10 @@ fn terminal_workspace(
                         div()
                             .rounded(px(999.0))
                             .bg(ui::bg_keycap())
-                            .px(px(8.0))
-                            .py(px(4.0))
+                            .px(px(6.0))
+                            .py(px(3.0))
                             .font_family("SF Mono")
-                            .text_size(px(10.0))
+                            .text_size(px(9.0))
                             .text_color(ui::text_secondary())
                             .line_clamp(1)
                             .child(terminal_snapshot.cwd_hint.clone()),
@@ -1948,9 +1900,9 @@ fn terminal_workspace(
                         .id("ftp-open-terminal")
                         .when(!connected, |button| button.opacity(0.42))
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                let _ = panel.borrow().service.open_terminal();
+                            let panel = panel.clone();
+                            move |_, window, cx| {
+                                let _ = panel.read(cx).service.open_terminal();
                                 window.refresh();
                             }
                         }),
@@ -1963,9 +1915,9 @@ fn terminal_workspace(
                             |button| button.opacity(0.42),
                         )
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                let _ = panel.borrow().service.sync_terminal_to_current_dir();
+                            let panel = panel.clone();
+                            move |_, window, cx| {
+                                let _ = panel.read(cx).service.sync_terminal_to_current_dir();
                                 window.refresh();
                             }
                         }),
@@ -1975,9 +1927,9 @@ fn terminal_workspace(
                         .id("ftp-close-terminal")
                         .when(!connected, |button| button.opacity(0.42))
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow().service.close_terminal();
+                            let panel = panel.clone();
+                            move |_, window, cx| {
+                                panel.read(cx).service.close_terminal();
                                 window.refresh();
                             }
                         }),
@@ -1987,28 +1939,28 @@ fn terminal_workspace(
             div()
                 .flex_1()
                 .min_h(px(0.0))
-                .p(px(8.0))
+                .p(px(6.0))
                 .bg(theme::semantic().bg_subtle_2)
                 .child(
                     div()
                         .id("ftp-scroll")
                         .size_full()
                         .overflow_y_scroll()
-                        .rounded(px(8.0))
+                        .rounded(px(6.0))
                         .border_1()
                         .border_color(ui::terminal_border())
                         .bg(terminal_bg)
-                        .px(px(10.0))
-                        .py(px(8.0))
+                        .px(px(8.0))
+                        .py(px(6.0))
                         .font_family("SF Mono")
-                        .text_size(px(12.0))
-                        .line_height(px(17.0))
+                        .text_size(px(11.0))
+                        .line_height(px(15.0))
                         .text_color(terminal_fg)
                         .when(terminal_snapshot.lines.is_empty(), |list| {
                             list.child(
                                 div()
-                                    .text_size(px(11.0))
-                                    .line_height(px(18.0))
+                                    .text_size(px(10.0))
+                                    .line_height(px(15.0))
                                     .text_color(terminal_muted)
                                     .child("terminal ready; output will appear here"),
                             )
@@ -2023,25 +1975,25 @@ fn terminal_workspace(
         )
         .child(
             div()
-                .px(px(8.0))
-                .py(px(6.0))
+                .px(px(6.0))
+                .py(px(4.0))
                 .border_t_1()
                 .border_color(ui::border_light())
                 .flex()
                 .items_center()
-                .gap(px(6.0))
+                .gap(px(4.0))
                 .bg(theme::semantic().bg_surface)
                 .child(
                     div()
                         .font_family("SF Mono")
-                        .text_size(px(12.0))
+                        .text_size(px(11.0))
                         .text_color(ui::text_secondary())
                         .child("$"),
                 )
                 .child(
                     div()
                         .flex_1()
-                        .rounded(px(7.0))
+                        .rounded(px(5.0))
                         .border_1()
                         .border_color(ui::border_light())
                         .bg(ui::bg_keycap())
@@ -2055,9 +2007,9 @@ fn terminal_workspace(
                         .id("ftp-send-terminal")
                         .when(!connected, |button| button.opacity(0.42))
                         .on_click({
-                            let panel = Rc::clone(&panel);
+                            let panel = panel.clone();
                             move |_, window, cx| {
-                                panel.borrow_mut().send_terminal(cx);
+                                cx.update_entity(&panel, |view, _cx| view.send_terminal(_cx));
                                 window.refresh();
                             }
                         }),
@@ -2069,7 +2021,7 @@ fn ftp_log_workspace(
     dark: bool,
     protocol_log: Vec<ProtocolLogEntry>,
     summary: Option<&SessionSummary>,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
     let count = protocol_log.len();
     let profile_id = summary.map(|summary| summary.profile_id);
@@ -2080,13 +2032,13 @@ fn ftp_log_workspace(
         .flex_col()
         .child(
             div()
-                .px(px(16.0))
-                .h(px(34.0))
+                .px(px(10.0))
+                .h(px(30.0))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .flex()
                 .items_center()
-                .gap(px(8.0))
+                .gap(px(6.0))
                 .child(meta_badge(
                     format!("{count} 条"),
                     theme::semantic().success,
@@ -2094,7 +2046,7 @@ fn ftp_log_workspace(
                 ))
                 .child(
                     div()
-                        .text_size(px(10.0))
+                        .text_size(px(9.0))
                         .text_color(ui::text_secondary())
                         .child("命令蓝 / 响应绿 / 信息灰 / 错误红"),
                 )
@@ -2104,10 +2056,10 @@ fn ftp_log_workspace(
                         .id("ftp-clear-log")
                         .when(profile_id.is_none(), |button| button.opacity(0.42))
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
+                            let panel = panel.clone();
+                            move |_, window, cx| {
                                 if let Some(profile_id) = profile_id {
-                                    panel.borrow().service.clear_protocol_log(profile_id);
+                                    panel.read(cx).service.clear_protocol_log(profile_id);
                                 }
                                 window.refresh();
                             }
@@ -2120,11 +2072,11 @@ fn ftp_log_workspace(
                 .min_h(px(0.0))
                 .id("ftp-scroll")
                 .overflow_y_scroll()
-                .px(px(14.0))
-                .py(px(12.0))
+                .px(px(10.0))
+                .py(px(8.0))
                 .flex()
                 .flex_col()
-                .gap(px(6.0))
+                .gap(px(4.0))
                 .when(protocol_log.is_empty(), |list| {
                     list.child(empty_state_card(
                         dark,
@@ -2149,7 +2101,7 @@ fn empty_protocol_workspace(dark: bool, protocol: Option<RemoteProtocol>) -> imp
     div()
         .flex_1()
         .min_h(px(0.0))
-        .p(px(16.0))
+        .p(px(10.0))
         .child(empty_state_card(dark, "协议工作区未激活", message))
 }
 
@@ -2162,15 +2114,15 @@ fn protocol_log_row(_dark: bool, entry: ProtocolLogEntry) -> impl IntoElement {
     };
 
     div()
-        .rounded(px(10.0))
+        .rounded(px(6.0))
         .border_1()
         .border_color(ui::border_light())
         .bg(ui::bg_keycap())
-        .px(px(10.0))
-        .py(px(8.0))
+        .px(px(8.0))
+        .py(px(6.0))
         .font_family("SF Mono")
-        .text_size(px(11.0))
-        .line_height(px(18.0))
+        .text_size(px(10.0))
+        .line_height(px(15.0))
         .child(div().text_color(color).child(entry.display_text()))
 }
 
@@ -2186,7 +2138,7 @@ fn transfer_panel(
     all_transfers: Vec<SessionTransferItem>,
     show_global_transfers: bool,
     collapsed: bool,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
     let transfer_scope_items = if show_global_transfers {
         None
@@ -2208,14 +2160,14 @@ fn transfer_panel(
     div()
         .border_t_1()
         .border_color(ui::border_light())
-        .h(if collapsed { px(32.0) } else { px(168.0) })
+        .h(if collapsed { px(28.0) } else { px(150.0) })
         .bg(theme::semantic().bg_surface)
         .flex()
         .flex_col()
         .child(
             div()
-                .h(px(32.0))
-                .px(px(12.0))
+                .h(px(28.0))
+                .px(px(10.0))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .flex()
@@ -2225,7 +2177,7 @@ fn transfer_panel(
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(6.0))
+                        .gap(px(4.0))
                         .child(
                             small_icon_action(
                                 if collapsed {
@@ -2237,16 +2189,16 @@ fn transfer_panel(
                             )
                             .id("ftp-toggle-transfer-panel")
                             .on_click({
-                                let panel = Rc::clone(&panel);
-                                move |_, window, _cx| {
-                                    panel.borrow_mut().set_transfer_collapsed(!collapsed);
+                                let panel = panel.clone();
+                                move |_, window, cx| {
+                                    cx.update_entity(&panel, |view, _cx| view.set_transfer_collapsed(!collapsed));
                                     window.refresh();
                                 }
                             }),
                         )
                         .child(
                             div()
-                                .text_size(px(11.0))
+                                .text_size(px(10.0))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .child("传输记录"),
                         )
@@ -2269,7 +2221,7 @@ fn transfer_panel(
                         .when(collapsed && !has_content, |row| {
                             row.child(
                                 div()
-                                    .text_size(px(11.0))
+                                    .text_size(px(10.0))
                                     .text_color(ui::text_secondary())
                                     .child("暂无任务"),
                             )
@@ -2279,15 +2231,15 @@ fn transfer_panel(
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(5.0))
+                        .gap(px(4.0))
                         .when(collapsed, |row| {
                             row.child(
                                 small_icon_text_action(IconName::ChevronUp, "展开", dark)
                                     .id("ftp-expand-transfer-panel")
                                     .on_click({
-                                        let panel = Rc::clone(&panel);
-                                        move |_, window, _cx| {
-                                            panel.borrow_mut().set_transfer_collapsed(false);
+                                        let panel = panel.clone();
+                                        move |_, window, cx| {
+                                            cx.update_entity(&panel, |view, _cx| view.set_transfer_collapsed(false));
                                             window.refresh();
                                         }
                                     }),
@@ -2298,9 +2250,9 @@ fn transfer_panel(
                                 small_icon_text_action(IconName::Close, "关闭", dark)
                                     .id("ftp-collapse-transfer-panel")
                                     .on_click({
-                                        let panel = Rc::clone(&panel);
-                                        move |_, window, _cx| {
-                                            panel.borrow_mut().set_transfer_collapsed(true);
+                                        let panel = panel.clone();
+                                        move |_, window, cx| {
+                                            cx.update_entity(&panel, |view, _cx| view.set_transfer_collapsed(true));
                                             window.refresh();
                                         }
                                     }),
@@ -2310,9 +2262,9 @@ fn transfer_panel(
                             segmented_chip("当前 session", !show_global_transfers, dark)
                                 .id("ftp-scope-current")
                                 .on_click({
-                                    let panel = Rc::clone(&panel);
-                                    move |_, window, _cx| {
-                                        panel.borrow_mut().toggle_transfer_scope(false);
+                                    let panel = panel.clone();
+                                    move |_, window, cx| {
+                                        cx.update_entity(&panel, |view, _cx| view.toggle_transfer_scope(false));
                                         window.refresh();
                                     }
                                 }),
@@ -2321,9 +2273,9 @@ fn transfer_panel(
                             segmented_chip("全部 session", show_global_transfers, dark)
                                 .id("ftp-scope-all")
                                 .on_click({
-                                    let panel = Rc::clone(&panel);
-                                    move |_, window, _cx| {
-                                        panel.borrow_mut().toggle_transfer_scope(true);
+                                    let panel = panel.clone();
+                                    move |_, window, cx| {
+                                        cx.update_entity(&panel, |view, _cx| view.toggle_transfer_scope(true));
                                         window.refresh();
                                     }
                                 }),
@@ -2333,10 +2285,10 @@ fn transfer_panel(
                                 .id("ftp-clear-finished-transfers")
                                 .when(show_global_transfers, |button| button.opacity(0.42))
                                 .on_click({
-                                    let panel = Rc::clone(&panel);
-                                    move |_, window, _cx| {
+                                    let panel = panel.clone();
+                                    move |_, window, cx| {
                                         if !show_global_transfers {
-                                            panel.borrow().service.clear_finished_transfers();
+                                            panel.read(cx).service.clear_finished_transfers();
                                         }
                                         window.refresh();
                                     }
@@ -2351,13 +2303,13 @@ fn transfer_panel(
                     .min_h(px(0.0))
                     .id("ftp-scroll")
                     .overflow_y_scroll()
-                    .px(px(10.0))
-                    .py(px(8.0))
+                    .px(px(8.0))
+                    .py(px(6.0))
                     .flex()
                     .flex_col()
-                    .gap(px(8.0))
+                    .gap(px(6.0))
                     .when(!drafts.is_empty(), |list| {
-                        list.child(draft_section(dark, drafts.clone(), Rc::clone(&panel)))
+                        list.child(draft_section(dark, drafts.clone(), panel.clone()))
                     })
                     .when(
                         current_transfers.is_empty()
@@ -2375,7 +2327,7 @@ fn transfer_panel(
                         list.children(
                             current_transfers
                                 .iter()
-                                .map(|item| transfer_card(dark, item, None, Rc::clone(&panel))),
+                                .map(|item| transfer_card(dark, item, None, panel.clone())),
                         )
                     })
                     .when(show_global_transfers, |list| {
@@ -2384,7 +2336,7 @@ fn transfer_panel(
                                 dark,
                                 &item.item,
                                 Some(item.session_name.clone()),
-                                Rc::clone(&panel),
+                                panel.clone(),
                             )
                         }))
                     }),
@@ -2395,15 +2347,15 @@ fn transfer_panel(
 fn draft_section(
     dark: bool,
     drafts: Vec<RemoteEditDraft>,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
-        .gap(px(8.0))
+        .gap(px(6.0))
         .child(
             div()
-                .text_size(px(11.0))
+                .text_size(px(10.0))
                 .font_weight(FontWeight::SEMIBOLD)
                 .child("待回传文本草稿"),
         )
@@ -2418,14 +2370,14 @@ fn draft_section(
             let draft_for_open = draft.clone();
             let draft_for_upload = draft.clone();
             div()
-                .rounded(px(12.0))
+                .rounded(px(8.0))
                 .border_1()
                 .border_color(ui::border_light())
                 .bg(ui::bg_keycap())
-                .p(px(12.0))
+                .p(px(8.0))
                 .flex()
                 .flex_col()
-                .gap(px(8.0))
+                .gap(px(6.0))
                 .child(
                     div()
                         .flex()
@@ -2435,16 +2387,16 @@ fn draft_section(
                             div()
                                 .flex()
                                 .flex_col()
-                                .gap(px(2.0))
+                                .gap(px(1.0))
                                 .child(
                                     div()
-                                        .text_size(px(11.0))
+                                        .text_size(px(10.0))
                                         .font_weight(FontWeight::SEMIBOLD)
                                         .child(draft.file_name.clone()),
                                 )
                                 .child(
                                     div()
-                                        .text_size(px(10.0))
+                                        .text_size(px(9.0))
                                         .text_color(ui::text_secondary())
                                         .line_clamp(1)
                                         .child(draft.remote_path.clone()),
@@ -2458,14 +2410,14 @@ fn draft_section(
                 )
                 .child(
                     div()
-                        .text_size(px(10.0))
+                        .text_size(px(9.0))
                         .text_color(ui::text_secondary())
                         .line_clamp(1)
                         .child(format!("本地缓存: {}", draft.local_cache_path)),
                 )
                 .child(
                     div()
-                        .text_size(px(10.0))
+                        .text_size(px(9.0))
                         .text_color(state_color)
                         .child(draft.message.clone()),
                 )
@@ -2473,14 +2425,14 @@ fn draft_section(
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(8.0))
+                        .gap(px(6.0))
                         .child(
                             small_action("打开本地文件", dark)
                                 .id("ftp-draft-open-local")
                                 .on_click({
-                                    let panel = Rc::clone(&panel);
-                                    move |_, window, _cx| {
-                                        panel.borrow_mut().reopen_local_draft(&draft_for_open);
+                                    let panel = panel.clone();
+                                    move |_, window, cx| {
+                                        cx.update_entity(&panel, |view, _cx| view.reopen_local_draft(&draft_for_open));
                                         window.refresh();
                                     }
                                 }),
@@ -2498,10 +2450,10 @@ fn draft_section(
                                 )
                                 .id("ftp-draft-upload")
                                 .on_click({
-                                    let panel = Rc::clone(&panel);
+                                    let panel = panel.clone();
                                     let draft_id = draft_for_upload.id.clone();
-                                    move |_, window, _cx| {
-                                        panel.borrow_mut().upload_draft(&draft_id, force);
+                                    move |_, window, cx| {
+                                        cx.update_entity(&panel, |view, _cx| view.upload_draft(&draft_id, force));
                                         window.refresh();
                                     }
                                 }),
@@ -2515,7 +2467,7 @@ fn transfer_card(
     dark: bool,
     item: &TransferItem,
     session_name: Option<String>,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
     let progress = item.progress_percent() as f32 / 100.0;
     let fill_width = (280.0 * progress.clamp(0.0, 1.0)).max(if progress > 0.0 { 2.0 } else { 0.0 });
@@ -2529,15 +2481,15 @@ fn transfer_card(
     let transfer_id = item.id.clone();
 
     div()
-        .rounded(px(12.0))
+        .rounded(px(8.0))
         .border_1()
         .border_color(ui::border_light())
         .bg(ui::bg_keycap())
-        .px(px(12.0))
-        .py(px(10.0))
+        .px(px(10.0))
+        .py(px(8.0))
         .flex()
         .flex_col()
-        .gap(px(8.0))
+        .gap(px(6.0))
         .child(
             div()
                 .flex()
@@ -2547,11 +2499,11 @@ fn transfer_card(
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(8.0))
+                        .gap(px(6.0))
                         .child(
                             div()
-                                .size(px(22.0))
-                                .rounded(px(6.0))
+                                .size(px(20.0))
+                                .rounded(px(4.0))
                                 .bg(if dark {
                                     hsla(0.0, 0.0, 1.0, 0.05)
                                 } else {
@@ -2560,7 +2512,7 @@ fn transfer_card(
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .text_size(px(11.0))
+                                .text_size(px(10.0))
                                 .text_color(status_color)
                                 .child(item.direction.arrow()),
                         )
@@ -2568,10 +2520,10 @@ fn transfer_card(
                             div()
                                 .flex()
                                 .flex_col()
-                                .gap(px(2.0))
+                                .gap(px(1.0))
                                 .child(
                                     div()
-                                        .text_size(px(11.0))
+                                        .text_size(px(10.0))
                                         .font_weight(FontWeight::SEMIBOLD)
                                         .line_clamp(1)
                                         .child(item.name.clone()),
@@ -2579,7 +2531,7 @@ fn transfer_card(
                                 .when(session_name.is_some(), |col| {
                                     col.child(
                                         div()
-                                            .text_size(px(10.0))
+                                            .text_size(px(9.0))
                                             .text_color(ui::text_secondary())
                                             .line_clamp(1)
                                             .child(session_name.unwrap_or_default()),
@@ -2591,10 +2543,10 @@ fn transfer_card(
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(8.0))
+                        .gap(px(6.0))
                         .child(
                             div()
-                                .text_size(px(10.0))
+                                .text_size(px(9.0))
                                 .text_color(status_color)
                                 .child(item.status_line()),
                         )
@@ -2603,9 +2555,9 @@ fn transfer_card(
                                 small_action("取消", dark)
                                     .id("ftp-transfer-cancel")
                                     .on_click({
-                                        let panel = Rc::clone(&panel);
-                                        move |_, window, _cx| {
-                                            panel.borrow().service.cancel_transfer(&transfer_id);
+                                        let panel = panel.clone();
+                                        move |_, window, cx| {
+                                            panel.read(cx).service.cancel_transfer(&transfer_id);
                                             window.refresh();
                                         }
                                     }),
@@ -2615,7 +2567,7 @@ fn transfer_card(
         )
         .child(
             div()
-                .h(px(5.0))
+                .h(px(4.0))
                 .rounded(px(999.0))
                 .bg(if dark {
                     hsla(0.0, 0.0, 1.0, 0.06)
@@ -2624,7 +2576,7 @@ fn transfer_card(
                 })
                 .child(
                     div()
-                        .h(px(5.0))
+                        .h(px(4.0))
                         .w(px(fill_width))
                         .rounded(px(999.0))
                         .bg(status_color),
@@ -2632,7 +2584,7 @@ fn transfer_card(
         )
         .child(
             div()
-                .text_size(px(10.0))
+                .text_size(px(9.0))
                 .text_color(ui::text_secondary())
                 .line_clamp(1)
                 .child(format!("{} · {}", item.local_path, item.remote_path)),
@@ -2643,13 +2595,13 @@ fn profile_editor_overlay(
     dark: bool,
     editor: Option<ProfileEditorSnapshot>,
     _selected: Option<RemoteProfile>,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
 ) -> gpui::AnyElement {
     let Some(editor) = editor else {
         return overlay_shell(
             dark,
             "ftp-editor-overlay",
-            Rc::clone(&panel),
+            panel.clone(),
             empty_state_card(dark, "配置编辑器初始化中", "请稍候").into_any_element(),
         )
         .into_any_element();
@@ -2660,11 +2612,11 @@ fn profile_editor_overlay(
     overlay_shell(
         dark,
         "ftp-editor-overlay",
-        Rc::clone(&panel),
+        panel.clone(),
         div()
-            .w(px(720.0))
-            .max_h(px(700.0))
-            .rounded(px(12.0))
+            .w(px(660.0))
+            .max_h(px(620.0))
+            .rounded(px(8.0))
             .border_1()
             .border_color(ui::border_light())
             .bg(theme::semantic().bg_surface)
@@ -2673,14 +2625,14 @@ fn profile_editor_overlay(
             .flex_col()
             .child(
                 div()
-                    .px(px(18.0))
-                    .py(px(12.0))
+                    .px(px(14.0))
+                    .py(px(10.0))
                     .flex()
                     .flex_col()
-                    .gap(px(4.0))
+                    .gap(px(3.0))
                     .child(
                         div()
-                            .text_size(px(24.0))
+                            .text_size(px(20.0))
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(match editor.mode {
                                 ProfileEditorMode::Existing(_) => "编辑连接",
@@ -2689,7 +2641,7 @@ fn profile_editor_overlay(
                     )
                     .child(
                         div()
-                            .text_size(px(12.0))
+                            .text_size(px(11.0))
                             .text_color(ui::text_secondary())
                             .child("为 SFTP / FTP / FTPS 服务器配置访问凭据。"),
                     ),
@@ -2700,11 +2652,11 @@ fn profile_editor_overlay(
                     .min_h(px(0.0))
                     .id("ftp-scroll")
                     .overflow_y_scroll()
-                    .px(px(18.0))
-                    .pb(px(14.0))
+                    .px(px(14.0))
+                    .pb(px(10.0))
                     .flex()
                     .flex_col()
-                    .gap(px(10.0))
+                    .gap(px(7.0))
                     .child(editor_notice(editor.notice, dark))
                     .child(profile_form_section(
                         "通用",
@@ -2712,11 +2664,11 @@ fn profile_editor_overlay(
                         div()
                             .flex()
                             .flex_col()
-                            .gap(px(10.0))
+                            .gap(px(7.0))
                             .child(profile_inline_field("名称", inputs.name.clone(), dark))
                             .child(profile_label_value_row(
                                 "协议",
-                                div().flex().gap(px(8.0)).children(
+                                div().flex().gap(px(6.0)).children(
                                     [
                                         RemoteProtocol::Sftp,
                                         RemoteProtocol::Ftp,
@@ -2732,11 +2684,9 @@ fn profile_editor_overlay(
                                         )
                                         .id(("ftp-editor-protocol", protocol_index(protocol_item)))
                                         .on_click({
-                                            let panel = Rc::clone(&panel);
+                                            let panel = panel.clone();
                                             move |_, window, cx| {
-                                                panel
-                                                    .borrow_mut()
-                                                    .set_editor_protocol(protocol_item, cx);
+                                                cx.update_entity(&panel, |view, _cx| view.set_editor_protocol(protocol_item, _cx));
                                                 window.refresh();
                                             }
                                         })
@@ -2751,7 +2701,7 @@ fn profile_editor_overlay(
                         div()
                             .flex()
                             .flex_col()
-                            .gap(px(10.0))
+                            .gap(px(7.0))
                             .child(profile_inline_field("主机", inputs.host.clone(), dark))
                             .child(profile_inline_field("端口", inputs.port.clone(), dark))
                             .child(profile_inline_field(
@@ -2766,10 +2716,10 @@ fn profile_editor_overlay(
                         div()
                             .flex()
                             .flex_col()
-                            .gap(px(10.0))
+                            .gap(px(7.0))
                             .child(profile_label_value_row(
                                 "方式",
-                                div().flex().gap(px(8.0)).children(
+                                div().flex().gap(px(6.0)).children(
                                     [
                                         AuthMethod::Password,
                                         AuthMethod::PrivateKey,
@@ -2784,11 +2734,9 @@ fn profile_editor_overlay(
                                         )
                                         .id(("ftp-editor-auth", auth_method_index(auth_method)))
                                         .on_click({
-                                            let panel = Rc::clone(&panel);
-                                            move |_, window, _cx| {
-                                                panel
-                                                    .borrow_mut()
-                                                    .set_editor_auth_method(auth_method);
+                                            let panel = panel.clone();
+                                            move |_, window, cx| {
+                                                cx.update_entity(&panel, |view, _cx| view.set_editor_auth_method(auth_method));
                                                 window.refresh();
                                             }
                                         })
@@ -2818,12 +2766,12 @@ fn profile_editor_overlay(
                     ))
                     .child(
                         div()
-                            .rounded(px(12.0))
+                            .rounded(px(8.0))
                             .border_1()
                             .border_color(ui::border_light())
                             .bg(theme::semantic().bg_surface)
-                            .px(px(12.0))
-                            .py(px(10.0))
+                            .px(px(10.0))
+                            .py(px(8.0))
                             .flex()
                             .items_center()
                             .justify_between()
@@ -2831,11 +2779,11 @@ fn profile_editor_overlay(
                                 div()
                                     .flex()
                                     .items_center()
-                                    .gap(px(8.0))
+                                    .gap(px(6.0))
                                     .child(editor_section_title("高级选项", dark))
                                     .child(
                                         div()
-                                            .text_size(px(11.0))
+                                            .text_size(px(10.0))
                                             .text_color(ui::text_tertiary())
                                             .child("默认目录 · 编码 · 超时 · 跳板机"),
                                     ),
@@ -2851,9 +2799,9 @@ fn profile_editor_overlay(
                                 )
                                 .id("ftp-editor-toggle-advanced")
                                 .on_click({
-                                    let panel = Rc::clone(&panel);
-                                    move |_, window, _cx| {
-                                        panel.borrow_mut().toggle_editor_show_advanced();
+                                    let panel = panel.clone();
+                                    move |_, window, cx| {
+                                        cx.update_entity(&panel, |view, _cx| view.toggle_editor_show_advanced());
                                         window.refresh();
                                     }
                                 }),
@@ -2866,7 +2814,7 @@ fn profile_editor_overlay(
                             div()
                                 .flex()
                                 .flex_col()
-                                .gap(px(10.0))
+                                .gap(px(7.0))
                                 .child(profile_inline_field(
                                     "连接超时(秒)",
                                     inputs.connect_timeout_secs.clone(),
@@ -2888,7 +2836,7 @@ fn profile_editor_overlay(
                                 .child(
                                     div()
                                         .flex()
-                                        .gap(px(8.0))
+                                        .gap(px(6.0))
                                         .child(
                                             segmented_chip(
                                                 "FTP 被动模式",
@@ -2898,11 +2846,9 @@ fn profile_editor_overlay(
                                             .id("ftp-editor-passive")
                                             .on_click(
                                                 {
-                                                    let panel = Rc::clone(&panel);
-                                                    move |_, window, _cx| {
-                                                        panel
-                                                            .borrow_mut()
-                                                            .toggle_editor_passive_mode();
+                                                    let panel = panel.clone();
+                                                    move |_, window, cx| {
+                                                        cx.update_entity(&panel, |view, _cx| view.toggle_editor_passive_mode());
                                                         window.refresh();
                                                     }
                                                 },
@@ -2912,11 +2858,9 @@ fn profile_editor_overlay(
                                             segmented_chip("使用跳板机", editor.jump_enabled, dark)
                                                 .id("ftp-editor-jump")
                                                 .on_click({
-                                                    let panel = Rc::clone(&panel);
-                                                    move |_, window, _cx| {
-                                                        panel
-                                                            .borrow_mut()
-                                                            .toggle_editor_jump_enabled();
+                                                    let panel = panel.clone();
+                                                    move |_, window, cx| {
+                                                        cx.update_entity(&panel, |view, _cx| view.toggle_editor_jump_enabled());
                                                         window.refresh();
                                                     }
                                                 }),
@@ -2925,9 +2869,9 @@ fn profile_editor_overlay(
                                             segmented_chip("固定到顶部", editor.pinned, dark)
                                                 .id("ftp-editor-pinned")
                                                 .on_click({
-                                                    let panel = Rc::clone(&panel);
-                                                    move |_, window, _cx| {
-                                                        panel.borrow_mut().toggle_editor_pinned();
+                                                    let panel = panel.clone();
+                                                    move |_, window, cx| {
+                                                        cx.update_entity(&panel, |view, _cx| view.toggle_editor_pinned());
                                                         window.refresh();
                                                     }
                                                 }),
@@ -2980,8 +2924,8 @@ fn profile_editor_overlay(
             )
             .child(
                 div()
-                    .px(px(18.0))
-                    .py(px(10.0))
+                    .px(px(14.0))
+                    .py(px(8.0))
                     .border_t_1()
                     .border_color(ui::border_light())
                     .flex()
@@ -2989,7 +2933,7 @@ fn profile_editor_overlay(
                     .justify_between()
                     .child(
                         div()
-                            .text_size(px(11.0))
+                            .text_size(px(10.0))
                             .text_color(ui::text_tertiary())
                             .child("敏感信息以明文方式保存到本地数据库。"),
                     )
@@ -2997,14 +2941,14 @@ fn profile_editor_overlay(
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(10.0))
+                            .gap(px(7.0))
                             .child(
                                 frost_button("取消", None, "ghost", dark, false)
                                     .id("ftp-close-editor")
                                     .on_click({
-                                        let panel = Rc::clone(&panel);
-                                        move |_, window, _cx| {
-                                            panel.borrow_mut().close_editor();
+                                        let panel = panel.clone();
+                                        move |_, window, cx| {
+                                            cx.update_entity(&panel, |view, _cx| view.close_editor());
                                             window.refresh();
                                         }
                                     }),
@@ -3013,9 +2957,9 @@ fn profile_editor_overlay(
                                 frost_button("保存", None, "primary", dark, false)
                                     .id("ftp-save-editor")
                                     .on_click({
-                                        let panel = Rc::clone(&panel);
+                                        let panel = panel.clone();
                                         move |_, window, cx| {
-                                            panel.borrow_mut().save_editor(cx);
+                                            cx.update_entity(&panel, |view, _cx| view.save_editor(_cx));
                                             window.refresh();
                                         }
                                     }),
@@ -3028,18 +2972,18 @@ fn profile_editor_overlay(
 
 fn profile_form_section(title: &'static str, _dark: bool, body: gpui::Div) -> gpui::Div {
     div()
-        .rounded(px(8.0))
+        .rounded(px(6.0))
         .border_1()
         .border_color(ui::border_light())
         .bg(theme::semantic().bg_surface)
-        .px(px(14.0))
-        .py(px(10.0))
+        .px(px(10.0))
+        .py(px(8.0))
         .flex()
         .flex_col()
-        .gap(px(8.0))
+        .gap(px(6.0))
         .child(
             div()
-                .text_size(px(12.0))
+                .text_size(px(11.0))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(theme::semantic().text_primary)
                 .child(title),
@@ -3051,27 +2995,27 @@ fn profile_label_value_row(label: &'static str, content: gpui::Div, _dark: bool)
     div()
         .border_b_1()
         .border_color(ui::border_light())
-        .h(px(42.0))
+        .h(px(36.0))
         .px(px(2.0))
         .flex()
         .items_center()
-        .gap(px(10.0))
+        .gap(px(7.0))
         .child(
             div()
-                .w(px(68.0))
-                .text_size(px(11.0))
+                .w(px(60.0))
+                .text_size(px(10.0))
                 .text_color(theme::semantic().text_primary)
                 .child(label),
         )
         .child(
             div()
                 .flex_1()
-                .h(px(34.0))
-                .rounded(px(8.0))
+                .h(px(30.0))
+                .rounded(px(6.0))
                 .border_1()
                 .border_color(ui::border_light())
                 .bg(theme::semantic().bg_elevated)
-                .px(px(10.0))
+                .px(px(8.0))
                 .flex()
                 .items_center()
                 .child(content),
@@ -3085,32 +3029,32 @@ fn profile_inline_field(label: &'static str, input: Entity<TextInput>, dark: boo
 fn new_folder_overlay(
     dark: bool,
     input: Option<Entity<TextInput>>,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
     overlay_shell(
         dark,
         "ftp-folder-overlay",
-        Rc::clone(&panel),
+        panel.clone(),
         div()
-            .w(px(420.0))
-            .rounded(px(16.0))
+            .w(px(380.0))
+            .rounded(px(8.0))
             .border_1()
             .border_color(ui::border_light())
             .bg(theme::semantic().bg_elevated)
             .shadow_lg()
-            .p(px(18.0))
+            .p(px(14.0))
             .flex()
             .flex_col()
-            .gap(px(12.0))
+            .gap(px(8.0))
             .child(
                 div()
-                    .text_size(px(14.0))
+                    .text_size(px(12.0))
                     .font_weight(FontWeight::SEMIBOLD)
                     .child("新建远程目录"),
             )
             .child(
                 div()
-                    .rounded(px(10.0))
+                    .rounded(px(6.0))
                     .border_1()
                     .border_color(ui::border_light())
                     .bg(ui::bg_keycap())
@@ -3120,14 +3064,14 @@ fn new_folder_overlay(
                 div()
                     .flex()
                     .justify_end()
-                    .gap(px(8.0))
+                    .gap(px(6.0))
                     .child(
                         frost_button("取消", None, "ghost", dark, false)
                             .id("ftp-cancel-folder")
                             .on_click({
-                                let panel = Rc::clone(&panel);
-                                move |_, window, _cx| {
-                                    panel.borrow_mut().close_folder_sheet();
+                                let panel = panel.clone();
+                                move |_, window, cx| {
+                                    cx.update_entity(&panel, |view, _cx| view.close_folder_sheet());
                                     window.refresh();
                                 }
                             }),
@@ -3136,9 +3080,9 @@ fn new_folder_overlay(
                         frost_button("创建", Some("+"), "primary", dark, false)
                             .id("ftp-confirm-folder")
                             .on_click({
-                                let panel = Rc::clone(&panel);
+                                let panel = panel.clone();
                                 move |_, window, cx| {
-                                    panel.borrow_mut().create_new_folder(cx);
+                                    cx.update_entity(&panel, |view, _cx| view.create_new_folder(_cx));
                                     window.refresh();
                                 }
                             }),
@@ -3151,7 +3095,7 @@ fn profile_menu_overlay(
     dark: bool,
     menu: Option<ProfileMenuState>,
     summaries_by_id: &HashMap<i64, SessionSummary>,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
 ) -> gpui::AnyElement {
     let Some(menu) = menu else {
         return div().into_any_element();
@@ -3171,9 +3115,9 @@ fn profile_menu_overlay(
                 .bg(hsla(0.0, 0.0, 0.0, 0.001))
                 .id("ftp-profile-menu-backdrop")
                 .on_click({
-                    let panel = Rc::clone(&panel);
-                    move |_, window, _cx| {
-                        panel.borrow_mut().close_menus();
+                    let panel = panel.clone();
+                    move |_, window, cx| {
+                        cx.update_entity(&panel, |view, _cx| view.close_menus());
                         window.refresh();
                     }
                 }),
@@ -3184,44 +3128,44 @@ fn profile_menu_overlay(
                 .top(menu.position.y)
                 .left(menu.position.x)
                 .w(px(196.0))
-                .rounded(px(12.0))
+                .rounded(px(8.0))
                 .border_1()
                 .border_color(ui::border_light())
                 .bg(theme::semantic().bg_elevated)
                 .shadow_lg()
-                .p(px(6.0))
+                .p(px(4.0))
                 .flex()
                 .flex_col()
-                .gap(px(4.0))
+                .gap(px(3.0))
                 .child(
                     menu_item("连接 / 切换", dark)
                         .id("ftp-menu-connect")
                         .on_click({
-                            let panel = Rc::clone(&panel);
+                            let panel = panel.clone();
                             let profile_id = menu.profile.id;
-                            move |_, window, _cx| {
-                                panel.borrow_mut().connect_profile(profile_id);
+                            move |_, window, cx| {
+                                cx.update_entity(&panel, |view, _cx| view.connect_profile(profile_id));
                                 window.refresh();
                             }
                         }),
                 )
                 .when(summary.is_some(), |menu_el| {
-                    let panel = Rc::clone(&panel);
+                    let panel = panel.clone();
                     let profile_id = menu.profile.id;
                     menu_el.child(
                         menu_item("断开该 session", dark)
                             .id("ftp-menu-disconnect")
-                            .on_click(move |_, window, _cx| {
-                                panel.borrow_mut().disconnect_profile(profile_id);
+                            .on_click(move |_, window, cx| {
+                                cx.update_entity(&panel, |view, _cx| view.disconnect_profile(profile_id));
                                 window.refresh();
                             }),
                     )
                 })
                 .child(menu_item("编辑配置", dark).id("ftp-menu-edit").on_click({
-                    let panel = Rc::clone(&panel);
+                    let panel = panel.clone();
                     let profile_id = menu.profile.id;
                     move |_, window, cx| {
-                        panel.borrow_mut().open_profile_editor(profile_id, cx);
+                        cx.update_entity(&panel, |view, _cx| view.open_profile_editor(profile_id, _cx));
                         window.refresh();
                     }
                 }))
@@ -3229,20 +3173,20 @@ fn profile_menu_overlay(
                     menu_item("复制配置", dark)
                         .id("ftp-menu-duplicate")
                         .on_click({
-                            let panel = Rc::clone(&panel);
+                            let panel = panel.clone();
                             let profile = menu.profile.clone();
                             move |_, window, cx| {
-                                panel.borrow_mut().duplicate_profile(&profile, cx);
+                                cx.update_entity(&panel, |view, _cx| view.duplicate_profile(&profile, _cx));
                                 window.refresh();
                             }
                         }),
                 )
                 .child(menu_item("删除配置", dark).id("ftp-menu-delete").on_click({
-                    let panel = Rc::clone(&panel);
+                    let panel = panel.clone();
                     let profile_id = menu.profile.id;
-                    move |_, window, _cx| {
-                        let _ = panel.borrow().service.delete_profile(profile_id);
-                        panel.borrow_mut().close_menus();
+                    move |_, window, cx| {
+                        let _ = panel.read(cx).service.delete_profile(profile_id);
+                        cx.update_entity(&panel, |view, _cx| view.close_menus());
                         window.refresh();
                     }
                 })),
@@ -3253,7 +3197,7 @@ fn profile_menu_overlay(
 fn file_menu_overlay(
     dark: bool,
     menu: Option<FileMenuState>,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
 ) -> gpui::AnyElement {
     let Some(menu) = menu else {
         return div().into_any_element();
@@ -3273,9 +3217,9 @@ fn file_menu_overlay(
                 .bg(hsla(0.0, 0.0, 0.0, 0.001))
                 .id("ftp-file-menu-backdrop")
                 .on_click({
-                    let panel = Rc::clone(&panel);
-                    move |_, window, _cx| {
-                        panel.borrow_mut().close_menus();
+                    let panel = panel.clone();
+                    move |_, window, cx| {
+                        cx.update_entity(&panel, |view, _cx| view.close_menus());
                         window.refresh();
                     }
                 }),
@@ -3286,47 +3230,47 @@ fn file_menu_overlay(
                 .top(menu.position.y)
                 .left(menu.position.x)
                 .w(px(196.0))
-                .rounded(px(12.0))
+                .rounded(px(8.0))
                 .border_1()
                 .border_color(ui::border_light())
                 .bg(theme::semantic().bg_elevated)
                 .shadow_lg()
-                .p(px(6.0))
+                .p(px(4.0))
                 .flex()
                 .flex_col()
-                .gap(px(4.0))
+                .gap(px(3.0))
                 .when(menu.item.is_dir, |menu_el| {
-                    let panel = Rc::clone(&panel);
+                    let panel = panel.clone();
                     let item = menu.item.clone();
                     menu_el.child(
                         menu_item("进入目录", dark)
                             .id("ftp-file-menu-enter")
-                            .on_click(move |_, window, _cx| {
-                                panel.borrow_mut().navigate_dir(&item.path);
+                            .on_click(move |_, window, cx| {
+                                cx.update_entity(&panel, |view, _cx| view.navigate_dir(&item.path));
                                 window.refresh();
                             }),
                     )
                 })
                 .when(!menu.item.is_dir, |menu_el| {
-                    let panel = Rc::clone(&panel);
+                    let panel = panel.clone();
                     let item = menu.item.clone();
                     menu_el.child(
                         menu_item("下载到本地", dark)
                             .id("ftp-file-menu-download")
-                            .on_click(move |_, window, _cx| {
-                                panel.borrow_mut().download_file(&item);
+                            .on_click(move |_, window, cx| {
+                                cx.update_entity(&panel, |view, _cx| view.download_file(&item));
                                 window.refresh();
                             }),
                     )
                 })
                 .when(can_open_text, |menu_el| {
-                    let panel = Rc::clone(&panel);
+                    let panel = panel.clone();
                     let item = menu.item.clone();
                     menu_el.child(
                         menu_item("打开文本文件", dark)
                             .id("ftp-file-menu-text")
-                            .on_click(move |_, window, _cx| {
-                                panel.borrow_mut().open_text_file(&item);
+                            .on_click(move |_, window, cx| {
+                                cx.update_entity(&panel, |view, _cx| view.open_text_file(&item));
                                 window.refresh();
                             }),
                     )
@@ -3335,10 +3279,10 @@ fn file_menu_overlay(
                     menu_item("删除", dark)
                         .id("ftp-file-menu-delete")
                         .on_click({
-                            let panel = Rc::clone(&panel);
+                            let panel = panel.clone();
                             let item = menu.item.clone();
-                            move |_, window, _cx| {
-                                panel.borrow_mut().delete_remote_item(&item);
+                            move |_, window, cx| {
+                                cx.update_entity(&panel, |view, _cx| view.delete_remote_item(&item));
                                 window.refresh();
                             }
                         }),
@@ -3350,7 +3294,7 @@ fn file_menu_overlay(
 fn overlay_shell(
     dark: bool,
     backdrop_id: &'static str,
-    panel: Rc<RefCell<FtpSftpSshView>>,
+    panel: Entity<FtpSftpSshView>,
     content: impl IntoElement,
 ) -> impl IntoElement {
     div()
@@ -3366,11 +3310,12 @@ fn overlay_shell(
                 .left_0()
                 .bg(hsla(0.0, 0.0, 0.0, if dark { 0.42 } else { 0.24 }))
                 .id(backdrop_id)
-                .on_click(move |_, window, _cx| {
-                    let mut panel = panel.borrow_mut();
-                    panel.close_menus();
-                    panel.close_editor();
-                    panel.close_folder_sheet();
+                .on_click(move |_, window, cx| {
+                    cx.update_entity(&panel, |view, _cx| {
+                        view.close_menus();
+                        view.close_editor();
+                        view.close_folder_sheet();
+                    });
                     window.refresh();
                 }),
         )
@@ -3389,7 +3334,7 @@ fn overlay_shell(
 
 fn search_input_shell(input: Option<Entity<TextInput>>, _dark: bool) -> impl IntoElement {
     div()
-        .rounded(px(8.0))
+        .rounded(px(6.0))
         .border_1()
         .border_color(ui::border_light())
         .bg(theme::semantic().bg_surface)
@@ -3426,29 +3371,29 @@ fn protocol_hint_card(
     };
 
     div()
-        .rounded(px(12.0))
+        .rounded(px(8.0))
         .border_1()
         .border_color(ui::border_light())
         .bg(ui::bg_keycap())
-        .px(px(12.0))
-        .py(px(10.0))
-        .text_size(px(10.0))
-        .line_height(px(16.0))
+        .px(px(10.0))
+        .py(px(8.0))
+        .text_size(px(9.0))
+        .line_height(px(14.0))
         .text_color(ui::text_secondary())
         .child(hint)
 }
 
 fn editor_notice(notice: String, _dark: bool) -> impl IntoElement {
     div()
-        .text_size(px(11.0))
-        .line_height(px(18.0))
+        .text_size(px(10.0))
+        .line_height(px(15.0))
         .text_color(ui::text_secondary())
         .child(notice)
 }
 
 fn editor_section_title(label: &'static str, _dark: bool) -> impl IntoElement {
     div()
-        .text_size(px(10.0))
+        .text_size(px(9.0))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(ui::text_tertiary())
         .child(label)
@@ -3458,16 +3403,16 @@ fn profile_field(label: &'static str, input: Entity<TextInput>, _dark: bool) -> 
     div()
         .flex()
         .flex_col()
-        .gap(px(5.0))
+        .gap(px(3.0))
         .child(
             div()
-                .text_size(px(10.0))
+                .text_size(px(9.0))
                 .text_color(ui::text_secondary())
                 .child(label),
         )
         .child(
             div()
-                .rounded(px(10.0))
+                .rounded(px(6.0))
                 .border_1()
                 .border_color(ui::border_light())
                 .bg(ui::bg_keycap())
@@ -3477,9 +3422,9 @@ fn profile_field(label: &'static str, input: Entity<TextInput>, _dark: bool) -> 
 
 fn segmented_chip(label: &'static str, active: bool, dark: bool) -> gpui::Div {
     div()
-        .h(px(26.0))
-        .px(px(9.0))
-        .rounded(px(8.0))
+        .h(px(22.0))
+        .px(px(7.0))
+        .rounded(px(6.0))
         .bg(if active {
             if dark {
                 hsla(0.54, 0.78, 0.56, 0.18)
@@ -3502,7 +3447,7 @@ fn segmented_chip(label: &'static str, active: bool, dark: bool) -> gpui::Div {
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(10.0))
+        .text_size(px(9.0))
         .text_color(if active {
             theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan)
         } else {
@@ -3513,19 +3458,19 @@ fn segmented_chip(label: &'static str, active: bool, dark: bool) -> gpui::Div {
 
 fn status_pill(label: String, color: gpui::Rgba, _dark: bool) -> impl IntoElement {
     div()
-        .h(px(22.0))
-        .px(px(8.0))
+        .h(px(20.0))
+        .px(px(6.0))
         .rounded(px(999.0))
         .bg(ui::bg_keycap())
         .border_1()
         .border_color(ui::border_light())
         .flex()
         .items_center()
-        .gap(px(6.0))
-        .child(div().size(px(6.0)).rounded(px(999.0)).bg(color))
+        .gap(px(4.0))
+        .child(div().size(px(5.0)).rounded(px(999.0)).bg(color))
         .child(
             div()
-                .text_size(px(10.0))
+                .text_size(px(8.0))
                 .text_color(theme::semantic().text_primary)
                 .child(label),
         )
@@ -3538,18 +3483,18 @@ fn meta_badge(label: String, color: gpui::Rgba, dark: bool) -> impl IntoElement 
             color,
             if dark { 0.18 } else { 0.10 },
         ))
-        .px(px(8.0))
-        .py(px(4.0))
-        .text_size(px(9.0))
+        .px(px(6.0))
+        .py(px(3.0))
+        .text_size(px(8.0))
         .text_color(if dark { color } else { color })
         .child(label)
 }
 
 fn small_action(label: &'static str, dark: bool) -> gpui::Div {
     div()
-        .h(px(22.0))
-        .px(px(7.0))
-        .rounded(px(6.0))
+        .h(px(20.0))
+        .px(px(5.0))
+        .rounded(px(4.0))
         .border_1()
         .border_color(ui::border_light())
         .bg(ui::bg_keycap())
@@ -3557,15 +3502,15 @@ fn small_action(label: &'static str, dark: bool) -> gpui::Div {
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(10.0))
+        .text_size(px(9.0))
         .text_color(theme::semantic().text_primary)
         .child(label)
 }
 
 fn small_icon_action(icon: IconName, dark: bool) -> gpui::Div {
     div()
-        .size(px(24.0))
-        .rounded(px(6.0))
+        .size(px(22.0))
+        .rounded(px(4.0))
         .border_1()
         .border_color(ui::border_light())
         .bg(ui::bg_keycap())
@@ -3574,14 +3519,14 @@ fn small_icon_action(icon: IconName, dark: bool) -> gpui::Div {
         .items_center()
         .justify_center()
         .text_color(theme::semantic().text_primary)
-        .child(Icon::new(icon).with_size(px(13.0)))
+        .child(Icon::new(icon).with_size(px(12.0)))
 }
 
 fn small_icon_text_action(icon: IconName, label: &'static str, dark: bool) -> gpui::Div {
     div()
-        .h(px(24.0))
-        .px(px(7.0))
-        .rounded(px(6.0))
+        .h(px(22.0))
+        .px(px(5.0))
+        .rounded(px(4.0))
         .border_1()
         .border_color(ui::border_light())
         .bg(ui::bg_keycap())
@@ -3589,22 +3534,22 @@ fn small_icon_text_action(icon: IconName, label: &'static str, dark: bool) -> gp
         .flex()
         .items_center()
         .justify_center()
-        .gap(px(4.0))
-        .text_size(px(10.0))
+        .gap(px(3.0))
+        .text_size(px(9.0))
         .text_color(theme::semantic().text_primary)
-        .child(Icon::new(icon).with_size(px(12.0)))
+        .child(Icon::new(icon).with_size(px(11.0)))
         .child(label)
 }
 
 fn menu_item(label: &'static str, dark: bool) -> gpui::Div {
     div()
-        .h(px(30.0))
-        .rounded(px(8.0))
-        .px(px(10.0))
+        .h(px(26.0))
+        .rounded(px(6.0))
+        .px(px(8.0))
         .hover(move |style| style.bg(row_hover_color(dark)).cursor_pointer())
         .flex()
         .items_center()
-        .text_size(px(11.0))
+        .text_size(px(9.0))
         .text_color(theme::semantic().text_primary)
         .child(label)
 }
@@ -3617,15 +3562,15 @@ fn transfer_count_chip(
     emphasize: bool,
 ) -> impl IntoElement {
     div()
-        .h(px(18.0))
-        .px(px(7.0))
+        .h(px(16.0))
+        .px(px(5.0))
         .rounded(px(999.0))
         .bg(if emphasize {
             theme::rgba_with_alpha(color, if dark { 0.20 } else { 0.12 })
         } else {
             ui::bg_keycap()
         })
-        .text_size(px(9.0))
+        .text_size(px(8.0))
         .text_color(if emphasize {
             color
         } else {
@@ -3639,24 +3584,24 @@ fn transfer_count_chip(
 
 fn empty_state_card(_dark: bool, title: &'static str, body: &str) -> impl IntoElement {
     div()
-        .rounded(px(14.0))
+        .rounded(px(8.0))
         .border_1()
         .border_color(ui::border_light())
         .bg(ui::bg_keycap())
-        .p(px(16.0))
+        .p(px(12.0))
         .flex()
         .flex_col()
-        .gap(px(6.0))
+        .gap(px(4.0))
         .child(
             div()
-                .text_size(px(12.0))
+                .text_size(px(11.0))
                 .font_weight(FontWeight::SEMIBOLD)
                 .child(title),
         )
         .child(
             div()
-                .text_size(px(10.0))
-                .line_height(px(16.0))
+                .text_size(px(8.0))
+                .line_height(px(14.0))
                 .text_color(ui::text_secondary())
                 .child(body.to_string()),
         )
@@ -3664,8 +3609,8 @@ fn empty_state_card(_dark: bool, title: &'static str, body: &str) -> impl IntoEl
 
 fn status_bar(dark: bool, accent: gpui::Rgba, message: String) -> impl IntoElement {
     div()
-        .h(px(28.0))
-        .px(px(14.0))
+        .h(px(26.0))
+        .px(px(10.0))
         .border_t_1()
         .border_color(ui::border_light())
         .flex()
@@ -3708,8 +3653,8 @@ fn profile_input(
         input.set_style(
             TextInputStyle {
                 height,
-                font_size: 12.0,
-                padding: 8.0,
+                font_size: 11.0,
+                padding: 6.0,
             },
             cx,
         );
@@ -3717,7 +3662,7 @@ fn profile_input(
     })
 }
 
-fn set_input_text(input: &Entity<TextInput>, text: String, cx: &mut App) {
+fn set_input_text(input: &Entity<TextInput>, text: String, cx: &mut impl AppContext) {
     input.update(cx, |input, input_cx| input.set_text(text, input_cx));
 }
 

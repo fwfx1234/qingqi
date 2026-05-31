@@ -1,6 +1,9 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
-use gpui::{AnyElement, App, IntoElement, Window};
+use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 
 use qingqi_plugin::{
     command::{Command, ContextKind, ContextMatcher},
@@ -15,7 +18,7 @@ use super::{manifest, service::DownloadService, store::DownloadStore, view};
 pub struct DownloadManagerPlugin {
     database: Arc<DatabaseService>,
     paths: AppPaths,
-    service: Option<Rc<RefCell<DownloadService>>>,
+    service: Option<Arc<Mutex<DownloadService>>>,
     watch_started: bool,
 }
 
@@ -29,23 +32,23 @@ impl DownloadManagerPlugin {
         })
     }
 
-    fn service(&mut self) -> anyhow::Result<Rc<RefCell<DownloadService>>> {
+    fn service(&mut self) -> anyhow::Result<Arc<Mutex<DownloadService>>> {
         if let Some(service) = &self.service {
-            return Ok(Rc::clone(service));
+            return Ok(Arc::clone(service));
         }
         let store = DownloadStore::open(
             Arc::clone(&self.database),
             &qingqi_plugin::database::feature_database_key(manifest::PLUGIN_ID, "tasks"),
         )?;
         let save_dir = self.paths.feature_output_dir(manifest::PLUGIN_ID);
-        let service = Rc::new(RefCell::new(DownloadService::new(store, save_dir)));
-        self.service = Some(Rc::clone(&service));
+        let service = Arc::new(Mutex::new(DownloadService::new(store, save_dir)));
+        self.service = Some(Arc::clone(&service));
         Ok(service)
     }
 
     fn ensure_watcher(
         &mut self,
-        service: Rc<RefCell<DownloadService>>,
+        service: Arc<Mutex<DownloadService>>,
         events: AppEventBus,
         cx: &mut App,
     ) {
@@ -55,14 +58,16 @@ impl DownloadManagerPlugin {
         self.watch_started = true;
 
         cx.spawn(async move |async_cx| {
-            let mut revision = service.borrow().revision();
+            let mut revision = service.lock().unwrap().revision();
             loop {
                 async_cx
                     .background_executor()
                     .timer(Duration::from_millis(400))
                     .await;
-                let active_count = service.borrow().active_count();
-                let next_revision = service.borrow().revision();
+                let (active_count, next_revision) = {
+                    let svc = service.lock().unwrap();
+                    (svc.active_count(), svc.revision())
+                };
                 if active_count > 0 || next_revision != revision {
                     revision = next_revision;
                     events.publish(manifest::PLUGIN_ID, AppEventKind::JobsChanged);
@@ -97,9 +102,14 @@ impl Plugin for DownloadManagerPlugin {
 
     fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let service = self.service()?;
-        self.ensure_watcher(Rc::clone(&service), cx.events.clone(), cx.app);
-        let panel = Rc::new(RefCell::new(view::DownloadManagerView::new(service)));
-        panel.borrow_mut().init(cx.app);
+        self.ensure_watcher(Arc::clone(&service), cx.events.clone(), cx.app);
+
+        let panel = cx.app.new(|cx| {
+            let mut panel = view::DownloadManagerView::new(service);
+            panel.init(cx);
+            panel
+        });
+
         Ok(PluginView::Window(Box::new(DownloadManagerView { panel })))
     }
 
@@ -109,7 +119,7 @@ impl Plugin for DownloadManagerPlugin {
 }
 
 struct DownloadManagerView {
-    panel: Rc<RefCell<view::DownloadManagerView>>,
+    panel: Entity<view::DownloadManagerView>,
 }
 
 impl WindowView for DownloadManagerView {
@@ -122,13 +132,8 @@ impl WindowView for DownloadManagerView {
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
-        view::DownloadManagerElement {
-            panel: Rc::clone(&self.panel),
-        }
-        .into_any_element()
+        self.panel.clone().into_any_element()
     }
 
-    fn on_close(&mut self) {
-        self.panel.borrow_mut().cleanup();
-    }
+    fn on_close(&mut self) {}
 }

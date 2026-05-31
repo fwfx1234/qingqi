@@ -43,7 +43,7 @@ pub(super) fn history_page(
                 .h_full()
                 .flex()
                 .flex_col()
-                .bg(theme::semantic().bg_subtle)
+                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.65))
                 .child(history_top_bar(
                     handle.clone(),
                     query_input,
@@ -56,7 +56,7 @@ pub(super) fn history_page(
                         .min_h(px(0.0))
                         .flex()
                         .flex_col()
-                        .child(div().px(px(16.0)).pt(px(16.0)).child(render_filter_tabs(
+                        .child(div().px(px(8.0)).pt(px(8.0)).child(render_filter_tabs(
                             handle.clone(),
                             current_filter,
                             dark,
@@ -66,8 +66,8 @@ pub(super) fn history_page(
                             div()
                                 .flex_1()
                                 .min_h(px(0.0))
-                                .px(px(12.0))
-                                .pb(px(14.0))
+                                .px(px(4.0))
+                                .pb(px(6.0))
                                 .child(history_list(
                                     handle.clone(),
                                     items,
@@ -81,21 +81,21 @@ pub(super) fn history_page(
         )
         .child(
             div()
-                .w(px(430.0))
-                .min_w(px(430.0))
+                .w(px(370.0))
+                .min_w(px(370.0))
                 .h_full()
                 .border_l_1()
-                .border_color(theme::semantic().border_default)
-                .bg(theme::semantic().bg_page)
+                .border_color(ui::border_light())
+                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.75))
                 .flex()
                 .flex_col()
                 .child(
                     div()
                         .flex_1()
                         .min_h(px(0.0))
-                        .px(px(24.0))
-                        .pt(px(24.0))
-                        .pb(px(14.0))
+                        .px(px(14.0))
+                        .pt(px(14.0))
+                        .pb(px(8.0))
                         .child(detail_panel(
                             handle,
                             selected_record,
@@ -114,31 +114,31 @@ fn history_top_bar(
     dark: bool,
 ) -> impl IntoElement {
     div()
-        .h(px(62.0))
-        .px(px(18.0))
+        .h(px(44.0))
+        .px(px(8.0))
         .border_b_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_page)
+        .border_color(ui::border_light())
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
         .flex()
         .items_center()
-        .child(div().w(px(220.0)))
+        .child(div().w(px(140.0)))
         .child(
             div()
                 .flex_1()
                 .flex()
                 .justify_center()
-                .child(search_field(query_input, dark).w(px(326.0))),
+                .child(search_field(query_input, dark).w(px(280.0))),
         )
         .child(
             div()
-                .w(px(220.0))
+                .w(px(140.0))
                 .flex()
                 .items_center()
                 .justify_end()
-                .gap(px(10.0))
+                .gap(px(6.0))
                 .child(
                     div()
-                        .text_size(px(13.0))
+                        .text_size(px(11.0))
                         .text_color(theme::semantic().text_secondary)
                         .child(format!("{item_count} 条")),
                 )
@@ -149,11 +149,11 @@ fn history_top_bar(
 fn top_bar_icon_button(handle: Entity<ClipboardView>, _dark: bool) -> impl IntoElement {
     div()
         .id("clipboard-open-settings")
-        .size(px(30.0))
-        .rounded(px(6.0))
+        .size(px(26.0))
+        .rounded(px(4.0))
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_elevated)
+        .border_color(ui::border_light())
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
         .flex()
         .items_center()
         .justify_center()
@@ -174,27 +174,28 @@ fn top_bar_icon_button(handle: Entity<ClipboardView>, _dark: bool) -> impl IntoE
 fn history_filter_divider(_dark: bool) -> impl IntoElement {
     div()
         .w_full()
-        .mt(px(14.0))
-        .mb(px(10.0))
+        .mt(px(6.0))
+        .mb(px(4.0))
         .h(px(1.0))
-        .bg(theme::semantic().border_default)
+        .bg(ui::border_light())
 }
 
 fn search_field(query_input: Entity<TextInput>, _dark: bool) -> gpui::Div {
     div()
         .min_w(px(0.0))
-        .h(px(32.0))
-        .rounded(px(9.0))
+        .h(px(28.0))
+        .rounded(px(6.0))
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_elevated)
-        .px(px(10.0))
+        .border_color(ui::border_light())
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
+        .shadow(glass_shadow())
+        .px(px(8.0))
         .flex()
         .items_center()
-        .gap(px(8.0))
+        .gap(px(4.0))
         .child(
             Icon::new(IconName::Search)
-                .with_size(ComponentSize::Medium)
+                .with_size(ComponentSize::Small)
                 .text_color(theme::semantic().text_placeholder),
         )
         .child(div().flex_1().child(query_input.into_any_element()))
@@ -213,29 +214,29 @@ fn render_filter_tabs(
             let h = handle.clone();
             let el = div()
                 .id(("clipboard-filter-tab", idx))
-                .h(px(26.0))
-                .px(px(10.0))
-                .rounded(px(6.0))
+                .h(px(24.0))
+                .px(px(8.0))
+                .rounded(px(4.0))
                 .bg(if is_active {
                     theme::rgba_with_alpha(
                         ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue),
                         0.12,
                     )
                 } else {
-                    theme::semantic().bg_elevated.into()
+                    theme::rgba_with_alpha(theme::semantic().bg_elevated, 0.6)
                 })
                 .border_1()
                 .border_color(if is_active {
-                    ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
+                    gpui::Hsla::from(ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue))
                 } else {
-                    theme::semantic().border_default
+                    ui::border_light()
                 })
                 .text_color(if is_active {
                     ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
                 } else {
                     theme::semantic().text_secondary
                 })
-                .text_size(px(12.0))
+                .text_size(px(10.0))
                 .font_weight(if is_active {
                     gpui::FontWeight::SEMIBOLD
                 } else {
@@ -265,7 +266,7 @@ fn render_filter_tabs(
         })
         .collect();
 
-    div().flex().items_center().gap(px(6.0)).children(tabs)
+    div().flex().items_center().gap(px(4.0)).children(tabs)
 }
 
 fn history_list(
@@ -331,11 +332,11 @@ fn empty_state_text(query: &str, _dark: bool, is_empty: bool) -> impl IntoElemen
         .flex_col()
         .items_center()
         .justify_center()
-        .gap_3()
+        .gap_1p5()
         .child(
             div()
-                .size(px(48.0))
-                .rounded(px(12.0))
+                .size(px(36.0))
+                .rounded(px(8.0))
                 .bg(theme::rgba_with_alpha(
                     ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue),
                     0.10,
@@ -343,7 +344,7 @@ fn empty_state_text(query: &str, _dark: bool, is_empty: bool) -> impl IntoElemen
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(16.0))
+                .text_size(px(14.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(ui::accent_color(
                     qingqi_plugin::plugin_spec::PluginAccent::Blue,
@@ -352,14 +353,14 @@ fn empty_state_text(query: &str, _dark: bool, is_empty: bool) -> impl IntoElemen
         )
         .child(
             div()
-                .text_size(px(14.0))
+                .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme::semantic().text_primary)
                 .child(title),
         )
         .child(
             div()
-                .text_size(px(12.0))
+                .text_size(px(10.0))
                 .text_color(theme::semantic().text_secondary)
                 .child(subtitle),
         )
@@ -381,7 +382,7 @@ fn history_row(
             0.12,
         )
     } else {
-        theme::semantic().bg_elevated.into()
+        theme::rgba_with_alpha(theme::semantic().bg_elevated, 0.75)
     };
     let row_bg = if selected {
         theme::rgba_with_alpha(
@@ -398,10 +399,10 @@ fn history_row(
     div()
         .id(("clipboard-row", item.id as u64))
         .w_full()
-        .h(px(86.0))
+        .h(px(64.0))
         .flex_none()
-        .p(px(12.0))
-        .rounded(px(8.0))
+        .p(px(6.0))
+        .rounded(px(6.0))
         .bg(row_bg)
         .hover(move |style| {
             style
@@ -429,7 +430,7 @@ fn history_row(
         })
         .flex()
         .items_center()
-        .gap(px(10.0))
+        .gap(px(6.0))
         .child(history_row_media(&item, icon_surface, dark))
         .child(
             div()
@@ -437,19 +438,19 @@ fn history_row(
                 .min_w(px(0.0))
                 .flex()
                 .flex_col()
-                .gap(px(2.0))
+                .gap(px(1.0))
                 .child(
                     div()
-                        .text_size(px(13.0))
-                        .line_height(px(18.0))
+                        .text_size(px(11.0))
+                        .line_height(px(15.0))
                         .line_clamp(2)
                         .text_color(title_color)
                         .child(title),
                 )
                 .child(
                     div()
-                        .text_size(px(11.0))
-                        .line_height(px(15.0))
+                        .text_size(px(10.0))
+                        .line_height(px(13.0))
                         .text_color(theme::semantic().text_secondary)
                         .child(subtitle),
                 ),
@@ -492,11 +493,11 @@ fn row_icon_button(
 ) -> impl IntoElement {
     div()
         .id(id)
-        .size(px(28.0))
-        .rounded(px(6.0))
+        .size(px(24.0))
+        .rounded(px(4.0))
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_elevated)
+        .border_color(ui::border_light())
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
         .flex()
         .items_center()
         .justify_center()
@@ -519,11 +520,11 @@ fn history_row_media(
 ) -> impl IntoElement {
     if item.kind == history_store::ClipboardItemKind::Image {
         return div()
-            .size(px(42.0))
-            .rounded(px(8.0))
+            .size(px(36.0))
+            .rounded(px(6.0))
             .border_1()
-            .border_color(theme::semantic().border_default)
-            .bg(theme::semantic().bg_elevated)
+            .border_color(ui::border_light())
+            .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
             .overflow_hidden()
             .child(
                 img(PathBuf::from(item.content.clone()))
@@ -548,13 +549,13 @@ fn history_row_media(
 
 fn icon_label(label: &'static str, surface: gpui::Hsla, color: gpui::Rgba) -> impl IntoElement {
     div()
-        .size(px(42.0))
-        .rounded(px(8.0))
+        .size(px(36.0))
+        .rounded(px(6.0))
         .bg(surface)
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(10.0))
+        .text_size(px(9.0))
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(color)
         .child(label)
@@ -669,8 +670,8 @@ fn preview_text_for_record(item: &ClipboardRecord) -> String {
 fn preview_text(preview_input: Entity<TextInput>, _dark: bool) -> impl IntoElement {
     div()
         .size_full()
-        .px(px(14.0))
-        .py(px(12.0))
+        .px(px(8.0))
+        .py(px(6.0))
         .text_color(theme::semantic().text_regular)
         .child(preview_input)
 }
@@ -685,7 +686,7 @@ fn preview_unavailable(message: &'static str, _dark: bool) -> impl IntoElement {
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(12.0))
+        .text_size(px(11.0))
         .text_color(theme::semantic().text_placeholder)
         .child(message)
 }
@@ -700,14 +701,15 @@ fn detail_panel(
     let has_selected = selected_record.is_some();
     let is_pinned = selected_record.as_ref().is_some_and(|item| item.pinned);
 
-    let panel = div().size_full().flex().flex_col().gap(px(10.0)).child(
+    let panel = div().size_full().flex().flex_col().gap(px(6.0)).child(
         div()
             .flex_1()
             .min_h(px(0.0))
             .rounded(px(8.0))
             .border_1()
-            .border_color(theme::semantic().border_default)
-            .bg(theme::semantic().bg_surface)
+            .border_color(ui::border_light())
+            .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.85))
+            .shadow(glass_shadow())
             .overflow_hidden()
             .child(
                 selected_record
@@ -727,7 +729,7 @@ fn detail_actions(handle: Entity<ClipboardView>, is_pinned: bool, dark: bool) ->
     div()
         .flex()
         .items_center()
-        .gap(px(8.0))
+        .gap(px(4.0))
         .child(detail_action_button("复制", dark, {
             let handle = handle.clone();
             move |_, _, cx| {
@@ -768,16 +770,16 @@ fn detail_action_button(
 ) -> impl IntoElement {
     div()
         .id(label)
-        .h(px(28.0))
-        .px(px(12.0))
-        .rounded(px(6.0))
+        .h(px(24.0))
+        .px(px(8.0))
+        .rounded(px(4.0))
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_surface)
+        .border_color(ui::border_light())
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.8))
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(12.0))
+        .text_size(px(10.0))
         .text_color(theme::semantic().text_primary)
         .hover(|style| style.bg(theme::semantic().row_hover).cursor_pointer())
         .child(label)

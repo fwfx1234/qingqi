@@ -1,7 +1,7 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{collections::HashMap, sync::{Arc, Mutex}};
 
 use gpui::{
-    App, AppContext, Component, Entity, InteractiveElement, IntoElement, ParentElement, RenderOnce,
+    AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
     StatefulInteractiveElement, Styled, Subscription, Window, div, px, relative,
 };
 
@@ -74,7 +74,7 @@ impl FilterTab {
 }
 
 pub struct DownloadManagerView {
-    service: Rc<RefCell<DownloadService>>,
+    service: Arc<Mutex<DownloadService>>,
     tasks: Vec<DownloadTask>,
     job_summary: DownloadJobSummary,
     task_counts: TaskCounts,
@@ -103,8 +103,12 @@ pub struct DownloadManagerView {
 }
 
 impl DownloadManagerView {
-    pub fn new(service: Rc<RefCell<DownloadService>>) -> Self {
-        let tasks = Self::load_tasks(&service, FilterTab::All);
+    pub fn new(service: Arc<Mutex<DownloadService>>) -> Self {
+        let filter = FilterTab::All;
+        let tasks = {
+            let svc = service.lock().unwrap();
+            Self::filter_tasks(svc.tasks_snapshot(), filter)
+        };
         let (
             job_summary,
             task_counts,
@@ -113,7 +117,7 @@ impl DownloadManagerView {
             stats_snapshot,
             service_revision,
         ) = {
-            let svc = service.borrow();
+            let svc = service.lock().unwrap();
             (
                 DownloadJobSummary::from_jobs(svc.job_snapshots()),
                 svc.task_counts(),
@@ -131,7 +135,7 @@ impl DownloadManagerView {
             settings_snapshot,
             save_dir_snapshot,
             stats_snapshot,
-            filter: FilterTab::All,
+            filter,
             url_input_entity: None,
             url_text: String::new(),
             message: String::from("输入 URL 或粘贴链接开始下载"),
@@ -152,11 +156,11 @@ impl DownloadManagerView {
         }
     }
 
-    pub fn init(&mut self, cx: &mut App) {
+    pub fn init(&mut self, cx: &mut Context<Self>) {
         self.ensure_inputs(cx);
     }
 
-    fn ensure_inputs(&mut self, cx: &mut App) {
+    fn ensure_inputs(&mut self, cx: &mut Context<Self>) {
         if self.url_input_entity.is_none() {
             let input = cx.new(|cx| {
                 let mut input = TextInput::new(cx, "输入下载链接...", "");
@@ -164,9 +168,9 @@ impl DownloadManagerView {
                 input.set_monospace(true, cx);
                 input.set_style(
                     TextInputStyle {
-                        height: 32.0,
-                        font_size: 12.0,
-                        padding: 10.0,
+                        height: 28.0,
+                        font_size: 11.0,
+                        padding: 8.0,
                     },
                     cx,
                 );
@@ -175,7 +179,7 @@ impl DownloadManagerView {
             self.url_input_entity = Some(input);
         }
 
-        let settings = self.service.borrow().settings_snapshot();
+        let settings = self.service.lock().unwrap().settings_snapshot();
 
         if self.save_root_input.is_none() {
             self.save_root_input = Some(self.make_settings_input(cx, settings.save_root.clone()));
@@ -222,16 +226,16 @@ impl DownloadManagerView {
         }
     }
 
-    fn make_settings_input(&self, cx: &mut App, value: String) -> Entity<TextInput> {
+    fn make_settings_input(&self, cx: &mut Context<Self>, value: String) -> Entity<TextInput> {
         cx.new(|cx| {
             let mut input = TextInput::new(cx, "", &value);
             input.set_chrome(false, cx);
             input.set_monospace(true, cx);
             input.set_style(
                 TextInputStyle {
-                    height: 28.0,
-                    font_size: 11.0,
-                    padding: 8.0,
+                    height: 26.0,
+                    font_size: 10.0,
+                    padding: 6.0,
                 },
                 cx,
             );
@@ -239,9 +243,7 @@ impl DownloadManagerView {
         })
     }
 
-    fn load_tasks(service: &Rc<RefCell<DownloadService>>, filter: FilterTab) -> Vec<DownloadTask> {
-        let tasks = service.borrow().tasks_snapshot();
-
+    fn filter_tasks(tasks: Vec<DownloadTask>, filter: FilterTab) -> Vec<DownloadTask> {
         match filter {
             FilterTab::All => tasks,
             FilterTab::Active => tasks
@@ -292,18 +294,18 @@ impl DownloadManagerView {
     }
 
     pub fn refresh(&mut self) {
-        let service = self.service.borrow();
-        self.tasks = Self::load_tasks(&self.service, self.filter);
-        self.job_summary = DownloadJobSummary::from_jobs(service.job_snapshots());
-        self.task_counts = service.task_counts();
-        self.settings_snapshot = service.settings_snapshot();
-        self.save_dir_snapshot = service.effective_save_dir().to_string_lossy().to_string();
-        self.stats_snapshot = service.stats();
-        self.service_revision = service.revision();
+        let svc = self.service.lock().unwrap();
+        self.tasks = Self::filter_tasks(svc.tasks_snapshot(), self.filter);
+        self.job_summary = DownloadJobSummary::from_jobs(svc.job_snapshots());
+        self.task_counts = svc.task_counts();
+        self.settings_snapshot = svc.settings_snapshot();
+        self.save_dir_snapshot = svc.effective_save_dir().to_string_lossy().to_string();
+        self.stats_snapshot = svc.stats();
+        self.service_revision = svc.revision();
     }
 
     fn refresh_if_stale(&mut self) {
-        let revision = self.service.borrow().revision();
+        let revision = self.service.lock().unwrap().revision();
         if revision != self.service_revision {
             self.refresh();
         }
@@ -313,7 +315,7 @@ impl DownloadManagerView {
         self.subscriptions.clear();
     }
 
-    pub fn observe_inputs(&mut self, handle: Rc<RefCell<DownloadManagerView>>, cx: &mut App) {
+    pub fn observe_inputs(&mut self, cx: &mut Context<Self>) {
         if !self.subscriptions.is_empty() {
             return;
         }
@@ -321,28 +323,28 @@ impl DownloadManagerView {
             return;
         };
         let observed_input = input.clone();
-        let subscription = cx.observe(&observed_input, move |_, cx| {
-            let text = input.read(cx).text();
-            handle.borrow_mut().url_text = text;
+        let subscription = cx.observe(&input, move |this, _, cx| {
+            let text = observed_input.read(cx).text();
+            this.url_text = text;
         });
         self.subscriptions.push(subscription);
     }
 
-    fn clear_url_input(&mut self, cx: &mut App) {
+    fn clear_url_input(&mut self, cx: &mut Context<Self>) {
         self.url_text.clear();
         if let Some(input) = self.url_input_entity.as_ref() {
             input.update(cx, |input, input_cx| input.clear(input_cx));
         }
     }
 
-    fn set_url_input_text(&mut self, text: String, cx: &mut App) {
+    fn set_url_input_text(&mut self, text: String, cx: &mut Context<Self>) {
         self.url_text = text.clone();
         if let Some(input) = self.url_input_entity.as_ref() {
             input.update(cx, |input, input_cx| input.set_text(text, input_cx));
         }
     }
 
-    pub fn add_download(&mut self, cx: &mut App) {
+    pub fn add_download(&mut self, cx: &mut Context<Self>) {
         let text = self.url_text.trim().to_string();
         if text.is_empty() {
             self.message = String::from("请输入下载链接");
@@ -351,7 +353,7 @@ impl DownloadManagerView {
         // Try multi-URL extraction first
         let urls = super::model::extract_urls_from_text(&text);
         if urls.len() > 1 {
-            let result = { self.service.borrow().add_urls_from_text(&text) };
+            let result = { self.service.lock().unwrap().add_urls_from_text(&text) };
             match result {
                 Ok(tasks) => {
                     self.clear_url_input(cx);
@@ -364,7 +366,7 @@ impl DownloadManagerView {
             }
         } else if urls.len() == 1 {
             let (add_result, task_id) = {
-                let svc = self.service.borrow();
+                let svc = self.service.lock().unwrap();
                 let result = svc.add_task(&urls[0]);
                 let tid = result.as_ref().map(|t| t.id.clone()).ok();
                 (result, tid)
@@ -374,7 +376,7 @@ impl DownloadManagerView {
                     self.clear_url_input(cx);
                     self.message = format!("已添加: {}", task.file_name);
                     if let Some(tid) = task_id {
-                        let start_result = { self.service.borrow().start_download(&tid) };
+                        let start_result = { self.service.lock().unwrap().start_download(&tid) };
                         if let Err(e) = start_result {
                             self.message = format!("启动失败: {e}");
                         }
@@ -390,7 +392,7 @@ impl DownloadManagerView {
         }
     }
 
-    pub fn paste_and_add(&mut self, cx: &App) {
+    pub fn paste_and_add(&mut self, cx: &Context<Self>) {
         let text = qingqi_platform::clipboard::read_text(cx).unwrap_or_default();
         let trimmed = text.trim();
         if trimmed.is_empty() {
@@ -416,8 +418,8 @@ impl DownloadManagerView {
         }
     }
 
-    fn reload_settings_inputs(&mut self, cx: &mut App) {
-        let settings = self.service.borrow().settings_snapshot();
+    fn reload_settings_inputs(&mut self, cx: &mut Context<Self>) {
+        let settings = self.service.lock().unwrap().settings_snapshot();
         if let Some(input) = &self.save_root_input {
             input.update(cx, |input, input_cx| {
                 input.set_text(settings.save_root.clone(), input_cx)
@@ -473,7 +475,7 @@ impl DownloadManagerView {
         }
     }
 
-    pub fn save_settings(&mut self, cx: &App) {
+    pub fn save_settings(&mut self, cx: &Context<Self>) {
         let save_root = self
             .save_root_input
             .as_ref()
@@ -526,17 +528,17 @@ impl DownloadManagerView {
             .unwrap_or_default();
 
         if !save_root.is_empty() {
-            if let Err(e) = self.service.borrow().set_save_root(&save_root) {
+            if let Err(e) = self.service.lock().unwrap().set_save_root(&save_root) {
                 self.message = format!("保存目录设置失败: {e}");
             }
         }
-        if let Err(e) = self.service.borrow().set_max_concurrent(concurrent) {
+        if let Err(e) = self.service.lock().unwrap().set_max_concurrent(concurrent) {
             self.message = format!("并发设置失败: {e}");
         }
-        if let Err(e) = self.service.borrow().set_speed_limit_kbps(speed_limit) {
+        if let Err(e) = self.service.lock().unwrap().set_speed_limit_kbps(speed_limit) {
             self.message = format!("限速设置失败: {e}");
         }
-        if let Err(e) = self.service.borrow().set_network_options(
+        if let Err(e) = self.service.lock().unwrap().set_network_options(
             &user_agent,
             &referer,
             &cookie,
@@ -554,7 +556,7 @@ impl DownloadManagerView {
     }
 
     pub fn pause_task(&mut self, id: &str) {
-        if let Err(e) = self.service.borrow().pause_job(&JobId::new(id)) {
+        if let Err(e) = self.service.lock().unwrap().pause_job(&JobId::new(id)) {
             self.message = format!("暂停失败: {e}");
         } else {
             self.message = String::from("已暂停");
@@ -563,7 +565,7 @@ impl DownloadManagerView {
     }
 
     pub fn resume_task(&mut self, id: &str) {
-        if let Err(e) = self.service.borrow().resume_job(&JobId::new(id)) {
+        if let Err(e) = self.service.lock().unwrap().resume_job(&JobId::new(id)) {
             self.message = format!("恢复失败: {e}");
         } else {
             self.message = String::from("已恢复");
@@ -572,7 +574,7 @@ impl DownloadManagerView {
     }
 
     pub fn cancel_task(&mut self, id: &str) {
-        if let Err(e) = self.service.borrow().cancel_job(&JobId::new(id)) {
+        if let Err(e) = self.service.lock().unwrap().cancel_job(&JobId::new(id)) {
             self.message = format!("取消失败: {e}");
         } else {
             self.message = String::from("已取消");
@@ -581,7 +583,7 @@ impl DownloadManagerView {
     }
 
     pub fn delete_task(&mut self, id: &str) {
-        if let Err(e) = self.service.borrow().delete_task(id) {
+        if let Err(e) = self.service.lock().unwrap().delete_task(id) {
             self.message = format!("删除失败: {e}");
         } else {
             self.message = String::from("已删除");
@@ -590,7 +592,7 @@ impl DownloadManagerView {
     }
 
     pub fn start_all(&mut self) {
-        match self.service.borrow().start_all_pending() {
+        match self.service.lock().unwrap().start_all_pending() {
             Ok(n) if n > 0 => {
                 self.message = format!("已启动 {n} 个任务");
             }
@@ -600,7 +602,7 @@ impl DownloadManagerView {
     }
 
     pub fn pause_all(&mut self) {
-        if let Err(e) = self.service.borrow().pause_all() {
+        if let Err(e) = self.service.lock().unwrap().pause_all() {
             self.message = format!("暂停失败: {e}");
         } else {
             self.message = String::from("已暂停全部");
@@ -609,7 +611,7 @@ impl DownloadManagerView {
     }
 
     pub fn resume_all(&mut self) {
-        if let Err(e) = self.service.borrow().resume_all() {
+        if let Err(e) = self.service.lock().unwrap().resume_all() {
             self.message = format!("恢复失败: {e}");
         } else {
             self.message = String::from("已恢复全部");
@@ -618,7 +620,7 @@ impl DownloadManagerView {
     }
 
     pub fn clear_completed(&mut self) {
-        match self.service.borrow().clear_completed() {
+        match self.service.lock().unwrap().clear_completed() {
             Ok(n) if n > 0 => {
                 self.message = format!("已清除 {n} 个已完成任务");
             }
@@ -628,7 +630,7 @@ impl DownloadManagerView {
     }
 
     pub fn clear_failed(&mut self) {
-        match self.service.borrow().clear_failed() {
+        match self.service.lock().unwrap().clear_failed() {
             Ok(n) if n > 0 => {
                 self.message = format!("已清除 {n} 个失败/取消任务");
             }
@@ -638,7 +640,7 @@ impl DownloadManagerView {
     }
 
     pub fn retry_task(&mut self, id: &str) {
-        match self.service.borrow().retry_task(id) {
+        match self.service.lock().unwrap().retry_task(id) {
             Ok(()) => self.message = String::from("已加入队列"),
             Err(e) => self.message = format!("重试失败: {e}"),
         }
@@ -657,7 +659,7 @@ impl DownloadManagerView {
     }
 
     pub fn open_save_dir(&mut self) {
-        let dir = self.service.borrow().effective_save_dir();
+        let dir = self.service.lock().unwrap().effective_save_dir();
         if let Err(e) = std::fs::create_dir_all(&dir) {
             self.message = format!("创建目录失败: {e}");
             return;
@@ -669,47 +671,35 @@ impl DownloadManagerView {
     }
 }
 
-pub struct DownloadManagerElement {
-    pub panel: Rc<RefCell<DownloadManagerView>>,
-}
+impl Render for DownloadManagerView {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.ensure_inputs(cx);
+        self.observe_inputs(cx);
+        self.refresh_if_stale();
+        let handle = cx.entity();
 
-impl IntoElement for DownloadManagerElement {
-    type Element = Component<Self>;
-
-    fn into_element(self) -> Self::Element {
-        Component::new(self)
-    }
-}
-
-impl RenderOnce for DownloadManagerElement {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let mut panel = self.panel.borrow_mut();
-        panel.ensure_inputs(_cx);
-        panel.observe_inputs(Rc::clone(&self.panel), _cx);
-        panel.refresh_if_stale();
         let dark = qingqi_ui::theme_mode::is_dark();
-        let tasks = panel.tasks.clone();
-        let filter = panel.filter;
-        let show_settings = panel.show_settings;
-        let url_input = panel.url_input_entity.clone().expect("url input missing");
-        let message = panel.message.clone();
-        let job_summary = panel.job_summary.clone();
-        let task_counts = panel.task_counts.clone();
-        let settings = panel.settings_snapshot.clone();
-        let save_dir = panel.save_dir_snapshot.clone();
-        let stats = panel.stats_snapshot.clone();
+        let tasks = self.tasks.clone();
+        let filter = self.filter;
+        let show_settings = self.show_settings;
+        let url_input = self.url_input_entity.clone().expect("url input missing");
+        let message = self.message.clone();
+        let job_summary = self.job_summary.clone();
+        let task_counts = self.task_counts.clone();
+        let settings = self.settings_snapshot.clone();
+        let save_dir = self.save_dir_snapshot.clone();
+        let stats = self.stats_snapshot.clone();
         // Clone settings input entities for overlay
-        let save_root_input = panel.save_root_input.clone();
-        let concurrent_input = panel.concurrent_input.clone();
-        let speed_limit_input = panel.speed_limit_input.clone();
-        let timeout_input = panel.timeout_input.clone();
-        let retry_input = panel.retry_input.clone();
-        let proxy_input = panel.proxy_input.clone();
-        let user_agent_input = panel.user_agent_input.clone();
-        let referer_input = panel.referer_input.clone();
-        let cookie_input = panel.cookie_input.clone();
-        let headers_input = panel.headers_input.clone();
-        drop(panel);
+        let save_root_input = self.save_root_input.clone();
+        let concurrent_input = self.concurrent_input.clone();
+        let speed_limit_input = self.speed_limit_input.clone();
+        let timeout_input = self.timeout_input.clone();
+        let retry_input = self.retry_input.clone();
+        let proxy_input = self.proxy_input.clone();
+        let user_agent_input = self.user_agent_input.clone();
+        let referer_input = self.referer_input.clone();
+        let cookie_input = self.cookie_input.clone();
+        let headers_input = self.headers_input.clone();
 
         ui::plugin_surface().child(
             ui::plugin_content().child(
@@ -717,20 +707,20 @@ impl RenderOnce for DownloadManagerElement {
                     .size_full()
                     .flex()
                     .flex_col()
-                    .gap_3()
-                    .child(header_bar(dark, job_summary.active_count))
-                    .child(url_input_bar(dark, url_input, Rc::clone(&self.panel)))
+                    .gap_1p5()
+                    .child(header_bar(job_summary.active_count))
+                    .child(url_input_bar(dark, url_input, handle.clone()))
                     .child(filter_bar(
                         dark,
                         filter,
                         &task_counts,
-                        Rc::clone(&self.panel),
+                        handle.clone(),
                     ))
                     .child(task_list(
                         dark,
                         tasks,
                         job_summary.progress_by_id,
-                        Rc::clone(&self.panel),
+                        handle.clone(),
                     ))
                     .child(bottom_bar(
                         dark,
@@ -738,7 +728,7 @@ impl RenderOnce for DownloadManagerElement {
                         &save_dir,
                         &settings,
                         &stats,
-                        Rc::clone(&self.panel),
+                        handle.clone(),
                     ))
                     .child(if show_settings {
                         settings_overlay(
@@ -753,7 +743,7 @@ impl RenderOnce for DownloadManagerElement {
                             referer_input,
                             cookie_input,
                             headers_input,
-                            Rc::clone(&self.panel),
+                            handle.clone(),
                         )
                         .into_any_element()
                     } else {
@@ -792,7 +782,7 @@ impl DownloadJobSummary {
     }
 }
 
-fn header_bar(_dark: bool, active_count: usize) -> impl IntoElement {
+fn header_bar(active_count: usize) -> impl IntoElement {
     div()
         .flex()
         .items_center()
@@ -806,10 +796,10 @@ fn header_bar(_dark: bool, active_count: usize) -> impl IntoElement {
                     div()
                         .flex()
                         .items_center()
-                        .gap_2()
+                        .gap_1()
                         .child(
                             div()
-                                .text_size(px(16.0))
+                                .text_size(px(14.0))
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .text_color(theme::semantic().text_primary)
                                 .child("下载管理器"),
@@ -832,17 +822,17 @@ fn header_bar(_dark: bool, active_count: usize) -> impl IntoElement {
                 )
                 .child(
                     div()
-                        .text_size(px(11.0))
+                        .text_size(px(10.0))
                         .text_color(ui::text_secondary())
                         .child("HTTP/HTTPS · 多任务 · 断点续传"),
                 ),
         )
         .child(
-            div().flex().items_center().gap_2().child(
+            div().flex().items_center().gap_1().child(
                 div()
-                    .h(px(28.0))
-                    .px_3()
-                    .rounded(px(8.0))
+                    .h(px(26.0))
+                    .px_2()
+                    .rounded(px(6.0))
                     .bg(if active_count > 0 {
                         theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.12)
                     } else {
@@ -857,7 +847,7 @@ fn header_bar(_dark: bool, active_count: usize) -> impl IntoElement {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_size(px(11.0))
+                    .text_size(px(10.0))
                     .text_color(if active_count > 0 {
                         ui::accent_color(PluginAccent::Green)
                     } else {
@@ -871,10 +861,10 @@ fn header_bar(_dark: bool, active_count: usize) -> impl IntoElement {
 fn url_input_bar(
     dark: bool,
     url_input: Entity<TextInput>,
-    panel: Rc<RefCell<DownloadManagerView>>,
+    handle: Entity<DownloadManagerView>,
 ) -> impl IntoElement {
     div()
-        .rounded(px(12.0))
+        .rounded(px(8.0))
         .bg(theme::rgba_with_alpha(
             ui::accent_color(PluginAccent::Green),
             0.05,
@@ -884,14 +874,14 @@ fn url_input_bar(
             ui::accent_color(PluginAccent::Green),
             0.18,
         ))
-        .p_3()
+        .p_1p5()
         .flex()
         .items_center()
-        .gap_2()
+        .gap_1()
         .child(
             div()
-                .size(px(36.0))
-                .rounded(px(10.0))
+                .size(px(30.0))
+                .rounded(px(6.0))
                 .bg(theme::rgba_with_alpha(
                     ui::accent_color(PluginAccent::Green),
                     0.12,
@@ -899,14 +889,14 @@ fn url_input_bar(
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(16.0))
+                .text_size(px(14.0))
                 .child("\u{1f517}"),
         )
         .child(
             div()
                 .flex_1()
-                .h(px(32.0))
-                .rounded(px(8.0))
+                .h(px(28.0))
+                .rounded(px(6.0))
                 .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.88))
                 .border_1()
                 .border_color(ui::border_light())
@@ -918,13 +908,14 @@ fn url_input_bar(
             action_button("\u{1f4cb} 粘贴", dark)
                 .id("download-paste")
                 .on_click({
-                    let panel = Rc::clone(&panel);
-                    move |_, window, cx| {
-                        let mut panel = panel.borrow_mut();
-                        panel.paste_and_add(cx);
-                        let text = panel.url_text.clone();
-                        panel.set_url_input_text(text, cx);
-                        window.refresh();
+                    let h = handle.clone();
+                    move |_, _window, cx| {
+                        cx.update_entity(&h, |panel, cx| {
+                            panel.paste_and_add(cx);
+                            let text = panel.url_text.clone();
+                            panel.set_url_input_text(text, cx);
+                            cx.notify();
+                        });
                     }
                 }),
         )
@@ -932,10 +923,12 @@ fn url_input_bar(
             primary_btn("添加下载", PluginAccent::Green, dark)
                 .id("download-add")
                 .on_click({
-                    let panel = Rc::clone(&panel);
-                    move |_, window, cx| {
-                        panel.borrow_mut().add_download(cx);
-                        window.refresh();
+                    let h = handle.clone();
+                    move |_, _window, cx| {
+                        cx.update_entity(&h, |panel, cx| {
+                            panel.add_download(cx);
+                            cx.notify();
+                        });
                     }
                 }),
         )
@@ -945,7 +938,7 @@ fn filter_bar(
     dark: bool,
     active_filter: FilterTab,
     counts: &TaskCounts,
-    panel: Rc<RefCell<DownloadManagerView>>,
+    handle: Entity<DownloadManagerView>,
 ) -> impl IntoElement {
     let status_filters = [
         FilterTab::All,
@@ -976,14 +969,14 @@ fn filter_bar(
                 .children(status_filters.iter().map(|&tab| {
                     let active = tab == active_filter;
                     let count = tab.count(counts);
+                    let h = handle.clone();
                     filter_chip(tab.label(), count, active, dark)
                         .id(("download-filter", tab as usize))
-                        .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().set_filter(tab);
-                                window.refresh();
-                            }
+                        .on_click(move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.set_filter(tab);
+                                cx.notify();
+                            });
                         })
                 }))
                 .child(div().flex_1())
@@ -991,10 +984,12 @@ fn filter_bar(
                     action_button("\u{25b6} 全部开始", dark)
                         .id("download-start-all")
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().start_all();
-                                window.refresh();
+                            let h = handle.clone();
+                            move |_, _window, cx| {
+                                cx.update_entity(&h, |panel, cx| {
+                                    panel.start_all();
+                                    cx.notify();
+                                });
                             }
                         }),
                 )
@@ -1002,10 +997,12 @@ fn filter_bar(
                     action_button("\u{23f8} 全部暂停", dark)
                         .id("download-pause-all")
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().pause_all();
-                                window.refresh();
+                            let h = handle.clone();
+                            move |_, _window, cx| {
+                                cx.update_entity(&h, |panel, cx| {
+                                    panel.pause_all();
+                                    cx.notify();
+                                });
                             }
                         }),
                 )
@@ -1013,10 +1010,12 @@ fn filter_bar(
                     action_button("\u{1f5d1} 清除已完成", dark)
                         .id("download-clear-done")
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().clear_completed();
-                                window.refresh();
+                            let h = handle.clone();
+                            move |_, _window, cx| {
+                                cx.update_entity(&h, |panel, cx| {
+                                    panel.clear_completed();
+                                    cx.notify();
+                                });
                             }
                         }),
                 )
@@ -1024,10 +1023,12 @@ fn filter_bar(
                     action_button("\u{26a0} 清除失败", dark)
                         .id("download-clear-failed")
                         .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().clear_failed();
-                                window.refresh();
+                            let h = handle.clone();
+                            move |_, _window, cx| {
+                                cx.update_entity(&h, |panel, cx| {
+                                    panel.clear_failed();
+                                    cx.notify();
+                                });
                             }
                         }),
                 ),
@@ -1047,14 +1048,14 @@ fn filter_bar(
                     let active = tab == active_filter;
                     let count = tab.count(counts);
                     if count > 0 || active {
+                        let h = handle.clone();
                         filter_chip(tab.label(), count, active, dark)
                             .id(("download-cat-filter", tab as usize))
-                            .on_click({
-                                let panel = Rc::clone(&panel);
-                                move |_, window, _cx| {
-                                    panel.borrow_mut().set_filter(tab);
-                                    window.refresh();
-                                }
+                            .on_click(move |_, _window, cx| {
+                                cx.update_entity(&h, |panel, cx| {
+                                    panel.set_filter(tab);
+                                    cx.notify();
+                                });
                             })
                             .into_any_element()
                     } else {
@@ -1066,9 +1067,9 @@ fn filter_bar(
 
 fn filter_chip(label: &str, count: usize, active: bool, _dark: bool) -> gpui::Div {
     div()
-        .h(px(28.0))
-        .px_3()
-        .rounded(px(8.0))
+        .h(px(26.0))
+        .px_2()
+        .rounded(px(6.0))
         .bg(if active {
             theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.12)
         } else {
@@ -1085,7 +1086,7 @@ fn filter_chip(label: &str, count: usize, active: bool, _dark: bool) -> gpui::Di
         .items_center()
         .justify_center()
         .gap_1()
-        .text_size(px(11.0))
+        .text_size(px(10.0))
         .text_color(if active {
             ui::accent_color(PluginAccent::Green)
         } else {
@@ -1108,12 +1109,12 @@ fn task_list(
     dark: bool,
     tasks: Vec<DownloadTask>,
     progress_by_id: HashMap<String, f64>,
-    panel: Rc<RefCell<DownloadManagerView>>,
+    handle: Entity<DownloadManagerView>,
 ) -> impl IntoElement {
     if tasks.is_empty() {
         return div()
             .flex_1()
-            .rounded(px(12.0))
+            .rounded(px(8.0))
             .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.74))
             .border_1()
             .border_color(ui::border_light())
@@ -1128,7 +1129,7 @@ fn task_list(
 
     div()
         .flex_1()
-        .rounded(px(12.0))
+        .rounded(px(8.0))
         .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.78))
         .border_1()
         .border_color(ui::border_light())
@@ -1137,14 +1138,14 @@ fn task_list(
         .flex_col()
         .child(
             div()
-                .h(px(34.0))
-                .px_3()
+                .h(px(28.0))
+                .px_2()
                 .bg(theme::rgba_with_alpha(theme::semantic().bg_subtle, 0.65))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .flex()
                 .items_center()
-                .text_size(px(10.0))
+                .text_size(px(9.0))
                 .text_color(ui::text_tertiary())
                 .child(components::table_header_cell("", 28.0))
                 .child(components::table_header_flex("文件名", 2.2))
@@ -1163,7 +1164,7 @@ fn task_list(
                 .scrollbar_width(px(6.0))
                 .children(tasks.into_iter().enumerate().map(|(index, task)| {
                     let progress = progress_by_id.get(&task.id).copied();
-                    task_row(task, progress, index, dark, Rc::clone(&panel))
+                    task_row(task, progress, index, dark, handle.clone())
                 })),
         )
         .into_any_element()
@@ -1174,13 +1175,14 @@ fn task_row(
     job_progress: Option<f64>,
     index: usize,
     dark: bool,
-    panel: Rc<RefCell<DownloadManagerView>>,
+    handle: Entity<DownloadManagerView>,
 ) -> impl IntoElement {
     let status = task.status;
     let task_id = task.id.clone();
     let task_id2 = task.id.clone();
     let task_id3 = task.id.clone();
     let task_id4 = task.id.clone();
+    let task_clone = task.clone();
     let is_completed = task.status == TaskStatus::Completed;
     let is_active = task.status.is_active();
     let is_paused = task.status == TaskStatus::Paused;
@@ -1188,19 +1190,19 @@ fn task_row(
     let is_terminal = task.status.is_terminal();
 
     div()
-        .h(px(56.0))
-        .px_3()
+        .h(px(44.0))
+        .px_2()
         .border_b_1()
         .border_color(ui::border_light())
         .flex()
         .items_center()
-        .gap_2()
+        .gap_1()
         .child(
             div()
                 .w(px(28.0))
                 .flex()
                 .justify_center()
-                .text_size(px(14.0))
+                .text_size(px(12.0))
                 .child(task.category.icon()),
         )
         .child(
@@ -1211,7 +1213,7 @@ fn task_row(
                 .gap_0p5()
                 .child(
                     div()
-                        .text_size(px(11.0))
+                        .text_size(px(10.0))
                         .text_color(theme::semantic().text_primary)
                         .child(task.file_name.clone()),
                 )
@@ -1226,7 +1228,7 @@ fn task_row(
         .child(
             div()
                 .w(px(90.0))
-                .text_size(px(10.0))
+                .text_size(px(9.0))
                 .font_family("SF Mono")
                 .text_color(ui::text_tertiary())
                 .child(format_progress(&task, true)),
@@ -1234,7 +1236,7 @@ fn task_row(
         .child(
             div()
                 .w(px(80.0))
-                .text_size(px(10.0))
+                .text_size(px(9.0))
                 .font_family("SF Mono")
                 .text_color(if is_active {
                     ui::accent_color(PluginAccent::Green)
@@ -1252,7 +1254,7 @@ fn task_row(
                 .w(px(150.0))
                 .flex()
                 .items_center()
-                .gap_2()
+                .gap_1()
                 .child(progress_bar(
                     dark,
                     job_progress,
@@ -1282,96 +1284,97 @@ fn task_row(
                 .items_center()
                 .gap_0p5()
                 .child(if is_active {
+                    let h = handle.clone();
+                    let id = task_id.clone();
                     action_icon("\u{23f8}", dark)
                         .id(("dl-pause", index))
-                        .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().pause_task(&task_id);
-                                window.refresh();
-                            }
+                        .on_click(move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.pause_task(&id);
+                                cx.notify();
+                            });
                         })
                         .into_any_element()
                 } else if is_paused {
+                    let h = handle.clone();
+                    let id = task_id2.clone();
                     action_icon("\u{25b6}", dark)
                         .id(("dl-resume", index))
-                        .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().resume_task(&task_id2);
-                                window.refresh();
-                            }
+                        .on_click(move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.resume_task(&id);
+                                cx.notify();
+                            });
                         })
                         .into_any_element()
                 } else if is_failed {
+                    let h = handle.clone();
+                    let id = task_id3.clone();
                     action_icon("\u{21bb}", dark)
                         .id(("dl-retry", index))
-                        .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().retry_task(&task_id3);
-                                window.refresh();
-                            }
+                        .on_click(move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.retry_task(&id);
+                                cx.notify();
+                            });
                         })
                         .into_any_element()
                 } else {
-                    div().w(px(22.0)).into_any_element()
+                    div().w(px(20.0)).into_any_element()
                 })
                 .child(if !is_terminal {
+                    let h = handle.clone();
+                    let id = task_id4.clone();
                     action_icon("\u{23f9}", dark)
                         .id(("dl-cancel", index))
-                        .on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().cancel_task(&task_id4);
-                                window.refresh();
-                            }
+                        .on_click(move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.cancel_task(&id);
+                                cx.notify();
+                            });
                         })
                         .into_any_element()
                 } else {
+                    let h = handle.clone();
+                    let id = task.id.clone();
                     action_icon("\u{1f5d1}", dark)
                         .id(("dl-delete", index))
-                        .on_click({
-                            let panel = Rc::clone(&panel);
-                            let id = task.id.clone();
-                            move |_, window, _cx| {
-                                panel.borrow_mut().delete_task(&id);
-                                window.refresh();
-                            }
+                        .on_click(move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.delete_task(&id);
+                                cx.notify();
+                            });
                         })
                         .into_any_element()
                 })
                 .child(if is_completed {
+                    let h = handle.clone();
+                    let t = task_clone.clone();
                     action_icon("\u{1f4c2}", dark)
                         .id(("dl-open", index))
-                        .on_click({
-                            let panel = Rc::clone(&panel);
-                            let task = task.clone();
-                            move |_, window, _cx| {
-                                panel.borrow_mut().open_file(&task);
-                                window.refresh();
-                            }
+                        .on_click(move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.open_file(&t);
+                                cx.notify();
+                            });
                         })
                         .into_any_element()
                 } else {
-                    div().w(px(22.0)).into_any_element()
+                    div().w(px(20.0)).into_any_element()
                 })
                 .child(if is_completed {
+                    let t = task_clone.clone();
                     action_icon("\u{1f50d}", dark)
                         .id(("dl-reveal", index))
-                        .on_click({
-                            let task = task.clone();
-                            move |_, window, _cx| {
-                                if let Some(parent) = std::path::Path::new(&task.save_path).parent()
-                                {
-                                    let _ = qingqi_platform::shell::open_path(parent);
-                                }
-                                window.refresh();
+                        .on_click(move |_, _window, _cx| {
+                            if let Some(parent) = std::path::Path::new(&t.save_path).parent()
+                            {
+                                let _ = qingqi_platform::shell::open_path(parent);
                             }
                         })
                         .into_any_element()
                 } else {
-                    div().w(px(22.0)).into_any_element()
+                    div().w(px(20.0)).into_any_element()
                 }),
         )
 }
@@ -1453,7 +1456,7 @@ fn bottom_bar(
     save_dir: &str,
     settings: &super::model::DownloadSettings,
     stats: &DownloadStats,
-    panel: Rc<RefCell<DownloadManagerView>>,
+    handle: Entity<DownloadManagerView>,
 ) -> impl IntoElement {
     let speed_note = if settings.speed_limit_kbps > 0 {
         format!("  限速 {} KB/s", settings.speed_limit_kbps)
@@ -1471,24 +1474,24 @@ fn bottom_bar(
     );
 
     div()
-        .rounded(px(10.0))
+        .rounded(px(6.0))
         .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
         .border_1()
         .border_color(ui::border_light())
-        .p_3()
+        .p_1p5()
         .flex()
         .items_center()
-        .gap_2()
+        .gap_1()
         .child(
             div()
                 .flex_1()
-                .text_size(px(11.0))
+                .text_size(px(10.0))
                 .text_color(theme::semantic().text_regular)
                 .child(message),
         )
         .child(
             div()
-                .text_size(px(10.0))
+                .text_size(px(9.0))
                 .text_color(ui::text_tertiary())
                 .overflow_hidden()
                 .child(format!(
@@ -1502,10 +1505,12 @@ fn bottom_bar(
             secondary_btn("\u{2699} 设置", dark)
                 .id("download-settings")
                 .on_click({
-                    let panel = Rc::clone(&panel);
-                    move |_, window, _cx| {
-                        panel.borrow_mut().toggle_settings();
-                        window.refresh();
+                    let h = handle.clone();
+                    move |_, _window, cx| {
+                        cx.update_entity(&h, |panel, cx| {
+                            panel.toggle_settings();
+                            cx.notify();
+                        });
                     }
                 }),
         )
@@ -1513,16 +1518,18 @@ fn bottom_bar(
             secondary_btn("打开目录", dark)
                 .id("download-open-dir")
                 .on_click({
-                    let panel = Rc::clone(&panel);
-                    move |_, window, _cx| {
-                        panel.borrow_mut().open_save_dir();
-                        window.refresh();
+                    let h = handle.clone();
+                    move |_, _window, cx| {
+                        cx.update_entity(&h, |panel, cx| {
+                            panel.open_save_dir();
+                            cx.notify();
+                        });
                     }
                 }),
         )
         .child(
             div()
-                .text_size(px(10.0))
+                .text_size(px(9.0))
                 .text_color(ui::text_tertiary())
                 .child(summary),
         )
@@ -1540,13 +1547,13 @@ fn settings_overlay(
     referer_input: Option<Entity<TextInput>>,
     cookie_input: Option<Entity<TextInput>>,
     headers_input: Option<Entity<TextInput>>,
-    panel: Rc<RefCell<DownloadManagerView>>,
+    handle: Entity<DownloadManagerView>,
 ) -> impl IntoElement {
     div()
         .absolute()
         .inset_0()
         .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.92))
-        .rounded(px(12.0))
+        .rounded(px(8.0))
         .flex()
         .flex_col()
         .child(
@@ -1554,12 +1561,12 @@ fn settings_overlay(
                 .flex()
                 .items_center()
                 .justify_between()
-                .p_4()
+                .p_2()
                 .border_b_1()
                 .border_color(ui::border_light())
                 .child(
                     div()
-                        .text_size(px(14.0))
+                        .text_size(px(12.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme::semantic().text_primary)
                         .child("下载设置"),
@@ -1568,19 +1575,23 @@ fn settings_overlay(
                     div()
                         .flex()
                         .items_center()
-                        .gap_2()
+                        .gap_1()
                         .child(secondary_btn("保存", dark).id("settings-save").on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, cx| {
-                                panel.borrow_mut().save_settings(cx);
-                                window.refresh();
+                            let h = handle.clone();
+                            move |_, _window, cx| {
+                                cx.update_entity(&h, |panel, cx| {
+                                    panel.save_settings(cx);
+                                    cx.notify();
+                                });
                             }
                         }))
                         .child(secondary_btn("取消", dark).id("settings-cancel").on_click({
-                            let panel = Rc::clone(&panel);
-                            move |_, window, _cx| {
-                                panel.borrow_mut().show_settings = false;
-                                window.refresh();
+                            let h = handle.clone();
+                            move |_, _window, cx| {
+                                cx.update_entity(&h, |panel, cx| {
+                                    panel.show_settings = false;
+                                    cx.notify();
+                                });
                             }
                         })),
                 ),
@@ -1590,18 +1601,17 @@ fn settings_overlay(
                 .id("settings-scroll")
                 .flex_1()
                 .overflow_y_scroll()
-                .p_4()
+                .p_2()
                 .flex()
                 .flex_col()
-                .gap_3()
-                .child(settings_field(dark, "保存目录", save_root_input))
+                .gap_1p5()
+                .child(settings_field("保存目录", save_root_input))
                 .child(
                     div()
                         .flex()
-                        .gap_3()
-                        .child(settings_field(dark, "并发数 (1-16)", concurrent_input))
+                        .gap_1p5()
+                        .child(settings_field("并发数 (1-16)", concurrent_input))
                         .child(settings_field(
-                            dark,
                             "限速 KB/s (0=不限)",
                             speed_limit_input,
                         )),
@@ -1609,28 +1619,27 @@ fn settings_overlay(
                 .child(
                     div()
                         .flex()
-                        .gap_3()
-                        .child(settings_field(dark, "超时 (秒)", timeout_input))
-                        .child(settings_field(dark, "重试次数", retry_input)),
+                        .gap_1p5()
+                        .child(settings_field("超时 (秒)", timeout_input))
+                        .child(settings_field("重试次数", retry_input)),
                 )
-                .child(settings_field(dark, "代理 URL", proxy_input))
-                .child(settings_field(dark, "User-Agent", user_agent_input))
+                .child(settings_field("代理 URL", proxy_input))
+                .child(settings_field("User-Agent", user_agent_input))
                 .child(
                     div()
                         .flex()
-                        .gap_3()
-                        .child(settings_field(dark, "Referer", referer_input))
-                        .child(settings_field(dark, "Cookie", cookie_input)),
+                        .gap_1p5()
+                        .child(settings_field("Referer", referer_input))
+                        .child(settings_field("Cookie", cookie_input)),
                 )
                 .child(settings_field(
-                    dark,
                     "自定义请求头 (每行 Key: Value)",
                     headers_input,
                 )),
         )
 }
 
-fn settings_field(_dark: bool, label: &str, input: Option<Entity<TextInput>>) -> gpui::Div {
+fn settings_field(label: &str, input: Option<Entity<TextInput>>) -> gpui::Div {
     div()
         .flex_1()
         .flex()
@@ -1638,13 +1647,13 @@ fn settings_field(_dark: bool, label: &str, input: Option<Entity<TextInput>>) ->
         .gap_1()
         .child(
             div()
-                .text_size(px(10.0))
+                .text_size(px(9.0))
                 .text_color(ui::text_tertiary())
                 .child(label.to_string()),
         )
         .child(
             div()
-                .h(px(28.0))
+                .h(px(26.0))
                 .rounded(px(6.0))
                 .bg(theme::rgba_with_alpha(theme::semantic().bg_subtle, 0.65))
                 .border_1()
@@ -1659,39 +1668,22 @@ fn settings_field(_dark: bool, label: &str, input: Option<Entity<TextInput>>) ->
 
 fn primary_btn(label: &str, accent: PluginAccent, _dark: bool) -> gpui::Div {
     div()
-        .h(px(32.0))
-        .px_3()
-        .rounded(px(8.0))
+        .h(px(26.0))
+        .px_2()
+        .rounded(px(6.0))
         .bg(ui::accent_color(accent))
         .hover(|style| style.cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(11.0))
+        .text_size(px(10.0))
         .text_color(theme::white())
         .child(label.to_string())
 }
 
 fn secondary_btn(label: &str, _dark: bool) -> gpui::Div {
     div()
-        .h(px(32.0))
-        .px_3()
-        .rounded(px(8.0))
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.88))
-        .border_1()
-        .border_color(ui::border_light())
-        .hover(|style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .text_color(theme::semantic().text_primary)
-        .child(label.to_string())
-}
-
-fn action_button(label: &str, _dark: bool) -> gpui::Div {
-    div()
-        .h(px(28.0))
+        .h(px(26.0))
         .px_2()
         .rounded(px(6.0))
         .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.88))
@@ -1706,30 +1698,34 @@ fn action_button(label: &str, _dark: bool) -> gpui::Div {
         .child(label.to_string())
 }
 
+fn action_button(label: &str, _dark: bool) -> gpui::Div {
+    div()
+        .h(px(26.0))
+        .px_1p5()
+        .rounded(px(6.0))
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.88))
+        .border_1()
+        .border_color(ui::border_light())
+        .hover(|style| style.cursor_pointer())
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(9.0))
+        .text_color(theme::semantic().text_primary)
+        .child(label.to_string())
+}
+
 fn action_icon(icon: &str, _dark: bool) -> gpui::Div {
     div()
-        .size(px(22.0))
+        .size(px(20.0))
         .rounded(px(4.0))
         .hover(|style| style.cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(12.0))
+        .text_size(px(11.0))
         .text_color(ui::text_secondary())
         .child(icon.to_string())
-}
-
-fn table_header_cell(label: &str, width: f32) -> gpui::Div {
-    div().w(px(width)).child(label.to_string())
-}
-
-fn table_header_flex(label: &str, grow: f32) -> gpui::Div {
-    let cell = div().child(label.to_string());
-    if grow >= 2.0 {
-        cell.flex_1()
-    } else {
-        cell.w(px(96.0))
-    }
 }
 
 // ── Formatting Helpers ──

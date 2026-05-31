@@ -72,9 +72,7 @@ pub fn register_builtin_plugins(host: &mut AppHost) -> Result<Arc<dyn ClipboardC
         |cx| feature_quick_launch::build(Arc::clone(&cx.database), cx.paths.clone()),
     );
     registry.register(
-        PluginDescriptor::builtin(
-            feature_system_settings::plugin::SystemSettingsPlugin::manifest_static(),
-        )
+        PluginDescriptor::builtin(feature_system_settings::manifest::manifest())
         .with_databases(feature_system_settings::databases()),
         {
             let app_index_handle = Arc::clone(&app_index_handle);
@@ -91,7 +89,7 @@ pub fn register_builtin_plugins(host: &mut AppHost) -> Result<Arc<dyn ClipboardC
         },
     );
     registry.register(
-        PluginDescriptor::builtin(feature_gpui_demo::plugin::GpuiDemoPlugin::manifest_static()),
+        PluginDescriptor::builtin(feature_gpui_demo::manifest::manifest()),
         |_| feature_gpui_demo::build(),
     );
     registry.register(

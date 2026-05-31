@@ -1,6 +1,6 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
-use gpui::{AnyElement, App, IntoElement, Window};
+use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 
 use crate::{manifest, service::FtpSftpSshService, view};
 use qingqi_plugin::{
@@ -79,9 +79,8 @@ impl Plugin for FtpSftpSshPlugin {
     fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let service = self.service()?;
         self.ensure_watcher(Arc::clone(&service), cx.events.clone(), cx.app);
-        Ok(PluginView::Window(Box::new(FtpSftpSshView {
-            panel: Rc::new(RefCell::new(view::FtpSftpSshView::new(service))),
-        })))
+        let handle = cx.app.new(|_cx| view::FtpSftpSshView::new(service));
+        Ok(PluginView::Window(Box::new(FtpSftpSshView { panel: handle })))
     }
 
     fn close_idle(&mut self) {
@@ -98,7 +97,7 @@ impl Plugin for FtpSftpSshPlugin {
 }
 
 struct FtpSftpSshView {
-    panel: Rc<RefCell<view::FtpSftpSshView>>,
+    panel: Entity<view::FtpSftpSshView>,
 }
 
 impl WindowView for FtpSftpSshView {
@@ -111,9 +110,6 @@ impl WindowView for FtpSftpSshView {
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
-        view::FtpSftpSshElement {
-            panel: Rc::clone(&self.panel),
-        }
-        .into_any_element()
+        self.panel.clone().into_any_element()
     }
 }

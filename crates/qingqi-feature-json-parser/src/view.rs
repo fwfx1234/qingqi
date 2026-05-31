@@ -1,12 +1,8 @@
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use gpui::{
-    AnyElement, App, AppContext, AsyncApp, Component, Entity, InteractiveElement, IntoElement,
-    ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window, div,
+    App, AppContext, AsyncApp, Context, Entity, FontWeight, InteractiveElement, IntoElement,
+    ParentElement, Render, StatefulInteractiveElement, Styled, Window, div,
     prelude::FluentBuilder, px,
 };
 
@@ -15,8 +11,6 @@ use qingqi_ui::{
     text_input::{TextInput, TextInputStyle},
     theme, ui,
 };
-
-const STACKED_LAYOUT_BREAKPOINT_PX: f32 = 860.0;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum JsonAction {
@@ -36,12 +30,6 @@ enum StatusTone {
     Error,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum JsonLayoutMode {
-    SideBySide,
-    Stacked,
-}
-
 pub struct JsonView {
     input: Option<Entity<TextInput>>,
     query: Option<Entity<TextInput>>,
@@ -52,6 +40,7 @@ pub struct JsonView {
     error_loc_text: String,
     last_mode: JsonMode,
     pending: Arc<Mutex<Option<JsonBackgroundResult>>>,
+    last_output_height: f32,
 }
 
 #[derive(Clone)]
@@ -72,6 +61,7 @@ impl JsonView {
             error_loc_text: String::new(),
             last_mode: JsonMode::Format,
             pending: Arc::new(Mutex::new(None)),
+            last_output_height: 0.0,
         }
     }
 
@@ -82,16 +72,16 @@ impl JsonView {
         self.error_loc_text.clear();
     }
 
-    fn ensure_inputs(&mut self, cx: &mut App) {
+    fn ensure_inputs(&mut self, cx: &mut Context<Self>) {
         if self.input.is_none() {
             self.input = Some(cx.new(|cx| {
-                let mut input = TextInput::new(cx, "粘贴或输入 JSON 内容", "");
+                let mut input = TextInput::new(cx, "粘贴或输入 JSON…", "");
                 input.set_multiline(true, cx);
                 input.set_monospace(true, cx);
                 input.set_chrome(false, cx);
                 input.set_style(
                     TextInputStyle {
-                        height: 248.0,
+                        height: 160.0,
                         font_size: 12.0,
                         padding: 10.0,
                     },
@@ -103,12 +93,12 @@ impl JsonView {
 
         if self.query.is_none() {
             self.query = Some(cx.new(|cx| {
-                let mut input = TextInput::new(cx, "$.foo.bar / .foo.bar / /foo/bar", "");
+                let mut input = TextInput::new(cx, "$.store.book[*].author", "");
                 input.set_chrome(false, cx);
                 input.set_style(
                     TextInputStyle {
-                        height: 32.0,
-                        font_size: 12.0,
+                        height: 38.0,
+                        font_size: 13.0,
                         padding: 8.0,
                     },
                     cx,
@@ -118,15 +108,16 @@ impl JsonView {
         }
 
         if self.output.is_none() {
+            let initial_height: f32 = 300.0;
             self.output = Some(cx.new(|cx| {
-                let mut input = TextInput::new(cx, "等待操作...", "");
+                let mut input = TextInput::new(cx, "处理结果…", "");
                 input.set_multiline(true, cx);
                 input.set_monospace(true, cx);
                 input.set_read_only(true, cx);
                 input.set_chrome(false, cx);
                 input.set_style(
                     TextInputStyle {
-                        height: 248.0,
+                        height: initial_height,
                         font_size: 12.0,
                         padding: 10.0,
                     },
@@ -134,10 +125,11 @@ impl JsonView {
                 );
                 input
             }));
+            self.last_output_height = initial_height;
         }
     }
 
-    fn apply_result(&mut self, result: JsonResult, mode: JsonMode, cx: &mut App) {
+    fn apply_result(&mut self, result: JsonResult, mode: JsonMode, cx: &mut Context<Self>) {
         self.last_mode = mode;
         let output_text = if result.output.is_empty() {
             String::new()
@@ -175,7 +167,7 @@ impl JsonView {
         self.status_tone = tone;
     }
 
-    pub fn set_launch_input(&mut self, text: &str, cx: &mut App) {
+    pub fn set_launch_input(&mut self, text: &str, cx: &mut Context<Self>) {
         self.ensure_inputs(cx);
         if let Some(input) = self.input.as_ref() {
             input.update(cx, |input, input_cx| {
@@ -200,7 +192,7 @@ impl JsonView {
         );
     }
 
-    fn collect_pending_result(&mut self, cx: &mut App) {
+    fn collect_pending_result(&mut self, cx: &mut Context<Self>) {
         let pending = self.pending.lock().ok().and_then(|mut slot| slot.take());
         if let Some(background) = pending {
             self.apply_result(background.result, background.mode, cx);
@@ -236,242 +228,219 @@ impl JsonView {
     }
 }
 
-pub struct JsonParserElement {
-    pub panel: Rc<RefCell<JsonView>>,
-}
+impl Render for JsonView {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.collect_pending_result(cx);
+        self.ensure_inputs(cx);
 
-impl IntoElement for JsonParserElement {
-    type Element = Component<Self>;
+        // Compute output height dynamically so it fills remaining space.
+        // Pixels / Pixels = f32, so dividing by px(1.0) extracts the numeric value.
+        let window_h: f32 = window.bounds().size.height / px(1.0);
+        // Fixed vertical space consumed by header, input, query, status, gaps, padding.
+        // Header: ~46px, Input section: ~200px, Query section: ~120px,
+        // Status bar: ~36px, internal padding/gaps: ~60px.
+        // That's about 462px overhead. The remaining goes to the output.
+        let fixed_overhead: f32 = 462.0;
+        let computed_output_h = (window_h - fixed_overhead).max(128.0);
 
-    fn into_element(self) -> Self::Element {
-        Component::new(self)
-    }
-}
-
-impl RenderOnce for JsonParserElement {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        {
-            let mut panel = self.panel.borrow_mut();
-            panel.collect_pending_result(cx);
-            panel.ensure_inputs(cx);
+        if (computed_output_h - self.last_output_height).abs() > 1.0 {
+            self.last_output_height = computed_output_h;
+            if let Some(output) = self.output.as_ref() {
+                output.update(cx, |input, input_cx| {
+                    input.set_style(
+                        TextInputStyle {
+                            height: computed_output_h,
+                            font_size: 12.0,
+                            padding: 10.0,
+                        },
+                        input_cx,
+                    );
+                });
+            }
         }
-        let panel = self.panel.borrow();
-        let input = panel.input.clone();
-        let query = panel.query.clone();
-        let output = panel.output.clone();
-        let status_text = panel.status_text.clone();
-        let stats_text = panel.stats_text.clone();
-        let error_loc_text = panel.error_loc_text.clone();
-        let last_mode = panel.last_mode;
-        let status_tone = panel.status_tone;
-        drop(panel);
 
-        let dark = qingqi_ui::theme_mode::is_dark();
-        let layout_mode = json_layout_mode(window.bounds().size.width);
+        let input = self.input.clone();
+        let query = self.query.clone();
+        let output = self.output.clone();
+        let status_text = self.status_text.clone();
+        let stats_text = self.stats_text.clone();
+        let error_loc_text = self.error_loc_text.clone();
+        let last_mode = self.last_mode;
+        let status_tone = self.status_tone;
+        let panel = cx.entity();
 
         ui::plugin_surface().child(
-            ui::plugin_scroll_content()
+            ui::plugin_content()
                 .flex()
                 .flex_col()
                 .gap_3()
-                .child(module_header())
-                .child(
-                    div()
-                        .flex()
-                        .flex_wrap()
-                        .gap_2()
-                        .child(mode_button(
-                            "格式化",
-                            JsonAction::Format,
-                            Rc::clone(&self.panel),
-                            dark,
-                            last_mode == JsonMode::Format,
-                        ))
-                        .child(mode_button(
-                            "压缩",
-                            JsonAction::Compact,
-                            Rc::clone(&self.panel),
-                            dark,
-                            last_mode == JsonMode::Compact,
-                        ))
-                        .child(mode_button(
-                            "验证",
-                            JsonAction::ValidateOnly,
-                            Rc::clone(&self.panel),
-                            dark,
-                            last_mode == JsonMode::Validate,
-                        ))
-                        .child(mode_button(
-                            "执行查询",
-                            JsonAction::Query,
-                            Rc::clone(&self.panel),
-                            dark,
-                            last_mode == JsonMode::Query,
-                        ))
-                        .child(toolbar_button(
-                            "复制输出",
-                            JsonAction::CopyOutput,
-                            Rc::clone(&self.panel),
-                            dark,
-                        ))
-                        .child(toolbar_button(
-                            "从剪贴板填充",
-                            JsonAction::PasteInput,
-                            Rc::clone(&self.panel),
-                            dark,
-                        ))
-                        .child(div().flex_1())
-                        .child(toolbar_button(
-                            "清空",
-                            JsonAction::Clear,
-                            Rc::clone(&self.panel),
-                            dark,
-                        )),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(
-                            div()
-                                .w(px(74.0))
-                                .text_size(px(11.0))
-                                .text_color(ui::text_secondary())
-                                .child("JSONPath"),
-                        )
-                        .child(
-                            div()
-                                .flex_1()
-                                .h(px(34.0))
-                                .rounded(px(10.0))
-                                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.86))
-                                .border_1()
-                                .border_color(ui::border_light())
-                                .child(query.unwrap().into_any_element()),
-                        ),
-                )
-                .child(editor_split(
-                    layout_mode,
-                    input.unwrap().into_any_element(),
-                    output.unwrap(),
-                    dark,
-                    last_mode,
-                ))
-                .child(status_bar(
-                    status_text,
-                    stats_text,
-                    error_loc_text,
-                    status_tone,
-                    dark,
-                )),
+                .child(header(&panel))
+                .child(input_section(input.unwrap()))
+                .child(query_section(query.unwrap(), &panel, last_mode))
+                .child(output_section(output.unwrap(), &panel, last_mode))
+                .child(status_footer(status_text, stats_text, error_loc_text, status_tone)),
         )
     }
 }
 
-fn json_layout_mode(width: gpui::Pixels) -> JsonLayoutMode {
-    if width < px(STACKED_LAYOUT_BREAKPOINT_PX) {
-        JsonLayoutMode::Stacked
-    } else {
-        JsonLayoutMode::SideBySide
-    }
-}
+// ── Header ──────────────────────────────────────────────────────────────────
 
-fn editor_split(
-    layout_mode: JsonLayoutMode,
-    input: AnyElement,
-    output: Entity<TextInput>,
-    dark: bool,
-    last_mode: JsonMode,
-) -> impl IntoElement {
-    let split = div().flex_1().w_full().flex().gap_3();
-    let split = match layout_mode {
-        JsonLayoutMode::SideBySide => split,
-        JsonLayoutMode::Stacked => split.flex_col(),
-    };
-
-    split
-        .child(editor_pane(
-            "输入",
-            theme::semantic().bg_surface,
-            input,
-            dark,
-            layout_mode,
-        ))
-        .child(output_pane(output, dark, last_mode, layout_mode))
-}
-
-fn editor_pane(
-    title: &'static str,
-    background: gpui::Rgba,
-    content: impl IntoElement,
-    _dark: bool,
-    layout_mode: JsonLayoutMode,
-) -> impl IntoElement {
+fn header(panel: &Entity<JsonView>) -> impl IntoElement {
     div()
-        .flex_1()
-        .w_full()
-        .when(layout_mode == JsonLayoutMode::Stacked, |pane| {
-            pane.min_h(px(220.0))
-        })
+        .flex()
+        .items_center()
+        .justify_between()
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(
+                    div()
+                        .text_size(px(16.0))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(theme::semantic().text_primary)
+                        .child("📦 JSON 解析"),
+                )
+                .child(
+                    div()
+                        .text_size(px(11.0))
+                        .text_color(ui::text_secondary())
+                        .child("JSON Parser"),
+                ),
+        )
+        .child(
+            div()
+                .flex()
+                .gap_2()
+                .child(secondary_button("粘贴", JsonAction::PasteInput, panel))
+                .child(secondary_button("清空", JsonAction::Clear, panel)),
+        )
+}
+
+// ── Input Section ───────────────────────────────────────────────────────────
+
+fn input_section(input: Entity<TextInput>) -> impl IntoElement {
+    div()
         .flex()
         .flex_col()
         .gap_2()
         .child(
             div()
-                .text_size(px(10.0))
-                .text_color(ui::text_secondary())
-                .child(title),
+                .text_size(px(12.0))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(ui::text_primary())
+                .child("输入文本"),
         )
         .child(
             div()
-                .flex_1()
-                .rounded(px(12.0))
-                .bg(theme::rgba_with_alpha(background, 0.86))
+                .flex()
+                .flex_col()
+                .rounded(px(10.0))
+                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.86))
                 .border_1()
                 .border_color(ui::border_light())
-                .child(content),
+                .overflow_hidden()
+                .child(input),
         )
 }
 
-fn output_pane(
-    output: Entity<TextInput>,
-    _dark: bool,
+// ── Query Section ───────────────────────────────────────────────────────────
+
+fn query_section(
+    query: Entity<TextInput>,
+    panel: &Entity<JsonView>,
     last_mode: JsonMode,
-    layout_mode: JsonLayoutMode,
 ) -> impl IntoElement {
     div()
-        .flex_1()
-        .w_full()
-        .when(layout_mode == JsonLayoutMode::Stacked, |pane| {
-            pane.min_h(px(220.0))
-        })
         .flex()
         .flex_col()
         .gap_2()
         .child(
             div()
-                .text_size(px(10.0))
-                .text_color(ui::text_secondary())
-                .child(output_title(last_mode)),
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .text_size(px(12.0))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(ui::text_primary())
+                        .child("JSONPath 查询"),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .gap_2()
+                        .child(mode_pill("格式化", JsonAction::Format, panel, last_mode == JsonMode::Format))
+                        .child(mode_pill("压缩", JsonAction::Compact, panel, last_mode == JsonMode::Compact))
+                        .child(mode_pill("验证", JsonAction::ValidateOnly, panel, last_mode == JsonMode::Validate)),
+                ),
+        )
+        .child(
+            div()
+                .rounded(px(10.0))
+                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.86))
+                .border_1()
+                .border_color(ui::border_light())
+                .overflow_hidden()
+                .child(query),
+        )
+        .child(
+            div()
+                .flex()
+                .justify_end()
+                .child(query_execute_button("执行 JSONPath 查询", panel)),
+        )
+}
+
+// ── Output Section ──────────────────────────────────────────────────────────
+
+fn output_section(
+    output: Entity<TextInput>,
+    panel: &Entity<JsonView>,
+    _last_mode: JsonMode,
+) -> impl IntoElement {
+    div()
+        .flex_1()
+        .w_full()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .text_size(px(12.0))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(ui::text_primary())
+                        .child("输出结果"),
+                )
+                .child(secondary_button("复制输出", JsonAction::CopyOutput, panel)),
         )
         .child(
             div()
                 .flex_1()
-                .rounded(px(12.0))
+                .w_full()
+                .rounded(px(10.0))
                 .bg(theme::rgba_with_alpha(theme::semantic().bg_subtle, 0.76))
                 .border_1()
                 .border_color(ui::border_light())
+                .overflow_hidden()
                 .child(output),
         )
 }
 
-fn status_bar(
+// ── Status Footer ───────────────────────────────────────────────────────────
+
+fn status_footer(
     status_text: String,
     stats_text: String,
     error_loc_text: String,
     status_tone: StatusTone,
-    _dark: bool,
 ) -> impl IntoElement {
     let status_color = match status_tone {
         StatusTone::Neutral => theme::semantic().text_regular,
@@ -479,16 +448,39 @@ fn status_bar(
         StatusTone::Error => theme::semantic().danger,
     };
 
+    let tone_icon = match status_tone {
+        StatusTone::Success => "✓",
+        StatusTone::Error => "✗",
+        StatusTone::Neutral => "",
+    };
+
     div()
-        .h(px(32.0))
+        .min_h(px(32.0))
         .rounded(px(10.0))
         .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
         .border_1()
         .border_color(ui::border_light())
         .px_3()
+        .py_1p5()
         .flex()
         .items_center()
-        .gap_3()
+        .flex_wrap()
+        .gap_x_3()
+        .gap_y_1()
+        .child(
+            div()
+                .text_size(px(10.0))
+                .text_color(ui::text_tertiary())
+                .child("统计"),
+        )
+        .when(!tone_icon.is_empty(), |bar| {
+            bar.child(
+                div()
+                    .text_size(px(11.0))
+                    .text_color(status_color)
+                    .child(tone_icon),
+            )
+        })
         .child(
             div()
                 .flex_1()
@@ -500,7 +492,7 @@ fn status_bar(
             bar.child(
                 div()
                     .text_size(px(11.0))
-                    .font_family("SF Mono")
+                    .font_family(ui::font_mono())
                     .text_color(theme::semantic().danger)
                     .child(error_loc_text),
             )
@@ -509,83 +501,25 @@ fn status_bar(
             bar.child(
                 div()
                     .text_size(px(11.0))
-                    .font_family("SF Mono")
+                    .font_family(ui::font_mono())
                     .text_color(ui::text_tertiary())
                     .child(stats_text),
             )
         })
 }
 
-fn output_title(mode: JsonMode) -> &'static str {
-    match mode {
-        JsonMode::Compact => "输出 (压缩)",
-        JsonMode::Query => "输出 (查询结果)",
-        JsonMode::Validate => "输出 (验证)",
-        JsonMode::Format => "输出 (格式化)",
-    }
-}
+// ── Button Helpers ──────────────────────────────────────────────────────────
 
-fn mode_button(
+fn secondary_button(
     label: &'static str,
     action: JsonAction,
-    panel: Rc<RefCell<JsonView>>,
-    _dark: bool,
-    active: bool,
-) -> impl IntoElement {
-    let background = if active {
-        theme::rgba_with_alpha(
-            theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Green),
-            0.14,
-        )
-    } else {
-        theme::rgba_with_alpha(theme::semantic().bg_surface, 0.84)
-    };
-    let border = if active {
-        theme::rgba_with_alpha(
-            theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Green),
-            0.24,
-        )
-    } else {
-        ui::border_light()
-    };
-    let text_color = if active {
-        theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Green)
-    } else {
-        theme::semantic().text_primary
-    };
-
-    div()
-        .id(label)
-        .h(px(30.0))
-        .px_3()
-        .rounded(px(8.0))
-        .bg(background)
-        .border_1()
-        .border_color(border)
-        .hover(move |style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .text_color(text_color)
-        .child(label)
-        .on_click(move |_, window, cx| {
-            run_action(action, &panel, cx);
-            window.refresh();
-        })
-}
-
-fn toolbar_button(
-    label: &'static str,
-    action: JsonAction,
-    panel: Rc<RefCell<JsonView>>,
-    _dark: bool,
+    panel: &Entity<JsonView>,
 ) -> impl IntoElement {
     div()
         .id(label)
-        .h(px(30.0))
+        .h(px(28.0))
         .px_3()
-        .rounded(px(8.0))
+        .rounded(px(6.0))
         .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.84))
         .border_1()
         .border_color(ui::border_light())
@@ -596,89 +530,142 @@ fn toolbar_button(
         .text_size(px(11.0))
         .text_color(theme::semantic().text_primary)
         .child(label)
-        .on_click(move |_, window, cx| {
-            run_action(action, &panel, cx);
-            window.refresh();
+        .on_click({
+            let panel = panel.clone();
+            move |_, window, cx| {
+                run_action(action, &panel, cx);
+                window.refresh();
+            }
         })
 }
 
-fn module_header() -> impl IntoElement {
-    div().flex().items_center().justify_between().child(
-        div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .child(
-                div()
-                    .text_size(px(16.0))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme::semantic().text_primary)
-                    .child("📦 JSON 解析"),
-            )
-            .child(
-                div()
-                    .text_size(px(11.0))
-                    .text_color(ui::text_secondary())
-                    .child("JSON Parser"),
-            ),
-    )
+fn mode_pill(
+    label: &'static str,
+    action: JsonAction,
+    panel: &Entity<JsonView>,
+    active: bool,
+) -> impl IntoElement {
+    let accent = theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Green);
+    let background = if active {
+        theme::rgba_with_alpha(accent, 0.14)
+    } else {
+        theme::rgba_with_alpha(theme::semantic().bg_surface, 0.84)
+    };
+    let border = if active {
+        theme::rgba_with_alpha(accent, 0.24)
+    } else {
+        ui::border_light()
+    };
+    let text_color = if active { accent } else { theme::semantic().text_primary };
+
+    div()
+        .id(label)
+        .h(px(26.0))
+        .px_2()
+        .rounded(px(6.0))
+        .bg(background)
+        .border_1()
+        .border_color(border)
+        .hover(move |style| style.cursor_pointer())
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(11.0))
+        .font_weight(if active { FontWeight::SEMIBOLD } else { FontWeight::default() })
+        .text_color(text_color)
+        .child(label)
+        .on_click({
+            let panel = panel.clone();
+            move |_, window, cx| {
+                run_action(action, &panel, cx);
+                window.refresh();
+            }
+        })
 }
 
-fn run_action(action: JsonAction, panel: &Rc<RefCell<JsonView>>, cx: &mut App) {
+fn query_execute_button(
+    label: &'static str,
+    panel: &Entity<JsonView>,
+) -> impl IntoElement {
+    let accent = theme::blue_500();
+    div()
+        .id(label)
+        .h(px(30.0))
+        .px_3()
+        .rounded(px(6.0))
+        .bg(accent)
+        .hover(move |style| style.bg(theme::blue_600()).cursor_pointer())
+        .flex()
+        .items_center()
+        .justify_center()
+        .gap_1()
+        .text_size(px(11.0))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(theme::white())
+        .child("▶")
+        .child(label)
+        .on_click({
+            let panel = panel.clone();
+            move |_, window, cx| {
+                run_action(JsonAction::Query, &panel, cx);
+                window.refresh();
+            }
+        })
+}
+
+// ── Actions ─────────────────────────────────────────────────────────────────
+
+fn run_action(action: JsonAction, panel: &Entity<JsonView>, cx: &mut App) {
     match action {
         JsonAction::CopyOutput => {
             let output = panel
-                .borrow()
+                .read(cx)
                 .output
                 .as_ref()
                 .map(|entity| entity.read(cx).text())
                 .unwrap_or_default();
             if output.is_empty() {
-                panel
-                    .borrow_mut()
-                    .set_status("无可复制内容", StatusTone::Neutral);
+                panel.update(cx, |panel, _cx| {
+                    panel.set_status("无可复制内容", StatusTone::Neutral);
+                });
                 return;
             }
             qingqi_platform::clipboard::write_text(cx, output);
-            panel
-                .borrow_mut()
-                .set_status("已复制到剪贴板", StatusTone::Success);
+            panel.update(cx, |panel, _cx| {
+                panel.set_status("已复制到剪贴板", StatusTone::Success);
+            });
         }
         JsonAction::PasteInput => {
             let text = qingqi_platform::clipboard::read_text(cx).unwrap_or_default();
             if text.trim().is_empty() {
-                panel
-                    .borrow_mut()
-                    .set_status("剪贴板为空", StatusTone::Neutral);
+                panel.update(cx, |panel, _cx| {
+                    panel.set_status("剪贴板为空", StatusTone::Neutral);
+                });
                 return;
             }
-            let input_entity = {
-                let mut state = panel.borrow_mut();
-                state.ensure_inputs(cx);
-                state.input.clone()
-            };
-            if let Some(input) = input_entity {
-                input.update(cx, |input, input_cx| input.set_text(text.clone(), input_cx));
-            }
+            panel.update(cx, |panel, cx| {
+                panel.ensure_inputs(cx);
+                if let Some(input) = panel.input.as_ref() {
+                    input.update(cx, |input, input_cx| input.set_text(text.clone(), input_cx));
+                }
+            });
             apply_mode(JsonMode::Format, panel, cx);
         }
         JsonAction::Clear => {
-            let (input_entity, query_entity) = {
-                let mut state = panel.borrow_mut();
-                state.clear();
-                state.ensure_inputs(cx);
-                (state.input.clone(), state.query.clone())
-            };
-            if let Some(input) = input_entity {
-                input.update(cx, |input, input_cx| input.clear(input_cx));
-            }
-            if let Some(query) = query_entity {
-                query.update(cx, |input, input_cx| input.clear(input_cx));
-            }
-            if let Some(output) = panel.borrow().output.clone() {
-                output.update(cx, |input, input_cx| input.clear(input_cx));
-            }
-            panel.borrow_mut().set_status("已清空", StatusTone::Neutral);
+            panel.update(cx, |panel, cx| {
+                panel.clear();
+                panel.ensure_inputs(cx);
+                if let Some(input) = panel.input.as_ref() {
+                    input.update(cx, |input, input_cx| input.clear(input_cx));
+                }
+                if let Some(query) = panel.query.as_ref() {
+                    query.update(cx, |input, input_cx| input.clear(input_cx));
+                }
+                if let Some(output) = panel.output.as_ref() {
+                    output.update(cx, |input, input_cx| input.clear(input_cx));
+                }
+                panel.set_status("已清空", StatusTone::Neutral);
+            });
         }
         JsonAction::Format => apply_mode(JsonMode::Format, panel, cx),
         JsonAction::Compact => apply_mode(JsonMode::Compact, panel, cx),
@@ -687,26 +674,21 @@ fn run_action(action: JsonAction, panel: &Rc<RefCell<JsonView>>, cx: &mut App) {
     }
 }
 
-fn apply_mode(mode: JsonMode, panel: &Rc<RefCell<JsonView>>, cx: &mut App) {
-    let (input_text, query_text) = {
-        let mut state = panel.borrow_mut();
-        state.ensure_inputs(cx);
-        let input_text = state
+fn apply_mode(mode: JsonMode, panel: &Entity<JsonView>, cx: &mut App) {
+    panel.update(cx, |panel, cx| {
+        panel.ensure_inputs(cx);
+        let input_text = panel
             .input
             .as_ref()
             .map(|input| input.read(cx).text())
             .unwrap_or_default();
-        let query_text = state
+        let query_text = panel
             .query
             .as_ref()
             .map(|input| input.read(cx).text())
             .unwrap_or_default();
-        (input_text, query_text)
-    };
-
-    panel
-        .borrow_mut()
-        .run_async(input_text, query_text, mode, cx.to_async());
+        panel.run_async(input_text, query_text, mode, cx.to_async());
+    });
 }
 
 fn format_stats(stats: &JsonStats) -> String {
@@ -726,27 +708,38 @@ fn format_stats(stats: &JsonStats) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{JsonLayoutMode, json_layout_mode, output_title};
-    use crate::service::JsonMode;
-    use gpui::px;
+    use super::format_stats;
+    use crate::service::JsonStats;
 
     #[test]
-    fn uses_side_by_side_layout_above_breakpoint() {
-        assert_eq!(json_layout_mode(px(980.0)), JsonLayoutMode::SideBySide);
-        assert_eq!(json_layout_mode(px(860.0)), JsonLayoutMode::SideBySide);
+    fn formats_stats_with_all_fields() {
+        let stats = JsonStats {
+            char_count: 120,
+            line_count: 5,
+            kind: "object".into(),
+            size: 3,
+            depth: 2,
+        };
+        let result = format_stats(&stats);
+        assert!(result.contains("object"));
+        assert!(result.contains("字符 120"));
+        assert!(result.contains("行 5"));
+        assert!(result.contains("元素 3"));
+        assert!(result.contains("深度 2"));
     }
 
     #[test]
-    fn uses_stacked_layout_below_breakpoint() {
-        assert_eq!(json_layout_mode(px(859.0)), JsonLayoutMode::Stacked);
-        assert_eq!(json_layout_mode(px(640.0)), JsonLayoutMode::Stacked);
-    }
-
-    #[test]
-    fn output_titles_follow_mode_labels() {
-        assert_eq!(output_title(JsonMode::Format), "输出 (格式化)");
-        assert_eq!(output_title(JsonMode::Compact), "输出 (压缩)");
-        assert_eq!(output_title(JsonMode::Validate), "输出 (验证)");
-        assert_eq!(output_title(JsonMode::Query), "输出 (查询结果)");
+    fn formats_stats_without_optional_fields() {
+        let stats = JsonStats {
+            char_count: 42,
+            line_count: 1,
+            kind: "string".into(),
+            size: 0,
+            depth: 0,
+        };
+        let result = format_stats(&stats);
+        assert!(result.contains("string"));
+        assert!(!result.contains("元素"));
+        assert!(!result.contains("深度"));
     }
 }

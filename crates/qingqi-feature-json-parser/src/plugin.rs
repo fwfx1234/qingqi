@@ -1,7 +1,6 @@
 use std::sync::Arc;
-use std::{cell::RefCell, rc::Rc};
 
-use gpui::{App, IntoElement, Window};
+use gpui::{App, AppContext, Entity, IntoElement, Window};
 
 use crate::{manifest, view};
 use qingqi_plugin::{
@@ -41,15 +40,14 @@ impl Plugin for JsonParserPlugin {
         }
     }
 
-    fn open(&mut self, _cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
-        Ok(PluginView::Inline(Box::new(JsonParserView {
-            panel: Rc::new(RefCell::new(view::JsonView::new())),
-        })))
+    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+        let panel = cx.app.new(|_cx| view::JsonView::new());
+        Ok(PluginView::Inline(Box::new(JsonParserView { panel })))
     }
 }
 
 struct JsonParserView {
-    panel: Rc<RefCell<view::JsonView>>,
+    panel: Entity<view::JsonView>,
 }
 
 impl InlineView for JsonParserView {
@@ -62,17 +60,13 @@ impl InlineView for JsonParserView {
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> gpui::AnyElement {
-        view::JsonParserElement {
-            panel: Rc::clone(&self.panel),
-        }
-        .into_any_element()
+        self.panel.clone().into_any_element()
     }
 
     fn on_input_changed(&mut self, text: &str, cx: &mut App) {
-        self.panel.borrow_mut().set_launch_input(text, cx);
+        self.panel
+            .update(cx, |panel, cx| panel.set_launch_input(text, cx));
     }
 
-    fn on_close(&mut self) {
-        self.panel.borrow_mut().clear();
-    }
+    fn on_close(&mut self) {}
 }

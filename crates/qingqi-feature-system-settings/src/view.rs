@@ -1,69 +1,465 @@
-use std::{cell::RefCell, rc::Rc};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use gpui::{
-    AnyElement, App, Component, Entity, InteractiveElement, IntoElement, ParentElement, RenderOnce,
-    StatefulInteractiveElement, Styled, Window, div, prelude::FluentBuilder, px,
+    AnyElement, App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement,
+    Render, StatefulInteractiveElement, Styled, Window, div, prelude::FluentBuilder, px,
 };
 
-use crate::plugin::SettingsView;
 use qingqi_platform::macos::PermissionStatus;
 use qingqi_plugin::{
     app::AppIndexSnapshot,
+    host::{AppIndexHandleRef, ShortcutHandleRef, ThemeHandleRef},
     shortcut::{CORE_PLUGIN_ID, ShortcutScope, ShortcutView},
+    storage::AppPaths,
     theme::ThemeMode,
 };
 use qingqi_ui::{
-    text_input::TextInput,
+    text_input::{TextInput, TextInputStyle},
     theme,
     ui::{self, components},
 };
 
-pub struct SettingsElement {
-    pub panel: Rc<RefCell<SettingsView>>,
+use crate::settings_store::{SettingsStore, retention_status_text};
+
+// ── SettingsView (model + rendering) ──
+
+pub struct SettingsView {
+    theme_handle: ThemeHandleRef,
+    settings_store: Arc<Mutex<SettingsStore>>,
+    app_index_handle: Option<AppIndexHandleRef>,
+    shortcut_handle: Option<ShortcutHandleRef>,
+    app_paths: AppPaths,
+    pub message: String,
+    retention_draft: u64,
+    retention_message: String,
+    accessibility_status: PermissionStatus,
+    icon_cache_message: String,
+    shortcut_inputs: HashMap<String, Entity<TextInput>>,
+    shortcut_drafts: HashMap<String, String>,
+    shortcut_message: String,
 }
 
-impl IntoElement for SettingsElement {
-    type Element = Component<Self>;
+impl SettingsView {
+    pub fn new(
+        theme_handle: ThemeHandleRef,
+        settings_store: Arc<Mutex<SettingsStore>>,
+        app_index_handle: Option<AppIndexHandleRef>,
+        shortcut_handle: Option<ShortcutHandleRef>,
+        app_paths: AppPaths,
+    ) -> Self {
+        let retention = settings_store
+            .lock()
+            .ok()
+            .map(|store| store.plugin_window_retention_seconds())
+            .unwrap_or(300);
+        let accessibility_status = qingqi_platform::macos::check_accessibility();
+        Self {
+            theme_handle,
+            settings_store,
+            app_index_handle,
+            shortcut_handle,
+            app_paths,
+            message: String::new(),
+            retention_draft: retention,
+            retention_message: String::new(),
+            accessibility_status,
+            icon_cache_message: String::new(),
+            shortcut_inputs: HashMap::new(),
+            shortcut_drafts: HashMap::new(),
+            shortcut_message: String::new(),
+        }
+    }
 
-    fn into_element(self) -> Self::Element {
-        Component::new(self)
+    // ── Theme ──
+
+    pub fn current_mode(&self) -> ThemeMode {
+        self.theme_handle.mode()
+    }
+
+    pub fn theme_config_path(&self) -> String {
+        self.theme_handle.config_path()
+    }
+
+    pub fn system_dark(&self) -> bool {
+        self.theme_handle.system_dark()
+    }
+
+    pub fn set_theme_mode(&mut self, mode: ThemeMode) {
+        let label = mode.label();
+        match self.theme_handle.set_mode(mode) {
+            Ok(()) => self.message = format!("已切换为{label}"),
+            Err(error) => self.message = format!("主题切换失败: {error}"),
+        }
+    }
+
+    // ── Retention ──
+
+    pub fn retention_seconds(&self) -> u64 {
+        self.retention_draft
+    }
+
+    pub fn retention_status(&self) -> String {
+        retention_status_text(self.retention_draft)
+    }
+
+    pub fn retention_message_text(&self) -> &str {
+        &self.retention_message
+    }
+
+    pub fn set_retention_draft(&mut self, seconds: u64) {
+        self.retention_draft = seconds.clamp(1, 3600);
+        self.retention_message.clear();
+    }
+
+    pub fn adjust_retention(&mut self, delta: i64) {
+        let new_value = if delta >= 0 {
+            (self.retention_draft as i64)
+                .saturating_add(delta)
+                .min(3600) as u64
+        } else {
+            (self.retention_draft as i64).saturating_add(delta).max(1) as u64
+        };
+        self.retention_draft = new_value;
+        self.retention_message.clear();
+    }
+
+    pub fn save_retention(&mut self) {
+        match self.settings_store.lock() {
+            Ok(mut store) => {
+                match store.set_plugin_window_retention_seconds(self.retention_draft) {
+                    Ok(saved) => {
+                        self.retention_draft = saved;
+                        self.retention_message = String::from("已保存");
+                    }
+                    Err(error) => {
+                        self.retention_message = format!("保存失败: {error}");
+                    }
+                }
+            }
+            Err(_) => {
+                self.retention_message = String::from("设置存储不可用");
+            }
+        }
+    }
+
+    pub fn restore_default_retention(&mut self) {
+        match self.settings_store.lock() {
+            Ok(mut store) => match store.restore_default_retention() {
+                Ok(value) => {
+                    self.retention_draft = value;
+                    self.retention_message = String::from("已恢复默认");
+                }
+                Err(error) => {
+                    self.retention_message = format!("恢复失败: {error}");
+                }
+            },
+            Err(_) => {
+                self.retention_message = String::from("设置存储不可用");
+            }
+        }
+    }
+
+    // ── App Index ──
+
+    pub fn app_index_available(&self) -> bool {
+        self.app_index_handle.is_some()
+    }
+
+    pub fn app_index_snapshot(&self) -> Option<AppIndexSnapshot> {
+        self.app_index_handle.as_ref().map(|svc| svc.snapshot())
+    }
+
+    pub fn request_rescan(&mut self) -> bool {
+        match &self.app_index_handle {
+            Some(svc) => {
+                if svc.request_scan() {
+                    self.message = String::from("正在后台重新扫描应用");
+                    true
+                } else {
+                    self.message = String::from("应用索引扫描已在进行中");
+                    false
+                }
+            }
+            None => {
+                self.message = String::from("应用索引服务不可用");
+                false
+            }
+        }
+    }
+
+    // ── Accessibility ──
+
+    pub fn accessibility_status(&self) -> PermissionStatus {
+        self.accessibility_status
+    }
+
+    pub fn accessibility_status_text(&self) -> String {
+        let label = match self.accessibility_status {
+            PermissionStatus::Authorized => "辅助功能权限：已授权",
+            PermissionStatus::NotAuthorized => "辅助功能权限：未授权",
+            PermissionStatus::Unknown => "辅助功能权限：未知（非 macOS 平台）",
+        };
+        label.to_string()
+    }
+
+    pub fn refresh_accessibility(&mut self) {
+        self.accessibility_status = qingqi_platform::macos::check_accessibility();
+    }
+
+    pub fn open_accessibility_settings(&mut self) -> bool {
+        let ok = qingqi_platform::macos::open_accessibility_settings();
+        if ok {
+            self.message = String::from("已打开系统设置");
+        } else {
+            self.message = String::from("打开系统设置失败");
+        }
+        // Re-read status after opening settings (user may have just toggled it)
+        self.refresh_accessibility();
+        ok
+    }
+
+    // ── Diagnostics paths ──
+
+    pub fn data_dir_path(&self) -> String {
+        self.app_paths.data_dir().display().to_string()
+    }
+
+    pub fn config_dir_path(&self) -> String {
+        self.app_paths
+            .data_dir()
+            .join("config")
+            .display()
+            .to_string()
+    }
+
+    pub fn log_dir_path(&self) -> String {
+        self.app_paths.data_dir().join("logs").display().to_string()
+    }
+
+    // ── Open directories ──
+
+    pub fn open_data_dir(&mut self) {
+        self.open_dir_action(&self.data_dir_path(), "数据目录");
+    }
+
+    pub fn open_config_dir(&mut self) {
+        let path = self.config_dir_path();
+        self.open_dir_action(&path, "配置目录");
+    }
+
+    pub fn open_log_dir(&mut self) {
+        let path = self.log_dir_path();
+        self.open_dir_action(&path, "日志目录");
+    }
+
+    fn open_dir_action(&mut self, path_str: &str, label: &str) {
+        let path = std::path::Path::new(path_str);
+        match qingqi_platform::shell::open_directory(path) {
+            Ok(()) => {
+                self.message = format!("已打开{label}");
+            }
+            Err(error) => {
+                self.message = format!("打开{label}失败: {error}");
+            }
+        }
+    }
+
+    // ── Plugin directory ──
+
+    pub fn imported_plugin_root_path(&self) -> String {
+        self.app_paths.imported_plugins_dir().display().to_string()
+    }
+
+    pub fn open_plugin_dir(&mut self) {
+        let path = self.app_paths.imported_plugins_dir();
+        match qingqi_platform::shell::open_directory(&path) {
+            Ok(()) => {
+                self.message = format!("已打开插件目录: {}", path.display());
+            }
+            Err(error) => {
+                self.message = format!("打开插件目录失败: {error}");
+            }
+        }
+    }
+
+    // ── Icon cache ──
+
+    pub fn icon_cache_dir_path(&self) -> String {
+        qingqi_platform::apps::icon_cache_dir()
+            .display()
+            .to_string()
+    }
+
+    pub fn icon_cache_message_text(&self) -> &str {
+        &self.icon_cache_message
+    }
+
+    pub fn clear_icon_cache(&mut self) {
+        match qingqi_platform::apps::clear_icon_cache_dir() {
+            Ok(count) => {
+                if count > 0 {
+                    self.icon_cache_message =
+                        format!("已清理 {count} 个缓存图标，下次重扫描时重建");
+                } else {
+                    self.icon_cache_message = String::from("图标缓存目录为空，无需清理");
+                }
+            }
+            Err(error) => {
+                self.icon_cache_message = format!("清理失败: {error}");
+            }
+        }
+    }
+
+    // ── Shortcuts ──
+
+    pub fn shortcut_message_text(&self) -> &str {
+        &self.shortcut_message
+    }
+
+    pub fn shortcut_rows(&mut self, cx: &mut Context<Self>) -> Vec<(ShortcutView, Entity<TextInput>)> {
+        let views = self
+            .shortcut_handle
+            .as_ref()
+            .map(|service| service.views())
+            .unwrap_or_default();
+
+        for view in &views {
+            let id = view.descriptor.id.clone();
+            let value = view
+                .normalized_accelerator
+                .clone()
+                .unwrap_or_else(|| view.descriptor.current_accelerator.clone());
+            let editable = view.descriptor.editable;
+            self.shortcut_drafts
+                .entry(id.clone())
+                .or_insert_with(|| value.clone());
+            let input = self.shortcut_inputs.entry(id).or_insert_with(|| {
+                cx.new(|cx| {
+                    let mut input = TextInput::new(cx, "例如 Alt+V", value);
+                    input.set_style(
+                        TextInputStyle {
+                            height: 30.0,
+                            font_size: 12.0,
+                            padding: 8.0,
+                        },
+                        cx,
+                    );
+                    input
+                })
+            });
+            input.update(cx, |input, input_cx| {
+                input.set_read_only(!editable, input_cx);
+            });
+        }
+
+        views
+            .into_iter()
+            .filter_map(|view| {
+                self.shortcut_inputs
+                    .get(&view.descriptor.id)
+                    .cloned()
+                    .map(|input| (view, input))
+            })
+            .collect()
+    }
+
+    pub fn save_shortcut(
+        &mut self,
+        shortcut_id: &str,
+        input: Entity<TextInput>,
+        enabled: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let accelerator = input.read(cx).text();
+        let result = self
+            .shortcut_handle
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("快捷键服务不可用"))
+            .and_then(|service| service.set_shortcut(shortcut_id, &accelerator, enabled));
+        match result {
+            Ok(()) => {
+                self.shortcut_drafts
+                    .insert(shortcut_id.to_string(), accelerator.clone());
+                self.shortcut_message = if enabled {
+                    format!("已保存快捷键 {accelerator}")
+                } else {
+                    String::from("已禁用快捷键")
+                };
+            }
+            Err(error) => {
+                self.shortcut_message = format!("快捷键保存失败: {error}");
+            }
+        }
+    }
+
+    pub fn restore_shortcut(&mut self, shortcut_id: &str, cx: &mut Context<Self>) {
+        let result = self
+            .shortcut_handle
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("快捷键服务不可用"))
+            .and_then(|service| service.restore_shortcut(shortcut_id));
+        match result {
+            Ok(()) => {
+                self.shortcut_message = String::from("已恢复默认快捷键");
+                if let Some(view) = self.shortcut_handle.as_ref().and_then(|service| {
+                    service
+                        .views()
+                        .into_iter()
+                        .find(|view| view.descriptor.id == shortcut_id)
+                }) {
+                    let value = view
+                        .normalized_accelerator
+                        .unwrap_or(view.descriptor.current_accelerator);
+                    self.shortcut_drafts
+                        .insert(shortcut_id.to_string(), value.clone());
+                    if let Some(input) = self.shortcut_inputs.get(shortcut_id) {
+                        input.update(cx, |input, input_cx| input.set_text(value, input_cx));
+                    }
+                }
+            }
+            Err(error) => {
+                self.shortcut_message = format!("恢复默认失败: {error}");
+            }
+        }
     }
 }
 
-impl RenderOnce for SettingsElement {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let panel = self.panel.borrow();
+// ── Render ──
+
+impl Render for SettingsView {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let entity = cx.entity();
         let dark = qingqi_ui::theme_mode::is_dark();
-        let message = panel.message.clone();
-        let current_mode = panel.current_mode();
-        let system_dark = panel.system_dark();
-        let config_path = panel.theme_config_path();
+        let message = self.message.clone();
+        let current_mode = self.current_mode();
+        let system_dark = self.system_dark();
+        let config_path = self.theme_config_path();
 
-        let retention_seconds = panel.retention_seconds();
-        let retention_status = panel.retention_status();
-        let retention_message = panel.retention_message_text().to_string();
+        let retention_seconds = self.retention_seconds();
+        let retention_status = self.retention_status();
+        let retention_message = self.retention_message_text().to_string();
 
-        let app_index_available = panel.app_index_available();
-        let app_snapshot: Option<AppIndexSnapshot> = panel.app_index_snapshot();
+        let app_index_available = self.app_index_available();
+        let app_snapshot: Option<AppIndexSnapshot> = self.app_index_snapshot();
 
-        let data_dir = panel.data_dir_path();
-        let config_dir = panel.config_dir_path();
-        let log_dir = panel.log_dir_path();
+        let data_dir = self.data_dir_path();
+        let config_dir = self.config_dir_path();
+        let log_dir = self.log_dir_path();
 
-        let accessibility_status = panel.accessibility_status();
-        let accessibility_text = panel.accessibility_status_text();
+        let accessibility_status = self.accessibility_status();
+        let accessibility_text = self.accessibility_status_text();
 
-        let imported_plugin_root = panel.imported_plugin_root_path();
+        let imported_plugin_root = self.imported_plugin_root_path();
 
-        let icon_cache_dir = panel.icon_cache_dir_path();
-        let icon_cache_message = panel.icon_cache_message_text().to_string();
+        let icon_cache_dir = self.icon_cache_dir_path();
+        let icon_cache_message = self.icon_cache_message_text().to_string();
 
         let has_app_snapshot = app_index_available && app_snapshot.is_some();
-        drop(panel);
+
         let (shortcut_rows, shortcut_message) = {
-            let mut panel = self.panel.borrow_mut();
-            let rows = panel.shortcut_rows(cx);
-            let message = panel.shortcut_message_text().to_string();
+            let rows = self.shortcut_rows(cx);
+            let message = self.shortcut_message_text().to_string();
             (rows, message)
         };
 
@@ -119,7 +515,7 @@ impl RenderOnce for SettingsElement {
                         dark,
                         "主题模式",
                         "切换浅色 / 深色 / 跟随系统外观",
-                        mode_segment(Rc::clone(&self.panel), current_mode, dark),
+                        mode_segment(entity.clone(), current_mode, dark),
                     ))
                     .child(components::settings_row(
                         dark,
@@ -154,7 +550,7 @@ impl RenderOnce for SettingsElement {
                         "插件窗口保留",
                         &retention_status,
                         retention_control(
-                            Rc::clone(&self.panel),
+                            entity.clone(),
                             retention_seconds,
                             retention_message,
                             dark,
@@ -164,7 +560,7 @@ impl RenderOnce for SettingsElement {
                         dark,
                         "导入插件",
                         "目录/ZIP 导入尚未实现；可打开目标目录查看",
-                        plugin_dir_button(Rc::clone(&self.panel), dark, &imported_plugin_root),
+                        plugin_dir_button(entity.clone(), dark, &imported_plugin_root),
                     ))
                     .child(components::settings_row(
                         dark,
@@ -179,7 +575,7 @@ impl RenderOnce for SettingsElement {
                 "快捷键",
                 Some("全局与应用内快捷键"),
                 shortcuts_section(
-                    Rc::clone(&self.panel),
+                    entity.clone(),
                     shortcut_rows,
                     shortcut_message,
                     dark,
@@ -191,7 +587,7 @@ impl RenderOnce for SettingsElement {
                 "应用索引",
                 Some("软件快速启动的应用缓存"),
                 div().flex().flex_col().child(app_index_row(
-                    Rc::clone(&self.panel),
+                    entity.clone(),
                     dark,
                     has_app_snapshot,
                     app_snapshot,
@@ -206,7 +602,7 @@ impl RenderOnce for SettingsElement {
                     .flex()
                     .flex_col()
                     .child(accessibility_row(
-                        Rc::clone(&self.panel),
+                        entity.clone(),
                         dark,
                         accessibility_status,
                         &accessibility_text,
@@ -239,7 +635,7 @@ impl RenderOnce for SettingsElement {
                     .flex()
                     .flex_col()
                     .child(diag_path_row(
-                        Rc::clone(&self.panel),
+                        entity.clone(),
                         dark,
                         "数据目录",
                         "Qingqi 应用数据根目录",
@@ -247,7 +643,7 @@ impl RenderOnce for SettingsElement {
                         DiagAction::DataDir,
                     ))
                     .child(diag_path_row(
-                        Rc::clone(&self.panel),
+                        entity.clone(),
                         dark,
                         "配置目录",
                         "配置文件与数据库路径",
@@ -255,7 +651,7 @@ impl RenderOnce for SettingsElement {
                         DiagAction::ConfigDir,
                     ))
                     .child(diag_path_row(
-                        Rc::clone(&self.panel),
+                        entity.clone(),
                         dark,
                         "日志目录",
                         "运行日志输出目录",
@@ -272,13 +668,13 @@ impl RenderOnce for SettingsElement {
                         dark,
                         "应用索引维护",
                         "手动重建软件快速启动的应用索引",
-                        app_index_action_button(Rc::clone(&self.panel), dark, has_app_snapshot),
+                        app_index_action_button(entity.clone(), dark, has_app_snapshot),
                     ))
                     .child(components::settings_row(
                         dark,
                         "清理图标缓存",
                         &icon_cache_dir,
-                        icon_cache_clear_button(Rc::clone(&self.panel), dark, icon_cache_message),
+                        icon_cache_clear_button(entity.clone(), dark, icon_cache_message),
                     ))
                     .child(components::settings_row(
                         dark,
@@ -293,7 +689,7 @@ impl RenderOnce for SettingsElement {
 // ── Retention control ──
 
 fn retention_control(
-    panel: Rc<RefCell<SettingsView>>,
+    entity: Entity<SettingsView>,
     seconds: u64,
     message: String,
     _dark: bool,
@@ -323,10 +719,12 @@ fn retention_control(
                 .text_color(text_primary)
                 .child("−")
                 .on_click({
-                    let panel = Rc::clone(&panel);
-                    move |_, window, _cx| {
-                        panel.borrow_mut().adjust_retention(-30);
-                        window.refresh();
+                    let entity = entity.clone();
+                    move |_, _window, cx| {
+                        entity.update(cx, |this, cx| {
+                            this.adjust_retention(-30);
+                            cx.notify();
+                        });
                     }
                 }),
         )
@@ -364,10 +762,12 @@ fn retention_control(
                 .text_color(text_primary)
                 .child("+")
                 .on_click({
-                    let panel = Rc::clone(&panel);
-                    move |_, window, _cx| {
-                        panel.borrow_mut().adjust_retention(30);
-                        window.refresh();
+                    let entity = entity.clone();
+                    move |_, _window, cx| {
+                        entity.update(cx, |this, cx| {
+                            this.adjust_retention(30);
+                            cx.notify();
+                        });
                     }
                 }),
         )
@@ -388,10 +788,12 @@ fn retention_control(
                 .text_color(theme::white())
                 .child("保存")
                 .on_click({
-                    let panel = Rc::clone(&panel);
-                    move |_, window, _cx| {
-                        panel.borrow_mut().save_retention();
-                        window.refresh();
+                    let entity = entity.clone();
+                    move |_, _window, cx| {
+                        entity.update(cx, |this, cx| {
+                            this.save_retention();
+                            cx.notify();
+                        });
                     }
                 }),
         )
@@ -413,10 +815,12 @@ fn retention_control(
                 .text_color(text_primary)
                 .child("默认")
                 .on_click({
-                    let panel = Rc::clone(&panel);
-                    move |_, window, _cx| {
-                        panel.borrow_mut().restore_default_retention();
-                        window.refresh();
+                    let entity = entity.clone();
+                    move |_, _window, cx| {
+                        entity.update(cx, |this, cx| {
+                            this.restore_default_retention();
+                            cx.notify();
+                        });
                     }
                 }),
         )
@@ -434,7 +838,7 @@ fn retention_control(
 // ── App index row ──
 
 fn app_index_row(
-    panel: Rc<RefCell<SettingsView>>,
+    entity: Entity<SettingsView>,
     dark: bool,
     has_snapshot: bool,
     snapshot: Option<AppIndexSnapshot>,
@@ -475,9 +879,12 @@ fn app_index_row(
 
     let action = if show_rescan {
         action_button(dark, "重扫描", true, {
-            move |_, window, _cx| {
-                panel.borrow_mut().request_rescan();
-                window.refresh();
+            let entity = entity.clone();
+            move |_, _window, cx| {
+                entity.update(cx, |this, cx| {
+                    this.request_rescan();
+                    cx.notify();
+                });
             }
         })
         .into_any_element()
@@ -521,15 +928,18 @@ fn app_index_row(
 }
 
 fn app_index_action_button(
-    panel: Rc<RefCell<SettingsView>>,
+    entity: Entity<SettingsView>,
     dark: bool,
     available: bool,
 ) -> AnyElement {
     if available {
         action_button(dark, "重建索引", true, {
-            move |_, window, _cx| {
-                panel.borrow_mut().request_rescan();
-                window.refresh();
+            let entity = entity.clone();
+            move |_, _window, cx| {
+                entity.update(cx, |this, cx| {
+                    this.request_rescan();
+                    cx.notify();
+                });
             }
         })
         .into_any_element()
@@ -539,7 +949,7 @@ fn app_index_action_button(
 }
 
 fn plugin_dir_button(
-    panel: Rc<RefCell<SettingsView>>,
+    entity: Entity<SettingsView>,
     _dark: bool,
     _root_path: &str,
 ) -> impl IntoElement {
@@ -558,14 +968,16 @@ fn plugin_dir_button(
         .text_size(theme::font_size_caption())
         .text_color(theme::semantic().text_primary)
         .child("打开目录")
-        .on_click(move |_, window, _cx| {
-            panel.borrow_mut().open_plugin_dir();
-            window.refresh();
+        .on_click(move |_, _window, cx| {
+            entity.update(cx, |this, cx| {
+                this.open_plugin_dir();
+                cx.notify();
+            });
         })
 }
 
 fn icon_cache_clear_button(
-    panel: Rc<RefCell<SettingsView>>,
+    entity: Entity<SettingsView>,
     _dark: bool,
     message: String,
 ) -> impl IntoElement {
@@ -589,9 +1001,11 @@ fn icon_cache_clear_button(
                 .text_size(theme::font_size_caption())
                 .text_color(theme::white())
                 .child("清理缓存")
-                .on_click(move |_, window, _cx| {
-                    panel.borrow_mut().clear_icon_cache();
-                    window.refresh();
+                .on_click(move |_, _window, cx| {
+                    entity.update(cx, |this, cx| {
+                        this.clear_icon_cache();
+                        cx.notify();
+                    });
                 }),
         )
         .when(!message.is_empty(), |el| {
@@ -607,7 +1021,7 @@ fn icon_cache_clear_button(
 // ── Shortcuts ──
 
 fn shortcuts_section(
-    panel: Rc<RefCell<SettingsView>>,
+    entity: Entity<SettingsView>,
     rows: Vec<(ShortcutView, Entity<TextInput>)>,
     message: String,
     dark: bool,
@@ -641,12 +1055,12 @@ fn shortcuts_section(
         })
         .children(
             rows.into_iter()
-                .map(|(view, input)| shortcut_row(Rc::clone(&panel), view, input, dark)),
+                .map(|(view, input)| shortcut_row(entity.clone(), view, input, dark)),
         )
 }
 
 fn shortcut_row(
-    panel: Rc<RefCell<SettingsView>>,
+    entity: Entity<SettingsView>,
     view: ShortcutView,
     input: Entity<TextInput>,
     dark: bool,
@@ -726,14 +1140,14 @@ fn shortcut_row(
                 .gap(px(8.0))
                 .child(shortcut_input_shell(input.clone(), editable))
                 .child(shortcut_action_button(dark, "保存", true, save_enabled, {
-                    let panel = Rc::clone(&panel);
+                    let entity = entity.clone();
                     let shortcut_id = shortcut_id.clone();
                     let input = input.clone();
-                    move |_, window, cx| {
-                        panel
-                            .borrow_mut()
-                            .save_shortcut(&shortcut_id, input.clone(), true, cx);
-                        window.refresh();
+                    move |_, _window, cx| {
+                        entity.update(cx, |this, cx| {
+                            this.save_shortcut(&shortcut_id, input.clone(), true, cx);
+                            cx.notify();
+                        });
                     }
                 }))
                 .child(shortcut_action_button(
@@ -742,26 +1156,30 @@ fn shortcut_row(
                     false,
                     editable,
                     {
-                        let panel = Rc::clone(&panel);
+                        let entity = entity.clone();
                         let shortcut_id = shortcut_id.clone();
                         let input = input.clone();
-                        move |_, window, cx| {
-                            panel.borrow_mut().save_shortcut(
-                                &shortcut_id,
-                                input.clone(),
-                                !enabled,
-                                cx,
-                            );
-                            window.refresh();
+                        move |_, _window, cx| {
+                            entity.update(cx, |this, cx| {
+                                this.save_shortcut(
+                                    &shortcut_id,
+                                    input.clone(),
+                                    !enabled,
+                                    cx,
+                                );
+                                cx.notify();
+                            });
                         }
                     },
                 ))
                 .child(shortcut_action_button(dark, "默认", false, editable, {
-                    let panel = Rc::clone(&panel);
+                    let entity = entity.clone();
                     let shortcut_id = shortcut_id.clone();
-                    move |_, window, cx| {
-                        panel.borrow_mut().restore_shortcut(&shortcut_id, cx);
-                        window.refresh();
+                    move |_, _window, cx| {
+                        entity.update(cx, |this, cx| {
+                            this.restore_shortcut(&shortcut_id, cx);
+                            cx.notify();
+                        });
                     }
                 })),
         )
@@ -1078,7 +1496,7 @@ fn permission_row(
 // ── Accessibility row (real status + open settings button) ──
 
 fn accessibility_row(
-    panel: Rc<RefCell<SettingsView>>,
+    entity: Entity<SettingsView>,
     _dark: bool,
     status: PermissionStatus,
     text: &str,
@@ -1166,9 +1584,14 @@ fn accessibility_row(
                         .text_size(theme::font_size_caption())
                         .text_color(theme::white())
                         .child("打开设置")
-                        .on_click(move |_, window, _cx| {
-                            panel.borrow_mut().open_accessibility_settings();
-                            window.refresh();
+                        .on_click({
+                            let entity = entity.clone();
+                            move |_, _window, cx| {
+                                entity.update(cx, |this, cx| {
+                                    this.open_accessibility_settings();
+                                    cx.notify();
+                                });
+                            }
                         }),
                 ),
         )
@@ -1184,7 +1607,7 @@ enum DiagAction {
 }
 
 fn diag_path_row(
-    panel: Rc<RefCell<SettingsView>>,
+    entity: Entity<SettingsView>,
     _dark: bool,
     label: &'static str,
     _description: &'static str,
@@ -1239,13 +1662,18 @@ fn diag_path_row(
                 .text_size(theme::font_size_caption())
                 .text_color(theme::semantic().text_primary)
                 .child("打开")
-                .on_click(move |_, window, _cx| {
-                    match action {
-                        DiagAction::DataDir => panel.borrow_mut().open_data_dir(),
-                        DiagAction::ConfigDir => panel.borrow_mut().open_config_dir(),
-                        DiagAction::LogDir => panel.borrow_mut().open_log_dir(),
+                .on_click({
+                    let entity = entity.clone();
+                    move |_, _window, cx| {
+                        entity.update(cx, |this, cx| {
+                            match action {
+                                DiagAction::DataDir => this.open_data_dir(),
+                                DiagAction::ConfigDir => this.open_config_dir(),
+                                DiagAction::LogDir => this.open_log_dir(),
+                            }
+                            cx.notify();
+                        });
                     }
-                    window.refresh();
                 }),
         )
 }
@@ -1328,7 +1756,7 @@ fn action_button(
 // ── Segmented Control for Theme Mode ──
 
 fn mode_segment(
-    panel: Rc<RefCell<SettingsView>>,
+    entity: Entity<SettingsView>,
     current_mode: ThemeMode,
     dark: bool,
 ) -> impl IntoElement {
@@ -1341,19 +1769,19 @@ fn mode_segment(
         .border_color(theme::semantic().border_default)
         .bg(theme::semantic().bg_subtle)
         .child(seg_button(
-            Rc::clone(&panel),
+            entity.clone(),
             ThemeMode::Light,
             current_mode,
             dark,
         ))
         .child(seg_button(
-            Rc::clone(&panel),
+            entity.clone(),
             ThemeMode::Dark,
             current_mode,
             dark,
         ))
         .child(seg_button(
-            Rc::clone(&panel),
+            entity.clone(),
             ThemeMode::System,
             current_mode,
             dark,
@@ -1361,7 +1789,7 @@ fn mode_segment(
 }
 
 fn seg_button(
-    panel: Rc<RefCell<SettingsView>>,
+    entity: Entity<SettingsView>,
     mode: ThemeMode,
     current_mode: ThemeMode,
     _dark: bool,
@@ -1386,9 +1814,14 @@ fn seg_button(
         .text_color(text_color)
         .child(mode_short_label(mode))
         .hover(move |style| style.bg(theme::semantic().bg_surface).cursor_pointer())
-        .on_click(move |_, window, _cx| {
-            panel.borrow_mut().set_theme_mode(mode);
-            window.refresh();
+        .on_click({
+            let entity = entity.clone();
+            move |_, _window, cx| {
+                entity.update(cx, |this, cx| {
+                    this.set_theme_mode(mode);
+                    cx.notify();
+                });
+            }
         });
 
     if active {

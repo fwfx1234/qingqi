@@ -14,14 +14,13 @@ pub(super) fn settings_page(
         .flex()
         .flex_col()
         .overflow_hidden()
-        .bg(theme::semantic().bg_page)
         .child(settings_header(handle.clone(), status_text, dark))
         .child(
             div()
                 .flex_1()
                 .min_h(px(0.0))
                 .overflow_y_scrollbar()
-                .p(px(14.0))
+                .p(px(8.0))
                 .child(settings_panel(handle, config, inputs, dark)),
         )
 }
@@ -32,15 +31,15 @@ fn settings_header(
     dark: bool,
 ) -> impl IntoElement {
     div()
-        .h(px(62.0))
-        .pl(px(108.0))
-        .pr(px(16.0))
+        .h(px(44.0))
+        .pl(px(74.0))
+        .pr(px(8.0))
         .border_b_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_page)
+        .border_color(ui::border_light())
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
         .flex()
         .items_center()
-        .gap(px(12.0))
+        .gap(px(6.0))
         .child(header_action_button(
             "clipboard-settings-back",
             dark,
@@ -59,18 +58,18 @@ fn settings_header(
             div()
                 .flex()
                 .flex_col()
-                .gap(px(2.0))
+                .gap(px(1.0))
                 .child(
                     div()
-                        .text_size(px(14.0))
+                        .text_size(px(12.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme::semantic().text_primary)
                         .child("剪贴板设置"),
                 )
                 .child(
                     div()
-                        .max_w(px(420.0))
-                        .text_size(px(11.0))
+                        .max_w(px(360.0))
+                        .text_size(px(10.0))
                         .line_clamp(1)
                         .text_color(theme::semantic().text_secondary)
                         .child(status_text),
@@ -90,14 +89,14 @@ fn settings_panel(
     div()
         .w_full()
         .min_w(px(0.0))
-        .rounded(px(6.0))
+        .rounded(px(4.0))
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_surface)
-        .p_4()
+        .border_color(ui::border_light())
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.85))
+        .p_2p5()
         .flex()
         .flex_col()
-        .gap_4()
+        .gap_2()
         .child(
             div()
                 .flex()
@@ -105,13 +104,13 @@ fn settings_panel(
                 .gap_1()
                 .child(
                     div()
-                        .text_size(px(16.0))
+                        .text_size(px(14.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .child("采集设置"),
                 )
                 .child(
                     div()
-                        .text_size(px(12.0))
+                        .text_size(px(10.0))
                         .text_color(theme::semantic().text_secondary)
                         .child("设置会直接写入 SQLite，供后台采集和后续热键接管使用"),
                 ),
@@ -191,7 +190,7 @@ fn settings_panel(
                     .child(input_shell(max_text_chars_input)),
                 div()
                     .flex()
-                    .gap_2()
+                    .gap_1()
                     .child(theme_button("保存", dark, {
                         let handle = handle.clone();
                         move |_, cx| {
@@ -243,7 +242,7 @@ fn settings_panel(
                     .child(input_shell(ignore_patterns_input)),
                 div()
                     .flex()
-                    .gap_2()
+                    .gap_1()
                     .child(theme_button("保存规则", dark, {
                         let handle = handle.clone();
                         move |_, cx| {
@@ -293,15 +292,15 @@ fn settings_row(
     _dark: bool,
 ) -> impl IntoElement {
     div()
-        .p_3()
-        .rounded(px(6.0))
+        .p_2()
+        .rounded(px(4.0))
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_page)
+        .border_color(ui::border_light())
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.6))
         .flex()
         .items_center()
         .justify_between()
-        .gap_3()
+        .gap_1p5()
         .overflow_hidden()
         .child(
             div()
@@ -312,14 +311,14 @@ fn settings_row(
                 .gap_1()
                 .child(
                     div()
-                        .text_size(px(13.0))
+                        .text_size(px(11.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .child(title),
                 )
                 .child(
                     div()
-                        .text_size(px(12.0))
-                        .line_height(px(18.0))
+                        .text_size(px(10.0))
+                        .line_height(px(14.0))
                         .line_clamp(2)
                         .text_color(theme::semantic().text_secondary)
                         .child(detail.into()),
@@ -333,17 +332,17 @@ fn settings_input_group(field: impl IntoElement, actions: impl IntoElement) -> i
         .flex()
         .flex_shrink_0()
         .items_center()
-        .gap_2()
+        .gap_1()
         .child(field)
         .child(actions)
 }
 
 fn input_shell(input: Entity<TextInput>) -> impl IntoElement {
     div()
-        .rounded(px(6.0))
+        .rounded(px(4.0))
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_surface)
+        .border_color(ui::border_light())
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.75))
         .child(input.into_any_element())
 }
 
