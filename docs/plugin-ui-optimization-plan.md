@@ -48,7 +48,7 @@
 
 ### 2.1 组件没有真正统一
 
-项目已有 `src/app/ui.rs` 作为共享 UI 原语层；workspace 拆分后该层归入 `qingqi-ui`。当前它提供：
+项目现以 `qingqi-ui` 作为共享 UI 原语层。当前它提供：
 
 - 语义 token：`bg_surface`、`bg_subtle`、`text_primary`、`text_secondary`、`border_light`、`success`、`warning`、`danger`、`accent_color`、`accent_soft` 等。
 - 组件原语：`section_card`、`page_title`、`separator`、`status_bar`、`badge`、`mono_block`、`icon_element`、`icon_tile`、`toolbar_button`、`primary_button`、`text_input_shell`、`metric_pill`、`stat_card`、`status_pill`、`category_pill`、`row_card`、`plugin_surface`、`plugin_content`、`plugin_scroll_content`、`ui_button`、`ui_icon_button`、`ui_card`、`ui_badge`、`ui_empty_state`、`ui_chip`、`ui_divider`。
@@ -124,7 +124,7 @@
 
 - **优先查 gpui-component**：按钮、tab/segmented、switch/checkbox、slider/progress、badge/tag、form 行、table、编辑器、overlay，默认先看组件库是否满足。
 - **效果不满足就改造，不绕开**：通过主题覆盖、本地 adapter、项目级 wrapper 让组件服从 `theme::token` 和共享 UI 语义，而不是在插件 view 里继续手写新按钮/新 chip。
-- **adapter 归属清晰**：单个插件试验可先放本地；两个及以上插件需要同类改造时，必须抽到共享 UI 层（拆分前 `app::ui` / `app::ui::components`，拆分后 `qingqi-ui`）。
+- **adapter 归属清晰**：单个插件试验可先放本地；两个及以上插件需要同类改造时，必须抽到共享 UI 层（`qingqi-ui` / `qingqi_ui::ui::components`）。
 - **布局仍可用 `div()`**：容器、flex/grid、一次性装饰可以用原生 GPUI；但可点击、可聚焦、可禁用、可加载、可选中的交互元素不应重复手写。
 - **Root 限制要遵守**：需要 `gpui_component::Root` 的 overlay/dialog/input 能力，必须按窗口单独 Root 化；未 Root 化窗口只能使用安全组件或本地 adapter。
 

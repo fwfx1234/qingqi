@@ -22,15 +22,18 @@
 - Rust 2024
 - GPUI `0.2.2`
 - SQLite（本地状态与索引持久化）
-- 平台能力封装（`src/platform`）
+- 平台能力封装（当前位于 `crates/qingqi/src/platform`）
 
-## 项目结构（当前拆分前）
+## 项目结构（当前）
 
-- `src/app`：应用入口、启动器、主题、窗口与运行时编排。
-- `src/core`：命令、插件协议、快捷键、存储和基础抽象。
-- `src/features`：各业务功能模块（插件实现）。
-- `src/platform`：系统相关能力（应用扫描、剪贴板、shell、tray 等）。
-- `assets`：图标与静态资源（`app-icon.svg` / `tray-icon.svg` 为源文件，构建时由 `build.rs` 生成 bundle 所需 PNG）。
+- `Cargo.toml`：workspace 根配置，统一依赖版本与 profile。
+- `crates/qingqi`：当前 bin crate，承载 app/core/features/platform 主体代码与打包资源。
+- `crates/qingqi/src/app`：应用入口、启动器、主题、窗口与运行时编排。
+- `crates/qingqi/src/core`：当前宿主实现与迁移中的 core 边界。
+- `crates/qingqi/src/features`：各业务功能模块（内置插件实现）。
+- `crates/qingqi/src/platform`：系统相关能力（应用扫描、剪贴板、shell、tray 等）。
+- `crates/qingqi/assets`：图标与静态资源（`app-icon.svg` / `tray-icon.svg` 为源文件，构建时由 `build.rs` 生成 bundle 所需 PNG）。
+- `crates/qingqi-plugin`：已抽出的插件 SDK crate，承载命令模型、插件契约、事件、存储、快捷键声明类型等。
 
 ## 设计与优化文档
 

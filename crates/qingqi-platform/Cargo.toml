@@ -1,0 +1,31 @@
+[package]
+name = "qingqi-platform"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+dirs.workspace = true
+global-hotkey.workspace = true
+gpui.workspace = true
+image.workspace = true
+plist.workspace = true
+resvg.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tiny-skia.workspace = true
+tracing.workspace = true
+tray-icon.workspace = true
+usvg.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows.workspace = true
+
+[build-dependencies]
+image = { workspace = true, default-features = false, features = ["png"] }
+resvg.workspace = true
+tiny-skia.workspace = true
+usvg.workspace = true

@@ -12,8 +12,7 @@ suishou visual parity.
 - GPUI compatibility: Qingqi pins `gpui = "=0.2.2"`, and
   `gpui-component 0.5.1` also targets GPUI `0.2.2`.
 - Initialization: `gpui_component::init(cx)` is called once in
-  `src/app/runtime.rs` before Qingqi registers local `TextInput` bindings.
-  After the workspace split, this initialization belongs in `qingqi-app`.
+  `qingqi-app` runtime before Qingqi registers local `TextInput` bindings.
 - The current integration does **not** wrap Qingqi windows in
   `gpui_component::Root` yet.
 
@@ -156,11 +155,11 @@ Use this table before replacing hand-written UI:
 
 | Need | Preferred Approach |
 | --- | --- |
-| Simple styled button | `gpui_component::button::Button` if nearby UI already uses component styling; otherwise the project UI helper is fine (`app::ui` before split, `qingqi-ui` after split) |
+| Simple styled button | `gpui_component::button::Button` if nearby UI already uses component styling; otherwise the project UI helper in `qingqi-ui` is fine |
 | Segmented tabs | `gpui_component::tab::TabBar` / `Tab` for new work |
 | Boolean settings | `switch`, `checkbox`, or `radio` |
 | Settings page rows | `setting` or `form` modules once visual parity is checked |
-| One-line search input | Existing `app::text_input::TextInput` unless migrating that whole window |
+| One-line search input | Existing `qingqi_ui::text_input::TextInput` unless migrating that whole window |
 | Multi-line plain text | Existing `TextInput` if simple; component `InputState` if editor interactions matter |
 | Code/script/JSON editor | Component `InputState` in code editor mode, with highlighting only as needed |
 | Long list | GPUI `uniform_list` or component virtual list; choose the one with less state churn |
@@ -172,8 +171,7 @@ Use this table before replacing hand-written UI:
 Qingqi's visual target is still suishou plugin-page parity. Do not blindly use
 the default shadcn-like appearance if it drifts from the target screen.
 
-- Prefer Qingqi theme tokens (`src/app/theme.rs` before split, `qingqi-ui::theme` after split) where exact color parity
-  matters.
+- Prefer Qingqi theme tokens in `qingqi-ui::theme` where exact color parity matters.
 - Component defaults are acceptable for internal tooling, `gpui-demo`, and
   features that do not yet target pixel parity.
 - If a component's default color/radius/spacing conflicts with suishou parity,
@@ -197,13 +195,17 @@ the default shadcn-like appearance if it drifts from the target screen.
 
 ## Testing Requirements
 
-For any change that adds or uses `gpui-component`:
+For any change that adds or uses `gpui-component`, prefer targeted `cargo check`
+or package-level tests while a large structural migration is still in flight;
+after the change set stabilizes, run the wider acceptance commands required by
+the authority doc.
 
 ```bash
 cd F:/develop/qingqi
-PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo fmt
-PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo test
-PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo check
+cargo fmt --all
+cargo check -p <affected-package>
+# 收敛后再按主导文档执行更大范围验收，例如：
+cargo test --workspace -j 1 --quiet
 ```
 
 If a change touches Root, overlays, focus, input, or plugin window lifecycle,

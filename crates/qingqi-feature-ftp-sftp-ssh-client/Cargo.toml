@@ -1,0 +1,25 @@
+[package]
+name = "qingqi-feature-ftp-sftp-ssh-client"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+dirs.workspace = true
+gpui.workspace = true
+gpui-component.workspace = true
+qingqi-platform = { path = "../qingqi-platform" }
+qingqi-plugin = { path = "../qingqi-plugin" }
+qingqi-ui = { path = "../qingqi-ui" }
+rfd.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ssh2.workspace = true
+suppaftp.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true

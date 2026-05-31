@@ -1,0 +1,13 @@
+[package]
+name = "qingqi-feature-about"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+gpui.workspace = true
+qingqi-plugin = { path = "../qingqi-plugin" }
+qingqi-ui = { path = "../qingqi-ui" }

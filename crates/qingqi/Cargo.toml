@@ -1,0 +1,48 @@
+[package]
+name = "qingqi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+qingqi-plugin = { path = "../qingqi-plugin" }
+qingqi-core = { path = "../qingqi-core" }
+qingqi-app = { path = "../qingqi-app" }
+qingqi-feature-about = { path = "../qingqi-feature-about" }
+qingqi-feature-anti-peeping = { path = "../qingqi-feature-anti-peeping" }
+qingqi-feature-api-debugger = { path = "../qingqi-feature-api-debugger" }
+qingqi-feature-clipboard = { path = "../qingqi-feature-clipboard" }
+qingqi-feature-download-manager = { path = "../qingqi-feature-download-manager" }
+qingqi-feature-ftp-sftp-ssh-client = { path = "../qingqi-feature-ftp-sftp-ssh-client" }
+qingqi-feature-gpui-demo = { path = "../qingqi-feature-gpui-demo" }
+qingqi-feature-http-capture = { path = "../qingqi-feature-http-capture" }
+qingqi-feature-image-compress = { path = "../qingqi-feature-image-compress" }
+qingqi-feature-json-parser = { path = "../qingqi-feature-json-parser" }
+qingqi-feature-qr-code = { path = "../qingqi-feature-qr-code" }
+qingqi-feature-quick-launch = { path = "../qingqi-feature-quick-launch" }
+qingqi-feature-system-settings = { path = "../qingqi-feature-system-settings" }
+
+[build-dependencies]
+image = { workspace = true, default-features = false, features = ["png"] }
+resvg.workspace = true
+tiny-skia.workspace = true
+usvg.workspace = true
+
+[package.metadata.bundle]
+name = "Qingqi"
+identifier = "com.fwfx1234.qingqi"
+icon = [
+    "assets/app_icon_16.png",
+    "assets/app_icon_32.png",
+    "assets/app_icon_64.png",
+    "assets/app_icon_128.png",
+    "assets/app_icon_256.png",
+    "assets/app_icon_512.png",
+]
+resources = ["assets/**/*"]
+category = "DeveloperTool"
+short_description = "A lightweight Rust + GPUI desktop toolbox inspired by Suishou."
+copyright = "Copyright (c) fwfx1234"

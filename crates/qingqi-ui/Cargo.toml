@@ -1,0 +1,14 @@
+[package]
+name = "qingqi-ui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+
+[dependencies]
+gpui.workspace = true
+gpui-component.workspace = true
+qingqi-plugin = { path = "../qingqi-plugin" }
+tracing.workspace = true
+unicode-segmentation.workspace = true

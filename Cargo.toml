@@ -1,47 +1,51 @@
-[package]
-name = "qingqi"
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 authors = ["fwfx1234"]
 description = "A lightweight Rust + GPUI desktop toolbox inspired by Suishou."
 license = "MIT"
 
-[dependencies]
+[workspace.dependencies]
 anyhow = "1.0"
 dirs = "6.0"
+global-hotkey = "0.8"
 gpui = { version = "=0.2.2", features = ["runtime_shaders"] }
 gpui-component = "0.5.1"
-global-hotkey = "0.8"
+hudsucker = { version = "0.24", default-features = false, features = ["rcgen-ca", "rustls-client"] }
 image = { version = "0.25", default-features = false, features = ["bmp", "jpeg", "png", "webp"] }
 libc = "0.2"
 plist = "1.7"
+qrcode = "0.14"
 quircs = "0.10"
 r2d2 = "0.8"
 r2d2_sqlite = { version = "0.31.0", features = ["bundled"] }
+rcgen = { version = "0.13", features = ["crypto"] }
+regex = "1.12"
+reqwest = { version = "0.12", features = ["blocking", "stream"] }
+rfd = "0.15"
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
-time = { version = "0.3", features = ["formatting", "local-offset", "macros"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "std"] }
-unicode-segmentation = "1.12"
-qrcode = "0.14"
-regex = "1.12"
-hudsucker = { version = "0.24", default-features = false, features = ["rcgen-ca", "rustls-client"] }
-rcgen = { version = "0.13", features = ["crypto"] }
-reqwest = { version = "0.12", features = ["blocking", "stream"] }
-rfd = "0.15"
 ssh2 = "0.9"
 suppaftp = { version = "6.0", features = ["secure"] }
+time = { version = "0.3", features = ["formatting", "local-offset", "macros"] }
+tiny-skia = "0.11"
 tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "std"] }
 tray-icon = { version = "0.21", default-features = false }
+unicode-segmentation = "1.12"
+usvg = "0.45"
 uuid = { version = "1.16", features = ["v4"] }
 resvg = "0.45"
-usvg = "0.45"
-tiny-skia = "0.11"
 
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.61", features = [
+[workspace.dependencies.windows]
+version = "0.61"
+features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
     "Win32_Storage_FileSystem",
@@ -52,33 +56,10 @@ windows = { version = "0.61", features = [
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
     "Win32_UI_WindowsAndMessaging",
-] }
-
-[build-dependencies]
-resvg = "0.45"
-usvg = "0.45"
-tiny-skia = "0.11"
-image = { version = "0.25", default-features = false, features = ["png"] }
+]
 
 [profile.release]
 codegen-units = 1
 lto = "thin"
 opt-level = "z"
 strip = "symbols"
-
-[package.metadata.bundle]
-name = "Qingqi"
-identifier = "com.fwfx1234.qingqi"
-# PNG 由 assets/app-icon.svg 在 cargo build 时生成
-icon = [
-    "assets/app_icon_16.png",
-    "assets/app_icon_32.png",
-    "assets/app_icon_64.png",
-    "assets/app_icon_128.png",
-    "assets/app_icon_256.png",
-    "assets/app_icon_512.png",
-]
-resources = ["assets/**/*"]
-category = "DeveloperTool"
-short_description = "A lightweight Rust + GPUI desktop toolbox inspired by Suishou."
-copyright = "Copyright (c) fwfx1234"

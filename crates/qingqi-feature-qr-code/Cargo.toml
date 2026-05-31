@@ -1,0 +1,21 @@
+[package]
+name = "qingqi-feature-qr-code"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+dirs.workspace = true
+gpui.workspace = true
+image.workspace = true
+qrcode.workspace = true
+qingqi-platform = { path = "../qingqi-platform" }
+qingqi-plugin = { path = "../qingqi-plugin" }
+qingqi-ui = { path = "../qingqi-ui" }
+quircs.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true

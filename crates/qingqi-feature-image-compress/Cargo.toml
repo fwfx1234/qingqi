@@ -1,0 +1,17 @@
+[package]
+name = "qingqi-feature-image-compress"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+dirs.workspace = true
+gpui.workspace = true
+image.workspace = true
+qingqi-platform = { path = "../qingqi-platform" }
+qingqi-plugin = { path = "../qingqi-plugin" }
+qingqi-ui = { path = "../qingqi-ui" }
+rfd.workspace = true
