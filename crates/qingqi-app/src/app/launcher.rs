@@ -81,7 +81,6 @@ pub struct Launcher {
     clipboard_context: Arc<dyn ClipboardContext>,
     plugin_visuals: HashMap<String, PluginVisual>,
     query_input: Option<Entity<TextInput>>,
-    all_commands: Vec<Command>,
     results: Rc<Vec<Command>>,
     selected: usize,
     results_visible_start: usize,
@@ -152,7 +151,6 @@ impl Launcher {
             clipboard_context,
             plugin_visuals,
             query_input: None,
-            all_commands,
             results,
             selected: 0,
             clipboard_boost_map: boost_map,
@@ -215,13 +213,12 @@ impl Launcher {
         }));
     }
 
-    /// Called when the launcher window is shown — re-reads usage data and
-    /// rebuilds the result list so the sort always reflects latest counts.
+    /// 事件驱动：唤起启动器时，从 DB 读最新使用数据重建排序。
     pub fn refresh_on_show(&mut self, cx: &mut App) {
-        self.all_commands = self.default_commands_with_clipboard();
+        let commands = self.default_commands_with_clipboard();
         let query = self.query(cx);
         if query.trim().is_empty() {
-            self.results = self.default_results(&self.all_commands, &self.plugin_visuals);
+            self.results = self.default_results(&commands, &self.plugin_visuals);
             self.selected = self.selected.min(self.results.len().saturating_sub(1));
         } else {
             self.results = Rc::new(self.query_commands(&query));
@@ -241,14 +238,14 @@ impl Launcher {
                 e.into_inner()
             }),
         );
-        self.all_commands = self.default_commands_with_clipboard();
+        let commands = self.default_commands_with_clipboard();
 
         let query = self.query(cx);
         if matches!(self.mode, LauncherMode::Search) {
             self.last_query = query.clone();
             self.pending_query = query.clone();
             if query.trim().is_empty() {
-                self.results = self.default_results(&self.all_commands, &self.plugin_visuals);
+                self.results = self.default_results(&commands, &self.plugin_visuals);
             } else {
                 self.results = Rc::new(self.query_commands(&query));
             }
@@ -383,7 +380,8 @@ impl Launcher {
         let query_empty = query.trim().is_empty();
 
         if query_empty {
-            self.results = self.default_results(&self.all_commands, &self.plugin_visuals);
+            let commands = self.default_commands_with_clipboard();
+            self.results = self.default_results(&commands, &self.plugin_visuals);
             self.selected = self.selected.min(self.results.len().saturating_sub(1));
             self.results_visible_start = visible_start_for_selection(self.selected);
             self.results_scroll
@@ -493,9 +491,10 @@ impl Launcher {
                 launcher.clipboard_boost_map = boost_map.clone();
 
                 if current_query.trim().is_empty() {
-                    launcher.all_commands = launcher.default_commands_with_clipboard();
-                    launcher.results =
-                        launcher.default_results(&launcher.all_commands, &launcher.plugin_visuals);
+                    launcher.results = {
+                        let cmds = launcher.default_commands_with_clipboard();
+                        launcher.default_results(&cmds, &launcher.plugin_visuals)
+                    };
                 } else {
                     launcher.results = Rc::new(launcher.query_commands(&current_query));
                 }
@@ -1029,9 +1028,9 @@ impl Launcher {
         self.results_visible_start = 0;
         self.plugin_list_visible_start = 0;
         let query = self.query(cx);
-        self.all_commands = self.default_commands_with_clipboard();
         if query.trim().is_empty() {
-            self.results = self.default_results(&self.all_commands, &self.plugin_visuals);
+            let commands = self.default_commands_with_clipboard();
+            self.results = self.default_results(&commands, &self.plugin_visuals);
             self.selected = self.selected.min(self.results.len().saturating_sub(1));
             self.results_visible_start = visible_start_for_selection(self.selected);
         } else {
@@ -1362,7 +1361,7 @@ fn launcher_quick_tab(
             };
             cx.update_entity(&handle, |launcher, entity_cx| {
                 if let Some(item) = launcher
-                    .all_commands
+                    .default_commands_with_clipboard()
                     .iter()
                     .find(|item| {
                         item.plugin_id == plugin_id
