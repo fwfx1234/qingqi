@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    os::unix::process::CommandExt,
     process::{Command as ProcessCommand, Stdio},
     sync::{
         Arc, Mutex,
@@ -610,13 +611,8 @@ fn run_script_action(service: &QuickLaunchService, action: &PreparedAction) -> R
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     #[cfg(unix)]
-    unsafe {
-        command.pre_exec(|| {
-            if libc::setpgid(0, 0) != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
+    {
+        command.process_group(0);
     }
     if !action.cwd.trim().is_empty() {
         command.current_dir(&action.cwd);
