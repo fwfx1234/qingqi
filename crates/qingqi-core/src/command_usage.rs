@@ -6,10 +6,26 @@ use time::OffsetDateTime;
 
 use qingqi_plugin::database::DatabaseService;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// 半衰期约 28 天（Firefox Places 同款）。
+const DECAY_PER_DAY: f64 = 0.975;
+const SECONDS_PER_DAY: f64 = 86_400.0;
+
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct CommandUsage {
     pub use_count: i64,
     pub last_used_at: i64,
+    /// 预计算的衰减评分，每次写入时更新。
+    /// 公式：new = old × λ^Δdays + 1.0
+    pub frecency: f64,
+}
+
+impl CommandUsage {
+    /// 基于上次写入的时间和当前时间，计算新的 frecency 值。
+    pub fn next_frecency(old_frecency: f64, old_last_used_at: i64) -> f64 {
+        let now = time::OffsetDateTime::now_utc().unix_timestamp() as f64;
+        let days = ((now - old_last_used_at as f64) / SECONDS_PER_DAY).max(0.0);
+        old_frecency * DECAY_PER_DAY.powf(days) + 1.0
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -29,14 +45,16 @@ impl CommandUsageStore {
     pub fn usage_map(&self) -> Result<HashMap<String, CommandUsage>> {
         self.database.with_registered_connection(&self.key, |conn| {
             ensure_schema(conn)?;
-            let mut stmt =
-                conn.prepare("SELECT command_key, use_count, last_used_at FROM command_usage")?;
+            let mut stmt = conn.prepare(
+                "SELECT command_key, use_count, last_used_at, frecency FROM command_usage",
+            )?;
             let rows = stmt.query_map([], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     CommandUsage {
                         use_count: row.get(1)?,
                         last_used_at: row.get(2)?,
+                        frecency: row.get::<_, f64>(3).unwrap_or(0.0),
                     },
                 ))
             })?;
@@ -57,15 +75,24 @@ impl CommandUsageStore {
 
         self.database.with_registered_connection(&self.key, |conn| {
             ensure_schema(conn)?;
+            let now = OffsetDateTime::now_utc().unix_timestamp();
+            // Read existing values to compute new frecency
+            let (old_frecency, old_last_used_at) = conn
+                .query_row(
+                    "SELECT frecency, last_used_at FROM command_usage WHERE command_key = ?1",
+                    params![command_key],
+                    |row| Ok((row.get::<_, f64>(0).unwrap_or(0.0), row.get::<_, i64>(1).unwrap_or(0))),
+                )
+                .unwrap_or((0.0, 0));
+            let new_frecency = CommandUsage::next_frecency(old_frecency, old_last_used_at);
             conn.execute(
-                "
-                INSERT INTO command_usage (command_key, use_count, last_used_at)
-                VALUES (?1, 1, ?2)
-                ON CONFLICT(command_key) DO UPDATE SET
-                    use_count = use_count + 1,
-                    last_used_at = excluded.last_used_at
-                ",
-                params![command_key, OffsetDateTime::now_utc().unix_timestamp()],
+                "INSERT INTO command_usage (command_key, use_count, last_used_at, frecency)
+                 VALUES (?1, 1, ?2, ?3)
+                 ON CONFLICT(command_key) DO UPDATE SET
+                     use_count = use_count + 1,
+                     last_used_at = excluded.last_used_at,
+                     frecency = excluded.frecency",
+                params![command_key, now, new_frecency],
             )?;
             Ok(())
         })
@@ -78,13 +105,18 @@ fn ensure_schema(conn: &rusqlite::Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS command_usage (
             command_key TEXT PRIMARY KEY,
             use_count INTEGER NOT NULL DEFAULT 0,
-            last_used_at INTEGER NOT NULL DEFAULT 0
+            last_used_at INTEGER NOT NULL DEFAULT 0,
+            frecency REAL NOT NULL DEFAULT 0.0
         );
 
-        CREATE INDEX IF NOT EXISTS idx_command_usage_recent
-            ON command_usage(use_count DESC, last_used_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_command_usage_frecency
+            ON command_usage(frecency DESC);
         ",
     )?;
+    // Add frecency column to existing tables (safe migration — ALTER TABLE IF NOT EXISTS)
+    let _ = conn.execute_batch(
+        "ALTER TABLE command_usage ADD COLUMN frecency REAL NOT NULL DEFAULT 0.0;",
+    );
     Ok(())
 }
 
@@ -128,5 +160,6 @@ mod tests {
         let stats = usage.get("plugin:json-parser").unwrap();
         assert_eq!(stats.use_count, 2);
         assert!(stats.last_used_at > 0);
+        assert!(stats.frecency > 0.0, "frecency should be computed on write");
     }
 }

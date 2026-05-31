@@ -263,61 +263,34 @@ impl PluginManager {
             .collect()
     }
 
+    /// 统一排序：总分 = 关键词匹配分 + 使用频度分（Frecency）。
+    /// 空查询时关键词分为 0，退化为纯 Frecency 排序。
+    /// Frecency 权重 5.0：一个使用中的高频应用 (frecency~10) 获得 +50，
+    /// 不足以覆盖精确标题匹配 (120)，但足以把近期常用项排在前面。
+    const FRECENCY_WEIGHT: f64 = 5.0;
+
     fn sort_scored_commands(
         &self,
         scored: &mut [(i32, Command)],
-        has_query: bool,
+        _has_query: bool,
         boost_map: &HashMap<String, i32>,
     ) {
         let usage = self.usage_map();
-        if has_query {
-            scored.sort_by(|(left_score, left), (right_score, right)| {
-                let left_usage = usage.get(&left.usage_key).cloned().unwrap_or_default();
-                let right_usage = usage.get(&right.usage_key).cloned().unwrap_or_default();
-                right_score
-                    .cmp(left_score)
-                    .then_with(|| {
-                        command_kind_priority(left.kind).cmp(&command_kind_priority(right.kind))
-                    })
-                    .then_with(|| right_usage.use_count.cmp(&left_usage.use_count))
-                    .then_with(|| right_usage.last_used_at.cmp(&left_usage.last_used_at))
-                    .then_with(|| left.title.cmp(&right.title))
-            });
-            return;
-        }
-
         scored.sort_by(|(left_score, left), (right_score, right)| {
-            let left_usage = usage.get(&left.usage_key).cloned().unwrap_or_default();
-            let right_usage = usage.get(&right.usage_key).cloned().unwrap_or_default();
-
-            let left_tier = command_sort_tier(left, left_usage.use_count, boost_map);
-            let right_tier = command_sort_tier(right, right_usage.use_count, boost_map);
-
-            let tier_cmp = left_tier.cmp(&right_tier);
-            if tier_cmp != std::cmp::Ordering::Equal {
-                return tier_cmp;
-            }
-
-            if left_tier == 0 {
-                right_score
-                    .cmp(left_score)
-                    .then_with(|| right_usage.use_count.cmp(&left_usage.use_count))
-                    .then_with(|| right_usage.last_used_at.cmp(&left_usage.last_used_at))
-                    .then_with(|| {
-                        command_kind_priority(left.kind).cmp(&command_kind_priority(right.kind))
-                    })
-                    .then_with(|| left.title.cmp(&right.title))
-            } else {
-                right_usage
-                    .use_count
-                    .cmp(&left_usage.use_count)
-                    .then_with(|| right_usage.last_used_at.cmp(&left_usage.last_used_at))
-                    .then_with(|| right_score.cmp(left_score))
-                    .then_with(|| {
-                        command_kind_priority(left.kind).cmp(&command_kind_priority(right.kind))
-                    })
-                    .then_with(|| left.title.cmp(&right.title))
-            }
+            let left_u = usage.get(&left.usage_key).cloned().unwrap_or_default();
+            let right_u = usage.get(&right.usage_key).cloned().unwrap_or_default();
+            let left_boost = boost_map.get(&left.plugin_id).copied().unwrap_or(0) as f64;
+            let right_boost = boost_map.get(&right.plugin_id).copied().unwrap_or(0) as f64;
+            let left_total = *left_score as f64 + left_u.frecency * Self::FRECENCY_WEIGHT + left_boost;
+            let right_total =
+                *right_score as f64 + right_u.frecency * Self::FRECENCY_WEIGHT + right_boost;
+            right_total
+                .partial_cmp(&left_total)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| {
+                    command_kind_priority(left.kind).cmp(&command_kind_priority(right.kind))
+                })
+                .then_with(|| left.title.cmp(&right.title))
         });
     }
 
@@ -513,15 +486,6 @@ fn default_plugin_command(manifest: Manifest) -> Vec<Command> {
     )]
 }
 
-fn command_sort_tier(command: &Command, use_count: i64, boost_map: &HashMap<String, i32>) -> u8 {
-    if boost_map.get(&command.plugin_id).copied().unwrap_or(0) > 0 {
-        return 0;
-    }
-    if use_count > 0 {
-        return 1;
-    }
-    2
-}
 
 pub fn command_kind_priority(kind: CommandKind) -> u8 {
     match kind {

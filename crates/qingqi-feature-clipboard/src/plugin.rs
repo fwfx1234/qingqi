@@ -131,6 +131,9 @@ impl Plugin for ClipboardPlugin {
                     .background_executor()
                     .timer(Duration::from_millis(700))
                     .await;
+                // Try platform-native background read first (macOS).
+                // On Windows, change_count() returns None, so we fall
+                // through to the main-thread gpui clipboard API.
                 let service_for_snapshot = Arc::clone(&service);
                 let snapshot = async_cx
                     .background_executor()
@@ -141,16 +144,20 @@ impl Plugin for ClipboardPlugin {
                         let Some(change_count) = service.current_change_count()? else {
                             return Ok(None);
                         };
-                        let snapshot = qingqi_platform::clipboard::read_background_snapshot(
+                        let snap = qingqi_platform::clipboard::read_background_snapshot(
                             change_count,
                             service.last_seen_image_id(),
                         );
-                        Ok::<_, anyhow::Error>(Some(snapshot))
+                        Ok::<_, anyhow::Error>(Some(snap))
                     })
                     .await;
 
                 match snapshot {
-                    Ok(Some(snapshot)) => {
+                    Ok(Some(snapshot))
+                        if snapshot.text.is_some()
+                            || snapshot.image.is_some()
+                            || snapshot.files.is_some() =>
+                    {
                         let service = Arc::clone(&service);
                         let _ = async_cx.update(move |_cx| {
                             if let Ok(service) = service.lock() {
@@ -158,8 +165,9 @@ impl Plugin for ClipboardPlugin {
                             }
                         });
                     }
-                    Ok(None) => {}
-                    Err(_) => {
+                    _ => {
+                        // Background read unavailable (Windows) or empty —
+                        // fall back to main-thread gpui clipboard API.
                         let service = Arc::clone(&service);
                         let _ = async_cx.update(move |cx| {
                             if let Ok(service) = service.lock() {

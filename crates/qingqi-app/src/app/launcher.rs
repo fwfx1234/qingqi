@@ -54,6 +54,8 @@ const LAUNCHER_WIDTH: f32 = 800.0;
 const EMPTY_RESULTS_HEIGHT: f32 = 180.0;
 const SEARCH_DEBOUNCE: Duration = Duration::from_millis(70);
 const COMMAND_SEARCH_LIMIT: usize = 5_000;
+/// 与 PluginManager::FRECENCY_WEIGHT 保持一致
+const FRECENCY_WEIGHT: f64 = 5.0;
 const PLUGIN_LIST_PREFETCH_THRESHOLD: usize = 40;
 static PLUGIN_OPEN_TRACE_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -331,13 +333,13 @@ impl Launcher {
             .filter(|item| Self::is_default_command(item, visuals))
             .cloned()
             .collect();
-        // Sort by usage first (most-used at top), falling back to kind + title.
+        // Sort by frecency (pre-computed decay score: recent + frequent = high)
         results.sort_by(|a, b| {
             let a_u = usage.get(&a.usage_key).cloned().unwrap_or_default();
             let b_u = usage.get(&b.usage_key).cloned().unwrap_or_default();
-            b_u.use_count
-                .cmp(&a_u.use_count)
-                .then_with(|| b_u.last_used_at.cmp(&a_u.last_used_at))
+            b_u.frecency
+                .partial_cmp(&a_u.frecency)
+                .unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| {
                     command_kind_priority(a.kind).cmp(&command_kind_priority(b.kind))
                 })
@@ -464,13 +466,14 @@ impl Launcher {
         scored.sort_by(|(left_score, left), (right_score, right)| {
             let left_u = usage.get(&left.usage_key).cloned().unwrap_or_default();
             let right_u = usage.get(&right.usage_key).cloned().unwrap_or_default();
-            right_score
-                .cmp(left_score)
+            let left_total = *left_score as f64 + left_u.frecency * FRECENCY_WEIGHT;
+            let right_total = *right_score as f64 + right_u.frecency * FRECENCY_WEIGHT;
+            right_total
+                .partial_cmp(&left_total)
+                .unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| {
                     command_kind_priority(left.kind).cmp(&command_kind_priority(right.kind))
                 })
-                .then_with(|| right_u.use_count.cmp(&left_u.use_count))
-                .then_with(|| right_u.last_used_at.cmp(&left_u.last_used_at))
                 .then_with(|| left.title.cmp(&right.title))
         });
         scored.into_iter().map(|(_, command)| command).collect()
