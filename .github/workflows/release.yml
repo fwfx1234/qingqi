@@ -68,7 +68,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path dist
           Copy-Item target/release/qingqi.exe dist/Qingqi.exe
-          Compress-Archive -Path dist/Qingqi.exe -DestinationPath dist/Qingqi-windows-x86_64.zip
+          Compress-Archive -Force -Path dist/Qingqi.exe -DestinationPath dist/Qingqi-windows-x86_64.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
