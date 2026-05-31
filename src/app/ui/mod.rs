@@ -593,6 +593,28 @@ pub fn ui_icon_button(icon_text: SharedString, size_px: f32) -> gpui::Div {
         )
 }
 
+/// System-style window close button (✕) for client-drawn / always-on-top
+/// plugin windows that have no native OS titlebar.  Subtle by default, red
+/// on hover (mimicking the Windows close button).  Clicking closes the
+/// window it is rendered in.
+pub fn window_close_button() -> impl IntoElement {
+    div()
+        .id("qingqi-window-close")
+        .w(px(40.0))
+        .h(px(28.0))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(theme::radius_md())
+        .text_size(px(13.0))
+        .text_color(text_secondary())
+        .hover(|style| style.bg(danger()).text_color(white()).cursor_pointer())
+        .on_click(|_event, window, app| {
+            window.defer(app, |window, _app| window.remove_window());
+        })
+        .child("✕")
+}
+
 /// Card container (matching suishou UiCard)
 pub fn ui_card() -> gpui::Div {
     div()

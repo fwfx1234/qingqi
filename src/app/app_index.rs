@@ -263,6 +263,11 @@ impl AppIndexService {
             started,
             &[("apps", &apps.len().to_string())],
         );
+        let cached_apps = {
+            let state = self.state.lock().unwrap_or_else(|e| { tracing::error!("app index lock poisoned, recovering"); e.into_inner() });
+            state.apps.clone()
+        };
+        preserve_cached_icon_paths(&mut apps, &cached_apps);
         self.publish_metadata_pass(apps.clone());
         let icons_started = Instant::now();
         populate_application_icons(&mut apps);
@@ -414,6 +419,27 @@ fn app_usage<'a>(usage: &'a HashMap<String, AppLaunchUsage>, path: &str) -> &'a 
     };
 
     usage.get(&format!("app:{path}")).unwrap_or(&DEFAULT_USAGE)
+}
+
+fn preserve_cached_icon_paths(apps: &mut [AppEntry], cached_apps: &[AppEntry]) {
+    let cached_icons = cached_apps
+        .iter()
+        .filter_map(|app| {
+            app.icon_path
+                .as_ref()
+                .map(|icon_path| (app.path.as_str(), icon_path.as_str()))
+        })
+        .collect::<HashMap<_, _>>();
+
+    for app in apps.iter_mut() {
+        if app.icon_path.is_none()
+            && let Some(icon_path) = cached_icons.get(app.path.as_str())
+        {
+            app.icon_path = Some((*icon_path).to_string());
+        }
+    }
+
+    clear_broken_icon_paths(apps);
 }
 
 fn log_slow_app_index_step(step: &'static str, started: Instant, fields: &[(&str, &str)]) {

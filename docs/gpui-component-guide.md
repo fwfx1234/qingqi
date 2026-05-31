@@ -13,6 +13,7 @@ suishou visual parity.
   `gpui-component 0.5.1` also targets GPUI `0.2.2`.
 - Initialization: `gpui_component::init(cx)` is called once in
   `src/app/runtime.rs` before Qingqi registers local `TextInput` bindings.
+  After the workspace split, this initialization belongs in `qingqi-app`.
 - The current integration does **not** wrap Qingqi windows in
   `gpui_component::Root` yet.
 
@@ -155,7 +156,7 @@ Use this table before replacing hand-written UI:
 
 | Need | Preferred Approach |
 | --- | --- |
-| Simple styled button | `gpui_component::button::Button` if nearby UI already uses component styling; otherwise existing `app::ui` helper is fine |
+| Simple styled button | `gpui_component::button::Button` if nearby UI already uses component styling; otherwise the project UI helper is fine (`app::ui` before split, `qingqi-ui` after split) |
 | Segmented tabs | `gpui_component::tab::TabBar` / `Tab` for new work |
 | Boolean settings | `switch`, `checkbox`, or `radio` |
 | Settings page rows | `setting` or `form` modules once visual parity is checked |
@@ -171,7 +172,7 @@ Use this table before replacing hand-written UI:
 Qingqi's visual target is still suishou plugin-page parity. Do not blindly use
 the default shadcn-like appearance if it drifts from the target screen.
 
-- Prefer Qingqi theme tokens from `src/app/theme.rs` where exact color parity
+- Prefer Qingqi theme tokens (`src/app/theme.rs` before split, `qingqi-ui::theme` after split) where exact color parity
   matters.
 - Component defaults are acceptable for internal tooling, `gpui-demo`, and
   features that do not yet target pixel parity.
@@ -191,7 +192,7 @@ the default shadcn-like appearance if it drifts from the target screen.
 5. Evaluate component editor only for JSON/API/Quick Launch use cases.
 6. Consider Root-enabling plugin windows after a single plugin proves overlay
    value.
-7. Update this document and `docs/architecture.md` when a component pattern
+7. Update this document and `docs/workspace-split-guide.md` when a component pattern
    becomes the preferred Qingqi pattern.
 
 ## Testing Requirements
@@ -199,7 +200,7 @@ the default shadcn-like appearance if it drifts from the target screen.
 For any change that adds or uses `gpui-component`:
 
 ```bash
-cd /Users/fwfx1234/develop/qingqi
+cd F:/develop/qingqi
 PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo fmt
 PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo test
 PATH=/Users/fwfx1234/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH cargo check

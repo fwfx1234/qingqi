@@ -23,8 +23,12 @@ pub struct ClipboardPlugin {
 
 impl ClipboardPlugin {
     pub fn new(service: ClipboardService) -> Self {
+        Self::from_shared(Arc::new(Mutex::new(service)))
+    }
+
+    pub fn from_shared(service: Arc<Mutex<ClipboardService>>) -> Self {
         Self {
-            service: Arc::new(Mutex::new(service)),
+            service,
             watch_started: false,
         }
     }

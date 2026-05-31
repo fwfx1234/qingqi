@@ -14,7 +14,6 @@ use std::sync::{
 };
 
 use windows::{
-    Win32::System::Threading::GetCurrentThreadId,
     Win32::UI::Input::KeyboardAndMouse::{
         GetKeyState, VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN,
         VK_RCONTROL, VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SPACE,
@@ -259,7 +258,11 @@ fn install_hook(
             WH_KEYBOARD_LL,
             Some(low_level_keyboard_proc),
             None,
-            GetCurrentThreadId(),
+            // Must be 0: a low-level keyboard hook is global only when not
+            // associated with a specific thread.  Passing a thread id would
+            // scope it to that thread's windows — and our hook thread has
+            // none, so it would capture nothing.
+            0,
         )
     }
     .map_err(|e| format!("SetWindowsHookExW(WH_KEYBOARD_LL) failed: {e}"))?;

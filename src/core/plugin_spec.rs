@@ -126,13 +126,16 @@ impl PluginOverviewSection {
 }
 
 impl WindowSpec {
+    /// A fixed-size ordinary window (native OS titlebar + close button).
     pub const fn fixed(width: f32, height: f32) -> Self {
         Self {
             size: WindowSize::Fixed { width, height },
-            always_on_top: true,
+            always_on_top: false,
         }
     }
 
+    /// A fixed-size floating panel that stays above other windows and draws
+    /// its own close button (e.g. clipboard, anti-peeping).
     pub const fn fixed_topmost(width: f32, height: f32) -> Self {
         Self {
             size: WindowSize::Fixed { width, height },
@@ -143,21 +146,21 @@ impl WindowSpec {
     pub const fn ratio(width: f32, height: f32) -> Self {
         Self {
             size: WindowSize::Ratio { width, height },
-            always_on_top: true,
+            always_on_top: false,
         }
     }
 
     pub const fn auto() -> Self {
         Self {
             size: WindowSize::Auto,
-            always_on_top: true,
+            always_on_top: false,
         }
     }
 
     pub const fn from_size(size: WindowSize) -> Self {
         Self {
             size,
-            always_on_top: true,
+            always_on_top: false,
         }
     }
 }

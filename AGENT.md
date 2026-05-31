@@ -1,26 +1,25 @@
 # Qingqi Agent Notes
 
 This project is a Rust + GPUI desktop toolbox. Keep changes aligned with the
-current architecture instead of growing `app::runtime` into a catch-all entry
+workspace split plan instead of growing `app::runtime` into a catch-all entry
 point.
 
-The **target architecture** lives in `docs/architecture.md`: the launcher +
-plugin design Qingqi is converging toward (slim `Plugin` trait, `PluginView`
-enum for the three modes, owned `Manifest`, built-in App catalog, declarative
-`FeatureRegistry`, and a seam for future third-party plugins). Read it before
-changing `src/app/`, `src/core/`, `src/platform/`, plugin wiring, background
-loops, event dispatch, or command caching.
+The **target architecture and split authority** lives in
+`docs/workspace-split-guide.md`. It is the single source of truth for crate
+boundaries, dependency direction, plugin SDK shape, and the "no compatibility
+layers / no fallback / no double mechanisms" rule. Read it before changing
+`src/app/`, `src/core/`, `src/platform/`, plugin wiring, background loops,
+event dispatch, command caching, or Cargo workspace layout.
 
-Note: the current code has not fully migrated to that target yet (it still uses
-`PluginRuntime`/`PluginSession`/`CommandTarget` and a hand-written
-`register_builtin_plugins`). The rules below describe how to work safely in the
-**current** codebase; `docs/architecture.md` §13 is the migration map from here
-to the target.
+Note: the current code has not fully migrated to that target yet. The rules
+below describe how to work safely in the **current pre-split** codebase. For
+the full GPT-5.4 execution sequence, use
+`docs/gpt-5.4-workspace-split-execution-plan.md`.
 
 `docs/conventions.md` is the from-scratch coding rulebook (layering, file/type
 naming, async patterns, and the high-performance-UI rules). Follow it for new
 code and when migrating; it is the authority on **how** code is written, while
-`docs/architecture.md` is the authority on **what** the system looks like.
+`docs/workspace-split-guide.md` is the authority on **what** the system looks like.
 
 ## Architecture Boundaries
 
@@ -106,7 +105,7 @@ code and when migrating; it is the authority on **how** code is written, while
 
 ## Core Architecture Work
 
-- Treat `docs/architecture.md` as the target design; check core changes against
+- Treat `docs/workspace-split-guide.md` as the target design; check core changes against
   it and move toward it rather than away.
 - Keep `PluginManager` free of window handles and platform IO.
 - Keep `WindowController` as the sole launcher/plugin window lifecycle owner.

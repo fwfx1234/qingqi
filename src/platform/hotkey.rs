@@ -47,6 +47,25 @@ pub fn register_global_hotkeys(registrations: &[(String, HotKey)]) -> HotkeyRegi
         registered.clear();
 
         for (shortcut_id, hotkey) in registrations {
+            // Some combos (e.g. Alt+Space) are reserved by the OS for the
+            // window system menu.  `RegisterHotKey` may report success but the
+            // system menu still swallows the keystroke, so route them through
+            // the low-level keyboard hook unconditionally rather than waiting
+            // for a registration error that never comes.
+            #[cfg(target_os = "windows")]
+            if needs_low_level_hook(hotkey)
+                && let Some(entry) = try_as_low_level_entry(shortcut_id, hotkey)
+            {
+                tracing::debug!(
+                    shortcut_id,
+                    "routing system-reserved hotkey through low-level hook"
+                );
+                result
+                    .low_level_fallbacks
+                    .push((shortcut_id.clone(), entry));
+                continue;
+            }
+
             match manager.register(*hotkey).map_err(|error| error.to_string()) {
                 Ok(()) => {
                     registered.push(*hotkey);
@@ -84,6 +103,15 @@ pub fn register_global_hotkeys(registrations: &[(String, HotKey)]) -> HotkeyRegi
     }
 
     result
+}
+
+#[cfg(target_os = "windows")]
+fn needs_low_level_hook(hotkey: &HotKey) -> bool {
+    use global_hotkey::hotkey::Code;
+    // Alt+Space opens the window system menu — `RegisterHotKey` can't reliably
+    // claim it, so it must go through `WH_KEYBOARD_LL`.
+    let mods = hotkey.mods;
+    hotkey.key == Code::Space && mods.alt() && !mods.ctrl() && !mods.shift() && !mods.meta()
 }
 
 #[cfg(target_os = "windows")]

@@ -1,7 +1,7 @@
 use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
@@ -32,7 +32,9 @@ use crate::{
 
 pub fn run() -> Result<()> {
     let paths = AppPaths::resolve()?;
-    init_tracing(paths.log_file("qingqi.log").as_path());
+    let log_path = paths.log_file("qingqi.log");
+    init_tracing(log_path.as_path());
+    install_panic_hook(log_path.with_file_name("qingqi-crash.log"));
 
     tracing::debug!(
         data_dir = %paths.data_dir().display(),
@@ -141,8 +143,17 @@ pub fn run() -> Result<()> {
         }
         background.start_hotkey_events(Arc::clone(&window_controller), cx);
 
+        // Install the low-level keyboard hook with the entries resolved above
+        // (e.g. Alt+Space).  We pass the entries explicitly rather than reading
+        // them from `cx.try_global::<ShortcutService>()` — the service is not
+        // registered as a global until further below, so reading it here would
+        // silently skip the hook and break Alt+Space.
         #[cfg(target_os = "windows")]
-        background.start_low_level_hook(Arc::clone(&window_controller), cx);
+        background.start_low_level_hook(
+            shortcut_service.low_level_entries().to_vec(),
+            Arc::clone(&window_controller),
+            cx,
+        );
 
         let initial_mode = crate::core::lock_or_recover(&power_manager, "power-manager").mode();
         match crate::platform::tray::install_tray(initial_mode) {
@@ -163,6 +174,51 @@ pub fn run() -> Result<()> {
         .shutdown();
     database_for_shutdown.shutdown();
     Ok(())
+}
+
+/// Install a panic hook that records the panic through `tracing` (so it lands
+/// in `qingqi.log`) and also appends it to a dedicated crash file.  Rust's
+/// default hook only prints to stderr, which is invisible for a GUI process
+/// launched without a console — so crashes ("闪退") would otherwise leave no
+/// trace.  The hook chains to the previously-installed hook to preserve
+/// stderr output.
+fn install_panic_hook(crash_log: PathBuf) {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        let location = info
+            .location()
+            .map(|loc| format!("{}:{}:{}", loc.file(), loc.line(), loc.column()))
+            .unwrap_or_else(|| String::from("<unknown location>"));
+        let payload = info.payload();
+        let message = payload
+            .downcast_ref::<&str>()
+            .copied()
+            .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+            .unwrap_or("<non-string panic payload>");
+        let thread = std::thread::current();
+        let thread_name = thread.name().unwrap_or("<unnamed>");
+
+        // Route through tracing so the panic lands in qingqi.log (and stderr).
+        tracing::error!(
+            target: "qingqi::panic",
+            thread = thread_name,
+            location = %location,
+            "panic: {message}\n{backtrace}"
+        );
+
+        // Belt-and-suspenders: append to a dedicated crash file in case the
+        // tracing pipeline is itself unwinding when the panic fires.
+        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&crash_log) {
+            let _ = writeln!(
+                file,
+                "==== panic ====\nthread : {thread_name}\nat     : {location}\nmessage: {message}\n{backtrace}\n"
+            );
+        }
+
+        // Preserve the previously-installed behaviour (prints to stderr).
+        default_hook(info);
+    }));
 }
 
 fn init_tracing(log_path: &Path) {

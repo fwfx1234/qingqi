@@ -5,9 +5,11 @@
 > 本文记录 2026-05-30 对当前插件界面的审查结论，用于后续逐步重构。它不是现状说明，而是后续 UI 统一化的执行依据。
 >
 > 相关约定：
-> - [architecture.md](architecture.md)：插件三种形态与整体架构。
+> - [workspace-split-guide.md](workspace-split-guide.md)：workspace 拆分与目标架构的主导文档。
 > - [conventions.md](conventions.md)：UI 组件、主题 token、图标、性能铁律。
 > - [gpui-component-guide.md](gpui-component-guide.md)：gpui-component 的使用边界与迁移手册。
+>
+> 本文只负责 UI 统一化问题。涉及 crate 边界、插件 SDK、资源归属和依赖方向时，一律服从 `workspace-split-guide.md`。
 
 ---
 
@@ -46,7 +48,7 @@
 
 ### 2.1 组件没有真正统一
 
-项目已有 `src/app/ui.rs` 作为共享 UI 原语层，提供：
+项目已有 `src/app/ui.rs` 作为共享 UI 原语层；workspace 拆分后该层归入 `qingqi-ui`。当前它提供：
 
 - 语义 token：`bg_surface`、`bg_subtle`、`text_primary`、`text_secondary`、`border_light`、`success`、`warning`、`danger`、`accent_color`、`accent_soft` 等。
 - 组件原语：`section_card`、`page_title`、`separator`、`status_bar`、`badge`、`mono_block`、`icon_element`、`icon_tile`、`toolbar_button`、`primary_button`、`text_input_shell`、`metric_pill`、`stat_card`、`status_pill`、`category_pill`、`row_card`、`plugin_surface`、`plugin_content`、`plugin_scroll_content`、`ui_button`、`ui_icon_button`、`ui_card`、`ui_badge`、`ui_empty_state`、`ui_chip`、`ui_divider`。
@@ -121,12 +123,12 @@
 执行原则：
 
 - **优先查 gpui-component**：按钮、tab/segmented、switch/checkbox、slider/progress、badge/tag、form 行、table、编辑器、overlay，默认先看组件库是否满足。
-- **效果不满足就改造，不绕开**：通过主题覆盖、本地 adapter、项目级 wrapper 让组件服从 `theme::token` 和 `app::ui` 语义，而不是在插件 view 里继续手写新按钮/新 chip。
-- **adapter 归属清晰**：单个插件试验可先放本地；两个及以上插件需要同类改造时，必须抽到 `app::ui` 或 `app::ui::components`。
+- **效果不满足就改造，不绕开**：通过主题覆盖、本地 adapter、项目级 wrapper 让组件服从 `theme::token` 和共享 UI 语义，而不是在插件 view 里继续手写新按钮/新 chip。
+- **adapter 归属清晰**：单个插件试验可先放本地；两个及以上插件需要同类改造时，必须抽到共享 UI 层（拆分前 `app::ui` / `app::ui::components`，拆分后 `qingqi-ui`）。
 - **布局仍可用 `div()`**：容器、flex/grid、一次性装饰可以用原生 GPUI；但可点击、可聚焦、可禁用、可加载、可选中的交互元素不应重复手写。
 - **Root 限制要遵守**：需要 `gpui_component::Root` 的 overlay/dialog/input 能力，必须按窗口单独 Root 化；未 Root 化窗口只能使用安全组件或本地 adapter。
 
-### 3.2 `app::ui` 需要补齐的原语
+### 3.2 共享 UI 层需要补齐的原语
 
 建议逐步补齐以下共享组件或 builder：
 
@@ -186,7 +188,7 @@ PluginSurface
 1. **主路径重排**：左侧只保留连接搜索 + 连接列表 + 新建按钮；中间为文件浏览；右侧为“终端 / 日志 / 详情”可折叠辅助栏。
 2. **传输队列收纳**：默认以底部 compact bar 展示正在传输数量和总体进度；点击展开完整队列。
 3. **高级连接配置折叠**：新建/编辑 profile 中只默认展示协议、主机、端口、用户名、认证方式；高级项（代理、编码、被动模式、跳板机、路径策略）进入高级折叠区。
-4. **统一样式**：替换本地 `frost_button/status_pill/meta_badge/empty_state_card/profile_field` 为 `app::ui` 原语。
+4. **统一样式**：替换本地 `frost_button/status_pill/meta_badge/empty_state_card/profile_field` 为共享 UI 原语。
 5. **消除硬编码色**：状态色统一 `success/warning/danger/text_secondary`。
 
 评分：合理性 3/5；组件复用度 1.5/5。
@@ -359,7 +361,7 @@ PluginSurface
 
 优化方向：
 
-1. **抽公共设置组件**：把 `settings_card/settings_row` 迁移到 `app::ui`，供剪贴板、下载、FTP profile 编辑等复用。
+1. **抽公共设置组件**：把 `settings_card/settings_row` 迁移到共享 UI 层，供剪贴板、下载、FTP profile 编辑等复用。
 2. **平台条件渲染**：macOS 权限只在 macOS 下显示；其他平台显示对应能力或隐藏。
 3. **设置项状态统一**：启用/禁用/未实现/错误/成功使用统一 `StatusPill`。
 
@@ -371,7 +373,7 @@ PluginSurface
 
 主要问题：
 
-- 本地重新定义了 `section_card`，与 `app::ui::section_card` 重名，容易混淆。
+- 本地重新定义了 `section_card`，与共享 UI 层的 `section_card` 重名，容易混淆。
 
 优化方向：
 
@@ -459,7 +461,7 @@ Primary action? / Secondary action?
 
 - [x] 记录当前问题和优化目标。
 - [ ] 建立 UI 审查清单，后续 PR 按清单检查。
-- [ ] 明确 `app::ui` 中保留哪一代原语，标记 legacy。
+- [ ] 明确共享 UI 层中保留哪一代原语，标记 legacy。
 
 ### 阶段 1：低风险 token 收敛
 
@@ -539,7 +541,7 @@ Primary action? / Secondary action?
 - [ ] 新增交互控件前是否先查过 gpui-component？
 - [ ] gpui-component 默认效果不满足时，是否通过 adapter/wrapper 改造，而不是手写第三套？
 - [ ] 是否没有新建本地 `*_button` / `*_chip` / `*_badge` / `*_card`？
-- [ ] 如果本地 adapter/helper 出现第二次，是否抽到 `app::ui` / `app::ui::components`？
+- [ ] 如果本地 adapter/helper 出现第二次，是否抽到共享 UI 层？
 - [ ] 表格/大列表是否使用 gpui-component table、虚拟 list 或明确分页？
 - [ ] 输入框/设置行/状态标签是否复用 gpui-component 或共享 adapter？
 
@@ -586,7 +588,7 @@ Primary action? / Secondary action?
 - 不建议为了“现代化”继续增加新的毛玻璃/阴影体系；应先统一基础交互和组件。
 - 不建议把所有 `div()` 都替换成 `gpui-component`；布局容器仍可用 `div()`。
 - 不建议因为 gpui-component 默认样式不完全匹配就绕开不用；应优先通过主题覆盖、adapter 或 wrapper 改造。
-- 不建议在插件内继续新增本地按钮/chip/card/helper；需要新视觉先补 gpui-component adapter 或 `app::ui`。
+- 不建议在插件内继续新增本地按钮/chip/card/helper；需要新视觉先补 gpui-component adapter 或共享 UI 原语。
 - 不建议把高级设置直接铺满主界面；应收纳到明确入口。
 
 ---

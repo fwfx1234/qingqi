@@ -24,7 +24,7 @@
 - SQLite（本地状态与索引持久化）
 - 平台能力封装（`src/platform`）
 
-## 项目结构
+## 项目结构（当前拆分前）
 
 - `src/app`：应用入口、启动器、主题、窗口与运行时编排。
 - `src/core`：命令、插件协议、快捷键、存储和基础抽象。
@@ -34,7 +34,8 @@
 
 ## 设计与优化文档
 
-- [架构设计](docs/architecture.md)
+- [workspace 拆分主导文档](docs/workspace-split-guide.md)
+- [GPT-5.4 workspace 拆分执行手册](docs/gpt-5.4-workspace-split-execution-plan.md)
 - [工程约定](docs/conventions.md)
 - [插件界面问题清单与优化方案](docs/plugin-ui-optimization-plan.md)
 - [gpui-component 使用指南](docs/gpui-component-guide.md)

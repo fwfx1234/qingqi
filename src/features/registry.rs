@@ -14,7 +14,11 @@ use crate::{
         about::{manifest as about_manifest, plugin::AboutPlugin},
         anti_peeping::{manifest as anti_peeping_manifest, plugin::AntiPeepingPlugin},
         api_debugger::{manifest as api_debugger_manifest, plugin::ApiDebuggerPlugin},
-        clipboard::service::ClipboardService,
+        clipboard::{
+            manifest as clipboard_manifest,
+            plugin::ClipboardPlugin,
+            service::ClipboardService,
+        },
         download_manager::{manifest as download_manager_manifest, plugin::DownloadManagerPlugin},
         ftp_sftp_ssh_client::{manifest as ftp_sftp_ssh_manifest, plugin::FtpSftpSshPlugin},
         gpui_demo::plugin::GpuiDemoPlugin,
@@ -38,14 +42,23 @@ pub fn register_builtin_plugins(
     let settings_store = Arc::new(Mutex::new(SettingsStore::new(
         paths.config("system_settings.json"),
     )));
+    let clipboard_db_path = paths.data_dir().join("clipboard.db");
+    database.register_database(DatabaseSpec::path(
+        "clipboard/history",
+        clipboard_db_path.clone(),
+    ))?;
     let clipboard_service = Arc::new(Mutex::new(ClipboardService::new(
         Arc::clone(&database),
-        paths.data_dir().join("clipboard.db"),
+        clipboard_db_path,
     )));
 
     let build_cx = BuildCx::new(Arc::clone(&database), paths.clone(), events);
     let mut registry = FeatureRegistry::new();
 
+    registry.register(PluginDescriptor::builtin(clipboard_manifest::manifest()), {
+        let clipboard_service = Arc::clone(&clipboard_service);
+        move |_| Ok(Box::new(ClipboardPlugin::from_shared(clipboard_service)))
+    });
     registry.register(
         PluginDescriptor::builtin(about_manifest::manifest()),
         |_| Ok(Box::new(AboutPlugin)),

@@ -144,24 +144,42 @@ pub(super) fn populate_application_icons(apps: &mut [InstalledApp]) {
 }
 
 pub(super) fn open_application(path: &str) -> Result<(), String> {
-    let path_wide = wide_null(path);
-    let open = wide_null("open");
-    let result = unsafe {
-        ShellExecuteW(
-            Some(HWND::default()),
-            PCWSTR(open.as_ptr()),
-            PCWSTR(path_wide.as_ptr()),
-            PCWSTR(std::ptr::null()),
-            PCWSTR(std::ptr::null()),
-            SW_SHOWNORMAL,
-        )
-    };
-    let code = result.0 as isize;
-    if code > 32 {
-        Ok(())
-    } else {
-        Err(format!("启动失败: ShellExecuteW 返回 {code}"))
-    }
+    // `ShellExecuteW` runs a nested modal message loop on the *calling* thread.
+    // When invoked on the GUI thread (from a launcher click handler), that
+    // nested loop re-enters GPUI's window procedure and polls pending
+    // foreground tasks while the `App` RefCell is still borrowed by the
+    // outer click `update` — triggering a `RefCell already borrowed` panic
+    // that, because it unwinds through the `extern "system"` window procedure,
+    // aborts the whole process ("闪退").
+    //
+    // Running the launch on a dedicated, short-lived thread keeps that nested
+    // message pump off the GUI thread entirely.  Launching is fire-and-forget
+    // (the launcher window closes immediately afterwards), so we optimistically
+    // report success and log any `ShellExecuteW` failure from the worker.
+    let path = path.to_string();
+    std::thread::Builder::new()
+        .name("qingqi-shell-open".into())
+        .spawn(move || {
+            let _com = ComApartment::init();
+            let path_wide = wide_null(&path);
+            let open = wide_null("open");
+            let result = unsafe {
+                ShellExecuteW(
+                    Some(HWND::default()),
+                    PCWSTR(open.as_ptr()),
+                    PCWSTR(path_wide.as_ptr()),
+                    PCWSTR(std::ptr::null()),
+                    PCWSTR(std::ptr::null()),
+                    SW_SHOWNORMAL,
+                )
+            };
+            let code = result.0 as isize;
+            if code <= 32 {
+                tracing::warn!(path = %path, code, "ShellExecuteW 启动应用失败");
+            }
+        })
+        .map_err(|error| format!("启动失败: 无法创建启动线程: {error}"))?;
+    Ok(())
 }
 
 fn collect_shortcuts() -> Vec<PathBuf> {

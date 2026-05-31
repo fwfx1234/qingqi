@@ -104,6 +104,7 @@ impl BackgroundSupervisor {
     #[cfg(target_os = "windows")]
     pub fn start_low_level_hook(
         &mut self,
+        entries: Vec<crate::platform::low_level_hook::LowLevelEntry>,
         window_controller: WindowControllerHandle,
         cx: &mut App,
     ) {
@@ -111,13 +112,6 @@ impl BackgroundSupervisor {
             return;
         }
 
-        let shortcut_service = cx.try_global::<crate::core::shortcut::ShortcutService>();
-        let Some(service) = shortcut_service else {
-            tracing::warn!("ShortcutService not available; skipping low-level hook");
-            return;
-        };
-
-        let entries = service.low_level_entries().to_vec();
         if entries.is_empty() {
             tracing::debug!("no low-level hook entries to install");
             return;

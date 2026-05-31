@@ -13,6 +13,7 @@ use gpui::{
 use crate::{
     app::{
         app_catalog::AppCatalog, events::AppEventBus, launcher::Launcher, text_input::TextInput,
+        ui,
     },
     core::{
         command::{Action, Activation, CommandInvocation},
@@ -338,12 +339,13 @@ impl WindowController {
         let title = view.title().to_string();
         let (display, bounds) = plugin_bounds(manifest.as_ref(), cx);
         let options = plugin_window_options(&title, manifest.as_ref(), display, bounds);
+        let client_drawn = manifest.as_ref().is_some_and(|m| m.window.always_on_top);
         let plugin_id_for_window = plugin_id.clone();
         let controller_for_window = Arc::clone(&controller);
         let window_started = Instant::now();
         match cx.open_window(options, move |window, cx| {
             window.set_window_title(&title);
-            cx.new(|_| PluginWindow::new(Arc::clone(&controller_for_window), view))
+            cx.new(|_| PluginWindow::new(Arc::clone(&controller_for_window), view, client_drawn))
         }) {
             Ok(handle) => {
                 log_plugin_window_step(&plugin_id, "open plugin window", window_started, trace);
@@ -644,26 +646,48 @@ fn plugin_window_options(
     display: Option<std::rc::Rc<dyn gpui::PlatformDisplay>>,
     bounds: Bounds<gpui::Pixels>,
 ) -> WindowOptions {
-    // All plugin windows are PopUp (always-on-top) regardless of manifest
-    // settings — plugins are tool panels that should float above normal windows.
-    let client_drawn_window = manifest.is_some_and(|m| m.id.as_ref() == "clipboard");
+    // Two flavours of independent plugin window:
+    //   • always_on_top = false → an ordinary OS-decorated window with a
+    //     native titlebar + close button (full tools that needn't float).
+    //   • always_on_top = true  → a borderless, client-drawn `PopUp` that
+    //     floats above other windows (clipboard, anti-peeping).  These have
+    //     no OS titlebar, so the window host overlays `ui::window_close_button`.
+    let always_on_top = manifest.is_some_and(|m| m.window.always_on_top);
 
-    WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(bounds)),
-        display_id: display.map(|display| display.id()),
-        titlebar: Some(TitlebarOptions {
-            title: Some(title.to_string().into()),
-            appears_transparent: client_drawn_window,
-            traffic_light_position: client_drawn_window.then_some(point(px(28.0), px(22.0))),
+    if always_on_top {
+        WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            display_id: display.map(|display| display.id()),
+            titlebar: Some(TitlebarOptions {
+                title: Some(title.to_string().into()),
+                appears_transparent: true,
+                traffic_light_position: Some(point(px(28.0), px(22.0))),
+                ..Default::default()
+            }),
+            kind: WindowKind::PopUp,
+            is_resizable: false,
+            is_minimizable: true,
+            window_background: WindowBackgroundAppearance::Opaque,
+            window_min_size: Some(bounds.size),
+            window_decorations: Some(WindowDecorations::Client),
             ..Default::default()
-        }),
-        kind: WindowKind::PopUp,
-        is_resizable: false,
-        is_minimizable: true,
-        window_background: WindowBackgroundAppearance::Opaque,
-        window_min_size: Some(bounds.size),
-        window_decorations: client_drawn_window.then_some(WindowDecorations::Client),
-        ..Default::default()
+        }
+    } else {
+        WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            display_id: display.map(|display| display.id()),
+            titlebar: Some(TitlebarOptions {
+                title: Some(title.to_string().into()),
+                ..Default::default()
+            }),
+            kind: WindowKind::Normal,
+            is_resizable: false,
+            is_minimizable: true,
+            window_background: WindowBackgroundAppearance::Opaque,
+            window_min_size: Some(bounds.size),
+            window_decorations: Some(WindowDecorations::Server),
+            ..Default::default()
+        }
     }
 }
 
@@ -713,15 +737,23 @@ struct PluginWindow {
     controller: WindowControllerHandle,
     view: Option<Box<dyn WindowView>>,
     plugin_id: String,
+    /// Whether this window is client-drawn (always-on-top, no OS titlebar) and
+    /// therefore needs an overlaid close button.
+    client_drawn: bool,
 }
 
 impl PluginWindow {
-    fn new(controller: WindowControllerHandle, view: Box<dyn WindowView>) -> Self {
+    fn new(
+        controller: WindowControllerHandle,
+        view: Box<dyn WindowView>,
+        client_drawn: bool,
+    ) -> Self {
         let plugin_id = view.plugin_id().to_string();
         Self {
             controller,
             view: Some(view),
             plugin_id,
+            client_drawn,
         }
     }
 
@@ -734,6 +766,7 @@ impl PluginWindow {
 
 impl Render for PluginWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let client_drawn = self.client_drawn;
         let content = self
             .view
             .as_mut()
@@ -742,6 +775,7 @@ impl Render for PluginWindow {
 
         div()
             .size_full()
+            .relative()
             .capture_key_down(cx.listener(|_this, event: &gpui::KeyDownEvent, window, cx| {
                 if event.keystroke.key.as_str() == "escape" {
                     window.defer(cx, |window, _cx| window.remove_window());
@@ -749,6 +783,16 @@ impl Render for PluginWindow {
                 }
             }))
             .child(content)
+            // Client-drawn (always-on-top) windows have no OS titlebar, so
+            // overlay a system-style close button at the top-right.  Ordinary
+            // windows get their close button from the native OS titlebar.
+            .children(client_drawn.then(|| {
+                div()
+                    .absolute()
+                    .top(px(6.0))
+                    .right(px(6.0))
+                    .child(ui::window_close_button())
+            }))
     }
 }
 

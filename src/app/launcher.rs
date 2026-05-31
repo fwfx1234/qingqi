@@ -1501,6 +1501,7 @@ fn plugin_list_row(
             let icon = item.icon.clone();
             div()
                 .size(px(36.0))
+                .flex_none()
                 .rounded(px(10.0))
                 .bg(icon_surface)
                 .border_1()
@@ -1765,6 +1766,7 @@ fn launcher_icon(
 
     div()
         .size(px(36.0))
+        .flex_none()
         .rounded(px(10.0))
         .bg(surface)
         .border_1()
