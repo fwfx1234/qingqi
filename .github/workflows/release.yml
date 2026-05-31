@@ -23,7 +23,7 @@ jobs:
 
       - name: Bundle macOS app
         run: |
-          cargo bundle --release
+          cargo bundle -p qingqi --release
           APP_PATH="$(ls -d target/release/bundle/osx/*.app | head -n 1)"
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "dist/Qingqi-macos-${{ runner.arch }}.zip"
@@ -51,11 +51,13 @@ jobs:
       - name: Build release
         run: cargo build --release
 
-      - name: Package binary
+      - name: Package binary with assets
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist
-          Compress-Archive -Path target/release/qingqi.exe -DestinationPath dist/Qingqi-windows-x86_64.zip
+          New-Item -ItemType Directory -Force -Path dist/qingqi
+          Copy-Item target/release/qingqi.exe dist/qingqi/
+          Copy-Item -Recurse crates/qingqi/assets dist/qingqi/
+          Compress-Archive -Path dist/qingqi/* -DestinationPath dist/Qingqi-windows-x86_64.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
