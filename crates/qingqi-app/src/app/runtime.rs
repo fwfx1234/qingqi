@@ -7,7 +7,6 @@ use std::{
 
 use anyhow::Result;
 use gpui::{App, Menu, MenuItem};
-use qingqi_plugin::clipboard::ClipboardContext;
 use qingqi_plugin::host::{AppIndexHandleRef, ShortcutHandleRef, ThemeHandleRef};
 use qingqi_plugin::{
     database::{DatabaseService, DatabaseSpec},
@@ -96,18 +95,19 @@ impl qingqi_plugin::host::ShortcutHandle for ShortcutHandleAdapter {
         shortcut_id: &str,
         accelerator: &str,
         enabled: bool,
+        cx: &mut App,
     ) -> anyhow::Result<()> {
         self.service
             .lock()
             .map_err(|_| anyhow::anyhow!("shortcut service lock poisoned"))?
-            .set_shortcut_detached(shortcut_id, accelerator, enabled)
+            .set_shortcut(shortcut_id, accelerator, enabled, cx)
     }
 
-    fn restore_shortcut(&self, shortcut_id: &str) -> anyhow::Result<()> {
+    fn restore_shortcut(&self, shortcut_id: &str, cx: &mut App) -> anyhow::Result<()> {
         self.service
             .lock()
             .map_err(|_| anyhow::anyhow!("shortcut service lock poisoned"))?
-            .restore_shortcut_detached(shortcut_id)
+            .restore_shortcut(shortcut_id, cx)
     }
 }
 
@@ -162,7 +162,7 @@ pub fn bootstrap() -> Result<AppHost> {
     })
 }
 
-pub fn run(host: AppHost, clipboard_context: Arc<dyn ClipboardContext>) -> Result<()> {
+pub fn run(host: AppHost) -> Result<()> {
     let AppHost {
         plugins,
         build_cx,
@@ -180,7 +180,6 @@ pub fn run(host: AppHost, clipboard_context: Arc<dyn ClipboardContext>) -> Resul
     let window_controller = Arc::new(Mutex::new(WindowController::new(
         Arc::clone(&plugins),
         Arc::clone(&app_catalog),
-        Arc::clone(&clipboard_context),
         build_cx.events.clone(),
     )));
     let app = gpui::Application::new().with_assets(qingqi_ui::assets::ProjectAssets);

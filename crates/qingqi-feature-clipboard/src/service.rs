@@ -2,6 +2,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use anyhow::{Context, Result};
@@ -13,7 +14,7 @@ use crate::{
         self as history_store_mod, ClipboardConfig, ClipboardItemKind, ClipboardRecord,
     },
 };
-use qingqi_plugin::{command::ClipboardPayload, database::DatabaseService};
+use qingqi_plugin::database::DatabaseService;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClipboardFilter {
@@ -70,7 +71,14 @@ pub struct ClipboardService {
     last_seen_text: Mutex<String>,
     last_seen_image_id: Mutex<u64>,
     last_seen_files: Mutex<String>,
-    last_change_count: Mutex<i64>,
+    last_seen_change_count: Mutex<Option<i64>>,
+    watch_started: bool,
+}
+
+enum ClipboardBackgroundRead {
+    Unsupported,
+    Unchanged,
+    Snapshot(i64, qingqi_platform::clipboard::ClipboardSnapshot),
 }
 
 impl ClipboardService {
@@ -83,54 +91,180 @@ impl ClipboardService {
     }
 
     pub fn with_image_dir(database: Arc<DatabaseService>, image_dir: PathBuf) -> Self {
-        let opened = ClipboardDataSource::open(Arc::clone(&database), "clipboard/history");
+        let opened = match ClipboardDataSource::open(Arc::clone(&database), "clipboard/history") {
+            Ok(data_source) => Some(data_source),
+            Err(error) => {
+                tracing::warn!(
+                    error = %error,
+                    "clipboard data source unavailable; background service will retry"
+                );
+                None
+            }
+        };
         let config = opened
             .as_ref()
-            .ok()
             .and_then(|data_source| data_source.load_config().ok())
             .unwrap_or_default();
         Self {
             database,
             image_dir,
-            data_source: Mutex::new(opened.ok()),
+            data_source: Mutex::new(opened),
             config: Arc::new(Mutex::new(config)),
             last_seen_text: Mutex::new(String::new()),
             last_seen_image_id: Mutex::new(0),
             last_seen_files: Mutex::new(String::new()),
-            last_change_count: Mutex::new(i64::MIN),
+            last_seen_change_count: Mutex::new(None),
+            watch_started: false,
         }
     }
 
     pub fn start(&mut self) {}
 
+    pub fn start_background(service: Arc<Mutex<Self>>, cx: &mut App) {
+        {
+            let Ok(mut service_guard) = service.lock() else {
+                tracing::warn!("clipboard service lock poisoned while starting background worker");
+                return;
+            };
+            if service_guard.watch_started {
+                return;
+            }
+            service_guard.watch_started = true;
+        }
+
+        cx.spawn(async move |async_cx| {
+            loop {
+                async_cx
+                    .background_executor()
+                    .timer(Duration::from_millis(700))
+                    .await;
+
+                let service_for_snapshot = Arc::clone(&service);
+                let snapshot = async_cx
+                    .background_executor()
+                    .spawn(async move {
+                        let service = service_for_snapshot
+                            .lock()
+                            .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
+                        service.read_background_snapshot()
+                    })
+                    .await;
+
+                match snapshot {
+                    Ok(ClipboardBackgroundRead::Unchanged) => {}
+                    Ok(ClipboardBackgroundRead::Snapshot(change_count, snapshot))
+                        if !snapshot.is_empty() =>
+                    {
+                        let service = Arc::clone(&service);
+                        let _ = async_cx.update(move |_cx| {
+                            if let Ok(service) = service.lock() {
+                                match service.capture_snapshot(snapshot) {
+                                    Ok(_) => {
+                                        if let Err(error) =
+                                            service.mark_change_count_seen(Some(change_count))
+                                        {
+                                            tracing::warn!(
+                                                error = %error,
+                                                "failed to mark clipboard change count"
+                                            );
+                                        }
+                                    }
+                                    Err(error) => {
+                                        tracing::warn!(
+                                            error = %error,
+                                            "clipboard capture failed; will retry this change"
+                                        );
+                                    }
+                                }
+                            }
+                        });
+                    }
+                    Ok(ClipboardBackgroundRead::Unsupported) => {
+                        let service = Arc::clone(&service);
+                        let _ = async_cx.update(move |cx| {
+                            if let Ok(service) = service.lock() {
+                                if let Err(error) = service.capture_current(cx) {
+                                    tracing::warn!(
+                                        error = %error,
+                                        "clipboard fallback capture failed"
+                                    );
+                                }
+                            }
+                        });
+                    }
+                    Err(error) => {
+                        tracing::warn!(error = %error, "clipboard background read failed");
+                    }
+                    Ok(ClipboardBackgroundRead::Snapshot(change_count, _)) => {
+                        let service = Arc::clone(&service);
+                        let _ = async_cx.update(move |_cx| {
+                            if let Ok(service) = service.lock() {
+                                if let Err(error) =
+                                    service.mark_change_count_seen(Some(change_count))
+                                {
+                                    tracing::warn!(
+                                        error = %error,
+                                        "failed to mark empty clipboard change count"
+                                    );
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        })
+        .detach();
+    }
+
     pub fn capture_current(&self, cx: &App) -> Result<bool> {
-        if self.claim_change_count(qingqi_platform::clipboard::change_count())? == Some(false) {
+        let change_count = qingqi_platform::clipboard::change_count();
+        if self.has_seen_change_count(change_count)? == Some(true) {
             return Ok(false);
         }
 
         let snapshot = qingqi_platform::clipboard::read_snapshot(cx, self.last_seen_image_id());
-        self.capture_snapshot(snapshot)
+        let captured = self.capture_snapshot(snapshot)?;
+        self.mark_change_count_seen(change_count)?;
+        Ok(captured)
     }
 
-    pub fn current_change_count(&self) -> Result<Option<i64>> {
-        let current = qingqi_platform::clipboard::change_count();
-        let _ = self.claim_change_count(current)?;
-        Ok(current)
+    fn read_background_snapshot(&self) -> Result<ClipboardBackgroundRead> {
+        let Some(change_count) = qingqi_platform::clipboard::change_count() else {
+            return Ok(ClipboardBackgroundRead::Unsupported);
+        };
+        if self.has_seen_change_count(Some(change_count))? == Some(true) {
+            return Ok(ClipboardBackgroundRead::Unchanged);
+        }
+        Ok(ClipboardBackgroundRead::Snapshot(
+            change_count,
+            qingqi_platform::clipboard::read_background_snapshot(
+                change_count,
+                self.last_seen_image_id(),
+            ),
+        ))
     }
 
-    pub fn claim_change_count(&self, change_count: Option<i64>) -> Result<Option<bool>> {
+    fn has_seen_change_count(&self, change_count: Option<i64>) -> Result<Option<bool>> {
         let Some(change_count) = change_count else {
             return Ok(None);
         };
-        let mut last = self
-            .last_change_count
+        let last = self
+            .last_seen_change_count
             .lock()
             .map_err(|_| anyhow::anyhow!("clipboard change-count lock poisoned"))?;
-        if *last == change_count {
-            return Ok(Some(false));
-        }
-        *last = change_count;
-        Ok(Some(true))
+        Ok(Some(*last == Some(change_count)))
+    }
+
+    fn mark_change_count_seen(&self, change_count: Option<i64>) -> Result<()> {
+        let Some(change_count) = change_count else {
+            return Ok(());
+        };
+        *self
+            .last_seen_change_count
+            .lock()
+            .map_err(|_| anyhow::anyhow!("clipboard change-count lock poisoned"))? =
+            Some(change_count);
+        Ok(())
     }
 
     pub fn capture_snapshot(
@@ -143,13 +277,19 @@ impl ClipboardService {
         if config.capture_files {
             if let Some(paths) = snapshot.files.clone() {
                 let signature = files_signature(&paths);
+                if self
+                    .last_seen_files
+                    .lock()
+                    .map(|last_seen| *last_seen == signature)
+                    .unwrap_or(false)
+                {
+                    return Ok(false);
+                }
+                let captured = self.capture_files_with_config(&paths, &config)?;
                 if let Ok(mut last_seen) = self.last_seen_files.lock() {
-                    if *last_seen == signature {
-                        return Ok(false);
-                    }
                     *last_seen = signature;
                 }
-                if self.capture_files_with_config(&paths, &config)? {
+                if captured {
                     return Ok(true);
                 }
             }
@@ -171,26 +311,37 @@ impl ClipboardService {
                         .collect();
                     if !paths.is_empty() {
                         let signature = files_signature(&paths);
+                        if self
+                            .last_seen_files
+                            .lock()
+                            .map(|last_seen| *last_seen == signature)
+                            .unwrap_or(false)
+                        {
+                            return Ok(false);
+                        }
+                        let captured = self.capture_files_with_config(&paths, &config)?;
                         if let Ok(mut last_seen) = self.last_seen_files.lock() {
-                            if *last_seen == signature {
-                                return Ok(false);
-                            }
                             *last_seen = signature;
                         }
-                        if self.capture_files_with_config(&paths, &config)? {
+                        if captured {
                             return Ok(true);
                         }
                     }
                 }
-                if let Ok(mut last_seen) = self.last_seen_text.lock() {
-                    if *last_seen != text {
+
+                let seen_text = self
+                    .last_seen_text
+                    .lock()
+                    .map(|last_seen| *last_seen == text)
+                    .unwrap_or(false);
+                if !seen_text {
+                    let captured = self.capture_text_with_config(&text, &config)?;
+                    if let Ok(mut last_seen) = self.last_seen_text.lock() {
                         *last_seen = text.clone();
-                        if self.capture_text_with_config(&text, &config)? {
-                            return Ok(true);
-                        }
                     }
-                } else if self.capture_text_with_config(&text, &config)? {
-                    return Ok(true);
+                    if captured {
+                        return Ok(true);
+                    }
                 }
             }
         }
@@ -319,12 +470,6 @@ impl ClipboardService {
         self.with_data_source(|data_source| data_source.latest())
     }
 
-    pub fn latest_payload(&self) -> Result<Option<ClipboardPayload>> {
-        Ok(self
-            .latest_record()?
-            .and_then(|record| clipboard_payload_from_record(&record)))
-    }
-
     pub fn toggle_pin(&self, id: i64) -> Result<Option<bool>> {
         self.with_data_source(|data_source| data_source.toggle_pin(id))
     }
@@ -407,10 +552,10 @@ impl ClipboardService {
             .lock()
             .map_err(|_| anyhow::anyhow!("clipboard data source lock poisoned"))?;
         if guard.is_none() {
-            *guard = Some(ClipboardDataSource::open(
-                Arc::clone(&self.database),
-                "clipboard/history",
-            )?);
+            *guard = Some(
+                ClipboardDataSource::open(Arc::clone(&self.database), "clipboard/history")
+                    .context("cannot open clipboard data source")?,
+            );
         }
         f(guard
             .as_ref()
@@ -423,37 +568,6 @@ impl ClipboardService {
             *current = config.clone();
         }
         Ok(config)
-    }
-}
-
-fn clipboard_payload_from_record(record: &ClipboardRecord) -> Option<ClipboardPayload> {
-    match record.kind {
-        ClipboardItemKind::Text => {
-            let text = record.content.clone();
-            if text.trim().is_empty() {
-                None
-            } else {
-                Some(ClipboardPayload {
-                    text: Some(text),
-                    ..Default::default()
-                })
-            }
-        }
-        ClipboardItemKind::Image => Some(ClipboardPayload {
-            image_path: Some(record.content.clone()),
-            ..Default::default()
-        }),
-        ClipboardItemKind::Files => {
-            let paths = history_store_mod::parse_file_paths(&record.content);
-            if paths.is_empty() {
-                None
-            } else {
-                Some(ClipboardPayload {
-                    file_paths: Some(paths),
-                    ..Default::default()
-                })
-            }
-        }
     }
 }
 

@@ -8,13 +8,20 @@ pub(super) fn settings_page(
     config: ClipboardConfig,
     inputs: (Entity<TextInput>, Entity<TextInput>, Entity<TextInput>),
     dark: bool,
+    chrome_metrics: ui::WindowChromeMetrics,
 ) -> impl IntoElement {
     div()
         .size_full()
+        .pt(px(chrome_metrics.content_top_padding))
         .flex()
         .flex_col()
         .overflow_hidden()
-        .child(settings_header(handle.clone(), status_text, dark))
+        .child(settings_header(
+            handle.clone(),
+            status_text,
+            dark,
+            chrome_metrics,
+        ))
         .child(
             div()
                 .flex_1()
@@ -29,11 +36,12 @@ fn settings_header(
     handle: Entity<ClipboardView>,
     status_text: String,
     dark: bool,
+    chrome_metrics: ui::WindowChromeMetrics,
 ) -> impl IntoElement {
     div()
         .h(px(44.0))
-        .pl(px(74.0))
-        .pr(px(8.0))
+        .pl(px(chrome_metrics.safe_left.max(74.0)))
+        .pr(px(chrome_metrics.safe_right.max(8.0)))
         .border_b_1()
         .border_color(ui::border_light())
         .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))

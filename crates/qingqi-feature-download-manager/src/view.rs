@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use gpui::{
     AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
@@ -535,7 +538,12 @@ impl DownloadManagerView {
         if let Err(e) = self.service.lock().unwrap().set_max_concurrent(concurrent) {
             self.message = format!("并发设置失败: {e}");
         }
-        if let Err(e) = self.service.lock().unwrap().set_speed_limit_kbps(speed_limit) {
+        if let Err(e) = self
+            .service
+            .lock()
+            .unwrap()
+            .set_speed_limit_kbps(speed_limit)
+        {
             self.message = format!("限速设置失败: {e}");
         }
         if let Err(e) = self.service.lock().unwrap().set_network_options(
@@ -710,12 +718,7 @@ impl Render for DownloadManagerView {
                     .gap_1p5()
                     .child(header_bar(job_summary.active_count))
                     .child(url_input_bar(dark, url_input, handle.clone()))
-                    .child(filter_bar(
-                        dark,
-                        filter,
-                        &task_counts,
-                        handle.clone(),
-                    ))
+                    .child(filter_bar(dark, filter, &task_counts, handle.clone()))
                     .child(task_list(
                         dark,
                         tasks,
@@ -1367,8 +1370,7 @@ fn task_row(
                     action_icon("\u{1f50d}", dark)
                         .id(("dl-reveal", index))
                         .on_click(move |_, _window, _cx| {
-                            if let Some(parent) = std::path::Path::new(&t.save_path).parent()
-                            {
+                            if let Some(parent) = std::path::Path::new(&t.save_path).parent() {
                                 let _ = qingqi_platform::shell::open_path(parent);
                             }
                         })
@@ -1611,10 +1613,7 @@ fn settings_overlay(
                         .flex()
                         .gap_1p5()
                         .child(settings_field("并发数 (1-16)", concurrent_input))
-                        .child(settings_field(
-                            "限速 KB/s (0=不限)",
-                            speed_limit_input,
-                        )),
+                        .child(settings_field("限速 KB/s (0=不限)", speed_limit_input)),
                 )
                 .child(
                     div()

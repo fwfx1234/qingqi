@@ -281,7 +281,8 @@ impl PluginManager {
             let right_u = usage.get(&right.usage_key).cloned().unwrap_or_default();
             let left_boost = boost_map.get(&left.plugin_id).copied().unwrap_or(0) as f64;
             let right_boost = boost_map.get(&right.plugin_id).copied().unwrap_or(0) as f64;
-            let left_total = *left_score as f64 + left_u.frecency * Self::FRECENCY_WEIGHT + left_boost;
+            let left_total =
+                *left_score as f64 + left_u.frecency * Self::FRECENCY_WEIGHT + left_boost;
             let right_total =
                 *right_score as f64 + right_u.frecency * Self::FRECENCY_WEIGHT + right_boost;
             right_total
@@ -485,7 +486,6 @@ fn default_plugin_command(manifest: Manifest) -> Vec<Command> {
         manifest.icon.as_str(),
     )]
 }
-
 
 pub fn command_kind_priority(kind: CommandKind) -> u8 {
     match kind {

@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use gpui::{
     App, AppContext, AsyncApp, Context, Entity, FontWeight, InteractiveElement, IntoElement,
-    ParentElement, Render, StatefulInteractiveElement, Styled, Window, div,
-    prelude::FluentBuilder, px,
+    ParentElement, Render, StatefulInteractiveElement, Styled, Window, div, prelude::FluentBuilder,
+    px,
 };
 
 use crate::service::{self, JsonMode, JsonResult, JsonStats};
@@ -278,7 +278,12 @@ impl Render for JsonView {
                 .child(input_section(input.unwrap()))
                 .child(query_section(query.unwrap(), &panel, last_mode))
                 .child(output_section(output.unwrap(), &panel, last_mode))
-                .child(status_footer(status_text, stats_text, error_loc_text, status_tone)),
+                .child(status_footer(
+                    status_text,
+                    stats_text,
+                    error_loc_text,
+                    status_tone,
+                )),
         )
     }
 }
@@ -372,9 +377,24 @@ fn query_section(
                     div()
                         .flex()
                         .gap_2()
-                        .child(mode_pill("格式化", JsonAction::Format, panel, last_mode == JsonMode::Format))
-                        .child(mode_pill("压缩", JsonAction::Compact, panel, last_mode == JsonMode::Compact))
-                        .child(mode_pill("验证", JsonAction::ValidateOnly, panel, last_mode == JsonMode::Validate)),
+                        .child(mode_pill(
+                            "格式化",
+                            JsonAction::Format,
+                            panel,
+                            last_mode == JsonMode::Format,
+                        ))
+                        .child(mode_pill(
+                            "压缩",
+                            JsonAction::Compact,
+                            panel,
+                            last_mode == JsonMode::Compact,
+                        ))
+                        .child(mode_pill(
+                            "验证",
+                            JsonAction::ValidateOnly,
+                            panel,
+                            last_mode == JsonMode::Validate,
+                        )),
                 ),
         )
         .child(
@@ -556,7 +576,11 @@ fn mode_pill(
     } else {
         ui::border_light()
     };
-    let text_color = if active { accent } else { theme::semantic().text_primary };
+    let text_color = if active {
+        accent
+    } else {
+        theme::semantic().text_primary
+    };
 
     div()
         .id(label)
@@ -571,7 +595,11 @@ fn mode_pill(
         .items_center()
         .justify_center()
         .text_size(px(11.0))
-        .font_weight(if active { FontWeight::SEMIBOLD } else { FontWeight::default() })
+        .font_weight(if active {
+            FontWeight::SEMIBOLD
+        } else {
+            FontWeight::default()
+        })
         .text_color(text_color)
         .child(label)
         .on_click({
@@ -583,10 +611,7 @@ fn mode_pill(
         })
 }
 
-fn query_execute_button(
-    label: &'static str,
-    panel: &Entity<JsonView>,
-) -> impl IntoElement {
+fn query_execute_button(label: &'static str, panel: &Entity<JsonView>) -> impl IntoElement {
     let accent = theme::blue_500();
     div()
         .id(label)

@@ -804,7 +804,9 @@ impl Render for ImageCompressView {
                                             let handle = handle.clone();
                                             move |_, window, cx| {
                                                 handle.update(cx, |this, _cx| {
-                                                    this.set_mode(CompressionMode::VisuallyLossless);
+                                                    this.set_mode(
+                                                        CompressionMode::VisuallyLossless,
+                                                    );
                                                 });
                                                 window.refresh();
                                             }

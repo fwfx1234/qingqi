@@ -22,7 +22,6 @@ pub(super) fn history_page(
     items: Arc<Vec<ClipboardRecord>>,
     selected: usize,
     query: &str,
-    query_input: Entity<TextInput>,
     selected_record: Option<ClipboardRecord>,
     item_count: usize,
     current_filter: ClipboardFilter,
@@ -30,10 +29,12 @@ pub(super) fn history_page(
     history_scroll: UniformListScrollHandle,
     preview_input: Entity<TextInput>,
     dark: bool,
+    chrome_metrics: ui::WindowChromeMetrics,
 ) -> impl IntoElement {
     div()
         .flex_1()
         .min_h(px(0.0))
+        .pt(px(chrome_metrics.content_top_padding))
         .flex()
         .overflow_hidden()
         .child(
@@ -46,9 +47,9 @@ pub(super) fn history_page(
                 .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.65))
                 .child(history_top_bar(
                     handle.clone(),
-                    query_input,
                     item_count,
                     dark,
+                    chrome_metrics,
                 ))
                 .child(
                     div()
@@ -62,21 +63,16 @@ pub(super) fn history_page(
                             dark,
                         )))
                         .child(history_filter_divider(dark))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_h(px(0.0))
-                                .px(px(4.0))
-                                .pb(px(6.0))
-                                .child(history_list(
-                                    handle.clone(),
-                                    items,
-                                    selected,
-                                    query,
-                                    history_scroll,
-                                    dark,
-                                )),
-                        ),
+                        .child(div().flex_1().min_h(px(0.0)).px(px(4.0)).pb(px(6.0)).child(
+                            history_list(
+                                handle.clone(),
+                                items,
+                                selected,
+                                query,
+                                history_scroll,
+                                dark,
+                            ),
+                        )),
                 ),
         )
         .child(
@@ -107,31 +103,54 @@ pub(super) fn history_page(
         )
 }
 
-fn history_top_bar(
-    handle: Entity<ClipboardView>,
+pub(super) fn history_titlebar_slot(
     query_input: Entity<TextInput>,
-    item_count: usize,
     dark: bool,
 ) -> impl IntoElement {
     div()
+        .h_full()
+        .flex()
+        .items_center()
+        .child(search_field(query_input, dark).w(px(320.0)))
+}
+
+fn history_top_bar(
+    handle: Entity<ClipboardView>,
+    item_count: usize,
+    dark: bool,
+    chrome_metrics: ui::WindowChromeMetrics,
+) -> impl IntoElement {
+    div()
         .h(px(44.0))
-        .px(px(8.0))
+        .pl(px(chrome_metrics.safe_left.max(8.0)))
+        .pr(px(chrome_metrics.safe_right.max(8.0)))
         .border_b_1()
         .border_color(ui::border_light())
         .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
         .flex()
         .items_center()
-        .child(div().w(px(140.0)))
         .child(
             div()
-                .flex_1()
                 .flex()
-                .justify_center()
-                .child(search_field(query_input, dark).w(px(280.0))),
+                .flex_col()
+                .gap(px(1.0))
+                .child(
+                    div()
+                        .text_size(px(12.0))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme::semantic().text_primary)
+                        .child("历史记录"),
+                )
+                .child(
+                    div()
+                        .text_size(px(10.0))
+                        .text_color(theme::semantic().text_secondary)
+                        .child("筛选和预览剪贴板内容"),
+                ),
         )
+        .child(div().flex_1())
         .child(
             div()
-                .w(px(140.0))
                 .flex()
                 .items_center()
                 .justify_end()
@@ -227,7 +246,9 @@ fn render_filter_tabs(
                 })
                 .border_1()
                 .border_color(if is_active {
-                    gpui::Hsla::from(ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue))
+                    gpui::Hsla::from(ui::accent_color(
+                        qingqi_plugin::plugin_spec::PluginAccent::Blue,
+                    ))
                 } else {
                     ui::border_light()
                 })

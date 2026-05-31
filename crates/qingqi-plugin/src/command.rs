@@ -119,10 +119,9 @@ pub struct LauncherContext {
     pub prefix: Option<String>,
     pub input_body: String,
     pub input_kinds: Vec<ContextKind>,
-    /// Clipboard content payload — set when the launcher opens and the
-    /// latest clipboard record is available.  Plugins that implement
-    /// [`crate::plugin::Plugin::clipboard_boost`] receive this to
-    /// perform their own content matching.
+    /// Current system clipboard payload — set when the launcher opens.
+    /// Plugins that implement [`crate::plugin::Plugin::clipboard_boost`]
+    /// receive this to perform their own content matching.
     pub clipboard_payload: Option<ClipboardPayload>,
 }
 

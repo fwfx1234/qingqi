@@ -80,7 +80,9 @@ impl Plugin for FtpSftpSshPlugin {
         let service = self.service()?;
         self.ensure_watcher(Arc::clone(&service), cx.events.clone(), cx.app);
         let handle = cx.app.new(|_cx| view::FtpSftpSshView::new(service));
-        Ok(PluginView::Window(Box::new(FtpSftpSshView { panel: handle })))
+        Ok(PluginView::Window(Box::new(FtpSftpSshView {
+            panel: handle,
+        })))
     }
 
     fn close_idle(&mut self) {

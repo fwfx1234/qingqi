@@ -1,4 +1,10 @@
 pub mod components;
+mod window_chrome;
+
+pub use window_chrome::{
+    WindowChromeConfig, WindowChromeMetrics, WindowChromeMode, WindowChromeStyle,
+    popup_window_chrome, popup_window_chrome_with_titlebar_slot,
+};
 
 use gpui::{
     InteractiveElement, IntoElement, ParentElement, SharedString, StatefulInteractiveElement,

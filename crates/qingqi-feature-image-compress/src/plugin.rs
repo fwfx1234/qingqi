@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::path::Path;
+use std::sync::Arc;
 
 use gpui::{App, AppContext, Entity, IntoElement, Window};
 

@@ -317,7 +317,10 @@ impl SettingsView {
         &self.shortcut_message
     }
 
-    pub fn shortcut_rows(&mut self, cx: &mut Context<Self>) -> Vec<(ShortcutView, Entity<TextInput>)> {
+    pub fn shortcut_rows(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Vec<(ShortcutView, Entity<TextInput>)> {
         let views = self
             .shortcut_handle
             .as_ref()
@@ -376,7 +379,7 @@ impl SettingsView {
             .shortcut_handle
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("快捷键服务不可用"))
-            .and_then(|service| service.set_shortcut(shortcut_id, &accelerator, enabled));
+            .and_then(|service| service.set_shortcut(shortcut_id, &accelerator, enabled, cx));
         match result {
             Ok(()) => {
                 self.shortcut_drafts
@@ -398,7 +401,7 @@ impl SettingsView {
             .shortcut_handle
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("快捷键服务不可用"))
-            .and_then(|service| service.restore_shortcut(shortcut_id));
+            .and_then(|service| service.restore_shortcut(shortcut_id, cx));
         match result {
             Ok(()) => {
                 self.shortcut_message = String::from("已恢复默认快捷键");
@@ -574,12 +577,7 @@ impl Render for SettingsView {
                 dark,
                 "快捷键",
                 Some("全局与应用内快捷键"),
-                shortcuts_section(
-                    entity.clone(),
-                    shortcut_rows,
-                    shortcut_message,
-                    dark,
-                ),
+                shortcuts_section(entity.clone(), shortcut_rows, shortcut_message, dark),
             ))
             // ── App Index ──
             .child(components::settings_card(
@@ -1161,12 +1159,7 @@ fn shortcut_row(
                         let input = input.clone();
                         move |_, _window, cx| {
                             entity.update(cx, |this, cx| {
-                                this.save_shortcut(
-                                    &shortcut_id,
-                                    input.clone(),
-                                    !enabled,
-                                    cx,
-                                );
+                                this.save_shortcut(&shortcut_id, input.clone(), !enabled, cx);
                                 cx.notify();
                             });
                         }

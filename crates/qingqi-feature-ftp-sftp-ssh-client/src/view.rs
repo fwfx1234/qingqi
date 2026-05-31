@@ -932,11 +932,7 @@ impl Render for FtpSftpSshView {
                 ))
             })
             .when(folder_sheet_open, |root| {
-                root.child(new_folder_overlay(
-                    dark,
-                    new_folder_input,
-                    entity.clone(),
-                ))
+                root.child(new_folder_overlay(dark, new_folder_input, entity.clone()))
             })
             .when(profile_menu.is_some(), |root| {
                 root.child(profile_menu_overlay(
@@ -1061,7 +1057,9 @@ fn top_bar(
                     let panel = panel.clone();
                     move |_, window, cx| {
                         if let Some(profile_id) = selected_id {
-                            cx.update_entity(&panel, |view, _cx| view.disconnect_profile(profile_id));
+                            cx.update_entity(&panel, |view, _cx| {
+                                view.disconnect_profile(profile_id)
+                            });
                         }
                         window.refresh();
                     }
@@ -1134,7 +1132,9 @@ fn sidebar(
                                 .on_click({
                                     let panel = panel.clone();
                                     move |_, window, cx| {
-                                        cx.update_entity(&panel, |view, _cx| view.begin_new_profile(_cx));
+                                        cx.update_entity(&panel, |view, _cx| {
+                                            view.begin_new_profile(_cx)
+                                        });
                                         window.refresh();
                                     }
                                 }),
@@ -1224,7 +1224,9 @@ fn connection_card(
             let panel = panel.clone();
             let profile = profile.clone();
             move |event, window, cx| {
-                cx.update_entity(&panel, |view, _cx| view.open_profile_menu(profile.clone(), event.position));
+                cx.update_entity(&panel, |view, _cx| {
+                    view.open_profile_menu(profile.clone(), event.position)
+                });
                 cx.stop_propagation();
                 window.refresh();
             }
@@ -1345,7 +1347,9 @@ fn connection_card(
                             let profile = profile.clone();
                             move |event, window, cx| {
                                 cx.stop_propagation();
-                                cx.update_entity(&panel, |view, _cx| view.open_profile_menu(profile.clone(), event.position()));
+                                cx.update_entity(&panel, |view, _cx| {
+                                    view.open_profile_menu(profile.clone(), event.position())
+                                });
                                 window.refresh();
                             }
                         }),
@@ -1663,7 +1667,9 @@ fn remote_entry_row(
             let panel = panel.clone();
             let item = item.clone();
             move |event, window, cx| {
-                cx.update_entity(&panel, |view, _cx| view.open_file_menu(item.clone(), event.position));
+                cx.update_entity(&panel, |view, _cx| {
+                    view.open_file_menu(item.clone(), event.position)
+                });
                 cx.stop_propagation();
                 window.refresh();
             }
@@ -1732,9 +1738,13 @@ fn remote_entry_row(
                                 let panel = panel.clone();
                                 move |_, window, cx| {
                                     if item_for_primary.is_dir {
-                                        cx.update_entity(&panel, |view, _cx| view.navigate_dir(&item_for_primary.path));
+                                        cx.update_entity(&panel, |view, _cx| {
+                                            view.navigate_dir(&item_for_primary.path)
+                                        });
                                     } else {
-                                        cx.update_entity(&panel, |view, _cx| view.download_file(&item_for_primary));
+                                        cx.update_entity(&panel, |view, _cx| {
+                                            view.download_file(&item_for_primary)
+                                        });
                                     }
                                     window.refresh();
                                 }
@@ -1748,7 +1758,9 @@ fn remote_entry_row(
                             .on_click({
                                 let panel = panel.clone();
                                 move |_, window, cx| {
-                                    cx.update_entity(&panel, |view, _cx| view.open_text_file(&item_for_text));
+                                    cx.update_entity(&panel, |view, _cx| {
+                                        view.open_text_file(&item_for_text)
+                                    });
                                     window.refresh();
                                 }
                             }),
@@ -1761,7 +1773,9 @@ fn remote_entry_row(
                             .on_click({
                                 let panel = panel.clone();
                                 move |event, window, cx| {
-                                    cx.update_entity(&panel, |view, _cx| view.open_file_menu(item_for_menu.clone(), event.position()));
+                                    cx.update_entity(&panel, |view, _cx| {
+                                        view.open_file_menu(item_for_menu.clone(), event.position())
+                                    });
                                     window.refresh();
                                 }
                             }),
@@ -2191,7 +2205,9 @@ fn transfer_panel(
                             .on_click({
                                 let panel = panel.clone();
                                 move |_, window, cx| {
-                                    cx.update_entity(&panel, |view, _cx| view.set_transfer_collapsed(!collapsed));
+                                    cx.update_entity(&panel, |view, _cx| {
+                                        view.set_transfer_collapsed(!collapsed)
+                                    });
                                     window.refresh();
                                 }
                             }),
@@ -2239,7 +2255,9 @@ fn transfer_panel(
                                     .on_click({
                                         let panel = panel.clone();
                                         move |_, window, cx| {
-                                            cx.update_entity(&panel, |view, _cx| view.set_transfer_collapsed(false));
+                                            cx.update_entity(&panel, |view, _cx| {
+                                                view.set_transfer_collapsed(false)
+                                            });
                                             window.refresh();
                                         }
                                     }),
@@ -2252,7 +2270,9 @@ fn transfer_panel(
                                     .on_click({
                                         let panel = panel.clone();
                                         move |_, window, cx| {
-                                            cx.update_entity(&panel, |view, _cx| view.set_transfer_collapsed(true));
+                                            cx.update_entity(&panel, |view, _cx| {
+                                                view.set_transfer_collapsed(true)
+                                            });
                                             window.refresh();
                                         }
                                     }),
@@ -2264,7 +2284,9 @@ fn transfer_panel(
                                 .on_click({
                                     let panel = panel.clone();
                                     move |_, window, cx| {
-                                        cx.update_entity(&panel, |view, _cx| view.toggle_transfer_scope(false));
+                                        cx.update_entity(&panel, |view, _cx| {
+                                            view.toggle_transfer_scope(false)
+                                        });
                                         window.refresh();
                                     }
                                 }),
@@ -2275,7 +2297,9 @@ fn transfer_panel(
                                 .on_click({
                                     let panel = panel.clone();
                                     move |_, window, cx| {
-                                        cx.update_entity(&panel, |view, _cx| view.toggle_transfer_scope(true));
+                                        cx.update_entity(&panel, |view, _cx| {
+                                            view.toggle_transfer_scope(true)
+                                        });
                                         window.refresh();
                                     }
                                 }),
@@ -2432,7 +2456,9 @@ fn draft_section(
                                 .on_click({
                                     let panel = panel.clone();
                                     move |_, window, cx| {
-                                        cx.update_entity(&panel, |view, _cx| view.reopen_local_draft(&draft_for_open));
+                                        cx.update_entity(&panel, |view, _cx| {
+                                            view.reopen_local_draft(&draft_for_open)
+                                        });
                                         window.refresh();
                                     }
                                 }),
@@ -2453,7 +2479,9 @@ fn draft_section(
                                     let panel = panel.clone();
                                     let draft_id = draft_for_upload.id.clone();
                                     move |_, window, cx| {
-                                        cx.update_entity(&panel, |view, _cx| view.upload_draft(&draft_id, force));
+                                        cx.update_entity(&panel, |view, _cx| {
+                                            view.upload_draft(&draft_id, force)
+                                        });
                                         window.refresh();
                                     }
                                 }),
@@ -2686,7 +2714,9 @@ fn profile_editor_overlay(
                                         .on_click({
                                             let panel = panel.clone();
                                             move |_, window, cx| {
-                                                cx.update_entity(&panel, |view, _cx| view.set_editor_protocol(protocol_item, _cx));
+                                                cx.update_entity(&panel, |view, _cx| {
+                                                    view.set_editor_protocol(protocol_item, _cx)
+                                                });
                                                 window.refresh();
                                             }
                                         })
@@ -2736,7 +2766,9 @@ fn profile_editor_overlay(
                                         .on_click({
                                             let panel = panel.clone();
                                             move |_, window, cx| {
-                                                cx.update_entity(&panel, |view, _cx| view.set_editor_auth_method(auth_method));
+                                                cx.update_entity(&panel, |view, _cx| {
+                                                    view.set_editor_auth_method(auth_method)
+                                                });
                                                 window.refresh();
                                             }
                                         })
@@ -2801,7 +2833,9 @@ fn profile_editor_overlay(
                                 .on_click({
                                     let panel = panel.clone();
                                     move |_, window, cx| {
-                                        cx.update_entity(&panel, |view, _cx| view.toggle_editor_show_advanced());
+                                        cx.update_entity(&panel, |view, _cx| {
+                                            view.toggle_editor_show_advanced()
+                                        });
                                         window.refresh();
                                     }
                                 }),
@@ -2848,7 +2882,9 @@ fn profile_editor_overlay(
                                                 {
                                                     let panel = panel.clone();
                                                     move |_, window, cx| {
-                                                        cx.update_entity(&panel, |view, _cx| view.toggle_editor_passive_mode());
+                                                        cx.update_entity(&panel, |view, _cx| {
+                                                            view.toggle_editor_passive_mode()
+                                                        });
                                                         window.refresh();
                                                     }
                                                 },
@@ -2860,7 +2896,9 @@ fn profile_editor_overlay(
                                                 .on_click({
                                                     let panel = panel.clone();
                                                     move |_, window, cx| {
-                                                        cx.update_entity(&panel, |view, _cx| view.toggle_editor_jump_enabled());
+                                                        cx.update_entity(&panel, |view, _cx| {
+                                                            view.toggle_editor_jump_enabled()
+                                                        });
                                                         window.refresh();
                                                     }
                                                 }),
@@ -2871,7 +2909,9 @@ fn profile_editor_overlay(
                                                 .on_click({
                                                     let panel = panel.clone();
                                                     move |_, window, cx| {
-                                                        cx.update_entity(&panel, |view, _cx| view.toggle_editor_pinned());
+                                                        cx.update_entity(&panel, |view, _cx| {
+                                                            view.toggle_editor_pinned()
+                                                        });
                                                         window.refresh();
                                                     }
                                                 }),
@@ -2948,7 +2988,9 @@ fn profile_editor_overlay(
                                     .on_click({
                                         let panel = panel.clone();
                                         move |_, window, cx| {
-                                            cx.update_entity(&panel, |view, _cx| view.close_editor());
+                                            cx.update_entity(&panel, |view, _cx| {
+                                                view.close_editor()
+                                            });
                                             window.refresh();
                                         }
                                     }),
@@ -2959,7 +3001,9 @@ fn profile_editor_overlay(
                                     .on_click({
                                         let panel = panel.clone();
                                         move |_, window, cx| {
-                                            cx.update_entity(&panel, |view, _cx| view.save_editor(_cx));
+                                            cx.update_entity(&panel, |view, _cx| {
+                                                view.save_editor(_cx)
+                                            });
                                             window.refresh();
                                         }
                                     }),
@@ -3082,7 +3126,9 @@ fn new_folder_overlay(
                             .on_click({
                                 let panel = panel.clone();
                                 move |_, window, cx| {
-                                    cx.update_entity(&panel, |view, _cx| view.create_new_folder(_cx));
+                                    cx.update_entity(&panel, |view, _cx| {
+                                        view.create_new_folder(_cx)
+                                    });
                                     window.refresh();
                                 }
                             }),
@@ -3144,7 +3190,9 @@ fn profile_menu_overlay(
                             let panel = panel.clone();
                             let profile_id = menu.profile.id;
                             move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| view.connect_profile(profile_id));
+                                cx.update_entity(&panel, |view, _cx| {
+                                    view.connect_profile(profile_id)
+                                });
                                 window.refresh();
                             }
                         }),
@@ -3156,7 +3204,9 @@ fn profile_menu_overlay(
                         menu_item("断开该 session", dark)
                             .id("ftp-menu-disconnect")
                             .on_click(move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| view.disconnect_profile(profile_id));
+                                cx.update_entity(&panel, |view, _cx| {
+                                    view.disconnect_profile(profile_id)
+                                });
                                 window.refresh();
                             }),
                     )
@@ -3165,7 +3215,9 @@ fn profile_menu_overlay(
                     let panel = panel.clone();
                     let profile_id = menu.profile.id;
                     move |_, window, cx| {
-                        cx.update_entity(&panel, |view, _cx| view.open_profile_editor(profile_id, _cx));
+                        cx.update_entity(&panel, |view, _cx| {
+                            view.open_profile_editor(profile_id, _cx)
+                        });
                         window.refresh();
                     }
                 }))
@@ -3176,7 +3228,9 @@ fn profile_menu_overlay(
                             let panel = panel.clone();
                             let profile = menu.profile.clone();
                             move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| view.duplicate_profile(&profile, _cx));
+                                cx.update_entity(&panel, |view, _cx| {
+                                    view.duplicate_profile(&profile, _cx)
+                                });
                                 window.refresh();
                             }
                         }),
@@ -3282,7 +3336,9 @@ fn file_menu_overlay(
                             let panel = panel.clone();
                             let item = menu.item.clone();
                             move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| view.delete_remote_item(&item));
+                                cx.update_entity(&panel, |view, _cx| {
+                                    view.delete_remote_item(&item)
+                                });
                                 window.refresh();
                             }
                         }),

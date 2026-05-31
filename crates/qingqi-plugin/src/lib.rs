@@ -1,5 +1,4 @@
 pub mod app;
-pub mod clipboard;
 pub mod command;
 pub mod database;
 pub mod dict_store;

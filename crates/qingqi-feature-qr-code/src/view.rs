@@ -377,11 +377,7 @@ impl QrView {
         }
 
         qingqi_platform::clipboard::write_text(cx, self.scan_result.clone());
-        self.record_copy_async(
-            self.scan_result.clone(),
-            String::from("已复制扫描结果"),
-            cx,
-        );
+        self.record_copy_async(self.scan_result.clone(), String::from("已复制扫描结果"), cx);
     }
 
     pub fn use_scan_result(&mut self, cx: &mut Context<Self>) {
@@ -441,9 +437,7 @@ impl QrView {
         cx.spawn(async move |this, async_cx| {
             let result = async_cx
                 .background_executor()
-                .spawn(
-                    async move { service.clear_history().map_err(|error| error.to_string()) },
-                )
+                .spawn(async move { service.clear_history().map_err(|error| error.to_string()) })
                 .await;
             if let Ok(mut slot) = pending.lock() {
                 *slot = Some(QrBackgroundResult::ClearHistory(result));
@@ -478,11 +472,7 @@ impl QrView {
 
     pub fn copy_history_item(&mut self, item: &QrHistoryRecord, cx: &mut Context<Self>) {
         qingqi_platform::clipboard::write_text(cx, item.content.clone());
-        self.record_copy_async(
-            item.content.clone(),
-            String::from("已复制历史内容"),
-            cx,
-        );
+        self.record_copy_async(item.content.clone(), String::from("已复制历史内容"), cx);
     }
 
     pub fn use_history_item(&mut self, item: &QrHistoryRecord, cx: &mut Context<Self>) {
@@ -794,9 +784,7 @@ impl Render for QrView {
                                                         move |_, _window, cx| {
                                                             entity.update(cx, |this, ctx| {
                                                                 let text = this.input_text(ctx);
-                                                                this.generate_from_text(
-                                                                    &text, ctx,
-                                                                );
+                                                                this.generate_from_text(&text, ctx);
                                                                 ctx.notify();
                                                             });
                                                         }
@@ -984,32 +972,24 @@ fn scan_panel(
                                     }
                                 }),
                         )
-                        .child(
-                            action_button("扫描", dark)
-                                .id("qr-scan-run")
-                                .on_click({
-                                    let entity = entity.clone();
-                                    move |_, _window, cx| {
-                                        entity.update(cx, |this, ctx| {
-                                            this.scan_selected_path(ctx);
-                                            ctx.notify();
-                                        });
-                                    }
-                                }),
-                        )
-                        .child(
-                            action_button("关闭", dark)
-                                .id("qr-scan-close")
-                                .on_click({
-                                    let entity = entity.clone();
-                                    move |_, _window, cx| {
-                                        entity.update(cx, |this, ctx| {
-                                            this.show_scan = false;
-                                            ctx.notify();
-                                        });
-                                    }
-                                }),
-                        ),
+                        .child(action_button("扫描", dark).id("qr-scan-run").on_click({
+                            let entity = entity.clone();
+                            move |_, _window, cx| {
+                                entity.update(cx, |this, ctx| {
+                                    this.scan_selected_path(ctx);
+                                    ctx.notify();
+                                });
+                            }
+                        }))
+                        .child(action_button("关闭", dark).id("qr-scan-close").on_click({
+                            let entity = entity.clone();
+                            move |_, _window, cx| {
+                                entity.update(cx, |this, ctx| {
+                                    this.show_scan = false;
+                                    ctx.notify();
+                                });
+                            }
+                        })),
                 ),
         )
         .child(
@@ -1027,9 +1007,7 @@ fn scan_panel(
                         .border_color(theme::semantic().border_default)
                         .drag_over::<ExternalPaths>(move |style, _, _, _| {
                             style.bg(theme::rgba_with_alpha(
-                                theme::accent_color(
-                                    qingqi_plugin::plugin_spec::PluginAccent::Cyan,
-                                ),
+                                theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan),
                                 if dark { 0.18 } else { 0.10 },
                             ))
                         })
@@ -1251,9 +1229,7 @@ fn history_panel(
                     history
                         .into_iter()
                         .enumerate()
-                        .map(|(index, item)| {
-                            history_row(entity.clone(), item, index, dark)
-                        }),
+                        .map(|(index, item)| history_row(entity.clone(), item, index, dark)),
                 )
                 .into_any_element()
         })

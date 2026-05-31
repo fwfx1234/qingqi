@@ -1,7 +1,4 @@
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
@@ -10,13 +7,14 @@ use crate::{manifest, service::ClipboardService, view};
 use qingqi_plugin::{
     command::{Activation, Command},
     events::AppEventBus,
+    host::ShortcutHandleRef,
     plugin::{Plugin, PluginCx, PluginId, PluginView, WindowView},
     shortcut::{ShortcutDescriptor, ShortcutScope, ShortcutTarget},
 };
 
 pub struct ClipboardPlugin {
     service: Arc<Mutex<ClipboardService>>,
-    watch_started: bool,
+    shortcut_handle: Option<ShortcutHandleRef>,
 }
 
 impl ClipboardPlugin {
@@ -27,8 +25,13 @@ impl ClipboardPlugin {
     pub fn from_shared(service: Arc<Mutex<ClipboardService>>) -> Self {
         Self {
             service,
-            watch_started: false,
+            shortcut_handle: None,
         }
+    }
+
+    pub fn with_shortcut_handle(mut self, shortcut_handle: Option<ShortcutHandleRef>) -> Self {
+        self.shortcut_handle = shortcut_handle;
+        self
     }
 
     pub fn service(&self) -> Arc<Mutex<ClipboardService>> {
@@ -59,7 +62,10 @@ impl Plugin for ClipboardPlugin {
         }
 
         let panel = cx.app.new(|cx| {
-            let mut panel = view::ClipboardView::new(Arc::clone(&self.service));
+            let mut panel = view::ClipboardView::with_shortcut_handle(
+                Arc::clone(&self.service),
+                self.shortcut_handle.clone(),
+            );
             panel.init(cx);
             panel
         });
@@ -119,66 +125,7 @@ impl Plugin for ClipboardPlugin {
     }
 
     fn start_background(&mut self, _: AppEventBus, cx: &mut App) {
-        if self.watch_started {
-            return;
-        }
-        self.watch_started = true;
-
-        let service = Arc::clone(&self.service);
-        cx.spawn(async move |async_cx| {
-            loop {
-                async_cx
-                    .background_executor()
-                    .timer(Duration::from_millis(700))
-                    .await;
-                // Try platform-native background read first (macOS).
-                // On Windows, change_count() returns None, so we fall
-                // through to the main-thread gpui clipboard API.
-                let service_for_snapshot = Arc::clone(&service);
-                let snapshot = async_cx
-                    .background_executor()
-                    .spawn(async move {
-                        let service = service_for_snapshot
-                            .lock()
-                            .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
-                        let Some(change_count) = service.current_change_count()? else {
-                            return Ok(None);
-                        };
-                        let snap = qingqi_platform::clipboard::read_background_snapshot(
-                            change_count,
-                            service.last_seen_image_id(),
-                        );
-                        Ok::<_, anyhow::Error>(Some(snap))
-                    })
-                    .await;
-
-                match snapshot {
-                    Ok(Some(snapshot))
-                        if snapshot.text.is_some()
-                            || snapshot.image.is_some()
-                            || snapshot.files.is_some() =>
-                    {
-                        let service = Arc::clone(&service);
-                        let _ = async_cx.update(move |_cx| {
-                            if let Ok(service) = service.lock() {
-                                let _ = service.capture_snapshot(snapshot);
-                            }
-                        });
-                    }
-                    _ => {
-                        // Background read unavailable (Windows) or empty —
-                        // fall back to main-thread gpui clipboard API.
-                        let service = Arc::clone(&service);
-                        let _ = async_cx.update(move |cx| {
-                            if let Ok(service) = service.lock() {
-                                let _ = service.capture_current(cx);
-                            }
-                        });
-                    }
-                }
-            }
-        })
-        .detach();
+        ClipboardService::start_background(Arc::clone(&self.service), cx);
     }
 
     fn close_idle(&mut self) {}

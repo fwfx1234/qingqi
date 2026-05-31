@@ -18,22 +18,25 @@ use qingqi_feature_json_parser as feature_json_parser;
 use qingqi_feature_qr_code as feature_qr_code;
 use qingqi_feature_quick_launch as feature_quick_launch;
 use qingqi_feature_system_settings as feature_system_settings;
-use qingqi_plugin::clipboard::ClipboardContext;
 
-pub fn register_builtin_plugins(host: &mut AppHost) -> Result<Arc<dyn ClipboardContext>> {
+pub fn register_builtin_plugins(host: &mut AppHost) -> Result<()> {
     let theme_handle = theme_handle_ref(host);
     let app_index_handle = app_index_handle_ref(host);
     let shortcut_handle = shortcut_handle_ref(host);
-    let (clipboard_plugin, clipboard_context) = feature_clipboard::build_shared(
-        Arc::clone(&host.build_cx.database),
-        host.build_cx.paths.clone(),
-    )?;
     let mut registry = FeatureRegistry::new();
 
     registry.register(
         PluginDescriptor::builtin(feature_clipboard::manifest::manifest())
             .with_databases(feature_clipboard::databases()),
-        move |_| Ok(clipboard_plugin),
+        {
+            let shortcut_handle = Arc::clone(&shortcut_handle);
+            move |cx| {
+                feature_clipboard::build_shared(
+                    Arc::clone(&cx.database),
+                    Some(Arc::clone(&shortcut_handle)),
+                )
+            }
+        },
     );
     registry.register(
         PluginDescriptor::builtin(feature_about::manifest::manifest()),
@@ -73,7 +76,7 @@ pub fn register_builtin_plugins(host: &mut AppHost) -> Result<Arc<dyn ClipboardC
     );
     registry.register(
         PluginDescriptor::builtin(feature_system_settings::manifest::manifest())
-        .with_databases(feature_system_settings::databases()),
+            .with_databases(feature_system_settings::databases()),
         {
             let app_index_handle = Arc::clone(&app_index_handle);
             let shortcut_handle = Arc::clone(&shortcut_handle);
@@ -104,5 +107,5 @@ pub fn register_builtin_plugins(host: &mut AppHost) -> Result<Arc<dyn ClipboardC
     );
 
     registry.build_all(&host.build_cx, &mut host.plugins)?;
-    Ok(clipboard_context)
+    Ok(())
 }

@@ -2,10 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 
-use crate::{
-    settings_store::SettingsStore,
-    view::SettingsView,
-};
+use crate::{settings_store::SettingsStore, view::SettingsView};
 use qingqi_plugin::{
     host::{AppIndexHandleRef, ShortcutHandleRef, ThemeHandleRef},
     plugin::{InlineView, Manifest, Plugin, PluginCx, PluginId, PluginView},

@@ -1630,9 +1630,7 @@ fn editor_panel(
                                 } else {
                                     ui::text_tertiary()
                                 })
-                                .hover(move |style| {
-                                    style.text_color(api_accent()).cursor_pointer()
-                                })
+                                .hover(move |style| style.text_color(api_accent()).cursor_pointer())
                                 .child(tab.label())
                                 .on_click({
                                     move |_, _window, cx| {
@@ -2045,8 +2043,7 @@ fn env_manager_dialog(
                                             .rounded(px(8.0))
                                             .border_1()
                                             .border_color(if active {
-                                                theme::rgba_with_alpha(api_accent(), 0.18)
-                                                    .into()
+                                                theme::rgba_with_alpha(api_accent(), 0.18).into()
                                             } else {
                                                 transparent_surface()
                                             })
@@ -2057,10 +2054,7 @@ fn env_manager_dialog(
                                             })
                                             .hover(move |style| {
                                                 style
-                                                    .bg(theme::rgba_with_alpha(
-                                                        api_accent(),
-                                                        0.05,
-                                                    ))
+                                                    .bg(theme::rgba_with_alpha(api_accent(), 0.05))
                                                     .cursor_pointer()
                                             })
                                             .flex()
@@ -2246,13 +2240,12 @@ fn env_manager_dialog(
                                     let view = view.clone();
                                     move |_, cx| {
                                         view.update(cx, |view, cx| {
-                                            let current = if view.env_detail_tab
-                                                == EnvDetailTab::Variables
-                                            {
-                                                view.env_variables_input.read(cx).text()
-                                            } else {
-                                                view.env_headers_input.read(cx).text()
-                                            };
+                                            let current =
+                                                if view.env_detail_tab == EnvDetailTab::Variables {
+                                                    view.env_variables_input.read(cx).text()
+                                                } else {
+                                                    view.env_headers_input.read(cx).text()
+                                                };
                                             let appended = if current.trim().is_empty() {
                                                 String::from("KEY=VALUE")
                                             } else {
@@ -2306,19 +2299,14 @@ fn env_manager_dialog(
                 .flex()
                 .items_center()
                 .gap(px(12.0))
-                .child(action_link(
-                    "api-env-save",
-                    "💾 保存更改",
-                    true,
-                    {
-                        let view = view.clone();
-                        move |_, cx| {
-                            view.update(cx, |view, cx| {
-                                view.save_environment_changes(cx);
-                            });
-                        }
-                    },
-                ))
+                .child(action_link("api-env-save", "💾 保存更改", true, {
+                    let view = view.clone();
+                    move |_, cx| {
+                        view.update(cx, |view, cx| {
+                            view.save_environment_changes(cx);
+                        });
+                    }
+                }))
                 .child(action_link("api-env-reset", "↩ 重置", false, {
                     let view = view.clone();
                     move |_, cx| {

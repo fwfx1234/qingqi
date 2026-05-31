@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use gpui::App;
 
 use crate::{app::AppIndexSnapshot, shortcut::ShortcutView, theme::ThemeMode};
 
@@ -18,8 +19,14 @@ pub trait AppIndexHandle {
 
 pub trait ShortcutHandle {
     fn views(&self) -> Vec<ShortcutView>;
-    fn set_shortcut(&self, shortcut_id: &str, accelerator: &str, enabled: bool) -> Result<()>;
-    fn restore_shortcut(&self, shortcut_id: &str) -> Result<()>;
+    fn set_shortcut(
+        &self,
+        shortcut_id: &str,
+        accelerator: &str,
+        enabled: bool,
+        cx: &mut App,
+    ) -> Result<()>;
+    fn restore_shortcut(&self, shortcut_id: &str, cx: &mut App) -> Result<()>;
 }
 
 pub type ThemeHandleRef = Arc<dyn ThemeHandle>;

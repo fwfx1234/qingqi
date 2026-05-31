@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     collections::HashMap,
     sync::{Mutex, OnceLock},
 };
@@ -8,6 +9,10 @@ use global_hotkey::{
 };
 
 static REGISTERED: OnceLock<Mutex<Vec<HotKey>>> = OnceLock::new();
+
+thread_local! {
+    static MANAGER: RefCell<Option<GlobalHotKeyManager>> = const { RefCell::new(None) };
+}
 
 pub struct HotkeyRegistrationResult {
     pub registered: HashMap<String, u32>,
@@ -26,81 +31,90 @@ pub fn register_global_hotkeys(registrations: &[(String, HotKey)]) -> HotkeyRegi
         #[cfg(target_os = "windows")]
         low_level_fallbacks: Vec::new(),
     };
-    let manager = match GlobalHotKeyManager::new() {
-        Ok(manager) => manager,
-        Err(error) => {
-            for (shortcut_id, _) in registrations {
-                result.errors.insert(shortcut_id.clone(), error.to_string());
+    let manager_error = MANAGER
+        .with(|manager| {
+            let mut manager = manager.borrow_mut();
+            if manager.is_none() {
+                *manager = Some(GlobalHotKeyManager::new().map_err(|error| error.to_string())?);
             }
-            return result;
-        }
-    };
+            let manager = manager
+                .as_ref()
+                .expect("global hotkey manager should be initialized");
 
-    if let Ok(mut registered) = registered_hotkeys().lock() {
-        if !registered.is_empty()
-            && let Err(error) = manager
-                .unregister_all(&registered)
-                .map_err(|error| error.to_string())
-        {
-            tracing::warn!(error, "global hotkey unregister failed");
-        }
-        registered.clear();
-
-        for (shortcut_id, hotkey) in registrations {
-            // Some combos (e.g. Alt+Space) are reserved by the OS for the
-            // window system menu.  `RegisterHotKey` may report success but the
-            // system menu still swallows the keystroke, so route them through
-            // the low-level keyboard hook unconditionally rather than waiting
-            // for a registration error that never comes.
-            #[cfg(target_os = "windows")]
-            if needs_low_level_hook(hotkey)
-                && let Some(entry) = try_as_low_level_entry(shortcut_id, hotkey)
-            {
-                tracing::debug!(
-                    shortcut_id,
-                    "routing system-reserved hotkey through low-level hook"
-                );
-                result
-                    .low_level_fallbacks
-                    .push((shortcut_id.clone(), entry));
-                continue;
-            }
-
-            match manager.register(*hotkey).map_err(|error| error.to_string()) {
-                Ok(()) => {
-                    registered.push(*hotkey);
-                    result.registered.insert(shortcut_id.clone(), hotkey.id());
+            if let Ok(mut registered) = registered_hotkeys().lock() {
+                if !registered.is_empty()
+                    && let Err(error) = manager
+                        .unregister_all(&registered)
+                        .map_err(|error| error.to_string())
+                {
+                    tracing::warn!(error, "global hotkey unregister failed");
                 }
-                Err(error) => {
+                registered.clear();
+
+                for (shortcut_id, hotkey) in registrations {
+                    // Some combos (e.g. Alt+Space) are reserved by the OS for the
+                    // window system menu.  `RegisterHotKey` may report success but the
+                    // system menu still swallows the keystroke, so route them through
+                    // the low-level keyboard hook unconditionally rather than waiting
+                    // for a registration error that never comes.
                     #[cfg(target_os = "windows")]
+                    if needs_low_level_hook(hotkey)
+                        && let Some(entry) = try_as_low_level_entry(shortcut_id, hotkey)
                     {
-                        // On Windows, Alt+Space is reserved by the OS — try
-                        // to parse it as a low-level hook fallback instead
-                        // of reporting a hard error.
-                        if let Some(entry) = try_as_low_level_entry(shortcut_id, hotkey) {
-                            tracing::debug!(
-                                shortcut_id,
-                                error = %error,
-                                "global hotkey failed, routing through low-level hook"
-                            );
-                            result
-                                .low_level_fallbacks
-                                .push((shortcut_id.clone(), entry));
-                            continue;
+                        tracing::debug!(
+                            shortcut_id,
+                            "routing system-reserved hotkey through low-level hook"
+                        );
+                        result
+                            .low_level_fallbacks
+                            .push((shortcut_id.clone(), entry));
+                        continue;
+                    }
+
+                    match manager.register(*hotkey).map_err(|error| error.to_string()) {
+                        Ok(()) => {
+                            registered.push(*hotkey);
+                            result.registered.insert(shortcut_id.clone(), hotkey.id());
+                        }
+                        Err(error) => {
+                            #[cfg(target_os = "windows")]
+                            {
+                                // On Windows, Alt+Space is reserved by the OS — try
+                                // to parse it as a low-level hook fallback instead
+                                // of reporting a hard error.
+                                if let Some(entry) = try_as_low_level_entry(shortcut_id, hotkey) {
+                                    tracing::debug!(
+                                        shortcut_id,
+                                        error = %error,
+                                        "global hotkey failed, routing through low-level hook"
+                                    );
+                                    result
+                                        .low_level_fallbacks
+                                        .push((shortcut_id.clone(), entry));
+                                    continue;
+                                }
+                            }
+                            let _ = shortcut_id;
+                            let _ = hotkey;
+                            result.errors.insert(shortcut_id.clone(), error);
                         }
                     }
-                    let _ = shortcut_id;
-                    let _ = hotkey;
-                    result.errors.insert(shortcut_id.clone(), error);
+                }
+            } else {
+                for (shortcut_id, _) in registrations {
+                    result.errors.insert(
+                        shortcut_id.clone(),
+                        String::from("global hotkey registry lock poisoned"),
+                    );
                 }
             }
-        }
-    } else {
+
+            Ok::<(), String>(())
+        })
+        .err();
+    if let Some(error) = manager_error {
         for (shortcut_id, _) in registrations {
-            result.errors.insert(
-                shortcut_id.clone(),
-                String::from("global hotkey registry lock poisoned"),
-            );
+            result.errors.insert(shortcut_id.clone(), error.clone());
         }
     }
 

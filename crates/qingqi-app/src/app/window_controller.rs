@@ -19,7 +19,6 @@ use crate::{
     },
 };
 use qingqi_core::plugin::{PluginManager, WindowView};
-use qingqi_plugin::clipboard::ClipboardContext;
 use qingqi_ui::{text_input::TextInput, ui};
 
 pub type WindowControllerHandle = Arc<Mutex<WindowController>>;
@@ -42,7 +41,6 @@ impl PluginOpenTrace {
 pub struct WindowController {
     plugin_manager: Arc<Mutex<PluginManager>>,
     app_catalog: Arc<AppCatalog>,
-    clipboard_context: Arc<dyn ClipboardContext>,
     events: AppEventBus,
     launcher_window: Option<AnyWindowHandle>,
     plugin_windows: HashMap<String, AnyWindowHandle>,
@@ -54,13 +52,11 @@ impl WindowController {
     pub fn new(
         plugin_manager: Arc<Mutex<PluginManager>>,
         app_catalog: Arc<AppCatalog>,
-        clipboard_context: Arc<dyn ClipboardContext>,
         events: AppEventBus,
     ) -> Self {
         Self {
             plugin_manager,
             app_catalog,
-            clipboard_context,
             events,
             launcher_window: None,
             plugin_windows: HashMap::new(),
@@ -170,9 +166,15 @@ impl WindowController {
         if let Some(window_handle) = stored_window_handle {
             if let Some(handle) = window_handle.downcast::<Launcher>() {
                 cx.activate(true);
-                match handle.update(cx, |_, window, _| window.activate_window()) {
+                match handle.update(cx, |launcher, window, cx| {
+                    window.activate_window();
+                    launcher.focus_query_input(window, cx);
+                }) {
                     Ok(_) => {
-                        let _ = handle.update(cx, |launcher, _window, cx| launcher.refresh_on_show(cx));
+                        let _ = handle.update(cx, |launcher, window, cx| {
+                            launcher.refresh_on_show(cx);
+                            launcher.focus_query_input(window, cx);
+                        });
                         cx.activate(true);
                         return;
                     }
@@ -217,15 +219,6 @@ impl WindowController {
                 e.into_inner()
             })
             .app_catalog();
-        let clipboard_context = Arc::clone(
-            &controller
-                .lock()
-                .unwrap_or_else(|e| {
-                    tracing::error!("window controller poisoned, recovering");
-                    e.into_inner()
-                })
-                .clipboard_context,
-        );
         let events = controller
             .lock()
             .unwrap_or_else(|e| {
@@ -277,15 +270,8 @@ impl WindowController {
                 Launcher::configure_query_input(&mut input, cx);
                 input
             });
-            let clipboard_context = Arc::clone(&clipboard_context);
-            let launcher = cx.new(|cx| {
-                Launcher::new(
-                    Arc::clone(&plugin_manager),
-                    Arc::clone(&app_catalog),
-                    clipboard_context,
-                    cx,
-                )
-            });
+            let launcher = cx
+                .new(|cx| Launcher::new(Arc::clone(&plugin_manager), Arc::clone(&app_catalog), cx));
             let handle = launcher.clone();
             launcher.update(cx, |launcher, launcher_cx| {
                 launcher.attach_handle(handle);
@@ -306,6 +292,10 @@ impl WindowController {
                     })
                     .launcher_window = Some(handle.into());
                 cx.activate(true);
+                let _ = handle.update(cx, |launcher, window, cx| {
+                    window.activate_window();
+                    launcher.focus_query_input(window, cx);
+                });
             }
             Err(error) => tracing::warn!(error = %error, "open launcher window failed"),
         }
@@ -397,6 +387,10 @@ impl WindowController {
         }) {
             Ok(handle) => {
                 log_plugin_window_step(&plugin_id, "open plugin window", window_started, trace);
+                let _ = handle.update(cx, |_, window, cx| {
+                    cx.activate(true);
+                    window.activate_window();
+                });
                 controller
                     .lock()
                     .unwrap_or_else(|e| {
@@ -755,6 +749,7 @@ fn plugin_window_options(
                 ..Default::default()
             }),
             kind: WindowKind::PopUp,
+            is_movable: true,
             is_resizable: false,
             is_minimizable: true,
             window_background: WindowBackgroundAppearance::Opaque,

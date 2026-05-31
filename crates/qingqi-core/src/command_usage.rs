@@ -81,7 +81,12 @@ impl CommandUsageStore {
                 .query_row(
                     "SELECT frecency, last_used_at FROM command_usage WHERE command_key = ?1",
                     params![command_key],
-                    |row| Ok((row.get::<_, f64>(0).unwrap_or(0.0), row.get::<_, i64>(1).unwrap_or(0))),
+                    |row| {
+                        Ok((
+                            row.get::<_, f64>(0).unwrap_or(0.0),
+                            row.get::<_, i64>(1).unwrap_or(0),
+                        ))
+                    },
                 )
                 .unwrap_or((0.0, 0));
             let new_frecency = CommandUsage::next_frecency(old_frecency, old_last_used_at);
@@ -105,18 +110,69 @@ fn ensure_schema(conn: &rusqlite::Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS command_usage (
             command_key TEXT PRIMARY KEY,
             use_count INTEGER NOT NULL DEFAULT 0,
-            last_used_at INTEGER NOT NULL DEFAULT 0,
-            frecency REAL NOT NULL DEFAULT 0.0
+            last_used_at INTEGER NOT NULL DEFAULT 0
         );
-
+        ",
+    )?;
+    ensure_frecency_column(conn)?;
+    backfill_frecency(conn)?;
+    conn.execute_batch(
+        "
         CREATE INDEX IF NOT EXISTS idx_command_usage_frecency
             ON command_usage(frecency DESC);
         ",
     )?;
-    // Add frecency column to existing tables (safe migration — ALTER TABLE IF NOT EXISTS)
-    let _ = conn.execute_batch(
-        "ALTER TABLE command_usage ADD COLUMN frecency REAL NOT NULL DEFAULT 0.0;",
-    );
+    Ok(())
+}
+
+fn ensure_frecency_column(conn: &rusqlite::Connection) -> Result<()> {
+    let mut stmt = conn.prepare("PRAGMA table_info(command_usage)")?;
+    let columns = stmt.query_map([], |row| row.get::<_, String>(1))?;
+    for column in columns {
+        if column? == "frecency" {
+            return Ok(());
+        }
+    }
+
+    conn.execute_batch("ALTER TABLE command_usage ADD COLUMN frecency REAL NOT NULL DEFAULT 0.0;")?;
+    Ok(())
+}
+
+fn backfill_frecency(conn: &rusqlite::Connection) -> Result<()> {
+    let now = OffsetDateTime::now_utc().unix_timestamp() as f64;
+    let rows = {
+        let mut stmt = conn.prepare(
+            "SELECT command_key, use_count, last_used_at
+             FROM command_usage
+             WHERE frecency <= 0.0 AND use_count > 0",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        })?;
+        let mut collected = Vec::new();
+        for row in rows {
+            collected.push(row?);
+        }
+        collected
+    };
+
+    for (command_key, use_count, last_used_at) in rows {
+        let frecency = if last_used_at > 0 {
+            let days = ((now - last_used_at as f64) / SECONDS_PER_DAY).max(0.0);
+            use_count as f64 * DECAY_PER_DAY.powf(days)
+        } else {
+            use_count as f64
+        };
+        conn.execute(
+            "UPDATE command_usage SET frecency = ?2 WHERE command_key = ?1",
+            params![command_key, frecency],
+        )?;
+    }
+
     Ok(())
 }
 
@@ -161,5 +217,44 @@ mod tests {
         assert_eq!(stats.use_count, 2);
         assert!(stats.last_used_at > 0);
         assert!(stats.frecency > 0.0, "frecency should be computed on write");
+    }
+
+    #[test]
+    fn legacy_usage_rows_are_backfilled_with_frecency() {
+        let paths = temp_paths();
+        let database = Arc::new(DatabaseService::new(paths.clone()));
+        database
+            .register_database(qingqi_plugin::database::DatabaseSpec::app(
+                "command-usage",
+                "usage.db",
+            ))
+            .unwrap();
+        let now = OffsetDateTime::now_utc().unix_timestamp();
+        database
+            .with_registered_connection("command-usage", |conn| {
+                conn.execute_batch(
+                    "
+                    CREATE TABLE command_usage (
+                        command_key TEXT PRIMARY KEY,
+                        use_count INTEGER NOT NULL DEFAULT 0,
+                        last_used_at INTEGER NOT NULL DEFAULT 0
+                    );
+                    ",
+                )?;
+                conn.execute(
+                    "INSERT INTO command_usage (command_key, use_count, last_used_at)
+                     VALUES (?1, ?2, ?3)",
+                    params!["plugin:legacy", 5_i64, now],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        let store = CommandUsageStore::new(database, "command-usage");
+
+        let usage = store.usage_map().unwrap();
+
+        let stats = usage.get("plugin:legacy").unwrap();
+        assert_eq!(stats.use_count, 5);
+        assert!(stats.frecency > 4.9);
     }
 }

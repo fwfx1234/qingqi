@@ -4,15 +4,17 @@ use std::{
 };
 
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
-    KeyDownEvent, ObjectFit, ParentElement, Render, ScrollStrategy, StatefulInteractiveElement,
-    BoxShadow, Styled, StyledImage, Subscription, Task, UniformListScrollHandle, Window, div, hsla, img, point, px,
+    App, AppContext, BoxShadow, Context, Entity, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, KeyDownEvent, ObjectFit, ParentElement, Render, ScrollStrategy,
+    StatefulInteractiveElement, Styled, StyledImage, Subscription, Task, UniformListScrollHandle,
+    Window, div, hsla, img, point, px,
 };
 
 use crate::{
     history_store::{self, ClipboardConfig, ClipboardRecord},
     service::{ClipboardFilter, ClipboardService},
 };
+use qingqi_plugin::host::ShortcutHandleRef;
 use qingqi_ui::{
     text_input::{TextInput, TextInputStyle},
     theme, ui,
@@ -22,21 +24,25 @@ mod history;
 mod settings;
 mod shared;
 
-use history::{history_page, keyboard_filters};
+use history::{history_page, history_titlebar_slot, keyboard_filters};
 use settings::{format_ignore_patterns, settings_page};
 
 const HISTORY_PAGE_SIZE: usize = 120;
 const HISTORY_PREFETCH_THRESHOLD: usize = 40;
 
+fn clipboard_window_chrome_config() -> ui::WindowChromeConfig {
+    ui::WindowChromeConfig::new()
+        .title("剪贴板")
+        .transparent(true)
+}
+
 fn glass_shadow() -> Vec<BoxShadow> {
-    vec![
-        BoxShadow {
-            color: theme::rgba_with_alpha(theme::semantic().shadow, 0.06),
-            offset: point(px(0.0), px(4.0)),
-            blur_radius: px(12.0),
-            spread_radius: px(-6.0),
-        },
-    ]
+    vec![BoxShadow {
+        color: theme::rgba_with_alpha(theme::semantic().shadow, 0.06),
+        offset: point(px(0.0), px(4.0)),
+        blur_radius: px(12.0),
+        spread_radius: px(-6.0),
+    }]
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -48,6 +54,7 @@ pub(super) enum ClipboardTab {
 pub struct ClipboardView {
     focus_handle: Option<FocusHandle>,
     service: Arc<Mutex<ClipboardService>>,
+    shortcut_handle: Option<ShortcutHandleRef>,
     query_input: Option<Entity<TextInput>>,
     preview_input: Option<Entity<TextInput>>,
     ignore_patterns_input: Option<Entity<TextInput>>,
@@ -73,9 +80,17 @@ pub struct ClipboardView {
 
 impl ClipboardView {
     pub(crate) fn new(service: Arc<Mutex<ClipboardService>>) -> Self {
+        Self::with_shortcut_handle(service, None)
+    }
+
+    pub(crate) fn with_shortcut_handle(
+        service: Arc<Mutex<ClipboardService>>,
+        shortcut_handle: Option<ShortcutHandleRef>,
+    ) -> Self {
         Self {
             focus_handle: None,
             service,
+            shortcut_handle,
             query_input: None,
             preview_input: None,
             ignore_patterns_input: None,
@@ -986,8 +1001,20 @@ impl ClipboardView {
             let _ = panel.update(async_cx, |panel, cx| {
                 panel.message = match result {
                     Ok(_) => {
-                        panel.sync_hotkey_input(&normalized, cx);
-                        format!("剪贴板快捷键已保存为 {normalized}")
+                        let register_result = panel
+                            .shortcut_handle
+                            .as_ref()
+                            .map(|handle| {
+                                handle.set_shortcut("clipboard.open-history", &normalized, true, cx)
+                            })
+                            .unwrap_or(Ok(()));
+                        match register_result {
+                            Ok(()) => {
+                                panel.sync_hotkey_input(&normalized, cx);
+                                format!("剪贴板快捷键已保存为 {normalized}")
+                            }
+                            Err(error) => format!("快捷键已保存，但重新注册失败: {error}"),
+                        }
                     }
                     Err(error) => format!("保存设置失败: {error}"),
                 };
@@ -1206,8 +1233,11 @@ impl Render for ClipboardView {
         let settings_config = self.settings_snapshot();
         let status_text = self.status_text();
         let dark = qingqi_ui::theme_mode::is_dark();
+        let chrome_config = clipboard_window_chrome_config();
+        let chrome_metrics = chrome_config.metrics();
 
         let root = div()
+            .relative()
             .size_full()
             .flex()
             .flex_col()
@@ -1228,7 +1258,6 @@ impl Render for ClipboardView {
                     items,
                     selected,
                     &query,
-                    query_input,
                     selected_record,
                     item_count,
                     current_filter,
@@ -1236,6 +1265,7 @@ impl Render for ClipboardView {
                     self.history_scroll.clone(),
                     preview_input,
                     dark,
+                    chrome_metrics,
                 )
                 .into_any_element()
             } else {
@@ -1245,9 +1275,15 @@ impl Render for ClipboardView {
                     settings_config,
                     settings_inputs,
                     dark,
+                    chrome_metrics,
                 )
                 .into_any_element()
             })
+            .child(ui::popup_window_chrome_with_titlebar_slot(
+                chrome_config,
+                (tab == ClipboardTab::History)
+                    .then(|| history_titlebar_slot(query_input, dark).into_any_element()),
+            ))
             .into_any_element()
     }
 }

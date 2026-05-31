@@ -27,6 +27,7 @@ use crate::{
         window_controller::{PluginOpenTrace, WindowControllerHandle},
     },
     core::{
+        clipboard::current_payload,
         command::{Activation, Command, CommandKind, build_launcher_context},
         events::{AppEventBus, AppEventKind},
         plugin_spec::{PluginStatus, ViewMode, WindowSize},
@@ -36,7 +37,6 @@ use qingqi_core::command_usage::CommandUsage;
 use qingqi_core::plugin::{
     InlineView, ListView, PluginListItem, PluginManager, command_kind_priority,
 };
-use qingqi_plugin::clipboard::ClipboardContext;
 
 // ── Design A · Deep Frost (launcher-glass-5.html), default light mode
 
@@ -80,7 +80,6 @@ struct PluginVisual {
 pub struct Launcher {
     plugin_manager: Arc<Mutex<PluginManager>>,
     app_catalog: Arc<AppCatalog>,
-    clipboard_context: Arc<dyn ClipboardContext>,
     plugin_visuals: HashMap<String, PluginVisual>,
     query_input: Option<Entity<TextInput>>,
     results: Rc<Vec<Command>>,
@@ -119,15 +118,14 @@ impl Launcher {
     pub fn new(
         plugin_manager: Arc<Mutex<PluginManager>>,
         app_catalog: Arc<AppCatalog>,
-        clipboard_context: Arc<dyn ClipboardContext>,
-        _cx: &App,
+        cx: &App,
     ) -> Self {
         let (all_commands, plugin_visuals, boost_map, usage) = {
             let mut manager = plugin_manager.lock().unwrap_or_else(|e| {
                 tracing::error!("plugin manager poisoned, recovering");
                 e.into_inner()
             });
-            let boost_map = Self::latest_boost_map(clipboard_context.as_ref(), &*manager);
+            let boost_map = Self::latest_boost_map(cx, &*manager);
             let mut all_commands = app_catalog.search("", COMMAND_SEARCH_LIMIT);
             all_commands.extend(manager.commands_with_clipboard(&boost_map));
             let plugin_visuals = manager
@@ -150,7 +148,6 @@ impl Launcher {
         Self {
             plugin_manager,
             app_catalog,
-            clipboard_context,
             plugin_visuals,
             query_input: None,
             results,
@@ -175,7 +172,7 @@ impl Launcher {
     }
 
     pub fn initialize_async(&mut self, events: AppEventBus, cx: &mut Context<Self>) {
-        self.refresh_clipboard_context_async(cx);
+        self.refresh_clipboard_boost_map(cx);
         self.start_event_watch(events, cx);
     }
 
@@ -217,6 +214,7 @@ impl Launcher {
 
     /// 事件驱动：唤起启动器时，从 DB 读最新使用数据重建排序。
     pub fn refresh_on_show(&mut self, cx: &mut App) {
+        self.refresh_clipboard_boost_map(cx);
         let commands = self.default_commands_with_clipboard();
         let query = self.query(cx);
         if query.trim().is_empty() {
@@ -226,20 +224,13 @@ impl Launcher {
             self.results = Rc::new(self.query_commands(&query));
             self.selected = 0;
             self.results_visible_start = 0;
-            self.results_scroll
-                .scroll_to_item(0, ScrollStrategy::Top);
+            self.results_scroll.scroll_to_item(0, ScrollStrategy::Top);
         }
         cx.refresh_windows();
     }
 
     fn refresh_results_after_commands_changed(&mut self, cx: &mut Context<Self>) {
-        self.clipboard_boost_map = Self::latest_boost_map(
-            self.clipboard_context.as_ref(),
-            &*self.plugin_manager.lock().unwrap_or_else(|e| {
-                tracing::error!("plugin manager poisoned, recovering");
-                e.into_inner()
-            }),
-        );
+        self.refresh_clipboard_boost_map(cx);
         let commands = self.default_commands_with_clipboard();
 
         let query = self.query(cx);
@@ -293,6 +284,12 @@ impl Launcher {
         self.query_input = Some(input);
     }
 
+    pub fn focus_query_input(&self, window: &mut Window, cx: &App) {
+        if let Some(input) = self.query_input.as_ref() {
+            window.focus(&input.focus_handle(cx));
+        }
+    }
+
     pub fn configure_query_input(input: &mut TextInput, cx: &mut Context<TextInput>) {
         input.set_style(
             TextInputStyle {
@@ -340,9 +337,7 @@ impl Launcher {
             b_u.frecency
                 .partial_cmp(&a_u.frecency)
                 .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| {
-                    command_kind_priority(a.kind).cmp(&command_kind_priority(b.kind))
-                })
+                .then_with(|| command_kind_priority(a.kind).cmp(&command_kind_priority(b.kind)))
                 .then_with(|| a.title.cmp(&b.title))
         });
         Rc::new(results)
@@ -376,12 +371,13 @@ impl Launcher {
             .unwrap_or_default()
     }
 
-    fn perform_search_for_query(&mut self, query: String, _cx: &App) {
+    fn perform_search_for_query(&mut self, query: String, cx: &App) {
         self.last_query = query.clone();
         self.pending_query = query.clone();
         let query_empty = query.trim().is_empty();
 
         if query_empty {
+            self.refresh_clipboard_boost_map(cx);
             let commands = self.default_commands_with_clipboard();
             self.results = self.default_results(&commands, &self.plugin_visuals);
             self.selected = self.selected.min(self.results.len().saturating_sub(1));
@@ -399,15 +395,22 @@ impl Launcher {
             .scroll_to_item(self.selected, ScrollStrategy::Top);
     }
 
-    fn latest_boost_map(
-        clipboard_context: &dyn ClipboardContext,
-        plugin_manager: &PluginManager,
-    ) -> HashMap<String, i32> {
-        let payload = clipboard_context.latest_payload();
+    fn latest_boost_map(cx: &App, plugin_manager: &PluginManager) -> HashMap<String, i32> {
+        let payload = current_payload(cx);
         match payload {
             Some(p) => plugin_manager.build_clipboard_boost_map(&p),
             None => HashMap::new(),
         }
+    }
+
+    fn refresh_clipboard_boost_map(&mut self, cx: &App) {
+        self.clipboard_boost_map = Self::latest_boost_map(
+            cx,
+            &*self.plugin_manager.lock().unwrap_or_else(|e| {
+                tracing::error!("plugin manager poisoned, recovering");
+                e.into_inner()
+            }),
+        );
     }
 
     fn default_commands_with_clipboard(&mut self) -> Vec<Command> {
@@ -477,55 +480,6 @@ impl Launcher {
                 .then_with(|| left.title.cmp(&right.title))
         });
         scored.into_iter().map(|(_, command)| command).collect()
-    }
-
-    fn refresh_clipboard_context_async(&mut self, cx: &mut Context<Self>) {
-        let clipboard_context = Arc::clone(&self.clipboard_context);
-        let boost_map = {
-            let plugin = self.plugin_manager.lock().unwrap_or_else(|e| {
-                tracing::error!("plugin manager poisoned, recovering");
-                e.into_inner()
-            });
-            Launcher::latest_boost_map(clipboard_context.as_ref(), &*plugin)
-        };
-        self.search_task = Some(cx.spawn(async move |launcher, async_cx| {
-            let _ = launcher.update(async_cx, |launcher, cx| {
-                let current_query = launcher.query(cx);
-                launcher.clipboard_boost_map = boost_map.clone();
-
-                if current_query.trim().is_empty() {
-                    launcher.results = {
-                        let cmds = launcher.default_commands_with_clipboard();
-                        launcher.default_results(&cmds, &launcher.plugin_visuals)
-                    };
-                } else {
-                    launcher.results = Rc::new(launcher.query_commands(&current_query));
-                }
-
-                launcher.selected = launcher
-                    .selected
-                    .min(launcher.results.len().saturating_sub(1));
-                launcher.results_visible_start = visible_start_for_selection(launcher.selected);
-                launcher.update_message();
-                if !launcher.results.is_empty() {
-                    launcher
-                        .results_scroll
-                        .scroll_to_item(launcher.selected, ScrollStrategy::Top);
-                }
-                cx.notify();
-            });
-        }));
-    }
-
-    fn perform_search_now(&mut self, cx: &App) -> bool {
-        let query = self.query(cx);
-        if query == self.last_query {
-            return false;
-        }
-
-        self.perform_search_for_query(query, cx);
-        self.update_message();
-        true
     }
 
     fn handle_query_changed(&mut self, cx: &mut Context<Self>) {
@@ -726,7 +680,7 @@ impl Launcher {
                 tracing::error!("plugin manager poisoned, recovering");
                 e.into_inner()
             })
-            .record_command_launch_background(&item, cx);
+            .record_command_launch(&item);
         let activation = item.activation.clone();
         let Activation::Open { plugin_id } = &activation else {
             if let Some(window_controller) = self.window_controller.clone() {
@@ -745,7 +699,7 @@ impl Launcher {
         let query = self.query(cx);
         let mut context = build_launcher_context(&query, &item.prefixes);
         if query.trim().is_empty() {
-            context.clipboard_payload = self.clipboard_context.latest_payload();
+            context.clipboard_payload = current_payload(cx);
         }
         let launch_input =
             item.launch_input_with_context(&query, &context, &self.clipboard_boost_map);

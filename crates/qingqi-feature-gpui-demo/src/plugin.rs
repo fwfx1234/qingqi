@@ -1,6 +1,6 @@
 use gpui::{
-    AnyElement, App, AppContext, Context, Entity, IntoElement, ParentElement, Render,
-    SharedString, Styled, Window, div, px,
+    AnyElement, App, AppContext, Context, Entity, IntoElement, ParentElement, Render, SharedString,
+    Styled, Window, div, px,
 };
 use gpui_component::{
     IconName, Sizable,
@@ -234,10 +234,7 @@ fn component_column(
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme::semantic().text_secondary)
-                .child(format!(
-                    "Slider — {}",
-                    slider_value
-                )),
+                .child(format!("Slider — {}", slider_value)),
         )
         .child(Slider::new(slider).horizontal())
 }
@@ -311,11 +308,7 @@ fn state_column(accent: PluginAccent) -> impl IntoElement {
             "Session",
             "窗口生命周期，只持有 UI entity state",
         ))
-        .child(demo_row(
-            accent,
-            "Service",
-            "可单测业务逻辑，不依赖 GPUI",
-        ))
+        .child(demo_row(accent, "Service", "可单测业务逻辑，不依赖 GPUI"))
         .child(demo_row(
             accent,
             "Store",
@@ -354,11 +347,7 @@ fn panel(title: &'static str) -> gpui::Div {
         )
 }
 
-fn demo_row(
-    accent: PluginAccent,
-    title: &'static str,
-    body: &'static str,
-) -> impl IntoElement {
+fn demo_row(accent: PluginAccent, title: &'static str, body: &'static str) -> impl IntoElement {
     div()
         .rounded(theme::radius_md())
         .bg(theme::semantic().bg_subtle_2)

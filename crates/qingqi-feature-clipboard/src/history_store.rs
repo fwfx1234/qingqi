@@ -957,6 +957,47 @@ mod tests {
     }
 
     #[test]
+    fn data_source_recreates_incompatible_database() {
+        let path = temp_db("incompatible.db");
+        let conn = rusqlite::Connection::open(&path).expect("open incompatible db");
+        conn.execute_batch(
+            "
+            CREATE TABLE clipboard_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content TEXT NOT NULL
+            );
+            ",
+        )
+        .expect("create incompatible schema");
+        drop(conn);
+
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(
+            path.parent().unwrap().to_path_buf(),
+        )));
+        database
+            .register_database(qingqi_plugin::database::DatabaseSpec::path(
+                "clipboard/history",
+                path,
+            ))
+            .unwrap();
+        let store =
+            ClipboardDataSource::open(database, "clipboard/history").expect("data source opens");
+
+        assert!(
+            store
+                .add_text("after reset", &ClipboardConfig::default())
+                .expect("add text after reset")
+        );
+        assert_eq!(
+            store
+                .latest()
+                .expect("latest after reset")
+                .map(|record| record.content),
+            Some(String::from("after reset"))
+        );
+    }
+
+    #[test]
     fn add_text_respects_capture_settings() {
         let store = open_data_source("capture.db");
 
