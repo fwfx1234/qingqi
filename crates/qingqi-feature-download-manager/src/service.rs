@@ -1,3 +1,4 @@
+use qingqi_plugin::lock_or_recover;
 use std::{
     collections::HashMap,
     fs::{self, File, OpenOptions},
@@ -104,7 +105,7 @@ impl DownloadService {
 
     /// Returns the current effective save directory (may differ from initial if changed via settings).
     pub fn effective_save_dir(&self) -> PathBuf {
-        let settings = self.settings.lock().unwrap();
+        let settings = lock_or_recover(&self.settings, "download-settings");
         let dir = PathBuf::from(&settings.save_root);
         fs::create_dir_all(&dir).ok();
         dir
@@ -116,7 +117,7 @@ impl DownloadService {
 
     /// Returns a snapshot of all tasks with live progress merged for active tasks.
     pub fn tasks_snapshot(&self) -> Vec<DownloadTask> {
-        let store = self.store.lock().unwrap();
+        let store = lock_or_recover(&self.store, "download-store");
         let mut tasks = store.list_tasks(None).unwrap_or_default();
         drop(store);
         for task in &mut tasks {
@@ -133,7 +134,7 @@ impl DownloadService {
     // ── settings ──
 
     pub fn settings_snapshot(&self) -> DownloadSettings {
-        self.settings.lock().unwrap().clone()
+        lock_or_recover(&self.settings, "download-settings").clone()
     }
 
     pub fn update_settings(&self, settings: DownloadSettings) -> Result<()> {
@@ -141,7 +142,7 @@ impl DownloadService {
         let timeout_secs = settings.timeout_secs.clamp(1, 3600);
         let retry_limit = settings.retry_limit.min(10);
         {
-            let mut s = self.settings.lock().unwrap();
+            let mut s = lock_or_recover(&self.settings, "download-settings");
             s.save_root = settings.save_root.clone();
             s.max_concurrent = max_concurrent;
             s.speed_limit_kbps = settings.speed_limit_kbps;
@@ -159,8 +160,8 @@ impl DownloadService {
     }
 
     fn persist_settings(&self) -> Result<()> {
-        let s = self.settings.lock().unwrap();
-        let store = self.store.lock().unwrap();
+        let s = lock_or_recover(&self.settings, "download-settings");
+        let store = lock_or_recover(&self.store, "download-store");
         store.save_settings(&[
             ("saveRoot", s.save_root.as_str()),
             ("maxConcurrent", &s.max_concurrent.to_string()),
@@ -207,7 +208,7 @@ impl DownloadService {
             updated_at: now,
         };
 
-        self.store.lock().unwrap().insert_task(&task)?;
+        lock_or_recover(&self.store, "download-store").insert_task(&task)?;
         self.bump_revision();
         Ok(task)
     }
@@ -237,7 +238,7 @@ impl DownloadService {
 
     pub fn retry_task(&self, task_id: &str) -> Result<()> {
         let task = {
-            let store = self.store.lock().unwrap();
+            let store = lock_or_recover(&self.store, "download-store");
             store
                 .get_task(task_id)?
                 .ok_or_else(|| anyhow!("任务不存在"))?
@@ -260,8 +261,8 @@ impl DownloadService {
     pub fn start_download(&self, task_id: &str) -> Result<()> {
         // Enforce max concurrent limit
         {
-            let active_map = self.active.lock().unwrap();
-            let settings = self.settings.lock().unwrap();
+            let active_map = lock_or_recover(&self.active, "download-active");
+            let settings = lock_or_recover(&self.settings, "download-settings");
             if active_map.len() >= settings.max_concurrent {
                 return Err(anyhow!(
                     "已达最大并发数 {}，请等待",
@@ -270,7 +271,7 @@ impl DownloadService {
             }
         }
         let task = {
-            let store = self.store.lock().unwrap();
+            let store = lock_or_recover(&self.store, "download-store");
             store
                 .get_task(task_id)?
                 .ok_or_else(|| anyhow!("任务不存在"))?
@@ -290,7 +291,7 @@ impl DownloadService {
         let speed = Arc::new(Mutex::new(0.0));
 
         {
-            let mut active = self.active.lock().unwrap();
+            let mut active = lock_or_recover(&self.active, "download-active");
             active.insert(
                 task_id.to_string(),
                 ActiveDownload {
@@ -332,7 +333,7 @@ impl DownloadService {
                 &settings,
             );
 
-            active_map.lock().unwrap().remove(&task_id);
+            lock_or_recover(&active_map, "download-active-map").remove(&task_id);
 
             match result {
                 Ok(()) => {
@@ -374,7 +375,7 @@ impl DownloadService {
     }
 
     pub fn pause_task(&self, task_id: &str) -> Result<()> {
-        let active = self.active.lock().unwrap();
+        let active = lock_or_recover(&self.active, "download-active");
         if let Some(dl) = active.get(task_id) {
             dl.pause_flag.store(true, Ordering::Relaxed);
             self.bump_revision();
@@ -394,7 +395,7 @@ impl DownloadService {
     }
 
     pub fn cancel_task(&self, task_id: &str) -> Result<()> {
-        let active = self.active.lock().unwrap();
+        let active = lock_or_recover(&self.active, "download-active");
         if let Some(dl) = active.get(task_id) {
             dl.cancel_flag.store(true, Ordering::Relaxed);
             self.bump_revision();
@@ -412,7 +413,7 @@ impl DownloadService {
     pub fn delete_task(&self, task_id: &str) -> Result<()> {
         self.cancel_task(task_id).ok();
         let task = {
-            let store = self.store.lock().unwrap();
+            let store = lock_or_recover(&self.store, "download-store");
             store.get_task(task_id)?
         };
         if let Some(task) = task {
@@ -420,7 +421,7 @@ impl DownloadService {
             if path.exists() {
                 fs::remove_file(path).ok();
             }
-            self.store.lock().unwrap().delete_task(task_id)?;
+            lock_or_recover(&self.store, "download-store").delete_task(task_id)?;
             self.bump_revision();
         }
         Ok(())
@@ -442,13 +443,13 @@ impl DownloadService {
 
     pub fn pause_all(&self) -> Result<()> {
         // Pause active downloads
-        let ids: Vec<String> = { self.active.lock().unwrap().keys().cloned().collect() };
+        let ids: Vec<String> = { lock_or_recover(&self.active, "download-active").keys().cloned().collect() };
         for id in ids {
             self.pause_task(&id).ok();
         }
         // Also pause queued tasks (in store)
         {
-            let store = self.store.lock().unwrap();
+            let store = lock_or_recover(&self.store, "download-store");
             let queued = store.list_tasks(Some(TaskStatus::Pending))?;
             for task in queued {
                 store.update_status(&task.id, TaskStatus::Paused, "")?;
@@ -460,7 +461,7 @@ impl DownloadService {
 
     pub fn resume_all(&self) -> Result<()> {
         let ids: Vec<String> = {
-            let store = self.store.lock().unwrap();
+            let store = lock_or_recover(&self.store, "download-store");
             let tasks = store.list_tasks(None)?;
             tasks
                 .iter()
@@ -480,7 +481,7 @@ impl DownloadService {
     }
 
     pub fn clear_failed(&self) -> Result<usize> {
-        let cleared = self.store.lock().unwrap().clear_failed()?;
+        let cleared = lock_or_recover(&self.store, "download-store").clear_failed()?;
         if cleared > 0 {
             self.bump_revision();
         }
@@ -493,7 +494,7 @@ impl DownloadService {
         let dir = PathBuf::from(path);
         fs::create_dir_all(&dir).with_context(|| format!("无法创建下载目录: {}", dir.display()))?;
         {
-            let mut s = self.settings.lock().unwrap();
+            let mut s = lock_or_recover(&self.settings, "download-settings");
             s.save_root = dir.to_string_lossy().to_string();
         }
         self.persist_settings()?;
@@ -504,7 +505,7 @@ impl DownloadService {
     pub fn set_max_concurrent(&self, value: usize) -> Result<()> {
         let v = value.clamp(1, 16);
         {
-            self.settings.lock().unwrap().max_concurrent = v;
+            lock_or_recover(&self.settings, "download-settings").max_concurrent = v;
         }
         self.persist_settings()?;
         self.bump_revision();
@@ -513,7 +514,7 @@ impl DownloadService {
 
     pub fn set_speed_limit_kbps(&self, value: u32) -> Result<()> {
         {
-            self.settings.lock().unwrap().speed_limit_kbps = value;
+            lock_or_recover(&self.settings, "download-settings").speed_limit_kbps = value;
         }
         self.persist_settings()?;
         self.bump_revision();
@@ -531,7 +532,7 @@ impl DownloadService {
         retry_limit: u32,
     ) -> Result<()> {
         {
-            let mut s = self.settings.lock().unwrap();
+            let mut s = lock_or_recover(&self.settings, "download-settings");
             s.user_agent = user_agent.trim().to_string();
             s.referer = referer.trim().to_string();
             s.cookie = cookie.trim().to_string();
@@ -555,16 +556,16 @@ impl DownloadService {
     }
 
     pub fn get_progress(&self, task_id: &str) -> Option<(u64, f64)> {
-        let active = self.active.lock().unwrap();
+        let active = lock_or_recover(&self.active, "download-active");
         active.get(task_id).map(|dl| {
             let downloaded = dl.progress.load(Ordering::Relaxed);
-            let speed = *dl.speed.lock().unwrap();
+            let speed = *lock_or_recover(&dl.speed, "download-speed");
             (downloaded, speed)
         })
     }
 
     pub fn active_count(&self) -> usize {
-        self.active.lock().unwrap().len()
+        lock_or_recover(&self.active, "download-active").len()
     }
 
     pub fn stats(&self) -> super::store::DownloadStats {
@@ -582,7 +583,7 @@ impl DownloadService {
     }
 
     pub fn task_counts(&self) -> super::store::TaskCounts {
-        self.store.lock().unwrap().task_counts().unwrap_or_default()
+        lock_or_recover(&self.store, "download-store").task_counts().unwrap_or_default()
     }
 
     pub fn tasks_by_category(&self, category: super::model::FileCategory) -> Vec<DownloadTask> {
@@ -594,7 +595,7 @@ impl DownloadService {
     }
 
     pub fn clear_completed(&self) -> Result<usize> {
-        let cleared = self.store.lock().unwrap().clear_completed()?;
+        let cleared = lock_or_recover(&self.store, "download-store").clear_completed()?;
         if cleared > 0 {
             self.bump_revision();
         }
@@ -714,7 +715,7 @@ fn download_file(
         speed_limit_kbps,
         retry_limit,
     ) = {
-        let s = settings.lock().unwrap();
+        let s = lock_or_recover(&settings, "download-settings");
         (
             s.timeout_secs,
             s.proxy_url.clone(),
@@ -765,7 +766,7 @@ fn download_file(
         // Auto-retry for transient errors
         if retry_limit > 0 && is_retryable(status.as_u16()) {
             let attempts = {
-                let s = store.lock().unwrap();
+                let s = lock_or_recover(&store, "download-store");
                 s.get_task(task_id)
                     .ok()
                     .flatten()
@@ -798,7 +799,7 @@ fn download_file(
 
     // Update file_size if we got it from response
     if let Some(size) = total_size {
-        let s = store.lock().unwrap();
+        let s = lock_or_recover(&store, "download-store");
         if let Ok(Some(mut task)) = s.get_task(task_id) {
             task.file_size = Some(size);
             s.update_task(&task).ok();
@@ -843,7 +844,7 @@ fn download_file(
         speed_tracker.add_bytes(n);
 
         let current_speed = speed_tracker.current_speed();
-        *speed.lock().unwrap() = current_speed;
+        *lock_or_recover(&speed, "download-speed") = current_speed;
 
         // Speed limit throttling
         if speed_limit_kbps > 0 {

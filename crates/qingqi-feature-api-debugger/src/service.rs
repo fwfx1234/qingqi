@@ -966,50 +966,6 @@ fn build_final_url(environment: &ApiEnvironment, request: &ApiRequest) -> String
     }
 }
 
-fn build_headers(environment: &ApiEnvironment, request: &ApiRequest) -> Vec<String> {
-    let mut headers = environment
-        .headers
-        .iter()
-        .chain(request.headers.iter())
-        .filter(|row| row.enabled && !row.key.trim().is_empty())
-        .map(|row| {
-            format!(
-                "{}: {}",
-                row.key.trim(),
-                substitute_vars(row.value.trim(), environment)
-            )
-        })
-        .collect::<Vec<_>>();
-
-    for row in &request.auth {
-        if row.enabled && !row.key.trim().is_empty() {
-            headers.push(format!(
-                "{}: {}",
-                row.key.trim(),
-                substitute_vars(row.value.trim(), environment)
-            ));
-        }
-    }
-
-    let cookies = request
-        .cookies
-        .iter()
-        .filter(|row| row.enabled && !row.key.trim().is_empty())
-        .map(|row| {
-            format!(
-                "{}={}",
-                row.key.trim(),
-                substitute_vars(row.value.trim(), environment)
-            )
-        })
-        .collect::<Vec<_>>();
-    if !cookies.is_empty() {
-        headers.push(format!("Cookie: {}", cookies.join("; ")));
-    }
-
-    headers
-}
-
 fn build_request_dump(url: &str, method: HttpMethod, headers: &[String], body: &str) -> String {
     let mut dump = format!("{} {}\n", method.label(), url);
     for header in headers {

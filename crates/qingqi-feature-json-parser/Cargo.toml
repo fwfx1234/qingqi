@@ -13,3 +13,6 @@ qingqi-platform = { path = "../qingqi-platform" }
 qingqi-plugin = { path = "../qingqi-plugin" }
 qingqi-ui = { path = "../qingqi-ui" }
 serde_json.workspace = true
+
+[lints]
+workspace = true

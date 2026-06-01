@@ -23,9 +23,7 @@ pub(super) fn history_page(
     selected: usize,
     query: &str,
     selected_record: Option<ClipboardRecord>,
-    item_count: usize,
     current_filter: ClipboardFilter,
-    status_text: String,
     history_scroll: UniformListScrollHandle,
     preview_input: Entity<TextInput>,
     dark: bool,
@@ -44,20 +42,14 @@ pub(super) fn history_page(
                 .h_full()
                 .flex()
                 .flex_col()
-                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.65))
-                .child(history_top_bar(
-                    handle.clone(),
-                    item_count,
-                    dark,
-                    chrome_metrics,
-                ))
+                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.45))
                 .child(
                     div()
                         .flex_1()
                         .min_h(px(0.0))
                         .flex()
                         .flex_col()
-                        .child(div().px(px(8.0)).pt(px(8.0)).child(render_filter_tabs(
+                        .child(div().px(px(10.0)).pt(px(12.0)).pb(px(4.0)).child(render_filter_tabs(
                             handle.clone(),
                             current_filter,
                             dark,
@@ -82,7 +74,7 @@ pub(super) fn history_page(
                 .h_full()
                 .border_l_1()
                 .border_color(ui::border_light())
-                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.75))
+                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.55))
                 .flex()
                 .flex_col()
                 .child(
@@ -93,9 +85,7 @@ pub(super) fn history_page(
                         .pt(px(14.0))
                         .pb(px(8.0))
                         .child(detail_panel(
-                            handle,
                             selected_record,
-                            status_text,
                             preview_input,
                             dark,
                         )),
@@ -104,6 +94,7 @@ pub(super) fn history_page(
 }
 
 pub(super) fn history_titlebar_slot(
+    handle: Entity<ClipboardView>,
     query_input: Entity<TextInput>,
     dark: bool,
 ) -> impl IntoElement {
@@ -111,83 +102,33 @@ pub(super) fn history_titlebar_slot(
         .h_full()
         .flex()
         .items_center()
-        .child(search_field(query_input, dark).w(px(320.0)))
-}
-
-fn history_top_bar(
-    handle: Entity<ClipboardView>,
-    item_count: usize,
-    dark: bool,
-    chrome_metrics: ui::WindowChromeMetrics,
-) -> impl IntoElement {
-    div()
-        .h(px(44.0))
-        .pl(px(chrome_metrics.safe_left.max(8.0)))
-        .pr(px(chrome_metrics.safe_right.max(8.0)))
-        .border_b_1()
-        .border_color(ui::border_light())
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
-        .flex()
-        .items_center()
+        .gap(px(6.0))
+        .child(search_field(query_input, dark).w(px(280.0)))
         .child(
             div()
-                .flex()
-                .flex_col()
-                .gap(px(1.0))
-                .child(
-                    div()
-                        .text_size(px(12.0))
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(theme::semantic().text_primary)
-                        .child("历史记录"),
-                )
-                .child(
-                    div()
-                        .text_size(px(10.0))
-                        .text_color(theme::semantic().text_secondary)
-                        .child("筛选和预览剪贴板内容"),
-                ),
-        )
-        .child(div().flex_1())
-        .child(
-            div()
+                .id("clipboard-open-settings")
+                .size(px(26.0))
+                .rounded(px(5.0))
                 .flex()
                 .items_center()
-                .justify_end()
-                .gap(px(6.0))
+                .justify_center()
+                .hover(|style| {
+                    style
+                        .bg(theme::rgba_with_alpha(theme::semantic().bg_elevated, 0.4))
+                        .cursor_pointer()
+                })
                 .child(
-                    div()
-                        .text_size(px(11.0))
-                        .text_color(theme::semantic().text_secondary)
-                        .child(format!("{item_count} 条")),
+                    Icon::new(IconName::Settings)
+                        .with_size(ComponentSize::Small)
+                        .text_color(theme::semantic().text_placeholder),
                 )
-                .child(top_bar_icon_button(handle, dark)),
+                .on_click(move |_, _, cx| {
+                    let _ = cx.update_entity(&handle, |panel, cx| {
+                        panel.set_tab(ClipboardTab::Settings);
+                        cx.notify();
+                    });
+                }),
         )
-}
-
-fn top_bar_icon_button(handle: Entity<ClipboardView>, _dark: bool) -> impl IntoElement {
-    div()
-        .id("clipboard-open-settings")
-        .size(px(26.0))
-        .rounded(px(4.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
-        .flex()
-        .items_center()
-        .justify_center()
-        .hover(|style| style.bg(theme::semantic().row_hover).cursor_pointer())
-        .child(
-            Icon::new(IconName::Settings)
-                .with_size(ComponentSize::Small)
-                .text_color(theme::semantic().text_secondary),
-        )
-        .on_click(move |_, _, cx| {
-            let _ = cx.update_entity(&handle, |panel, cx| {
-                panel.set_tab(ClipboardTab::Settings);
-                cx.notify();
-            });
-        })
 }
 
 fn history_filter_divider(_dark: bool) -> impl IntoElement {
@@ -206,7 +147,7 @@ fn search_field(query_input: Entity<TextInput>, _dark: bool) -> gpui::Div {
         .rounded(px(6.0))
         .border_1()
         .border_color(ui::border_light())
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.35))
         .shadow(glass_shadow())
         .px(px(8.0))
         .flex()
@@ -242,7 +183,7 @@ fn render_filter_tabs(
                         0.12,
                     )
                 } else {
-                    theme::rgba_with_alpha(theme::semantic().bg_elevated, 0.6)
+                    theme::rgba_with_alpha(theme::semantic().bg_elevated, 0.35)
                 })
                 .border_1()
                 .border_color(if is_active {
@@ -341,10 +282,10 @@ fn history_virtual_list(
 }
 
 fn empty_state_text(query: &str, _dark: bool, is_empty: bool) -> impl IntoElement {
-    let (title, subtitle) = if is_empty && query.trim().is_empty() {
-        ("暂无剪贴板记录", "复制一段文本后，这里会开始积累历史")
+    let message = if is_empty && query.trim().is_empty() {
+        "暂无剪贴板记录"
     } else {
-        ("没有匹配记录", "换个关键词，或者切换到其他筛选标签")
+        "没有匹配记录"
     };
 
     div()
@@ -353,37 +294,17 @@ fn empty_state_text(query: &str, _dark: bool, is_empty: bool) -> impl IntoElemen
         .flex_col()
         .items_center()
         .justify_center()
-        .gap_1p5()
+        .gap(px(8.0))
         .child(
-            div()
-                .size(px(36.0))
-                .rounded(px(8.0))
-                .bg(theme::rgba_with_alpha(
-                    ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue),
-                    0.10,
-                ))
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(px(14.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(ui::accent_color(
-                    qingqi_plugin::plugin_spec::PluginAccent::Blue,
-                ))
-                .child("空"),
+            Icon::new(IconName::Copy)
+                .with_size(ComponentSize::Large)
+                .text_color(theme::semantic().text_placeholder),
         )
         .child(
             div()
                 .text_size(px(12.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic().text_primary)
-                .child(title),
-        )
-        .child(
-            div()
-                .text_size(px(10.0))
-                .text_color(theme::semantic().text_secondary)
-                .child(subtitle),
+                .text_color(theme::semantic().text_placeholder)
+                .child(message),
         )
 }
 
@@ -395,15 +316,15 @@ fn history_row(
     dark: bool,
 ) -> impl IntoElement {
     let title = history_item_title(&item);
-    let subtitle = history_item_meta(&item);
+    let meta = history_item_meta(&item);
     let pinned = item.pinned;
     let icon_surface = if selected {
         theme::rgba_with_alpha(
             ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue),
-            0.12,
+            0.15,
         )
     } else {
-        theme::rgba_with_alpha(theme::semantic().bg_elevated, 0.75)
+        theme::rgba_with_alpha(theme::semantic().bg_elevated, 0.5)
     };
     let row_bg = if selected {
         theme::rgba_with_alpha(
@@ -413,14 +334,11 @@ fn history_row(
     } else {
         hsla(0.0, 0.0, 0.0, 0.0)
     };
-    let title_color = theme::semantic().text_primary;
-    let pin_handle = handle.clone();
-    let delete_handle = handle.clone();
 
     div()
         .id(("clipboard-row", item.id as u64))
         .w_full()
-        .h(px(64.0))
+        .h(px(56.0))
         .flex_none()
         .p(px(6.0))
         .rounded(px(6.0))
@@ -451,7 +369,7 @@ fn history_row(
         })
         .flex()
         .items_center()
-        .gap(px(6.0))
+        .gap(px(8.0))
         .child(history_row_media(&item, icon_surface, dark))
         .child(
             div()
@@ -462,76 +380,36 @@ fn history_row(
                 .gap(px(1.0))
                 .child(
                     div()
-                        .text_size(px(11.0))
-                        .line_height(px(15.0))
-                        .line_clamp(2)
-                        .text_color(title_color)
-                        .child(title),
+                        .flex()
+                        .items_center()
+                        .gap(px(4.0))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w(px(0.0))
+                                .text_size(px(12.0))
+                                .line_height(px(16.0))
+                                .line_clamp(1)
+                                .text_color(theme::semantic().text_primary)
+                                .child(title),
+                        )
+                        .children(pinned.then(|| {
+                            Icon::new(IconName::Star)
+                                .with_size(ComponentSize::Small)
+                                .text_color(ui::accent_color(
+                                    qingqi_plugin::plugin_spec::PluginAccent::Blue,
+                                ))
+                                .into_any_element()
+                        })),
                 )
                 .child(
                     div()
                         .text_size(px(10.0))
                         .line_height(px(13.0))
                         .text_color(theme::semantic().text_secondary)
-                        .child(subtitle),
+                        .child(meta),
                 ),
         )
-        .child(row_icon_button(
-            if pinned {
-                IconName::Star
-            } else {
-                IconName::StarOff
-            },
-            "clipboard-row-pin",
-            dark,
-            move |_, _, cx| {
-                let _ = cx.update_entity(&pin_handle, |panel, cx| {
-                    panel.select(index, cx);
-                    panel.toggle_selected_pin(cx);
-                    cx.notify();
-                });
-            },
-        ))
-        .child(row_icon_button(
-            IconName::Delete,
-            "clipboard-row-delete",
-            dark,
-            move |_, _, cx| {
-                let _ = cx.update_entity(&delete_handle, |panel, cx| {
-                    panel.select(index, cx);
-                    panel.delete_selected(cx);
-                    cx.notify();
-                });
-            },
-        ))
-}
-
-fn row_icon_button(
-    icon: IconName,
-    id: &'static str,
-    _dark: bool,
-    on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
-) -> impl IntoElement {
-    div()
-        .id(id)
-        .size(px(24.0))
-        .rounded(px(4.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
-        .flex()
-        .items_center()
-        .justify_center()
-        .hover(|style| style.bg(theme::semantic().row_hover).cursor_pointer())
-        .child(
-            Icon::new(icon)
-                .with_size(ComponentSize::Small)
-                .text_color(theme::semantic().text_secondary),
-        )
-        .on_click(move |event, window, cx| {
-            on_click(event, window, cx);
-            cx.stop_propagation();
-        })
 }
 
 fn history_row_media(
@@ -674,26 +552,11 @@ fn preview_content(
     }
 }
 
-fn preview_text_for_record(item: &ClipboardRecord) -> String {
-    match item.kind {
-        history_store::ClipboardItemKind::Files => {
-            let paths = item.parsed_file_paths();
-            if paths.is_empty() {
-                item.preview.clone()
-            } else {
-                paths.join("\n")
-            }
-        }
-        _ => item.content.clone(),
-    }
-}
-
 fn preview_text(preview_input: Entity<TextInput>, _dark: bool) -> impl IntoElement {
     div()
-        .size_full()
+        .w_full()
         .px(px(8.0))
         .py(px(6.0))
-        .overflow_y_scrollbar()
         .text_color(theme::semantic().text_regular)
         .child(preview_input)
 }
@@ -714,96 +577,28 @@ fn preview_unavailable(message: &'static str, _dark: bool) -> impl IntoElement {
 }
 
 fn detail_panel(
-    handle: Entity<ClipboardView>,
     selected_record: Option<ClipboardRecord>,
-    _status_text: String,
     preview_input: Entity<TextInput>,
     dark: bool,
 ) -> impl IntoElement {
-    let has_selected = selected_record.is_some();
-    let is_pinned = selected_record.as_ref().is_some_and(|item| item.pinned);
-
-    let panel = div().size_full().flex().flex_col().gap(px(6.0)).child(
-        div()
-            .flex_1()
-            .min_h(px(0.0))
-            .rounded(px(8.0))
-            .border_1()
-            .border_color(ui::border_light())
-            .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.85))
-            .shadow(glass_shadow())
-            .overflow_hidden()
-            .child(
-                selected_record
-                    .map(|item| preview_content(item, preview_input, dark).into_any_element())
-                    .unwrap_or_else(|| preview_empty(dark).into_any_element()),
-            ),
-    );
-
-    if has_selected {
-        panel.child(detail_actions(handle, is_pinned, dark))
-    } else {
-        panel
-    }
-}
-
-fn detail_actions(handle: Entity<ClipboardView>, is_pinned: bool, dark: bool) -> impl IntoElement {
     div()
+        .size_full()
         .flex()
-        .items_center()
-        .gap(px(4.0))
-        .child(detail_action_button("复制", dark, {
-            let handle = handle.clone();
-            move |_, _, cx| {
-                let _ = cx.update_entity(&handle, |panel, cx| {
-                    panel.copy_selected(cx);
-                    cx.notify();
-                });
-            }
-        }))
-        .child(detail_action_button(
-            if is_pinned { "取消置顶" } else { "置顶" },
-            dark,
-            {
-                let handle = handle.clone();
-                move |_, _, cx| {
-                    let _ = cx.update_entity(&handle, |panel, cx| {
-                        panel.toggle_selected_pin(cx);
-                        cx.notify();
-                    });
-                }
-            },
-        ))
-        .child(detail_action_button("删除", dark, {
-            let handle = handle.clone();
-            move |_, _, cx| {
-                let _ = cx.update_entity(&handle, |panel, cx| {
-                    panel.delete_selected(cx);
-                    cx.notify();
-                });
-            }
-        }))
-}
-
-fn detail_action_button(
-    label: &'static str,
-    _dark: bool,
-    on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
-) -> impl IntoElement {
-    div()
-        .id(label)
-        .h(px(24.0))
-        .px(px(8.0))
-        .rounded(px(4.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.8))
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(10.0))
-        .text_color(theme::semantic().text_primary)
-        .hover(|style| style.bg(theme::semantic().row_hover).cursor_pointer())
-        .child(label)
-        .on_click(on_click)
+        .flex_col()
+        .child(
+            div()
+                .flex_1()
+                .min_h(px(0.0))
+                .rounded(px(8.0))
+                .border_1()
+                .border_color(ui::border_light())
+                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.5))
+                .shadow(glass_shadow())
+                .overflow_y_scrollbar()
+                .child(
+                    selected_record
+                        .map(|item| preview_content(item, preview_input, dark).into_any_element())
+                        .unwrap_or_else(|| preview_empty(dark).into_any_element()),
+                ),
+        )
 }

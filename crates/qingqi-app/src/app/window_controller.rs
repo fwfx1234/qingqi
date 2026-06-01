@@ -12,13 +12,12 @@ use gpui::{
 
 use crate::{
     app::{app_catalog::AppCatalog, launcher::Launcher},
-    core::{
-        command::{Action, Activation, CommandInvocation},
-        events::AppEventBus,
-        plugin_spec::WindowSize,
-    },
 };
+use qingqi_core::lock_or_recover;
 use qingqi_core::plugin::{PluginManager, WindowView};
+use qingqi_plugin::command::{Action, Activation, CommandInvocation};
+use qingqi_plugin::events::AppEventBus;
+use qingqi_plugin::plugin_spec::WindowSize;
 use qingqi_ui::{text_input::TextInput, ui};
 
 pub type WindowControllerHandle = Arc<Mutex<WindowController>>;
@@ -106,46 +105,26 @@ impl WindowController {
 
     pub fn toggle_launcher(controller: WindowControllerHandle, cx: &mut App) {
         let stored_window_handle = {
-            controller
-                .lock()
-                .unwrap_or_else(|e| {
-                    tracing::error!("window controller poisoned, recovering");
-                    e.into_inner()
-                })
+                            lock_or_recover(&controller, "window_controller")
                 .launcher_window
         };
         if let Some(window_handle) = stored_window_handle {
             if let Some(handle) = window_handle.downcast::<Launcher>() {
                 match handle.update(cx, |_, window, _| window.remove_window()) {
                     Ok(_) => {
-                        controller
-                            .lock()
-                            .unwrap_or_else(|e| {
-                                tracing::error!("window controller poisoned, recovering");
-                                e.into_inner()
-                            })
+                                                    lock_or_recover(&controller, "window_controller")
                             .launcher_window = None;
                         return;
                     }
                     Err(error) => {
                         tracing::warn!(error = %error, "toggle existing launcher window failed");
-                        controller
-                            .lock()
-                            .unwrap_or_else(|e| {
-                                tracing::error!("window controller poisoned, recovering");
-                                e.into_inner()
-                            })
+                                                    lock_or_recover(&controller, "window_controller")
                             .launcher_window = None;
                     }
                 }
             } else {
                 tracing::warn!("stored launcher window handle had unexpected root type");
-                controller
-                    .lock()
-                    .unwrap_or_else(|e| {
-                        tracing::error!("window controller poisoned, recovering");
-                        e.into_inner()
-                    })
+                                    lock_or_recover(&controller, "window_controller")
                     .launcher_window = None;
             }
         }
@@ -155,12 +134,7 @@ impl WindowController {
 
     pub fn show_launcher(controller: WindowControllerHandle, cx: &mut App) {
         let stored_window_handle = {
-            controller
-                .lock()
-                .unwrap_or_else(|e| {
-                    tracing::error!("window controller poisoned, recovering");
-                    e.into_inner()
-                })
+                            lock_or_recover(&controller, "window_controller")
                 .launcher_window
         };
         if let Some(window_handle) = stored_window_handle {
@@ -180,23 +154,13 @@ impl WindowController {
                     }
                     Err(error) => {
                         tracing::warn!(error = %error, "activate existing launcher window failed");
-                        controller
-                            .lock()
-                            .unwrap_or_else(|e| {
-                                tracing::error!("window controller poisoned, recovering");
-                                e.into_inner()
-                            })
+                                                    lock_or_recover(&controller, "window_controller")
                             .launcher_window = None;
                     }
                 }
             } else {
                 tracing::warn!("stored launcher window handle had unexpected root type");
-                controller
-                    .lock()
-                    .unwrap_or_else(|e| {
-                        tracing::error!("window controller poisoned, recovering");
-                        e.into_inner()
-                    })
+                                    lock_or_recover(&controller, "window_controller")
                     .launcher_window = None;
             }
         }
@@ -205,34 +169,14 @@ impl WindowController {
     }
 
     fn open_launcher(controller: WindowControllerHandle, cx: &mut App) {
-        let plugin_manager = controller
-            .lock()
-            .unwrap_or_else(|e| {
-                tracing::error!("window controller poisoned, recovering");
-                e.into_inner()
-            })
+        let plugin_manager =             lock_or_recover(&controller, "window_controller")
             .plugin_manager();
-        let app_catalog = controller
-            .lock()
-            .unwrap_or_else(|e| {
-                tracing::error!("window controller poisoned, recovering");
-                e.into_inner()
-            })
+        let app_catalog =             lock_or_recover(&controller, "window_controller")
             .app_catalog();
-        let events = controller
-            .lock()
-            .unwrap_or_else(|e| {
-                tracing::error!("window controller poisoned, recovering");
-                e.into_inner()
-            })
+        let events =             lock_or_recover(&controller, "window_controller")
             .events
             .clone();
-        let initial_results = plugin_manager
-            .lock()
-            .unwrap_or_else(|e| {
-                tracing::error!("window controller poisoned, recovering");
-                e.into_inner()
-            })
+        let initial_results =             lock_or_recover(&plugin_manager, "window_controller")
             .commands_with_clipboard(&HashMap::new())
             .len();
         let window_size = size(
@@ -284,12 +228,7 @@ impl WindowController {
             launcher
         }) {
             Ok(handle) => {
-                controller
-                    .lock()
-                    .unwrap_or_else(|e| {
-                        tracing::error!("window controller poisoned, recovering");
-                        e.into_inner()
-                    })
+                                    lock_or_recover(&controller, "window_controller")
                     .launcher_window = Some(handle.into());
                 cx.activate(true);
                 let _ = handle.update(cx, |launcher, window, cx| {
@@ -317,19 +256,9 @@ impl WindowController {
     ) {
         let plugin_id = plugin_id.as_ref().to_string();
         let started = Instant::now();
-        let plugin_manager = controller
-            .lock()
-            .unwrap_or_else(|e| {
-                tracing::error!("window controller poisoned, recovering");
-                e.into_inner()
-            })
+        let plugin_manager =             lock_or_recover(&controller, "window_controller")
             .plugin_manager();
-        let manifest = plugin_manager
-            .lock()
-            .unwrap_or_else(|e| {
-                tracing::error!("window controller poisoned, recovering");
-                e.into_inner()
-            })
+        let manifest =             lock_or_recover(&plugin_manager, "window_controller")
             .manifests()
             .into_iter()
             .find(|manifest| manifest.id.as_ref() == plugin_id);
@@ -353,12 +282,7 @@ impl WindowController {
         }
 
         let view_started = Instant::now();
-        let view = match plugin_manager
-            .lock()
-            .unwrap_or_else(|e| {
-                tracing::error!("window controller poisoned, recovering");
-                e.into_inner()
-            })
+        let view = match             lock_or_recover(&plugin_manager, "window_controller")
             .open_window_view(&plugin_id, cx)
         {
             Ok(view) => view,
@@ -391,12 +315,7 @@ impl WindowController {
                     cx.activate(true);
                     window.activate_window();
                 });
-                controller
-                    .lock()
-                    .unwrap_or_else(|e| {
-                        tracing::error!("window controller poisoned, recovering");
-                        e.into_inner()
-                    })
+                                    lock_or_recover(&controller, "window_controller")
                     .set_plugin_window(plugin_id_for_window, handle.into());
             }
             Err(error) => tracing::warn!(
@@ -419,12 +338,7 @@ impl WindowController {
         cx: &mut App,
     ) -> bool {
         let stored_window_handle = {
-            controller
-                .lock()
-                .unwrap_or_else(|e| {
-                    tracing::error!("window controller poisoned, recovering");
-                    e.into_inner()
-                })
+                            lock_or_recover(&controller, "window_controller")
                 .plugin_windows
                 .get(plugin_id)
                 .copied()
@@ -446,12 +360,7 @@ impl WindowController {
                             error = %error,
                             "activate existing plugin window failed"
                         );
-                        controller
-                            .lock()
-                            .unwrap_or_else(|e| {
-                                tracing::error!("window controller poisoned, recovering");
-                                e.into_inner()
-                            })
+                                                    lock_or_recover(&controller, "window_controller")
                             .clear_plugin_window(plugin_id);
                     }
                 }
@@ -460,12 +369,7 @@ impl WindowController {
                     plugin_id,
                     "stored plugin window handle had unexpected root type"
                 );
-                controller
-                    .lock()
-                    .unwrap_or_else(|e| {
-                        tracing::error!("window controller poisoned, recovering");
-                        e.into_inner()
-                    })
+                                    lock_or_recover(&controller, "window_controller")
                     .clear_plugin_window(plugin_id);
             }
         }
@@ -487,12 +391,7 @@ impl WindowController {
                 plugin_window.reopen(window, cx);
                 window.activate_window();
             });
-            controller
-                .lock()
-                .unwrap_or_else(|e| {
-                    tracing::error!("window controller poisoned, recovering");
-                    e.into_inner()
-                })
+                            lock_or_recover(&controller, "window_controller")
                 .set_plugin_window(plugin_id.to_string(), window_handle);
             cx.activate(true);
             return true;
@@ -507,12 +406,7 @@ impl WindowController {
         cx: &mut App,
     ) -> bool {
         let stored_window_handle = {
-            controller
-                .lock()
-                .unwrap_or_else(|e| {
-                    tracing::error!("window controller poisoned, recovering");
-                    e.into_inner()
-                })
+                            lock_or_recover(&controller, "window_controller")
                 .plugin_windows
                 .get(plugin_id)
                 .copied()
@@ -523,12 +417,7 @@ impl WindowController {
                     window.defer(cx, |window, _cx| window.remove_window());
                 }) {
                     Ok(_) => {
-                        controller
-                            .lock()
-                            .unwrap_or_else(|e| {
-                                tracing::error!("window controller poisoned, recovering");
-                                e.into_inner()
-                            })
+                                                    lock_or_recover(&controller, "window_controller")
                             .clear_plugin_window(plugin_id);
                         return true;
                     }
@@ -538,12 +427,7 @@ impl WindowController {
                             error = %error,
                             "close existing plugin window failed"
                         );
-                        controller
-                            .lock()
-                            .unwrap_or_else(|e| {
-                                tracing::error!("window controller poisoned, recovering");
-                                e.into_inner()
-                            })
+                                                    lock_or_recover(&controller, "window_controller")
                             .clear_plugin_window(plugin_id);
                     }
                 }
@@ -552,12 +436,7 @@ impl WindowController {
                     plugin_id,
                     "stored plugin window handle had unexpected root type"
                 );
-                controller
-                    .lock()
-                    .unwrap_or_else(|e| {
-                        tracing::error!("window controller poisoned, recovering");
-                        e.into_inner()
-                    })
+                                    lock_or_recover(&controller, "window_controller")
                     .clear_plugin_window(plugin_id);
             }
         }
@@ -579,12 +458,7 @@ impl WindowController {
                     window.defer(cx, |window, _cx| window.remove_window());
                 })
                 .is_ok();
-            controller
-                .lock()
-                .unwrap_or_else(|e| {
-                    tracing::error!("window controller poisoned, recovering");
-                    e.into_inner()
-                })
+                            lock_or_recover(&controller, "window_controller")
                 .clear_plugin_window(plugin_id);
             if closed {
                 return true;
@@ -614,12 +488,7 @@ impl WindowController {
                 None
             }
             Activation::Run(Action::LaunchApp { path }) => {
-                let app_catalog = controller
-                    .lock()
-                    .unwrap_or_else(|e| {
-                        tracing::error!("window controller poisoned, recovering");
-                        e.into_inner()
-                    })
+                let app_catalog =                     lock_or_recover(&controller, "window_controller")
                     .app_catalog();
                 Some(match app_catalog.launch(&path) {
                     Ok(()) => format!("已打开 {}", std::path::Path::new(&path).display()),
@@ -627,19 +496,9 @@ impl WindowController {
                 })
             }
             activation @ Activation::Run(Action::PluginAction { .. }) => {
-                let plugin_manager = controller
-                    .lock()
-                    .unwrap_or_else(|e| {
-                        tracing::error!("window controller poisoned, recovering");
-                        e.into_inner()
-                    })
+                let plugin_manager =                     lock_or_recover(&controller, "window_controller")
                     .plugin_manager();
-                plugin_manager
-                    .lock()
-                    .unwrap_or_else(|e| {
-                        tracing::error!("window controller poisoned, recovering");
-                        e.into_inner()
-                    })
+                                    lock_or_recover(&plugin_manager, "window_controller")
                     .handle_command(CommandInvocation { activation }, cx)
                     .ok()
                     .and_then(|outcome| outcome.message)
@@ -664,12 +523,7 @@ impl WindowController {
     }
 
     fn close_idle_plugin(&mut self, plugin_id: &str) {
-        self.plugin_manager
-            .lock()
-            .unwrap_or_else(|e| {
-                tracing::error!("window controller poisoned, recovering");
-                e.into_inner()
-            })
+                    lock_or_recover(&self.plugin_manager, "window_controller")
             .close_idle(plugin_id);
         self.clear_plugin_window(plugin_id);
     }
@@ -745,14 +599,14 @@ fn plugin_window_options(
             titlebar: Some(TitlebarOptions {
                 title: Some(title.to_string().into()),
                 appears_transparent: true,
-                traffic_light_position: Some(point(px(28.0), px(22.0))),
+                traffic_light_position: Some(point(px(-80.0), px(-80.0))),
                 ..Default::default()
             }),
             kind: WindowKind::PopUp,
             is_movable: true,
             is_resizable: false,
             is_minimizable: true,
-            window_background: WindowBackgroundAppearance::Opaque,
+            window_background: WindowBackgroundAppearance::Blurred,
             window_min_size: Some(bounds.size),
             window_decorations: Some(WindowDecorations::Client),
             ..Default::default()
@@ -894,12 +748,7 @@ impl Drop for PluginWindow {
         if let Some(mut view) = self.view.take() {
             view.on_close();
         }
-        self.controller
-            .lock()
-            .unwrap_or_else(|e| {
-                tracing::error!("window controller poisoned, recovering");
-                e.into_inner()
-            })
+                    lock_or_recover(&self.controller, "window_controller")
             .close_idle_plugin(&self.plugin_id);
     }
 }

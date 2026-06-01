@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
+use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Task, Window};
 
 use crate::{manifest, service::ApiService, view};
 use qingqi_plugin::{
@@ -15,7 +15,7 @@ pub struct ApiDebuggerPlugin {
     database: Arc<DatabaseService>,
     paths: AppPaths,
     service: Option<Arc<ApiService>>,
-    watch_started: bool,
+    watcher_task: Option<Task<()>>,
 }
 
 impl ApiDebuggerPlugin {
@@ -24,7 +24,7 @@ impl ApiDebuggerPlugin {
             database,
             paths,
             service: None,
-            watch_started: false,
+            watcher_task: None,
         }
     }
 
@@ -41,12 +41,11 @@ impl ApiDebuggerPlugin {
     }
 
     fn ensure_watcher(&mut self, service: Arc<ApiService>, events: AppEventBus, cx: &mut App) {
-        if self.watch_started {
+        if self.watcher_task.is_some() {
             return;
         }
-        self.watch_started = true;
 
-        cx.spawn(async move |async_cx| {
+        self.watcher_task = Some(cx.spawn(async move |async_cx| {
             let mut revision = service.revision();
             loop {
                 async_cx
@@ -59,8 +58,7 @@ impl ApiDebuggerPlugin {
                     events.publish(manifest::PLUGIN_ID, AppEventKind::FeatureChanged);
                 }
             }
-        })
-        .detach();
+        }));
     }
 }
 
@@ -99,6 +97,12 @@ impl Plugin for ApiDebuggerPlugin {
         self.ensure_watcher(Arc::clone(&service), cx.events.clone(), cx.app);
         let view = cx.app.new(|cx| view::ApiDebuggerView::new(service, cx));
         Ok(PluginView::Window(Box::new(ApiDebuggerWindow { view })))
+    }
+
+    fn close_idle(&mut self) {
+        // Stop the revision watcher when the window closes; the service is kept
+        // so a later reopen reuses it and restarts the watcher.
+        self.watcher_task = None;
     }
 }
 

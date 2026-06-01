@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-#[path = "icon_raster.rs"]
+#[path = "../qingqi-platform/src/icon_raster.rs"]
 mod icon_raster;
 
 fn main() {
@@ -12,7 +12,9 @@ fn main() {
     println!("cargo:rerun-if-changed={}", svg.display());
     println!(
         "cargo:rerun-if-changed={}",
-        manifest_dir.join("icon_raster.rs").display()
+        manifest_dir
+            .join("../qingqi-platform/src/icon_raster.rs")
+            .display()
     );
 
     for size in [16_u32, 32, 64, 128, 256, 512] {

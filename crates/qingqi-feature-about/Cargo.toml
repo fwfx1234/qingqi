@@ -11,3 +11,6 @@ anyhow.workspace = true
 gpui.workspace = true
 qingqi-plugin = { path = "../qingqi-plugin" }
 qingqi-ui = { path = "../qingqi-ui" }
+
+[lints]
+workspace = true

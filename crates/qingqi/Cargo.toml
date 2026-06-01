@@ -46,3 +46,6 @@ resources = ["assets/**/*"]
 category = "DeveloperTool"
 short_description = "A lightweight Rust + GPUI desktop toolbox inspired by Suishou."
 copyright = "Copyright (c) fwfx1234"
+
+[lints]
+workspace = true

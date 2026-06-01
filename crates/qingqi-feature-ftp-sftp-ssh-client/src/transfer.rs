@@ -55,24 +55,12 @@ pub fn transfer_counts(items: &[TransferItem]) -> TransferCounts {
     counts
 }
 
-/// Transfer service with max 3 concurrent workers.
 pub struct TransferService {
     items: Mutex<HashMap<String, TransferItem>>,
     cancelled: Mutex<std::collections::HashSet<String>>,
     pool: Arc<RemoteConnectionPool>,
     revision: Arc<std::sync::atomic::AtomicU64>,
     shutdown: AtomicBool,
-    _workers: Vec<thread::JoinHandle<()>>,
-    task_tx: std::sync::mpsc::Sender<TransferTask>,
-}
-
-struct TransferTask {
-    transfer_id: String,
-    profile_id: i64,
-    direction: TransferDirection,
-    local_path: String,
-    remote_path: String,
-    size: i64,
 }
 
 impl TransferService {
@@ -80,43 +68,12 @@ impl TransferService {
         pool: Arc<RemoteConnectionPool>,
         revision: Arc<std::sync::atomic::AtomicU64>,
     ) -> Self {
-        let (tx, rx) = std::sync::mpsc::channel::<TransferTask>();
-        let rx = Arc::new(Mutex::new(rx));
-
-        let mut workers = Vec::new();
-        for _ in 0..3 {
-            let rx = Arc::clone(&rx);
-            // Each worker just pulls tasks from the shared receiver
-            // We can't easily share an mpsc::Receiver, so we use a shared mutex around it
-            let handle = thread::Builder::new()
-                .name("transfer-worker".into())
-                .spawn(move || {
-                    loop {
-                        let task = match rx.lock() {
-                            Ok(guard) => match guard.recv() {
-                                Ok(t) => t,
-                                Err(_) => break, // Channel closed
-                            },
-                            Err(_) => break, // Mutex poisoned
-                        };
-                        // Worker will be driven externally via run_transfer
-                        drop(task);
-                    }
-                })
-                .ok();
-            if let Some(h) = handle {
-                workers.push(h);
-            }
-        }
-
         Self {
             items: Mutex::new(HashMap::new()),
             cancelled: Mutex::new(std::collections::HashSet::new()),
             pool,
             revision,
             shutdown: AtomicBool::new(false),
-            _workers: workers,
-            task_tx: tx,
         }
     }
 

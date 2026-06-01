@@ -314,23 +314,6 @@ impl FtpSftpSshView {
         }
     }
 
-    fn reset_editor(&mut self, cx: &mut Context<Self>) {
-        self.log_ui_action("reset_editor");
-        self.refresh_cached_profiles_if_needed();
-        match self.editor_mode {
-            ProfileEditorMode::Existing(id) => {
-                if let Some(profile) = self.profiles().into_iter().find(|profile| profile.id == id)
-                {
-                    self.load_editor_draft(RemoteProfileDraft::from_profile(&profile), cx);
-                    self.editor_notice = format!("已重置为已保存的 {}", profile.name);
-                }
-            }
-            ProfileEditorMode::New => {
-                self.load_editor_draft(RemoteProfileDraft::blank(), cx);
-                self.editor_notice = String::from("已重置新建表单");
-            }
-        }
-    }
 
     fn save_editor(&mut self, cx: &mut Context<Self>) {
         self.log_ui_action("save_editor");
@@ -353,38 +336,7 @@ impl FtpSftpSshView {
         }
     }
 
-    fn test_editor(&mut self, cx: &mut Context<Self>) {
-        self.log_ui_action("test_editor");
-        self.ensure_editor_inputs(cx);
-        match self.service.test_profile_draft(self.editor_draft(cx)) {
-            Ok(message) => self.editor_notice = message,
-            Err(error) => self.editor_notice = format!("测试连接失败: {error}"),
-        }
-    }
 
-    fn delete_profile_from_editor(&mut self, id: i64, cx: &mut Context<Self>) {
-        self.log_ui_action_with_profile("delete_profile_from_editor", id);
-        match self.service.delete_profile(id) {
-            Ok(true) => {
-                self.refresh_cached_profiles_if_needed();
-                if let Some(profile) = self.selected_profile() {
-                    self.editor_mode = ProfileEditorMode::Existing(profile.id);
-                    self.load_editor_draft(RemoteProfileDraft::from_profile(&profile), cx);
-                } else {
-                    self.editor_mode = ProfileEditorMode::New;
-                    self.load_editor_draft(RemoteProfileDraft::blank(), cx);
-                }
-                self.editor_notice = String::from("连接配置已删除");
-                self.editor_open = false;
-            }
-            Ok(false) => {
-                self.editor_notice = String::from("连接配置不存在");
-            }
-            Err(error) => {
-                self.editor_notice = format!("删除失败: {error}");
-            }
-        }
-    }
 
     fn duplicate_profile(&mut self, profile: &RemoteProfile, cx: &mut Context<Self>) {
         self.log_ui_action_with_profile("duplicate_profile", profile.id);
@@ -495,7 +447,7 @@ impl FtpSftpSshView {
         self.log_ui_action_with_profile("connect_profile", profile_id);
         let _ = self.service.select_profile(profile_id);
         let svc = Arc::clone(&self.service);
-        let _ = svc.connect_profile(profile_id);
+        if let Err(e) = svc.connect_profile(profile_id) { tracing::error!(%e, "connect_profile failed"); }
         self.profile_menu = None;
     }
 
@@ -513,7 +465,7 @@ impl FtpSftpSshView {
                 .into_iter()
                 .map(|path| path.to_string_lossy().into_owned())
                 .collect::<Vec<_>>();
-            let _ = svc.upload_paths(raw);
+            if let Err(e) = svc.upload_paths(raw) { tracing::error!(%e, "upload_paths failed"); }
         }
     }
 
@@ -521,7 +473,7 @@ impl FtpSftpSshView {
         self.log_ui_action("upload_folder");
         let svc = Arc::clone(&self.service);
         if let Some(path) = rfd::FileDialog::new().pick_folder() {
-            let _ = svc.upload_paths(vec![path.to_string_lossy().into_owned()]);
+            if let Err(e) = svc.upload_paths(vec![path.to_string_lossy().into_owned()]) { tracing::error!(%e, "upload_paths failed"); }
         }
     }
 
@@ -533,7 +485,7 @@ impl FtpSftpSshView {
         let svc = Arc::clone(&self.service);
         if let Some(dir) = rfd::FileDialog::new().pick_folder() {
             let local_dir = dir.to_string_lossy().into_owned();
-            let _ = svc.start_download(item.path.clone(), &local_dir, item.size);
+            if let Err(e) = svc.start_download(item.path.clone(), &local_dir, item.size) { tracing::error!(%e, "start_download failed"); }
         }
         self.file_menu = None;
     }
@@ -541,34 +493,34 @@ impl FtpSftpSshView {
     fn open_text_file(&mut self, item: &RemoteFileItem) {
         self.log_ui_action("open_text_file");
         let svc = Arc::clone(&self.service);
-        let _ = svc.open_text_file(item);
+        if let Err(e) = svc.open_text_file(item) { tracing::error!(%e, "open_text_file failed"); }
         self.file_menu = None;
     }
 
     fn delete_remote_item(&mut self, item: &RemoteFileItem) {
         self.log_ui_action("delete_remote_item");
         let svc = Arc::clone(&self.service);
-        let _ = svc.remote_delete(&item.path, item.is_dir);
+        if let Err(e) = svc.remote_delete(&item.path, item.is_dir) { tracing::error!(%e, "remote_delete failed"); }
         self.file_menu = None;
     }
 
     fn navigate_dir(&mut self, path: &str) {
         self.log_ui_action("navigate_dir");
         let svc = Arc::clone(&self.service);
-        let _ = svc.navigate_dir(path);
+        if let Err(e) = svc.navigate_dir(path) { tracing::error!(%e, "navigate_dir failed"); }
         self.file_menu = None;
     }
 
     fn refresh_dir(&mut self) {
         self.log_ui_action("refresh_dir");
         let svc = Arc::clone(&self.service);
-        let _ = svc.refresh_dir();
+        if let Err(e) = svc.refresh_dir() { tracing::error!(%e, "refresh_dir failed"); }
     }
 
     fn navigate_up(&mut self) {
         self.log_ui_action("navigate_up");
         let svc = Arc::clone(&self.service);
-        let _ = svc.navigate_up();
+        if let Err(e) = svc.navigate_up() { tracing::error!(%e, "navigate_up failed"); }
     }
 
     fn open_profile_menu(&mut self, profile: RemoteProfile, position: Point<Pixels>) {
@@ -619,7 +571,7 @@ impl FtpSftpSshView {
             format!("{base}/{name}")
         };
         let svc = Arc::clone(&self.service);
-        let _ = svc.remote_mkdir(&path);
+        if let Err(e) = svc.remote_mkdir(&path) { tracing::error!(%e, "remote_mkdir failed"); }
         self.folder_sheet_open = false;
     }
 
@@ -635,7 +587,9 @@ impl FtpSftpSshView {
         if !text.ends_with('\n') {
             text.push('\n');
         }
-        let _ = self.service.send_terminal_input(&text);
+        if let Err(e) = self.service.send_terminal_input(&text) {
+            tracing::error!(%e, "send_terminal_input failed");
+        }
         input.update(cx, |input, input_cx| input.clear(input_cx));
     }
 
@@ -668,7 +622,7 @@ impl FtpSftpSshView {
             "ftp/sftp/ssh ui action"
         );
         let svc = Arc::clone(&self.service);
-        let _ = svc.upload_draft(draft_id, force);
+        if let Err(e) = svc.upload_draft(draft_id, force) { tracing::error!(%e, "upload_draft failed"); }
     }
 
     fn reopen_local_draft(&mut self, draft: &RemoteEditDraft) {
@@ -678,7 +632,9 @@ impl FtpSftpSshView {
             path = %draft.local_cache_path,
             "ftp/sftp/ssh ui action"
         );
-        let _ = qingqi_platform::shell::open_path(Path::new(&draft.local_cache_path));
+        if let Err(e) = qingqi_platform::shell::open_path(Path::new(&draft.local_cache_path)) {
+            tracing::error!(%e, "open_path failed");
+        }
     }
 }
 
@@ -1580,7 +1536,7 @@ fn file_workspace(
                             .map(|path| path.to_string_lossy().into_owned())
                             .collect::<Vec<_>>();
                         let svc = Arc::clone(&panel.read(cx).service);
-                        let _ = svc.upload_paths(raw);
+                        if let Err(e) = svc.upload_paths(raw) { tracing::error!(%e, "upload_paths failed"); }
                         window.refresh();
                     }
                 })
@@ -1916,7 +1872,9 @@ fn terminal_workspace(
                         .on_click({
                             let panel = panel.clone();
                             move |_, window, cx| {
-                                let _ = panel.read(cx).service.open_terminal();
+                                if let Err(e) = panel.read(cx).service.open_terminal() {
+                                    tracing::error!(%e, "open_terminal failed");
+                                }
                                 window.refresh();
                             }
                         }),
@@ -2012,8 +1970,10 @@ fn terminal_workspace(
                         .border_color(ui::border_light())
                         .bg(ui::bg_keycap())
                         .child(
-                            terminal_input
-                                .unwrap_or_else(|| panic!("terminal input should be initialized")),
+                            terminal_input.map(|i| i.into_any_element()).unwrap_or_else(|| {
+                                tracing::error!("terminal input should be initialized");
+                                div().child("终端输入未初始化").into_any_element()
+                            }),
                         ),
                 )
                 .child(
@@ -3102,7 +3062,10 @@ fn new_folder_overlay(
                     .border_1()
                     .border_color(ui::border_light())
                     .bg(ui::bg_keycap())
-                    .child(input.unwrap_or_else(|| panic!("new folder input should exist"))),
+                    .child(input.map(|i| i.into_any_element()).unwrap_or_else(|| {
+                        tracing::error!("new folder input should exist");
+                        div().child("新建目录输入未初始化").into_any_element()
+                    })),
             )
             .child(
                 div()
@@ -3239,7 +3202,9 @@ fn profile_menu_overlay(
                     let panel = panel.clone();
                     let profile_id = menu.profile.id;
                     move |_, window, cx| {
-                        let _ = panel.read(cx).service.delete_profile(profile_id);
+                        if let Err(e) = panel.read(cx).service.delete_profile(profile_id) {
+                            tracing::error!(%e, "delete_profile failed");
+                        }
                         cx.update_entity(&panel, |view, _cx| view.close_menus());
                         window.refresh();
                     }
@@ -3394,7 +3359,10 @@ fn search_input_shell(input: Option<Entity<TextInput>>, _dark: bool) -> impl Int
         .border_1()
         .border_color(ui::border_light())
         .bg(theme::semantic().bg_surface)
-        .child(input.unwrap_or_else(|| panic!("search input should be initialized")))
+        .child(input.map(|i| i.into_any_element()).unwrap_or_else(|| {
+            tracing::error!("search input should be initialized");
+            div().child("搜索输入未初始化").into_any_element()
+        }))
 }
 
 fn protocol_hint_card(
@@ -3455,26 +3423,6 @@ fn editor_section_title(label: &'static str, _dark: bool) -> impl IntoElement {
         .child(label)
 }
 
-fn profile_field(label: &'static str, input: Entity<TextInput>, _dark: bool) -> impl IntoElement {
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(3.0))
-        .child(
-            div()
-                .text_size(px(9.0))
-                .text_color(ui::text_secondary())
-                .child(label),
-        )
-        .child(
-            div()
-                .rounded(px(6.0))
-                .border_1()
-                .border_color(ui::border_light())
-                .bg(ui::bg_keycap())
-                .child(input),
-        )
-}
 
 fn segmented_chip(label: &'static str, active: bool, dark: bool) -> gpui::Div {
     div()
@@ -3681,14 +3629,6 @@ fn status_bar(dark: bool, accent: gpui::Rgba, message: String) -> impl IntoEleme
         ))
 }
 
-fn protocol_status_text(protocol: RemoteProtocol) -> String {
-    match protocol {
-        RemoteProtocol::Sftp => String::from("已连接 · SFTP 文件与终端"),
-        RemoteProtocol::Ftp => String::from("已连接 · FTP 文件与命令日志"),
-        RemoteProtocol::Ftps => String::from("已连接 · FTPS 文件与命令日志"),
-        RemoteProtocol::Ssh => String::from("已连接 · SSH 终端"),
-    }
-}
 
 fn profile_input(
     cx: &mut App,

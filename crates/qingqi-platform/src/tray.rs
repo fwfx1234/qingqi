@@ -85,38 +85,57 @@ pub fn rebuild_menu(mode: PreventSleepMode) -> Result<(), String> {
     }
 }
 
-/// Poll tray click and menu events. Returns pending actions.
-pub fn poll_actions() -> Vec<TrayAction> {
+/// Block until the next tray-icon left-click, returning the resulting action.
+///
+/// Event-driven: parks on the `tray-icon` event channel instead of polling, so
+/// it adds no idle CPU wakeups. Returns `None` when the channel is disconnected
+/// (or on platforms without a tray), which signals callers to stop looping.
+pub fn next_tray_action() -> Option<TrayAction> {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
         use tray_icon::{MouseButton, MouseButtonState, TrayIconEvent};
 
-        let mut actions = Vec::new();
-
-        while let Ok(event) = TrayIconEvent::receiver().try_recv() {
+        loop {
+            let event = TrayIconEvent::receiver().recv().ok()?;
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
                 ..
             } = event
             {
-                actions.push(TrayAction::Show);
+                return Some(TrayAction::Show);
             }
+            // Other tray events (right-click, enter/leave, …) are ignored; keep
+            // blocking until a left-click arrives.
         }
-
-        while let Ok(event) = MenuEvent::receiver().try_recv() {
-            let Some(action) = action_for_menu_id(event.id().as_ref()) else {
-                continue;
-            };
-            actions.push(action);
-        }
-
-        actions
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        Vec::new()
+        None
+    }
+}
+
+/// Block until the next tray menu selection, returning the mapped action.
+///
+/// Event-driven counterpart to [`next_tray_action`] for the menu channel.
+/// Returns `None` when the channel is disconnected (or on unsupported
+/// platforms).
+pub fn next_menu_action() -> Option<TrayAction> {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        loop {
+            let event = MenuEvent::receiver().recv().ok()?;
+            if let Some(action) = action_for_menu_id(event.id().as_ref()) {
+                return Some(action);
+            }
+            // Unknown menu id; keep blocking for the next selection.
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        None
     }
 }
 

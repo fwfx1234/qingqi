@@ -15,3 +15,6 @@ qingqi-platform = { path = "../qingqi-platform" }
 qingqi-plugin = { path = "../qingqi-plugin" }
 qingqi-ui = { path = "../qingqi-ui" }
 rfd.workspace = true
+
+[lints]
+workspace = true

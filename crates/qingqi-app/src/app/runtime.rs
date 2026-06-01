@@ -208,12 +208,7 @@ pub fn run(host: AppHost) -> Result<()> {
         cx.on_action(|_: &Quit, cx| cx.quit());
 
         #[cfg(target_os = "windows")]
-        window_controller
-            .lock()
-            .unwrap_or_else(|e| {
-                tracing::error!("window controller poisoned, recovering");
-                e.into_inner()
-            })
+        lock_or_recover(&window_controller, "window_controller")
             .ensure_keep_alive_window(cx);
 
         set_menus(cx);
@@ -263,7 +258,7 @@ pub fn run(host: AppHost) -> Result<()> {
         let initial_mode = qingqi_core::lock_or_recover(&power_manager, "power-manager").mode();
         match qingqi_platform::tray::install_tray(initial_mode) {
             Ok(()) => {
-                background.start_tray_poll(
+                background.start_tray_events(
                     Arc::clone(&window_controller),
                     Arc::clone(&power_manager),
                     cx,

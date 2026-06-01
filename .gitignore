@@ -1,4 +1,7 @@
 /target/
+.claude/
+docs/.claude/
+dist/
 /.idea/
 /.vscode/
 .tmp/

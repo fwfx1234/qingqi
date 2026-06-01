@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
+use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Task, Window};
 
 use crate::{manifest, service::FtpSftpSshService, view};
 use qingqi_plugin::{
@@ -14,7 +14,7 @@ pub struct FtpSftpSshPlugin {
     database: Arc<DatabaseService>,
     paths: AppPaths,
     service: Option<Arc<FtpSftpSshService>>,
-    watch_started: bool,
+    watcher_task: Option<Task<()>>,
 }
 
 impl FtpSftpSshPlugin {
@@ -23,7 +23,7 @@ impl FtpSftpSshPlugin {
             database,
             paths,
             service: None,
-            watch_started: false,
+            watcher_task: None,
         })
     }
 
@@ -45,12 +45,11 @@ impl FtpSftpSshPlugin {
         events: AppEventBus,
         cx: &mut App,
     ) {
-        if self.watch_started {
+        if self.watcher_task.is_some() {
             return;
         }
-        self.watch_started = true;
 
-        cx.spawn(async move |async_cx| {
+        self.watcher_task = Some(cx.spawn(async move |async_cx| {
             let mut revision = service.revision();
             loop {
                 async_cx
@@ -67,8 +66,7 @@ impl FtpSftpSshPlugin {
                     events.publish(manifest::PLUGIN_ID, AppEventKind::FeatureChanged);
                 }
             }
-        })
-        .detach();
+        }));
     }
 }
 
@@ -86,9 +84,9 @@ impl Plugin for FtpSftpSshPlugin {
     }
 
     fn close_idle(&mut self) {
-        if !self.watch_started {
-            self.service = None;
-        }
+        // Stop the watcher when the window closes; keep `service` so live
+        // terminals/SSH sessions survive and a reopen reuses the same instance.
+        self.watcher_task = None;
     }
 
     fn shutdown(&mut self) {

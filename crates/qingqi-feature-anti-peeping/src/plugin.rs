@@ -129,7 +129,6 @@ impl Plugin for AntiPeepingPlugin {
         Ok(PluginView::Window(Box::new(AntiPeepingView {
             active: Rc::clone(&self.active),
             image_path: Rc::clone(&self.image_path),
-            overlay_windows: Rc::clone(&self.overlay_windows),
             paths: self.paths.clone(),
             draft_path: self.image_path.borrow().clone().unwrap_or_default(),
         })))
@@ -143,7 +142,6 @@ impl Plugin for AntiPeepingPlugin {
 struct AntiPeepingView {
     active: Rc<RefCell<bool>>,
     image_path: Rc<RefCell<Option<String>>>,
-    overlay_windows: Rc<RefCell<Vec<AnyWindowHandle>>>,
     paths: AppPaths,
     draft_path: String,
 }

@@ -60,6 +60,14 @@ features = [
     "Win32_UI_WindowsAndMessaging",
 ]
 
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"
+todo = "warn"
+dbg_macro = "deny"
+
 [profile.release]
 codegen-units = 1
 lto = "thin"

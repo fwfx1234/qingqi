@@ -82,7 +82,7 @@ impl LowLevelHook {
                 let hhook = match hhook {
                     Ok(h) => h,
                     Err(e) => {
-                        *error_flag.lock().unwrap() = Some(e);
+                        *error_flag.lock().expect("error_flag mutex should not be poisoned") = Some(e);
                         ready_flag.store(true, Ordering::SeqCst);
                         return;
                     }

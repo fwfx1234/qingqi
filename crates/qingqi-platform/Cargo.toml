@@ -29,3 +29,6 @@ image = { workspace = true, default-features = false, features = ["png"] }
 resvg.workspace = true
 tiny-skia.workspace = true
 usvg.workspace = true
+
+[lints]
+workspace = true

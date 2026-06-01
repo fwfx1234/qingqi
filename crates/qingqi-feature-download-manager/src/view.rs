@@ -10,6 +10,7 @@ use gpui::{
 
 use qingqi_plugin::{
     job::{JobId, JobProvider},
+    lock_or_recover,
     plugin_spec::PluginAccent,
 };
 use qingqi_ui::{
@@ -109,7 +110,7 @@ impl DownloadManagerView {
     pub fn new(service: Arc<Mutex<DownloadService>>) -> Self {
         let filter = FilterTab::All;
         let tasks = {
-            let svc = service.lock().unwrap();
+            let svc = lock_or_recover(&service, "download-service");
             Self::filter_tasks(svc.tasks_snapshot(), filter)
         };
         let (
@@ -120,7 +121,7 @@ impl DownloadManagerView {
             stats_snapshot,
             service_revision,
         ) = {
-            let svc = service.lock().unwrap();
+            let svc = lock_or_recover(&service, "download-service");
             (
                 DownloadJobSummary::from_jobs(svc.job_snapshots()),
                 svc.task_counts(),
@@ -182,7 +183,7 @@ impl DownloadManagerView {
             self.url_input_entity = Some(input);
         }
 
-        let settings = self.service.lock().unwrap().settings_snapshot();
+        let settings = lock_or_recover(&self.service, "download-service").settings_snapshot();
 
         if self.save_root_input.is_none() {
             self.save_root_input = Some(self.make_settings_input(cx, settings.save_root.clone()));
@@ -297,7 +298,7 @@ impl DownloadManagerView {
     }
 
     pub fn refresh(&mut self) {
-        let svc = self.service.lock().unwrap();
+        let svc = lock_or_recover(&self.service, "download-service");
         self.tasks = Self::filter_tasks(svc.tasks_snapshot(), self.filter);
         self.job_summary = DownloadJobSummary::from_jobs(svc.job_snapshots());
         self.task_counts = svc.task_counts();
@@ -308,7 +309,7 @@ impl DownloadManagerView {
     }
 
     fn refresh_if_stale(&mut self) {
-        let revision = self.service.lock().unwrap().revision();
+        let revision = lock_or_recover(&self.service, "download-service").revision();
         if revision != self.service_revision {
             self.refresh();
         }
@@ -356,7 +357,7 @@ impl DownloadManagerView {
         // Try multi-URL extraction first
         let urls = super::model::extract_urls_from_text(&text);
         if urls.len() > 1 {
-            let result = { self.service.lock().unwrap().add_urls_from_text(&text) };
+            let result = { lock_or_recover(&self.service, "download-service").add_urls_from_text(&text) };
             match result {
                 Ok(tasks) => {
                     self.clear_url_input(cx);
@@ -369,7 +370,7 @@ impl DownloadManagerView {
             }
         } else if urls.len() == 1 {
             let (add_result, task_id) = {
-                let svc = self.service.lock().unwrap();
+                let svc = lock_or_recover(&self.service, "download-service");
                 let result = svc.add_task(&urls[0]);
                 let tid = result.as_ref().map(|t| t.id.clone()).ok();
                 (result, tid)
@@ -379,7 +380,7 @@ impl DownloadManagerView {
                     self.clear_url_input(cx);
                     self.message = format!("已添加: {}", task.file_name);
                     if let Some(tid) = task_id {
-                        let start_result = { self.service.lock().unwrap().start_download(&tid) };
+                        let start_result = { lock_or_recover(&self.service, "download-service").start_download(&tid) };
                         if let Err(e) = start_result {
                             self.message = format!("启动失败: {e}");
                         }
@@ -422,7 +423,7 @@ impl DownloadManagerView {
     }
 
     fn reload_settings_inputs(&mut self, cx: &mut Context<Self>) {
-        let settings = self.service.lock().unwrap().settings_snapshot();
+        let settings = lock_or_recover(&self.service, "download-service").settings_snapshot();
         if let Some(input) = &self.save_root_input {
             input.update(cx, |input, input_cx| {
                 input.set_text(settings.save_root.clone(), input_cx)
@@ -531,11 +532,11 @@ impl DownloadManagerView {
             .unwrap_or_default();
 
         if !save_root.is_empty() {
-            if let Err(e) = self.service.lock().unwrap().set_save_root(&save_root) {
+            if let Err(e) = lock_or_recover(&self.service, "download-service").set_save_root(&save_root) {
                 self.message = format!("保存目录设置失败: {e}");
             }
         }
-        if let Err(e) = self.service.lock().unwrap().set_max_concurrent(concurrent) {
+        if let Err(e) = lock_or_recover(&self.service, "download-service").set_max_concurrent(concurrent) {
             self.message = format!("并发设置失败: {e}");
         }
         if let Err(e) = self
@@ -546,7 +547,7 @@ impl DownloadManagerView {
         {
             self.message = format!("限速设置失败: {e}");
         }
-        if let Err(e) = self.service.lock().unwrap().set_network_options(
+        if let Err(e) = lock_or_recover(&self.service, "download-service").set_network_options(
             &user_agent,
             &referer,
             &cookie,
@@ -564,7 +565,7 @@ impl DownloadManagerView {
     }
 
     pub fn pause_task(&mut self, id: &str) {
-        if let Err(e) = self.service.lock().unwrap().pause_job(&JobId::new(id)) {
+        if let Err(e) = lock_or_recover(&self.service, "download-service").pause_job(&JobId::new(id)) {
             self.message = format!("暂停失败: {e}");
         } else {
             self.message = String::from("已暂停");
@@ -573,7 +574,7 @@ impl DownloadManagerView {
     }
 
     pub fn resume_task(&mut self, id: &str) {
-        if let Err(e) = self.service.lock().unwrap().resume_job(&JobId::new(id)) {
+        if let Err(e) = lock_or_recover(&self.service, "download-service").resume_job(&JobId::new(id)) {
             self.message = format!("恢复失败: {e}");
         } else {
             self.message = String::from("已恢复");
@@ -582,7 +583,7 @@ impl DownloadManagerView {
     }
 
     pub fn cancel_task(&mut self, id: &str) {
-        if let Err(e) = self.service.lock().unwrap().cancel_job(&JobId::new(id)) {
+        if let Err(e) = lock_or_recover(&self.service, "download-service").cancel_job(&JobId::new(id)) {
             self.message = format!("取消失败: {e}");
         } else {
             self.message = String::from("已取消");
@@ -591,7 +592,7 @@ impl DownloadManagerView {
     }
 
     pub fn delete_task(&mut self, id: &str) {
-        if let Err(e) = self.service.lock().unwrap().delete_task(id) {
+        if let Err(e) = lock_or_recover(&self.service, "download-service").delete_task(id) {
             self.message = format!("删除失败: {e}");
         } else {
             self.message = String::from("已删除");
@@ -600,7 +601,7 @@ impl DownloadManagerView {
     }
 
     pub fn start_all(&mut self) {
-        match self.service.lock().unwrap().start_all_pending() {
+        match lock_or_recover(&self.service, "download-service").start_all_pending() {
             Ok(n) if n > 0 => {
                 self.message = format!("已启动 {n} 个任务");
             }
@@ -610,7 +611,7 @@ impl DownloadManagerView {
     }
 
     pub fn pause_all(&mut self) {
-        if let Err(e) = self.service.lock().unwrap().pause_all() {
+        if let Err(e) = lock_or_recover(&self.service, "download-service").pause_all() {
             self.message = format!("暂停失败: {e}");
         } else {
             self.message = String::from("已暂停全部");
@@ -619,7 +620,7 @@ impl DownloadManagerView {
     }
 
     pub fn resume_all(&mut self) {
-        if let Err(e) = self.service.lock().unwrap().resume_all() {
+        if let Err(e) = lock_or_recover(&self.service, "download-service").resume_all() {
             self.message = format!("恢复失败: {e}");
         } else {
             self.message = String::from("已恢复全部");
@@ -628,7 +629,7 @@ impl DownloadManagerView {
     }
 
     pub fn clear_completed(&mut self) {
-        match self.service.lock().unwrap().clear_completed() {
+        match lock_or_recover(&self.service, "download-service").clear_completed() {
             Ok(n) if n > 0 => {
                 self.message = format!("已清除 {n} 个已完成任务");
             }
@@ -638,7 +639,7 @@ impl DownloadManagerView {
     }
 
     pub fn clear_failed(&mut self) {
-        match self.service.lock().unwrap().clear_failed() {
+        match lock_or_recover(&self.service, "download-service").clear_failed() {
             Ok(n) if n > 0 => {
                 self.message = format!("已清除 {n} 个失败/取消任务");
             }
@@ -648,7 +649,7 @@ impl DownloadManagerView {
     }
 
     pub fn retry_task(&mut self, id: &str) {
-        match self.service.lock().unwrap().retry_task(id) {
+        match lock_or_recover(&self.service, "download-service").retry_task(id) {
             Ok(()) => self.message = String::from("已加入队列"),
             Err(e) => self.message = format!("重试失败: {e}"),
         }
@@ -667,7 +668,7 @@ impl DownloadManagerView {
     }
 
     pub fn open_save_dir(&mut self) {
-        let dir = self.service.lock().unwrap().effective_save_dir();
+        let dir = lock_or_recover(&self.service, "download-service").effective_save_dir();
         if let Err(e) = std::fs::create_dir_all(&dir) {
             self.message = format!("创建目录失败: {e}");
             return;

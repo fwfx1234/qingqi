@@ -1436,19 +1436,6 @@ fn status_tag(status: QueueStatus, _dark: bool, reduction_ratio: Option<f32>) ->
         .child(label)
 }
 
-fn table_header_cell(label: &str, width: f32) -> impl IntoElement {
-    div().w(px(width)).child(label.to_string())
-}
-
-fn table_header_flex(label: &str, grow: f32) -> impl IntoElement {
-    let cell = div().child(label.to_string());
-    if grow >= 2.0 {
-        cell.flex_1().into_any_element()
-    } else {
-        cell.w(px(96.0)).into_any_element()
-    }
-}
-
 fn footer_bar(
     dark: bool,
     message: String,

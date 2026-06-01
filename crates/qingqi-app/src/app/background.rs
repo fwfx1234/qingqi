@@ -30,41 +30,52 @@ impl BackgroundSupervisor {
         Self::default()
     }
 
-    pub fn start_tray_poll(
+    pub fn start_tray_events(
         &mut self,
         window_controller: WindowControllerHandle,
         power_manager: Arc<Mutex<PowerManager>>,
         cx: &mut App,
     ) {
-        if !self.mark_started("tray-poll") {
+        if !self.mark_started("tray-events") {
             return;
         }
 
-        let task = cx.spawn(async move |async_cx| {
+        // Tray-icon left-clicks → show launcher. Event-driven: the helper parks
+        // on the tray channel, so there is no idle polling wakeup.
+        let icon_wc = Arc::clone(&window_controller);
+        let icon_pm = Arc::clone(&power_manager);
+        let icon_task = cx.spawn(async move |async_cx| {
             loop {
-                async_cx
+                let action = async_cx
                     .background_executor()
-                    .timer(Duration::from_millis(120))
+                    .spawn(async { qingqi_platform::tray::next_tray_action() })
                     .await;
-                let actions = qingqi_platform::tray::poll_actions();
-                if actions.is_empty() {
-                    continue;
-                }
-                let window_controller = Arc::clone(&window_controller);
-                let pm = Arc::clone(&power_manager);
-                let _ = async_cx.update(move |cx| {
-                    for action in actions {
-                        handle_tray_action(
-                            action,
-                            Arc::clone(&window_controller),
-                            Arc::clone(&pm),
-                            cx,
-                        );
-                    }
-                });
+                let Some(action) = action else {
+                    break;
+                };
+                let wc = Arc::clone(&icon_wc);
+                let pm = Arc::clone(&icon_pm);
+                let _ = async_cx.update(move |cx| handle_tray_action(action, wc, pm, cx));
             }
         });
-        self.tasks.push(task);
+        self.tasks.push(icon_task);
+
+        // Tray menu selections → their mapped actions.
+        let menu_task = cx.spawn(async move |async_cx| {
+            loop {
+                let action = async_cx
+                    .background_executor()
+                    .spawn(async { qingqi_platform::tray::next_menu_action() })
+                    .await;
+                let Some(action) = action else {
+                    break;
+                };
+                let wc = Arc::clone(&window_controller);
+                let pm = Arc::clone(&power_manager);
+                let _ = async_cx.update(move |cx| handle_tray_action(action, wc, pm, cx));
+            }
+        });
+        self.tasks.push(menu_task);
     }
 
     pub fn start_hotkey_events(&mut self, window_controller: WindowControllerHandle, cx: &mut App) {

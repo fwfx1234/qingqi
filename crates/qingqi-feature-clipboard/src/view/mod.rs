@@ -1,5 +1,5 @@
 use std::{
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
@@ -7,7 +7,7 @@ use gpui::{
     App, AppContext, BoxShadow, Context, Entity, FocusHandle, Focusable, InteractiveElement,
     IntoElement, KeyDownEvent, ObjectFit, ParentElement, Render, ScrollStrategy,
     StatefulInteractiveElement, Styled, StyledImage, Subscription, Task, UniformListScrollHandle,
-    Window, div, hsla, img, point, px,
+    Window, div, img, point, px,
 };
 
 use crate::{
@@ -82,6 +82,7 @@ pub struct ClipboardView {
 }
 
 impl ClipboardView {
+    #[allow(dead_code)]
     pub(crate) fn new(service: Arc<Mutex<ClipboardService>>) -> Self {
         Self::with_shortcut_handle(service, None)
     }
@@ -532,6 +533,14 @@ impl ClipboardView {
                 "5" => self.set_filter_shortcut(4, cx),
                 "6" => self.cycle_filter_to(ClipboardFilter::Link, cx),
                 "7" => self.cycle_filter_to(ClipboardFilter::Code, cx),
+                "," => {
+                    let next = match self.tab {
+                        ClipboardTab::History => ClipboardTab::Settings,
+                        ClipboardTab::Settings => ClipboardTab::History,
+                    };
+                    self.set_tab(next);
+                    true
+                }
                 _ => false,
             };
             if handled {
@@ -583,13 +592,6 @@ impl ClipboardView {
             String::from("写回剪贴板失败")
         };
         self.status_text = self.message.clone();
-    }
-
-    fn focus_panel(&self, window: &mut Window, cx: &App) {
-        if let Some(focus_handle) = self.focus_handle.as_ref() {
-            window.focus(focus_handle);
-            let _ = cx;
-        }
     }
 
     fn toggle_selected_pin(&mut self, cx: &mut Context<Self>) {
@@ -654,138 +656,9 @@ impl ClipboardView {
         }));
     }
 
-    fn open_selected_parent_dir(&mut self, cx: &mut Context<Self>) {
-        let Some(item) = self.items.get(self.selected) else {
-            self.message = String::from("没有选中记录");
-            return;
-        };
-        if item.kind != history_store::ClipboardItemKind::Files {
-            return;
-        }
-        let paths = history_store::parse_file_paths(&item.content);
-        if paths.is_empty() {
-            self.message = String::from("文件记录不包含有效路径");
-            self.status_text = self.status_text();
-            cx.notify();
-            return;
-        }
 
-        let first_actionable = history_store::find_first_actionable_path(&paths);
-        match first_actionable {
-            Some(target) => match qingqi_platform::shell::open_path(&target) {
-                Ok(()) => {
-                    self.message = format!("已打开目录 {}", target.display());
-                }
-                Err(e) => {
-                    self.message = format!("打开失败: {e}");
-                }
-            },
-            None => {
-                self.message = String::from("所有文件路径的父目录都已不存在");
-            }
-        }
-        self.status_text = self.status_text();
-        cx.notify();
-    }
 
-    /// Reveal a single file path in Finder. The path must exist on disk.
-    fn reveal_path_in_finder(&mut self, path: &str, cx: &mut Context<Self>) {
-        let p = Path::new(path);
-        if !p.exists() {
-            self.message = format!("文件已不存在: {}", path);
-            self.status_text = self.status_text();
-            cx.notify();
-            return;
-        }
-        match qingqi_platform::shell::reveal_in_finder(p) {
-            Ok(()) => {
-                self.message = format!("已在访达中显示: {}", path);
-            }
-            Err(e) => {
-                self.message = format!("操作失败: {e}");
-            }
-        }
-        self.status_text = self.status_text();
-        cx.notify();
-    }
 
-    /// Reveal the first existing file path from the selected record in Finder.
-    fn reveal_first_existing_in_finder(&mut self, cx: &mut Context<Self>) {
-        let Some(item) = self.items.get(self.selected) else {
-            self.message = String::from("没有选中记录");
-            self.status_text = self.status_text();
-            cx.notify();
-            return;
-        };
-        if item.kind != history_store::ClipboardItemKind::Files {
-            return;
-        }
-        let paths = history_store::parse_file_paths(&item.content);
-        if paths.is_empty() {
-            self.message = String::from("文件记录不包含有效路径");
-            self.status_text = self.status_text();
-            cx.notify();
-            return;
-        }
-        match history_store::find_first_existing_path(&paths) {
-            Some(existing) => {
-                self.reveal_path_in_finder(&existing.to_string_lossy(), cx);
-            }
-            None => {
-                self.message = String::from("所有文件路径都已不存在");
-                self.status_text = self.status_text();
-                cx.notify();
-            }
-        }
-    }
-
-    fn clear_unpinned(&mut self, cx: &mut Context<Self>) {
-        let service = Arc::clone(&self.service);
-        self.message = String::from("正在清理未置顶记录...");
-        self.status_text = self.message.clone();
-        self.action_task = Some(cx.spawn(async move |panel, async_cx| {
-            let result = async_cx
-                .background_executor()
-                .spawn(async move {
-                    let service = service
-                        .lock()
-                        .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
-                    service.clear_unpinned()
-                })
-                .await;
-
-            let _ = panel.update(async_cx, |panel, cx| {
-                let count = result.unwrap_or(0);
-                panel.message = format!("已清理 {count} 条未置顶记录");
-                panel.status_text = panel.message.clone();
-                panel.refresh_async(cx);
-            });
-        }));
-    }
-
-    fn clear_all(&mut self, cx: &mut Context<Self>) {
-        let service = Arc::clone(&self.service);
-        self.message = String::from("正在清空记录...");
-        self.status_text = self.message.clone();
-        self.action_task = Some(cx.spawn(async move |panel, async_cx| {
-            let result = async_cx
-                .background_executor()
-                .spawn(async move {
-                    let service = service
-                        .lock()
-                        .map_err(|_| anyhow::anyhow!("clipboard service lock poisoned"))?;
-                    service.clear_all()
-                })
-                .await;
-
-            let _ = panel.update(async_cx, |panel, cx| {
-                let count = result.unwrap_or(0);
-                panel.message = format!("已清空 {count} 条记录");
-                panel.status_text = panel.message.clone();
-                panel.refresh_async(cx);
-            });
-        }));
-    }
 
     fn set_tab(&mut self, tab: ClipboardTab) {
         self.tab = tab;
@@ -1132,70 +1005,6 @@ impl ClipboardView {
     }
 }
 
-fn render_tab_bar(
-    handle: Entity<ClipboardView>,
-    active: ClipboardTab,
-    _dark: bool,
-) -> impl IntoElement {
-    let tabs = [
-        (ClipboardTab::History, "历史记录"),
-        (ClipboardTab::Settings, "设置"),
-    ];
-
-    div()
-        .h(px(30.0))
-        .px(px(8.0))
-        .border_b_1()
-        .border_color(ui::border_light())
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
-        .flex()
-        .items_center()
-        .gap(px(2.0))
-        .children(tabs.into_iter().enumerate().map(|(idx, (tab, label))| {
-            let is_active = active == tab;
-            let h = handle.clone();
-            div()
-                .id(("clipboard-tab", idx as u64))
-                .h(px(24.0))
-                .px(px(8.0))
-                .rounded(px(4.0))
-                .bg(if is_active {
-                    theme::semantic().bg_surface.into()
-                } else {
-                    hsla(0.0, 0.0, 0.0, 0.0)
-                })
-                .text_color(if is_active {
-                    theme::semantic().text_primary
-                } else {
-                    theme::semantic().text_secondary
-                })
-                .font_weight(if is_active {
-                    gpui::FontWeight::SEMIBOLD
-                } else {
-                    gpui::FontWeight::NORMAL
-                })
-                .text_size(px(10.0))
-                .cursor_pointer()
-                .hover(move |style| {
-                    style.bg(if !is_active {
-                        theme::semantic().row_hover.into()
-                    } else {
-                        hsla(0.0, 0.0, 0.0, 0.0)
-                    })
-                })
-                .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
-                    let _ = cx.update_entity(&h, |panel, cx| {
-                        panel.set_tab(tab);
-                        cx.notify();
-                    });
-                })
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(label)
-        }))
-}
-
 impl Render for ClipboardView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.focus_pending {
@@ -1229,7 +1038,6 @@ impl Render for ClipboardView {
                 .child("剪贴板组件加载中...")
                 .into_any_element();
         };
-        let item_count = self.items.len();
         let selected_record = self.items.get(self.selected).cloned();
         let settings_inputs = match (
             self.ignore_patterns_input.clone(),
@@ -1275,9 +1083,7 @@ impl Render for ClipboardView {
                     selected,
                     &query,
                     selected_record,
-                    item_count,
                     current_filter,
-                    status_text,
                     self.history_scroll.clone(),
                     preview_input,
                     dark,
@@ -1298,7 +1104,7 @@ impl Render for ClipboardView {
             .child(ui::popup_window_chrome_with_titlebar_slot(
                 chrome_config,
                 (tab == ClipboardTab::History)
-                    .then(|| history_titlebar_slot(query_input, dark).into_any_element()),
+                    .then(|| history_titlebar_slot(handle, query_input, dark).into_any_element()),
             ))
             .into_any_element()
     }

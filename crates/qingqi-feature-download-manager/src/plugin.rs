@@ -3,7 +3,7 @@ use std::{
     time::Duration,
 };
 
-use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
+use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Task, Window};
 
 use qingqi_plugin::{
     command::{Command, ContextKind, ContextMatcher},
@@ -19,7 +19,7 @@ pub struct DownloadManagerPlugin {
     database: Arc<DatabaseService>,
     paths: AppPaths,
     service: Option<Arc<Mutex<DownloadService>>>,
-    watch_started: bool,
+    watcher_task: Option<Task<()>>,
 }
 
 impl DownloadManagerPlugin {
@@ -28,7 +28,7 @@ impl DownloadManagerPlugin {
             database,
             paths,
             service: None,
-            watch_started: false,
+            watcher_task: None,
         })
     }
 
@@ -52,12 +52,11 @@ impl DownloadManagerPlugin {
         events: AppEventBus,
         cx: &mut App,
     ) {
-        if self.watch_started {
+        if self.watcher_task.is_some() {
             return;
         }
-        self.watch_started = true;
 
-        cx.spawn(async move |async_cx| {
+        self.watcher_task = Some(cx.spawn(async move |async_cx| {
             let mut revision = service.lock().unwrap().revision();
             loop {
                 async_cx
@@ -73,8 +72,7 @@ impl DownloadManagerPlugin {
                     events.publish(manifest::PLUGIN_ID, AppEventKind::JobsChanged);
                 }
             }
-        })
-        .detach();
+        }));
     }
 }
 
@@ -114,7 +112,12 @@ impl Plugin for DownloadManagerPlugin {
     }
 
     fn close_idle(&mut self) {
-        self.service = None;
+        // Stop the job watcher when the window closes. Keep `service` so the
+        // same instance is reused on reopen — its `active` map stays consistent
+        // and in-flight downloads (whose threads own their own Arc clones)
+        // remain visible. Dropping/recreating the service here would orphan the
+        // running downloads behind a fresh, empty service.
+        self.watcher_task = None;
     }
 }
 

@@ -28,15 +28,16 @@ use crate::{
     },
     core::{
         clipboard::current_payload,
+        command::{Activation, Command, CommandKind, build_launcher_context},
+        events::{AppEventBus, AppEventKind},
+        plugin_spec::{PluginStatus, ViewMode, WindowSize},
     },
 };
 use qingqi_core::command_usage::CommandUsage;
+use qingqi_core::{lock_or_recover, plugin::PluginManager};
 use qingqi_core::plugin::{
-    InlineView, ListView, PluginListItem, PluginManager, command_kind_priority,
+    InlineView, ListView, PluginListItem, command_kind_priority,
 };
-use qingqi_plugin::command::{Activation, Command, CommandKind, build_launcher_context};
-use qingqi_plugin::events::{AppEventBus, AppEventKind};
-use qingqi_plugin::plugin_spec::{PluginStatus, ViewMode, WindowSize};
 
 // ── Design A · Deep Frost (launcher-glass-5.html), default light mode
 
@@ -54,6 +55,8 @@ const LAUNCHER_WIDTH: f32 = 800.0;
 const EMPTY_RESULTS_HEIGHT: f32 = 180.0;
 const SEARCH_DEBOUNCE: Duration = Duration::from_millis(70);
 const COMMAND_SEARCH_LIMIT: usize = 5_000;
+/// 与 PluginManager::FRECENCY_WEIGHT 保持一致
+const FRECENCY_WEIGHT: f64 = 5.0;
 const PLUGIN_LIST_PREFETCH_THRESHOLD: usize = 40;
 static PLUGIN_OPEN_TRACE_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -84,7 +87,6 @@ pub struct Launcher {
     selected: usize,
     results_visible_start: usize,
     message: String,
-    self_handle: Option<Entity<Launcher>>,
     window_controller: Option<WindowControllerHandle>,
     last_query: String,
     pending_query: String,
@@ -119,10 +121,7 @@ impl Launcher {
         cx: &App,
     ) -> Self {
         let (all_commands, plugin_visuals, boost_map, usage) = {
-            let mut manager = plugin_manager.lock().unwrap_or_else(|e| {
-                tracing::error!("plugin manager poisoned, recovering");
-                e.into_inner()
-            });
+            let mut manager = lock_or_recover(&plugin_manager, "plugin_manager");
             let boost_map = Self::latest_boost_map(cx, &*manager);
             let mut all_commands = app_catalog.search("", COMMAND_SEARCH_LIMIT);
             all_commands.extend(manager.commands_with_clipboard(&boost_map));
@@ -153,7 +152,6 @@ impl Launcher {
             clipboard_boost_map: boost_map,
             results_visible_start: 0,
             message: String::from("搜索功能或打开应用..."),
-            self_handle: None,
             window_controller: None,
             last_query: String::new(),
             pending_query: String::new(),
@@ -193,13 +191,7 @@ impl Launcher {
                 if event.kind == AppEventKind::CommandsChanged {
                     let _ = launcher.update(async_cx, |launcher, cx| {
                         if event.source.as_ref() != "app-catalog" {
-                            launcher
-                                .plugin_manager
-                                .lock()
-                                .unwrap_or_else(|e| {
-                                    tracing::error!("plugin manager poisoned, recovering");
-                                    e.into_inner()
-                                })
+                            lock_or_recover(&launcher.plugin_manager, "plugin_manager")
                                 .invalidate_commands();
                         }
                         launcher.refresh_results_after_commands_changed(cx);
@@ -268,10 +260,6 @@ impl Launcher {
             *selected = (*selected).min(items.len().saturating_sub(1));
             self.plugin_list_visible_start = visible_start_for_selection(*selected);
         }
-    }
-
-    pub fn attach_handle(&mut self, handle: Entity<Launcher>) {
-        self.self_handle = Some(handle);
     }
 
     pub fn attach_window_controller(&mut self, handle: WindowControllerHandle) {
@@ -404,22 +392,14 @@ impl Launcher {
     fn refresh_clipboard_boost_map(&mut self, cx: &App) {
         self.clipboard_boost_map = Self::latest_boost_map(
             cx,
-            &*self.plugin_manager.lock().unwrap_or_else(|e| {
-                tracing::error!("plugin manager poisoned, recovering");
-                e.into_inner()
-            }),
+            &*lock_or_recover(&self.plugin_manager, "plugin_manager"),
         );
     }
 
     fn default_commands_with_clipboard(&mut self) -> Vec<Command> {
         let mut commands = self.app_catalog.search("", COMMAND_SEARCH_LIMIT);
         commands.extend(
-            self.plugin_manager
-                .lock()
-                .unwrap_or_else(|e| {
-                    tracing::error!("plugin manager poisoned, recovering");
-                    e.into_inner()
-                })
+            lock_or_recover(&self.plugin_manager, "plugin_manager")
                 .commands_with_clipboard(&self.clipboard_boost_map),
         );
         commands
@@ -428,12 +408,7 @@ impl Launcher {
     fn query_commands(&mut self, query: &str) -> Vec<Command> {
         let mut commands = self.app_catalog.search(query, COMMAND_SEARCH_LIMIT);
         commands.extend(
-            self.plugin_manager
-                .lock()
-                .unwrap_or_else(|e| {
-                    tracing::error!("plugin manager poisoned, recovering");
-                    e.into_inner()
-                })
+            lock_or_recover(&self.plugin_manager, "plugin_manager")
                 .query_commands_with_clipboard(
                     query,
                     COMMAND_SEARCH_LIMIT,
@@ -464,8 +439,19 @@ impl Launcher {
             .lock()
             .map(|pm| pm.usage_map())
             .unwrap_or_default();
-        // 使用 PluginManager 的统一排序逻辑，包含 clipboard boost 权重
-        PluginManager::sort_commands(&mut scored, &usage, &self.clipboard_boost_map);
+        scored.sort_by(|(left_score, left), (right_score, right)| {
+            let left_u = usage.get(&left.usage_key).cloned().unwrap_or_default();
+            let right_u = usage.get(&right.usage_key).cloned().unwrap_or_default();
+            let left_total = *left_score as f64 + left_u.frecency * FRECENCY_WEIGHT;
+            let right_total = *right_score as f64 + right_u.frecency * FRECENCY_WEIGHT;
+            right_total
+                .partial_cmp(&left_total)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| {
+                    command_kind_priority(left.kind).cmp(&command_kind_priority(right.kind))
+                })
+                .then_with(|| left.title.cmp(&right.title))
+        });
         scored.into_iter().map(|(_, command)| command).collect()
     }
 
@@ -1030,7 +1016,7 @@ impl Render for Launcher {
         }
 
         let dark = theme_mode::is_dark();
-        let handle = self.self_handle.clone();
+        let handle = Some(cx.entity());
         let query_input = self.query_input.clone();
         let query = self.query(cx);
         let results = self.results.clone();

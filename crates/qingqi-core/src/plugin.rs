@@ -63,7 +63,7 @@ impl PluginManager {
 
     pub fn commands(&mut self) -> Vec<Command> {
         self.refresh_command_cache();
-        self.sorted_commands("", self.command_cache.clone(), false)
+        self.sorted_commands("", &self.command_cache, false)
     }
 
     pub fn shortcuts(&mut self) -> Vec<ShortcutDescriptor> {
@@ -118,7 +118,7 @@ impl PluginManager {
 
     pub fn commands_with_clipboard(&mut self, boost_map: &HashMap<String, i32>) -> Vec<Command> {
         self.refresh_command_cache();
-        self.sorted_commands_with_clipboard("", self.command_cache.clone(), false, boost_map)
+        self.sorted_commands_with_clipboard("", &self.command_cache, false, boost_map)
     }
 
     fn build_commands(&self) -> Vec<Command> {
@@ -209,28 +209,24 @@ impl PluginManager {
     fn sorted_commands(
         &self,
         query: &str,
-        commands: Vec<Command>,
+        commands: &[Command],
         require_positive_score: bool,
     ) -> Vec<Command> {
-        self.sorted_commands_with_clipboard(
-            query,
-            commands,
-            require_positive_score,
-            &HashMap::new(),
-        )
+        self.sorted_commands_with_clipboard(query, commands, require_positive_score, &HashMap::new())
     }
 
     fn sorted_commands_with_clipboard(
         &self,
         query: &str,
-        commands: Vec<Command>,
+        commands: &[Command],
         require_positive_score: bool,
         boost_map: &HashMap<String, i32>,
     ) -> Vec<Command> {
         let known_prefixes = self.known_prefixes();
         let context = build_launcher_context(query, &known_prefixes);
         let mut scored = commands
-            .into_iter()
+            .iter()
+            .cloned()
             .filter_map(|command| {
                 command
                     .score_with_context(&context)
@@ -267,18 +263,24 @@ impl PluginManager {
     /// 空查询时关键词分为 0，退化为纯 Frecency 排序。
     /// Frecency 权重 5.0：一个使用中的高频应用 (frecency~10) 获得 +50，
     /// 不足以覆盖精确标题匹配 (120)，但足以把近期常用项排在前面。
-    const FRECENCY_WEIGHT: f64 = 5.0;
+    pub const FRECENCY_WEIGHT: f64 = 5.0;
 
-    fn sort_scored_commands(
-        &self,
+    /// 公开的排序函数：总分 = 关键词匹配分 + 使用频度分 + clipboard boost。
+    /// 供 Launcher 等外部调用方复用统一的排序逻辑。
+    pub fn sort_commands(
         scored: &mut [(i32, Command)],
-        _has_query: bool,
+        usage_map: &HashMap<String, CommandUsage>,
         boost_map: &HashMap<String, i32>,
     ) {
-        let usage = self.usage_map();
         scored.sort_by(|(left_score, left), (right_score, right)| {
-            let left_u = usage.get(&left.usage_key).cloned().unwrap_or_default();
-            let right_u = usage.get(&right.usage_key).cloned().unwrap_or_default();
+            let left_u = usage_map
+                .get(&left.usage_key)
+                .cloned()
+                .unwrap_or_default();
+            let right_u = usage_map
+                .get(&right.usage_key)
+                .cloned()
+                .unwrap_or_default();
             let left_boost = boost_map.get(&left.plugin_id).copied().unwrap_or(0) as f64;
             let right_boost = boost_map.get(&right.plugin_id).copied().unwrap_or(0) as f64;
             let left_total =
@@ -293,6 +295,15 @@ impl PluginManager {
                 })
                 .then_with(|| left.title.cmp(&right.title))
         });
+    }
+
+    fn sort_scored_commands(
+        &self,
+        scored: &mut [(i32, Command)],
+        _has_query: bool,
+        boost_map: &HashMap<String, i32>,
+    ) {
+        Self::sort_commands(scored, &self.usage_map(), boost_map);
     }
 
     pub fn usage_map(&self) -> HashMap<String, CommandUsage> {
