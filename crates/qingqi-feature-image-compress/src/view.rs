@@ -769,7 +769,7 @@ impl Render for ImageCompressView {
                     .size_full()
                     .flex()
                     .flex_col()
-                    .gap_3()
+                    .gap_2()
                     .child(
                         div()
                             .flex()
@@ -777,16 +777,10 @@ impl Render for ImageCompressView {
                             .justify_between()
                             .child(
                                 div()
-                                    .flex()
-                                    .flex_col()
-                                    .gap_1()
-                                    .child(section_title("🖼 图片压缩", "Image Compress", dark))
-                                    .child(
-                                        div()
-                                            .text_size(px(11.0))
-                                            .text_color(ui::text_secondary())
-                                            .child("PNG / JPEG / WebP · 批量处理"),
-                                    ),
+                                    .text_size(px(14.0))
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_color(theme::semantic().text_primary)
+                                    .child("图片压缩"),
                             )
                             .child(
                                 div()
@@ -913,34 +907,6 @@ impl Render for ImageCompressView {
     }
 }
 
-fn section_title(title: &str, tag: &str, _dark: bool) -> impl IntoElement {
-    div()
-        .flex()
-        .items_center()
-        .gap_2()
-        .child(
-            div()
-                .text_size(px(16.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic().text_primary)
-                .child(title.to_string()),
-        )
-        .child(
-            div()
-                .px_2()
-                .h(px(20.0))
-                .rounded(px(999.0))
-                .bg(theme::rgba_with_alpha(
-                    ui::accent_color(PluginAccent::Amber),
-                    0.12,
-                ))
-                .flex()
-                .items_center()
-                .text_size(px(10.0))
-                .text_color(ui::accent_color(PluginAccent::Amber))
-                .child(tag.to_string()),
-        )
-}
 
 fn mode_chip(label: &str, active: bool, _dark: bool) -> gpui::Div {
     div()

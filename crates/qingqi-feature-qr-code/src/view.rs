@@ -669,13 +669,19 @@ impl Render for QrView {
                 ui::plugin_scroll_content()
                     .flex()
                     .flex_col()
-                    .gap_3()
+                    .gap_2()
                     .child(
                         div()
                             .flex()
                             .items_center()
                             .justify_between()
-                            .child(module_title("📱 二维码", "QR Code", dark))
+                            .child(
+                                div()
+                                    .text_size(px(14.0))
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_color(theme::semantic().text_primary)
+                                    .child("二维码"),
+                            )
                             .child(
                                 div()
                                     .flex()
@@ -719,7 +725,6 @@ impl Render for QrView {
                                     .flex()
                                     .flex_col()
                                     .gap_2()
-                                    .child(section_label("输入内容", dark))
                                     .child(
                                         div()
                                             .rounded(px(12.0))
@@ -847,9 +852,6 @@ fn preview_panel(dark: bool, qr_matrix: Vec<bool>, qr_size: usize) -> impl IntoE
     div()
         .w(px(220.0))
         .flex()
-        .flex_col()
-        .gap_2()
-        .child(section_label("预览", dark))
         .child(
             div()
                 .size(px(220.0))
@@ -1388,13 +1390,6 @@ fn status_bar(message: String, tone: StatusTone, _dark: bool) -> impl IntoElemen
         )
 }
 
-fn section_label(label: &str, _dark: bool) -> impl IntoElement {
-    div()
-        .text_size(px(11.0))
-        .text_color(ui::text_secondary())
-        .child(label.to_string())
-}
-
 fn primary_action_button(label: &str, _dark: bool) -> gpui::Div {
     components::button(
         label.to_string(),
@@ -1482,25 +1477,6 @@ fn icon_button(active: bool, _dark: bool, count: usize) -> gpui::Div {
         )
 }
 
-fn module_title(title: &str, tag: &str, _dark: bool) -> impl IntoElement {
-    div()
-        .flex()
-        .flex_col()
-        .gap_1()
-        .child(
-            div()
-                .text_size(px(16.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic().text_primary)
-                .child(title.to_string()),
-        )
-        .child(
-            div()
-                .text_size(px(11.0))
-                .text_color(ui::text_secondary())
-                .child(tag.to_string()),
-        )
-}
 
 fn ghost_button(label: &str, dark: bool) -> gpui::Div {
     components::button(

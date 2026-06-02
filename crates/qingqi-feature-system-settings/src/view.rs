@@ -434,7 +434,6 @@ impl Render for SettingsView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let entity = cx.entity();
         let dark = qingqi_ui::theme_mode::is_dark();
-        let message = self.message.clone();
         let current_mode = self.current_mode();
         let system_dark = self.system_dark();
         let config_path = self.theme_config_path();
@@ -466,12 +465,6 @@ impl Render for SettingsView {
             (rows, message)
         };
 
-        let header_message = if message.is_empty() {
-            String::from("主题、窗口保留、应用索引与诊断信息")
-        } else {
-            message
-        };
-
         let page_bg = theme::semantic().bg_page;
         let text_primary = theme::semantic().text_primary;
         let text_secondary = theme::semantic().text_secondary;
@@ -489,21 +482,9 @@ impl Render for SettingsView {
             .child(
                 div().flex().items_center().justify_between().child(
                     div()
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .child(
-                            div()
-                                .text_size(theme::font_size_title())
-                                .font_weight(gpui::FontWeight::BOLD)
-                                .child("系统设置"),
-                        )
-                        .child(
-                            div()
-                                .text_size(theme::font_size_caption())
-                                .text_color(text_secondary)
-                                .child(header_message),
-                        ),
+                        .text_size(px(14.0))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .child("系统设置"),
                 ),
             )
             // ── Theme & Appearance ──

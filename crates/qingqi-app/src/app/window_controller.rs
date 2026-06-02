@@ -731,9 +731,9 @@ impl Render for PluginWindow {
             )
             .child(content)
             // Client-drawn (always-on-top) windows have no OS titlebar, so
-            // overlay a system-style close button at the top-right.  Ordinary
-            // windows get their close button from the native OS titlebar.
-            .children(client_drawn.then(|| {
+            // overlay a system-style close button at the top-right.  On macOS
+            // the GPUI chrome renders traffic lights (close/min/max) — skip.
+            .children((client_drawn && !cfg!(target_os = "macos")).then(|| {
                 div()
                     .absolute()
                     .top(px(6.0))

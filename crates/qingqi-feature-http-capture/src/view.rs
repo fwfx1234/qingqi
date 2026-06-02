@@ -464,13 +464,6 @@ impl Render for CaptureView {
                             .gap_3()
                             .child(
                                 div()
-                                    .text_size(px(11.0))
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .text_color(theme::semantic().text_secondary)
-                                    .child("过滤器"),
-                            )
-                            .child(
-                                div()
                                     .rounded(theme::radius_md())
                                     .bg(theme::semantic().bg_subtle)
                                     .border_1()
@@ -640,14 +633,6 @@ impl Render for CaptureView {
                                     }),
                             )
                             .child(ui::separator())
-                            // Stats
-                            .child(
-                                div()
-                                    .text_size(px(11.0))
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .text_color(theme::semantic().text_secondary)
-                                    .child("统计"),
-                            )
                             .child(ui::metric_pill(
                                 "总计",
                                 format!("{total}"),

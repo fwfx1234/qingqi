@@ -164,22 +164,22 @@ impl WindowView for AntiPeepingView {
         div()
             .flex()
             .flex_col()
-            .p(px(24.0))
-            .gap(px(16.0))
+            .p(px(20.0))
+            .gap(px(12.0))
             .child(
                 div()
-                    .text_size(px(16.0))
+                    .text_size(px(14.0))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .child("防窥屏"),
             )
             .child(
                 div()
-                    .text_size(px(13.0))
+                    .text_size(px(12.0))
                     .text_color(ui::text_secondary())
                     .child(if active {
-                        "防窥屏已开启 — 所有屏幕已遮盖，按 Esc 键退出"
+                        "已开启 — 按 Esc 键退出"
                     } else {
-                        "防窥屏已关闭"
+                        "已关闭"
                     }),
             )
             .child(div().h(px(1.0)).bg(ui::border_light()))
@@ -187,13 +187,7 @@ impl WindowView for AntiPeepingView {
                 div()
                     .text_size(px(12.0))
                     .font_weight(gpui::FontWeight::MEDIUM)
-                    .child("自定义图片路径（可选）"),
-            )
-            .child(
-                div()
-                    .text_size(px(11.0))
-                    .text_color(ui::text_tertiary())
-                    .child("留空则显示纯黑色遮罩，输入图片文件路径可使用自定义图片"),
+                    .child("自定义图片"),
             )
             .child(div().flex().gap(px(8.0)).items_center().child({
                 let label = if draft.is_empty() {

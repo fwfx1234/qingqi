@@ -237,10 +237,7 @@ impl Render for JsonView {
         // Pixels / Pixels = f32, so dividing by px(1.0) extracts the numeric value.
         let window_h: f32 = window.bounds().size.height / px(1.0);
         // Fixed vertical space consumed by header, input, query, status, gaps, padding.
-        // Header: ~46px, Input section: ~200px, Query section: ~120px,
-        // Status bar: ~36px, internal padding/gaps: ~60px.
-        // That's about 462px overhead. The remaining goes to the output.
-        let fixed_overhead: f32 = 462.0;
+        let fixed_overhead: f32 = 390.0;
         let computed_output_h = (window_h - fixed_overhead).max(128.0);
 
         if (computed_output_h - self.last_output_height).abs() > 1.0 {
@@ -273,7 +270,7 @@ impl Render for JsonView {
             ui::plugin_content()
                 .flex()
                 .flex_col()
-                .gap_3()
+                .gap_2()
                 .child(header(&panel))
                 .child(input_section(input.unwrap()))
                 .child(query_section(query.unwrap(), &panel, last_mode))
@@ -297,22 +294,10 @@ fn header(panel: &Entity<JsonView>) -> impl IntoElement {
         .justify_between()
         .child(
             div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .child(
-                    div()
-                        .text_size(px(16.0))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(theme::semantic().text_primary)
-                        .child("📦 JSON 解析"),
-                )
-                .child(
-                    div()
-                        .text_size(px(11.0))
-                        .text_color(ui::text_secondary())
-                        .child("JSON Parser"),
-                ),
+                .text_size(px(14.0))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(theme::semantic().text_primary)
+                .child("JSON 解析"),
         )
         .child(
             div()
@@ -329,14 +314,6 @@ fn input_section(input: Entity<TextInput>) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
-        .gap_2()
-        .child(
-            div()
-                .text_size(px(12.0))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(ui::text_primary())
-                .child("输入文本"),
-        )
         .child(
             div()
                 .flex()
@@ -368,13 +345,6 @@ fn query_section(
                 .justify_between()
                 .child(
                     div()
-                        .text_size(px(12.0))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(ui::text_primary())
-                        .child("JSONPath 查询"),
-                )
-                .child(
-                    div()
                         .flex()
                         .gap_2()
                         .child(mode_pill(
@@ -395,7 +365,8 @@ fn query_section(
                             panel,
                             last_mode == JsonMode::Validate,
                         )),
-                ),
+                )
+                .child(query_execute_button("查询", panel)),
         )
         .child(
             div()
@@ -405,12 +376,6 @@ fn query_section(
                 .border_color(ui::border_light())
                 .overflow_hidden()
                 .child(query),
-        )
-        .child(
-            div()
-                .flex()
-                .justify_end()
-                .child(query_execute_button("执行 JSONPath 查询", panel)),
         )
 }
 
@@ -432,13 +397,7 @@ fn output_section(
                 .flex()
                 .items_center()
                 .justify_between()
-                .child(
-                    div()
-                        .text_size(px(12.0))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(ui::text_primary())
-                        .child("输出结果"),
-                )
+                .child(div())
                 .child(secondary_button("复制输出", JsonAction::CopyOutput, panel)),
         )
         .child(
@@ -487,12 +446,6 @@ fn status_footer(
         .flex_wrap()
         .gap_x_3()
         .gap_y_1()
-        .child(
-            div()
-                .text_size(px(10.0))
-                .text_color(ui::text_tertiary())
-                .child("统计"),
-        )
         .when(!tone_icon.is_empty(), |bar| {
             bar.child(
                 div()

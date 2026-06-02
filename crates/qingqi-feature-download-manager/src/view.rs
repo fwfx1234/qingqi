@@ -793,43 +793,10 @@ fn header_bar(active_count: usize) -> impl IntoElement {
         .justify_between()
         .child(
             div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_1()
-                        .child(
-                            div()
-                                .text_size(px(14.0))
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(theme::semantic().text_primary)
-                                .child("下载管理器"),
-                        )
-                        .child(
-                            div()
-                                .px_2()
-                                .h(px(20.0))
-                                .rounded(px(999.0))
-                                .bg(theme::rgba_with_alpha(
-                                    ui::accent_color(PluginAccent::Green),
-                                    0.12,
-                                ))
-                                .flex()
-                                .items_center()
-                                .text_size(px(10.0))
-                                .text_color(ui::accent_color(PluginAccent::Green))
-                                .child("Download Manager"),
-                        ),
-                )
-                .child(
-                    div()
-                        .text_size(px(10.0))
-                        .text_color(ui::text_secondary())
-                        .child("HTTP/HTTPS · 多任务 · 断点续传"),
-                ),
+                .text_size(px(14.0))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme::semantic().text_primary)
+                .child("下载管理器"),
         )
         .child(
             div().flex().items_center().gap_1().child(
@@ -1042,12 +1009,6 @@ fn filter_bar(
                 .flex()
                 .items_center()
                 .gap_1()
-                .child(
-                    div()
-                        .text_size(px(9.0))
-                        .text_color(ui::text_tertiary())
-                        .child("分类:"),
-                )
                 .children(category_filters.iter().map(|&tab| {
                     let active = tab == active_filter;
                     let count = tab.count(counts);
