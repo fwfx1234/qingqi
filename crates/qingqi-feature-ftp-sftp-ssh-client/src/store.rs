@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
 
-use crate::model::{AuthMethod, RemoteProfile, RemoteProfileDraft, RemoteProtocol};
+use crate::model::{AuthMethod, FtpsMode, RemoteProfile, RemoteProfileDraft, RemoteProtocol};
 use qingqi_plugin::database::{DatabaseService, PooledConnection, SqlitePool};
 
 pub const LIST_PROFILES: &str = "
@@ -326,6 +326,8 @@ fn map_profile(row: &rusqlite::Row<'_>) -> rusqlite::Result<RemoteProfile> {
         jump_private_key_passphrase: row.get(21)?,
         pinned: row.get::<_, i64>(22)? != 0,
         notes: row.get(23)?,
+        group_id: None,
+        ftps_mode: FtpsMode::Explicit,
         last_used_at: row.get(24)?,
         created_at: row.get(25)?,
         updated_at: row.get(26)?,

@@ -77,6 +77,9 @@ pub fn violet_700() -> Rgba {
     rgb(0x6d28d9)
 }
 
+pub fn green_400() -> Rgba {
+    rgb(0x4ade80)
+}
 pub fn green_500() -> Rgba {
     rgb(0x16a34a)
 }
@@ -84,6 +87,9 @@ pub fn green_600() -> Rgba {
     rgb(0x10b981)
 }
 
+pub fn amber_400() -> Rgba {
+    rgb(0xfbbf24)
+}
 pub fn amber_500() -> Rgba {
     rgb(0xf59e0b)
 }
@@ -91,6 +97,9 @@ pub fn amber_600() -> Rgba {
     rgb(0xd97706)
 }
 
+pub fn red_400() -> Rgba {
+    rgb(0xf87171)
+}
 pub fn red_500() -> Rgba {
     rgb(0xef4444)
 }
@@ -98,6 +107,12 @@ pub fn red_600() -> Rgba {
     rgb(0xdc2626)
 }
 
+pub fn cyan_300() -> Rgba {
+    rgb(0x67e8f9)
+}
+pub fn cyan_400() -> Rgba {
+    rgb(0x22d3ee)
+}
 pub fn cyan_500() -> Rgba {
     rgb(0x0ea5e9)
 }
@@ -183,7 +198,13 @@ pub fn font_size_caption() -> Pixels {
 
 // ── Semantic Color Tokens (compile-time safe, replaces string-based lookup) ──
 
-/// All semantic UI colors for one theme mode.
+/// Layer 2: Semantic UI color tokens.
+///
+/// Only tokens that are **truly cross-component** and **have light/dark mode
+/// differences** belong here (e.g. `bg_surface`, `text_primary`, `danger`).
+/// Component-specific colors live in Layer 3 contextual functions below
+/// (e.g. `http_method_color()`, `launcher_glass()`).
+///
 /// Access via `theme::semantic().field` for compile-time safety.
 pub struct SemanticColors {
     pub bg_page: Rgba,
@@ -192,10 +213,11 @@ pub struct SemanticColors {
     pub bg_subtle: Rgba,
     pub bg_subtle_2: Rgba,
     pub bg_glass: Hsla,
+    pub bg_hover: Rgba,
     pub border_default: Rgba,
     pub border_strong: Rgba,
     pub text_primary: Rgba,
-    pub text_regular: Rgba,
+    pub text_body: Rgba,
     pub text_secondary: Rgba,
     pub text_placeholder: Rgba,
     pub primary: Rgba,
@@ -207,27 +229,8 @@ pub struct SemanticColors {
     pub warning: Rgba,
     pub danger: Rgba,
     pub info: Rgba,
-    pub nav_idle: Rgba,
-    pub nav_active_bg: Rgba,
-    pub nav_item_active_bg: Rgba,
-    pub nav_active_text: Rgba,
-    pub nav_icon_idle_bg: Rgba,
-    pub nav_icon_active_bg: Rgba,
-    pub nav_icon_active_bg_soft: Rgba,
-    pub method_get: Rgba,
-    pub method_post: Rgba,
-    pub method_put: Rgba,
-    pub method_delete: Rgba,
-    pub method_patch: Rgba,
-    pub table_header: Rgba,
-    pub row_hover: Rgba,
-    pub row_selected: Rgba,
-    pub status_bar_bg: Rgba,
     pub shadow: Rgba,
-    /// Backdrop color for overlay/modal遮罩 (replaces launcher_glass overflow)
     pub overlay_backdrop: Hsla,
-    /// Keycap / subtle chip background (replaces launcher_keycap)
-    pub keycap_bg: Hsla,
 }
 
 fn build_light() -> SemanticColors {
@@ -238,10 +241,11 @@ fn build_light() -> SemanticColors {
         bg_subtle: rgb(0xeef1f5),
         bg_subtle_2: rgb(0xf8f9fb),
         bg_glass: hsla(0.0, 0.0, 1.0, 0.98),
+        bg_hover: rgb(0xeef4fb),
         border_default: rgb(0xd7dce5),
         border_strong: rgb(0xb8c0cc),
         text_primary: rgb(0x1d1d1f),
-        text_regular: rgb(0x3a3a3c),
+        text_body: rgb(0x3a3a3c),
         text_secondary: rgb(0x8a8f98),
         text_placeholder: rgb(0xa5acb8),
         primary: rgb(0x0a84ff),
@@ -253,25 +257,8 @@ fn build_light() -> SemanticColors {
         warning: rgb(0xf59e0b),
         danger: rgb(0xff3b30),
         info: rgb(0x0ea5e9),
-        nav_idle: rgb(0x334155),
-        nav_active_bg: rgb(0xd6e9ff),
-        nav_item_active_bg: rgb(0xe8f3ff),
-        nav_active_text: rgb(0x0066cc),
-        nav_icon_idle_bg: rgb(0xf1f5f9),
-        nav_icon_active_bg: rgb(0x0a84ff),
-        nav_icon_active_bg_soft: rgb(0xd6e9ff),
-        method_get: rgb(0x16a34a),
-        method_post: rgb(0xf59e0b),
-        method_put: rgb(0x3b82f6),
-        method_delete: rgb(0xef4444),
-        method_patch: rgb(0x0ea5e9),
-        table_header: rgb(0xfafafb),
-        row_hover: rgb(0xeef4fb),
-        row_selected: rgb(0xddeeff),
-        status_bar_bg: rgb(0xf7f8fa),
         shadow: rgb(0x000000),
         overlay_backdrop: hsla(0.0, 0.0, 0.0, 0.24),
-        keycap_bg: hsla(0.0, 0.0, 0.0, 0.04),
     }
 }
 
@@ -283,10 +270,11 @@ fn build_dark() -> SemanticColors {
         bg_subtle: rgb(0x252a33),
         bg_subtle_2: rgb(0x181b21),
         bg_glass: hsla(0.0, 0.0, 0.0, 0.30),
+        bg_hover: rgb(0x222a35),
         border_default: rgb(0x3a414d),
         border_strong: rgb(0x596171),
         text_primary: rgb(0xf5f5f7),
-        text_regular: rgb(0xd8dce3),
+        text_body: rgb(0xd8dce3),
         text_secondary: rgb(0x989faa),
         text_placeholder: rgb(0x7f8793),
         primary: rgb(0x0a84ff),
@@ -298,25 +286,8 @@ fn build_dark() -> SemanticColors {
         warning: rgb(0xf59e0b),
         danger: rgb(0xff453a),
         info: rgb(0x0ea5e9),
-        nav_idle: rgb(0x94a3b8),
-        nav_active_bg: rgb(0x0a84ff),
-        nav_item_active_bg: rgb(0x0d2a45),
-        nav_active_text: rgb(0xe8f3ff),
-        nav_icon_idle_bg: rgb(0x242a34),
-        nav_icon_active_bg: rgb(0x0a84ff),
-        nav_icon_active_bg_soft: rgb(0x143b5f),
-        method_get: rgb(0x22c55e),
-        method_post: rgb(0xfbbf24),
-        method_put: rgb(0x60a5fa),
-        method_delete: rgb(0xf87171),
-        method_patch: rgb(0x22d3ee),
-        table_header: rgb(0x0f1623),
-        row_hover: rgb(0x222a35),
-        row_selected: rgb(0x143b5f),
-        status_bar_bg: rgb(0x171b22),
         shadow: rgb(0x000000),
         overlay_backdrop: hsla(0.0, 0.0, 0.0, 0.44),
-        keycap_bg: hsla(0.0, 0.0, 1.0, 0.03),
     }
 }
 
@@ -330,31 +301,36 @@ pub fn semantic() -> SemanticColors {
     }
 }
 
-// ── Launcher-specific colors (from suishou LauncherWindow.qml) ──────────
+// ── Layer 3: HTTP Method Colors ─────────────────────────
 
-pub fn launcher_panel() -> Rgba {
+pub fn http_method_color(method: &str) -> Rgba {
     let dark = crate::theme_mode::is_dark();
-    if dark { rgb(0x0f0f23) } else { rgb(0xf8f5ff) }
+    match method {
+        "GET" => if dark { green_400() } else { green_500() },
+        "POST" => if dark { amber_400() } else { amber_500() },
+        "PUT" => if dark { blue_400() } else { rgb(0x3b82f6) },
+        "DELETE" => if dark { red_400() } else { red_500() },
+        "PATCH" => if dark { cyan_400() } else { cyan_500() },
+        _ => if dark { slate_400() } else { slate_500() },
+    }
 }
 
-pub fn launcher_panel_border() -> Rgba {
-    let dark = crate::theme_mode::is_dark();
-    if dark { rgb(0x34304f) } else { rgb(0xded4ff) }
-}
+// ── Layer 3: Terminal Colors ────────────────────────────
 
-pub fn launcher_field() -> Rgba {
-    let dark = crate::theme_mode::is_dark();
-    if dark { rgb(0x15152c) } else { rgb(0xffffff) }
-}
+pub fn terminal_bg() -> Rgba { if crate::theme_mode::is_dark() { rgb(0x0b1118) } else { rgb(0x111827) } }
+pub fn terminal_fg() -> Rgba { if crate::theme_mode::is_dark() { rgb(0xd7e2ee) } else { rgb(0xe5e7eb) } }
+pub fn terminal_muted() -> Rgba { if crate::theme_mode::is_dark() { rgb(0x7dd3fc) } else { rgb(0xbfdbfe) } }
+pub fn terminal_border() -> Rgba { if crate::theme_mode::is_dark() { rgb(0x1f2937) } else { rgb(0x374151) } }
 
-pub fn launcher_field_border() -> Rgba {
-    let dark = crate::theme_mode::is_dark();
-    if dark { rgb(0x2a2842) } else { rgb(0xe4dcff) }
-}
+// ── Layer 3: Keycap background ─────────────────────────
 
+pub fn keycap_bg() -> Hsla { if crate::theme_mode::is_dark() { hsla(0.0, 0.0, 1.0, 0.03) } else { hsla(0.0, 0.0, 0.0, 0.04) } }
+
+// ── Layer 3: Launcher colors ───────────────────────────
+
+/// Row hover background used in launcher item hover states.
 pub fn launcher_row_selected() -> Rgba {
-    let dark = crate::theme_mode::is_dark();
-    if dark { rgb(0x241b48) } else { rgb(0xf7f7fa) }
+    if crate::theme_mode::is_dark() { rgb(0x241b48) } else { rgb(0xf7f7fa) }
 }
 
 /// Icon surface background (unselected state).  Returns a colour with
@@ -383,10 +359,6 @@ pub fn launcher_accent() -> Rgba {
     if dark { rgb(0xc8b8ff) } else { rgb(0x6b4fcf) }
 }
 
-pub fn launcher_deep_background() -> Rgba {
-    let dark = crate::theme_mode::is_dark();
-    if dark { rgb(0x0b0b1a) } else { rgb(0xf5f5f7) }
-}
 
 pub fn launcher_glass() -> Hsla {
     let dark = crate::theme_mode::is_dark();
@@ -397,14 +369,6 @@ pub fn launcher_glass() -> Hsla {
     }
 }
 
-pub fn launcher_glass_border() -> Hsla {
-    let dark = crate::theme_mode::is_dark();
-    if dark {
-        hsla(0.0, 0.0, 1.0, 0.08)
-    } else {
-        rgba_with_alpha(rgb(0xffffff), 0.92)
-    }
-}
 
 pub fn launcher_soft_line() -> Hsla {
     let dark = crate::theme_mode::is_dark();
@@ -415,14 +379,6 @@ pub fn launcher_soft_line() -> Hsla {
     }
 }
 
-pub fn launcher_keycap() -> Hsla {
-    let dark = crate::theme_mode::is_dark();
-    if dark {
-        hsla(0.0, 0.0, 1.0, 0.03)
-    } else {
-        rgba_with_alpha(rgb(0xf8f8fb), 0.78)
-    }
-}
 
 pub fn launcher_muted_text() -> Rgba {
     let dark = crate::theme_mode::is_dark();

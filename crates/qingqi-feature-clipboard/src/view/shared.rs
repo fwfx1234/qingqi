@@ -25,7 +25,7 @@ pub(super) fn header_action_button(
         .text_size(px(10.0))
         .font_weight(gpui::FontWeight::MEDIUM)
         .text_color(theme::semantic().text_primary)
-        .hover(|style| style.bg(theme::semantic().row_hover).cursor_pointer())
+        .hover(|style| style.bg(theme::semantic().bg_hover).cursor_pointer())
         .child(child)
         .on_click(move |event, _window, cx| on_click(event, cx))
 }

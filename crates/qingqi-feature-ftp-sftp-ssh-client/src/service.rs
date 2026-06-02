@@ -218,6 +218,8 @@ impl FtpSftpSshService {
             jump_private_key_passphrase: draft.jump_private_key_passphrase.clone(),
             pinned: draft.pinned,
             notes: draft.notes.clone(),
+            group_id: None,
+            ftps_mode: crate::model::FtpsMode::Explicit,
             last_used_at: String::new(),
             created_at: String::new(),
             updated_at: String::new(),

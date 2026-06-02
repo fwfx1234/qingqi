@@ -1450,7 +1450,7 @@ fn bottom_bar(
             div()
                 .flex_1()
                 .text_size(px(10.0))
-                .text_color(theme::semantic().text_regular)
+                .text_color(theme::semantic().text_body)
                 .child(message),
         )
         .child(

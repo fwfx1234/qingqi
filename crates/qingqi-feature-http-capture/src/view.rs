@@ -659,7 +659,7 @@ impl Render for CaptureView {
                                 div()
                                     .h(px(30.0))
                                     .px_3()
-                                    .bg(theme::semantic().table_header)
+                                    .bg(theme::semantic().bg_subtle_2)
                                     .rounded_t(theme::radius_lg())
                                     .flex()
                                     .items_center()
@@ -743,7 +743,7 @@ impl Render for CaptureView {
                                                 theme::semantic().bg_subtle_2
                                             })
                                             .hover(|s| {
-                                                s.bg(theme::semantic().row_hover).cursor_pointer()
+                                                s.bg(theme::semantic().bg_hover).cursor_pointer()
                                             })
                                             .flex()
                                             .items_center()
@@ -988,7 +988,7 @@ impl Render for CaptureView {
                                             .h(px(28.0))
                                             .rounded(theme::radius_sm())
                                             .bg(if active {
-                                                theme::semantic().nav_active_bg
+                                                if qingqi_ui::theme_mode::is_dark() { theme::semantic().primary } else { theme::semantic().primary_soft }
                                             } else {
                                                 theme::semantic().bg_subtle
                                             })

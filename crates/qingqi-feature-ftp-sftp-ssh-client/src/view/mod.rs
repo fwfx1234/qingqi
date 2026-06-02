@@ -1,3 +1,5 @@
+pub mod glass;
+
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use crate::{
@@ -440,6 +442,8 @@ impl FtpSftpSshView {
             jump_private_key_passphrase: inputs.jump_private_key_passphrase.read(cx).text(),
             pinned: self.editor_pinned,
             notes: inputs.notes.read(cx).text(),
+            group_id: None,
+            ftps_mode: crate::model::FtpsMode::Explicit,
         }
     }
 
@@ -788,6 +792,7 @@ impl Render for FtpSftpSshView {
                 .is_some_and(|summary| summary.status == ConnectionStatus::Connected);
 
         ui::plugin_surface()
+            .child(div().absolute().inset_0().bg(glass::tint(dark)))
             .font_family(ui::font_ui())
             .relative()
             .on_key_down({
@@ -931,11 +936,12 @@ fn top_bar(
         .h(px(38.0))
         .px(px(10.0))
         .border_b_1()
-        .border_color(ui::border_light())
+        .border_color(glass::divider(dark))
         .flex()
         .items_center()
         .gap(px(6.0))
-        .bg(theme::semantic().bg_surface)
+        .bg(glass::bg(dark))
+        .shadow(glass::shadow())
         .child(div().size(px(7.0)).rounded(px(999.0)).bg(status_color))
         .child(
             div()
@@ -1037,8 +1043,9 @@ fn sidebar(
         .w(px(220.0))
         .min_h(px(0.0))
         .border_r_1()
-        .border_color(ui::border_light())
-        .bg(ui::bg_keycap())
+        .border_color(glass::border(dark))
+        .bg(glass::bg(dark))
+        .shadow(glass::shadow())
         .flex()
         .flex_col()
         .child(
@@ -2095,7 +2102,7 @@ fn protocol_log_row(_dark: bool, entry: ProtocolLogEntry) -> impl IntoElement {
 }
 
 fn row_hover_color(dark: bool) -> gpui::Hsla {
-    theme::rgba_with_alpha(theme::semantic().row_hover, if dark { 0.86 } else { 0.72 })
+    theme::rgba_with_alpha(theme::semantic().bg_hover, if dark { 0.86 } else { 0.72 })
 }
 
 fn transfer_panel(
@@ -3608,7 +3615,7 @@ fn status_bar(dark: bool, accent: gpui::Rgba, message: String) -> impl IntoEleme
             if dark {
                 accent
             } else {
-                theme::semantic().text_regular
+                theme::semantic().text_body
             },
         ))
 }

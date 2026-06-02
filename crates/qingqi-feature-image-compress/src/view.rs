@@ -827,7 +827,7 @@ impl Render for ImageCompressView {
                                         div()
                                             .text_size(px(11.0))
                                             .font_family("SF Mono")
-                                            .text_color(theme::semantic().text_regular)
+                                            .text_color(theme::semantic().text_body)
                                             .child(format!("{quality}%")),
                                     )
                                     .child(
@@ -1517,7 +1517,7 @@ fn footer_bar(
                     div()
                         .flex_1()
                         .text_size(px(11.0))
-                        .text_color(theme::semantic().text_regular)
+                        .text_color(theme::semantic().text_body)
                         .child(message),
                 )
                 .child(

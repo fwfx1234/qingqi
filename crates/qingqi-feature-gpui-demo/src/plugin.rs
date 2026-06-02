@@ -148,7 +148,7 @@ fn header(accent: PluginAccent) -> impl IntoElement {
                     div()
                         .text_size(px(12.0))
                         .line_height(px(18.0))
-                        .text_color(theme::semantic().text_regular)
+                        .text_color(theme::semantic().text_body)
                         .child("用 gpui-component 真实组件替代静态描述，验证按钮、标签页、开关等控件的交互行为。"),
                 ),
         )
@@ -385,7 +385,7 @@ fn demo_row(accent: PluginAccent, title: &'static str, body: &'static str) -> im
                     div()
                         .text_size(px(11.0))
                         .line_height(px(16.0))
-                        .text_color(theme::semantic().text_regular)
+                        .text_color(theme::semantic().text_body)
                         .child(body),
                 ),
         )

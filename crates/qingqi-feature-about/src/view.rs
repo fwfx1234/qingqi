@@ -44,7 +44,7 @@ impl Render for AboutView {
                     .child(
                         div()
                             .text_size(px(13.0))
-                            .text_color(theme::semantic().text_regular)
+                            .text_color(theme::semantic().text_body)
                             .child(format!("版本 {APP_VERSION}")),
                     )
                     // ── Tech stack ────────────────────────────────────────
@@ -70,7 +70,7 @@ impl Render for AboutView {
                             .child(
                                 div()
                                     .text_size(px(12.0))
-                                    .text_color(theme::semantic().text_regular)
+                                    .text_color(theme::semantic().text_body)
                                     .child("基于 Rust + GPUI 的桌面工具箱"),
                             ),
                     )
@@ -148,7 +148,7 @@ fn tech_row(label: &'static str, value: &'static str) -> impl IntoElement {
         .child(
             div()
                 .text_size(px(13.0))
-                .text_color(theme::semantic().text_regular)
+                .text_color(theme::semantic().text_body)
                 .child(label),
         )
         .child(
@@ -175,7 +175,7 @@ fn desc_row(label: &'static str, desc: &'static str) -> impl IntoElement {
         .child(
             div()
                 .text_size(px(12.0))
-                .text_color(theme::semantic().text_regular)
+                .text_color(theme::semantic().text_body)
                 .child(desc),
         )
 }

@@ -1,7 +1,10 @@
 pub mod data_source;
+pub mod import_openapi;
+pub mod import_postman;
 pub mod manifest;
 pub mod model;
 pub mod plugin;
+pub mod script_manager;
 pub mod script_service;
 pub mod service;
 pub mod store;

@@ -1596,7 +1596,7 @@ fn action_row(
                     div()
                         .text_size(px(10.0))
                         .font_family("SF Mono")
-                        .text_color(theme::semantic().text_regular)
+                        .text_color(theme::semantic().text_body)
                         .child(subtitle_for(&action)),
                 ),
         )
@@ -2437,7 +2437,7 @@ fn history_row(
                         .text_size(px(10.0))
                         .font_family("SF Mono")
                         .text_color(if run.stderr.trim().is_empty() {
-                            theme::semantic().text_regular
+                            theme::semantic().text_body
                         } else {
                             tone
                         })
@@ -2467,7 +2467,7 @@ fn result_sheet(
     let ok = result.run.status == RunStatus::Success;
     let status_line = result_meta_text(&result.run);
     let stderr_color = if result.run.stderr.trim().is_empty() {
-        theme::semantic().text_regular
+        theme::semantic().text_body
     } else {
         tone
     };

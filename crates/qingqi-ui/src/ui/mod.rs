@@ -39,7 +39,7 @@ pub fn text_primary() -> gpui::Rgba {
 }
 
 pub fn text_secondary() -> gpui::Rgba {
-    theme::semantic().text_regular
+    theme::semantic().text_body
 }
 
 pub fn text_tertiary() -> gpui::Rgba {
@@ -79,12 +79,12 @@ pub fn overlay_backdrop() -> gpui::Hsla {
 
 /// Keycap / subtle chip background (replaces launcher_keycap)
 pub fn bg_keycap() -> gpui::Hsla {
-    theme::semantic().keycap_bg
+    theme::keycap_bg()
 }
 
 /// Row hover background (replaces launcher_row_selected in plugin views)
 pub fn row_hover() -> gpui::Rgba {
-    theme::semantic().row_hover
+    theme::semantic().bg_hover
 }
 
 pub fn white() -> gpui::Rgba {
@@ -599,7 +599,7 @@ pub fn ui_empty_state(message: impl Into<SharedString>) -> impl IntoElement {
         .child(
             div()
                 .text_size(px(14.0))
-                .text_color(theme::semantic().text_regular)
+                .text_color(theme::semantic().text_body)
                 .child(message),
         )
 }

@@ -6,7 +6,7 @@ use time::{OffsetDateTime, macros::format_description};
 
 use crate::model::{
     ApiVariable, CollectionNode, EnvHeader, EnvVariable, Environment, EnvironmentFull, HttpHistory,
-    HttpTab, NodeKind, RequestSnapshot, VariableScope,
+    HttpTab, NodeKind, RequestSnapshot, Script, ScriptCategory, VariableScope,
 };
 use qingqi_plugin::database::{DatabaseService, PooledConnection, SqlitePool};
 
@@ -127,6 +127,18 @@ impl ApiDebuggerDataSource {
                 updated_at  TEXT NOT NULL DEFAULT '',
                 PRIMARY KEY (scope, env_name, var_key)
             );
+
+            CREATE TABLE IF NOT EXISTS scripts (
+                id          TEXT PRIMARY KEY,
+                name        TEXT NOT NULL DEFAULT '',
+                category    TEXT NOT NULL CHECK(category IN ('pre','post','common')),
+                content     TEXT NOT NULL DEFAULT '',
+                sort_order  INTEGER NOT NULL DEFAULT 0,
+                created_at  TEXT NOT NULL DEFAULT '',
+                updated_at  TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_scripts_category
+                ON scripts(category, sort_order);
             ",
         )?;
 
@@ -623,6 +635,98 @@ impl ApiDebuggerDataSource {
             params![tab_id],
         )?;
         Ok(affected)
+    }
+
+    // ── Scripts ──
+
+    pub fn list_scripts(&self, category: Option<ScriptCategory>) -> Result<Vec<Script>> {
+        let conn = self.connection()?;
+        let (sql, params_vec): (String, Vec<String>) = if let Some(cat) = category {
+            (
+                "SELECT id, name, category, content, sort_order, created_at, updated_at
+                 FROM scripts WHERE category = ?1 ORDER BY sort_order, name"
+                    .into(),
+                vec![cat.as_str().to_string()],
+            )
+        } else {
+            (
+                "SELECT id, name, category, content, sort_order, created_at, updated_at
+                 FROM scripts ORDER BY category, sort_order, name"
+                    .into(),
+                vec![],
+            )
+        };
+        let mut stmt = conn.prepare(&sql)?;
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec
+            .iter()
+            .map(|s| s as &dyn rusqlite::types::ToSql)
+            .collect();
+        let rows = stmt.query_map(param_refs.as_slice(), |row| {
+            Ok(Script {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                category: ScriptCategory::from_db(&row.get::<_, String>(2)?),
+                content: row.get(3)?,
+                sort_order: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    pub fn get_script(&self, id: &str) -> Result<Option<Script>> {
+        let conn = self.connection()?;
+        conn.query_row(
+            "SELECT id, name, category, content, sort_order, created_at, updated_at
+             FROM scripts WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(Script {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    category: ScriptCategory::from_db(&row.get::<_, String>(2)?),
+                    content: row.get(3)?,
+                    sort_order: row.get(4)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(Into::into)
+    }
+
+    pub fn save_script(&self, script: &Script) -> Result<()> {
+        let now = now_label();
+        let conn = self.connection()?;
+        conn.execute(
+            "INSERT INTO scripts (id, name, category, content, sort_order, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                category = excluded.category,
+                content = excluded.content,
+                sort_order = excluded.sort_order,
+                updated_at = ?7",
+            params![
+                script.id,
+                script.name,
+                script.category.as_str(),
+                script.content,
+                script.sort_order,
+                script.created_at,
+                now,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_script(&self, id: &str) -> Result<bool> {
+        let conn = self.connection()?;
+        let affected = conn.execute("DELETE FROM scripts WHERE id = ?1", params![id])?;
+        Ok(affected > 0)
     }
 
     // ── Scoped Variables ──

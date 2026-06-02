@@ -1017,7 +1017,7 @@ fn collection_tree(
                         .text_color(if dark {
                             theme::semantic().text_primary
                         } else {
-                            theme::semantic().text_regular
+                            theme::semantic().text_body
                         })
                         .child("集合"),
                 )
@@ -1205,7 +1205,7 @@ fn request_tree_block(
                         .text_color(if request_active {
                             api_accent()
                         } else {
-                            theme::semantic().text_regular
+                            theme::semantic().text_body
                         })
                         .truncate()
                         .child(request.title.clone()),
@@ -1274,7 +1274,7 @@ fn request_tree_block(
                             .text_color(if active {
                                 api_accent()
                             } else {
-                                theme::semantic().text_regular
+                                theme::semantic().text_body
                             })
                             .truncate()
                             .child(scenario.name.clone()),
@@ -1780,7 +1780,7 @@ fn response_panel(
                         .font_family("SF Mono")
                         .text_size(px(10.0))
                         .line_height(px(16.0))
-                        .text_color(theme::semantic().text_regular)
+                        .text_color(theme::semantic().text_body)
                         .child(response_text),
                 ),
         )
@@ -2527,7 +2527,7 @@ fn context_menu_item(
         .px(px(12.0))
         .py(px(8.0))
         .text_size(px(11.0))
-        .text_color(theme::semantic().text_regular)
+        .text_color(theme::semantic().text_body)
         .hover(move |style| {
             style
                 .bg(theme::rgba_with_alpha(api_accent(), 0.06))

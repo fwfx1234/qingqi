@@ -252,7 +252,7 @@ fn query_row(query: Entity<TextInput>, panel: &Entity<JsonView>, _last_mode: Jso
 
 fn status_footer(status_text: String, stats_text: String, error_loc_text: String, status_tone: StatusTone) -> impl IntoElement {
     let status_color = match status_tone {
-        StatusTone::Neutral => theme::semantic().text_regular,
+        StatusTone::Neutral => theme::semantic().text_body,
         StatusTone::Success => theme::semantic().success,
         StatusTone::Error => theme::semantic().danger,
     };
@@ -293,7 +293,7 @@ fn tokenize_line(line: &str) -> Vec<(String, gpui::Rgba)> {
     let string_color = theme::semantic().success;
     let number_color = theme::semantic().warning;
     let bool_null_color = gpui::rgb(0x8B5CF6);
-    let punct_color = theme::semantic().text_regular;
+    let punct_color = theme::semantic().text_body;
     let default_color = theme::semantic().text_primary;
 
     while i < n {

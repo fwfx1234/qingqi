@@ -81,6 +81,44 @@ pub struct ApiScenario {
     pub status: ScenarioStatus,
 }
 
+// ── Script management ──
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ScriptCategory {
+    PreRequest,
+    PostRequest,
+    Common,
+}
+
+impl ScriptCategory {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::PreRequest => "pre",
+            Self::PostRequest => "post",
+            Self::Common => "common",
+        }
+    }
+
+    pub fn from_db(s: &str) -> Self {
+        match s {
+            "pre" => Self::PreRequest,
+            "post" => Self::PostRequest,
+            _ => Self::Common,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Script {
+    pub id: String,
+    pub name: String,
+    pub category: ScriptCategory,
+    pub content: String,
+    pub sort_order: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ApiRequest {
     pub title: String,

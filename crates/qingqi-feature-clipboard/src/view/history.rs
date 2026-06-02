@@ -207,7 +207,7 @@ fn render_filter_tabs(
                 .hover(move |style| {
                     style
                         .bg(if !is_active {
-                            theme::semantic().row_hover.into()
+                            theme::semantic().bg_hover.into()
                         } else {
                             hsla(0.0, 0.0, 0.0, 0.0)
                         })
@@ -353,7 +353,7 @@ fn history_row(
                         0.08,
                     )
                 } else {
-                    theme::semantic().row_hover.into()
+                    theme::semantic().bg_hover.into()
                 })
                 .cursor_pointer()
         })
@@ -420,7 +420,7 @@ fn history_row(
                         .id(("clipboard-row-pin", index))
                         .size(px(24.0)).rounded(px(4.0))
                         .flex().items_center().justify_center()
-                        .hover(|s| s.bg(theme::semantic().row_hover).cursor_pointer())
+                        .hover(|s| s.bg(theme::semantic().bg_hover).cursor_pointer())
                         .child(
                             Icon::new(if pinned { IconName::Star } else { IconName::StarOff })
                                 .with_size(ComponentSize::Small)
@@ -444,7 +444,7 @@ fn history_row(
                         .id(("clipboard-row-delete", index))
                         .size(px(24.0)).rounded(px(4.0))
                         .flex().items_center().justify_center()
-                        .hover(|s| s.bg(theme::semantic().row_hover).cursor_pointer())
+                        .hover(|s| s.bg(theme::semantic().bg_hover).cursor_pointer())
                         .child(
                             Icon::new(IconName::Delete)
                                 .with_size(ComponentSize::Small)
@@ -607,7 +607,7 @@ fn preview_text(preview_input: Entity<TextInput>, _dark: bool) -> impl IntoEleme
         .w_full()
         .px(px(8.0))
         .py(px(6.0))
-        .text_color(theme::semantic().text_regular)
+        .text_color(theme::semantic().text_body)
         .child(preview_input)
 }
 

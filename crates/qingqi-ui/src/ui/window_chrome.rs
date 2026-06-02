@@ -285,7 +285,7 @@ fn windows_control_button(
                 style.bg(ui::danger()).text_color(ui::white())
             } else {
                 style
-                    .bg(theme::semantic().row_hover)
+                    .bg(ui::bg_keycap())
                     .text_color(theme::semantic().text_primary)
             };
             style.cursor_pointer()
