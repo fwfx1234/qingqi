@@ -861,7 +861,7 @@ impl Render for ImageCompressView {
                     .child(
                         drop_zone(pending_count)
                             .child(
-                                primary_button("📋 粘贴剪贴板", PluginAccent::Amber, dark)
+                                primary_button("粘贴", PluginAccent::Amber, dark)
                                     .id("image-compress-paste")
                                     .on_click({
                                         let handle = handle.clone();
@@ -874,7 +874,7 @@ impl Render for ImageCompressView {
                                     }),
                             )
                             .child(
-                                secondary_button("📂 选择图片", dark)
+                                secondary_button("选择图片", dark)
                                     .id("image-compress-choose")
                                     .on_click({
                                         let handle = handle.clone();
@@ -955,58 +955,13 @@ fn quality_button(label: &str, _dark: bool) -> gpui::Div {
 
 fn drop_zone(pending_count: usize) -> gpui::Div {
     div()
-        .rounded(px(12.0))
-        .bg(theme::rgba_with_alpha(
-            ui::accent_color(PluginAccent::Amber),
-            0.05,
-        ))
-        .border_1()
-        .border_color(theme::rgba_with_alpha(
-            ui::accent_color(PluginAccent::Amber),
-            0.18,
-        ))
-        .p_3()
-        .flex()
-        .items_center()
-        .gap_3()
+        .rounded(px(10.0))
+        .bg(theme::rgba_with_alpha(ui::accent_color(PluginAccent::Amber), 0.05))
+        .border_1().border_color(theme::rgba_with_alpha(ui::accent_color(PluginAccent::Amber), 0.18))
+        .p_3().flex().items_center().gap_3()
         .child(
-            div()
-                .size(px(42.0))
-                .rounded(px(12.0))
-                .bg(theme::rgba_with_alpha(
-                    ui::accent_color(PluginAccent::Amber),
-                    0.12,
-                ))
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(ui::icon_element("folder.svg", ui::text_secondary(), 20.0)),
-        )
-        .child(
-            div()
-                .flex_1()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .child(
-                    div()
-                        .text_size(px(12.0))
-                        .font_weight(gpui::FontWeight::MEDIUM)
-                        .text_color(theme::semantic().text_primary)
-                        .child("粘贴剪贴板或拖入图片"),
-                )
-                .child(
-                    div()
-                        .text_size(px(10.0))
-                        .text_color(ui::text_tertiary())
-                        .child("支持 PNG, JPG, WebP · 批量处理"),
-                ),
-        )
-        .child(
-            div()
-                .text_size(px(11.0))
-                .text_color(theme::semantic().warning)
-                .child(format!("待压缩 {pending_count} 张")),
+            div().flex_1().flex().items_center().gap_3()
+                .child(div().text_size(px(12.0)).font_weight(gpui::FontWeight::MEDIUM).text_color(theme::semantic().text_primary).child(format!("{pending_count} 张图片")))
         )
 }
 
@@ -1451,9 +1406,9 @@ fn footer_bar(
                 .child(
                     primary_button(
                         if running {
-                            "⏳ 压缩中…"
+                            "压缩中…"
                         } else {
-                            "▶ 开始压缩"
+                            "开始压缩"
                         },
                         PluginAccent::Amber,
                         dark,
@@ -1471,7 +1426,7 @@ fn footer_bar(
                 )
                 .children(if running {
                     Some(
-                        secondary_button("⏹ 取消", dark)
+                        secondary_button("取消", dark)
                             .id("image-compress-cancel")
                             .on_click({
                                 let handle = handle.clone();
@@ -1489,9 +1444,9 @@ fn footer_bar(
                 .child(
                     secondary_button(
                         if overwrite_original {
-                            "📝 覆盖原图"
+                            "覆盖原图"
                         } else {
-                            "📝 输出到目录"
+                            "另存为"
                         },
                         dark,
                     )
@@ -1520,7 +1475,7 @@ fn footer_bar(
                         }),
                 )
                 .child(
-                    secondary_button("📂 打开目录", dark)
+                    secondary_button("打开目录", dark)
                         .id("image-compress-open-dir")
                         .on_click({
                             let handle = handle.clone();
