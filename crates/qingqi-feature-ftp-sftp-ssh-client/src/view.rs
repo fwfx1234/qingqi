@@ -1065,12 +1065,6 @@ fn sidebar(
                                         .font_weight(FontWeight::SEMIBOLD)
                                         .child("连接管理"),
                                 )
-                                .child(
-                                    div()
-                                        .text_size(px(10.0))
-                                        .text_color(ui::text_secondary())
-                                        .child(format!("{open_count} 个")),
-                                ),
                         )
                         .child(
                             div()
@@ -1135,7 +1129,7 @@ fn sidebar(
                 .text_color(ui::text_tertiary())
                 .flex()
                 .items_center()
-                .child(format!("{open_count} 个连接 · 右键查看操作")),
+                .child(format!("{open_count} 个连接")),
         )
 }
 
@@ -2608,7 +2602,6 @@ fn profile_editor_overlay(
             .border_1()
             .border_color(ui::border_light())
             .bg(theme::semantic().bg_surface)
-            .shadow_lg()
             .flex()
             .flex_col()
             .child(
@@ -2627,12 +2620,6 @@ fn profile_editor_overlay(
                                 ProfileEditorMode::New => "新建连接",
                             }),
                     )
-                    .child(
-                        div()
-                            .text_size(px(11.0))
-                            .text_color(ui::text_secondary())
-                            .child("为 SFTP / FTP / FTPS 服务器配置访问凭据。"),
-                    ),
             )
             .child(
                 div()
@@ -3045,7 +3032,6 @@ fn new_folder_overlay(
             .border_1()
             .border_color(ui::border_light())
             .bg(theme::semantic().bg_elevated)
-            .shadow_lg()
             .p(px(14.0))
             .flex()
             .flex_col()
@@ -3141,8 +3127,7 @@ fn profile_menu_overlay(
                 .border_1()
                 .border_color(ui::border_light())
                 .bg(theme::semantic().bg_elevated)
-                .shadow_lg()
-                .p(px(4.0))
+                    .p(px(4.0))
                 .flex()
                 .flex_col()
                 .gap(px(3.0))
@@ -3253,8 +3238,7 @@ fn file_menu_overlay(
                 .border_1()
                 .border_color(ui::border_light())
                 .bg(theme::semantic().bg_elevated)
-                .shadow_lg()
-                .p(px(4.0))
+                    .p(px(4.0))
                 .flex()
                 .flex_col()
                 .gap(px(3.0))
