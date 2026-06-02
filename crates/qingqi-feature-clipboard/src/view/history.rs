@@ -334,6 +334,8 @@ fn history_row(
     } else {
         hsla(0.0, 0.0, 0.0, 0.0)
     };
+    let pin_handle = handle.clone();
+    let delete_handle = handle.clone();
 
     div()
         .id(("clipboard-row", item.id as u64))
@@ -408,6 +410,54 @@ fn history_row(
                         .line_height(px(13.0))
                         .text_color(theme::semantic().text_secondary)
                         .child(meta),
+                ),
+        )
+        // Pin + Delete — subtle, always visible on the right
+        .child(
+            div().flex().items_center().gap(px(2.0))
+                .child(
+                    div()
+                        .id(("clipboard-row-pin", index))
+                        .size(px(24.0)).rounded(px(4.0))
+                        .flex().items_center().justify_center()
+                        .hover(|s| s.bg(theme::semantic().row_hover).cursor_pointer())
+                        .child(
+                            Icon::new(if pinned { IconName::Star } else { IconName::StarOff })
+                                .with_size(ComponentSize::Small)
+                                .text_color(if pinned {
+                                    ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
+                                } else {
+                                    theme::semantic().text_placeholder
+                                }),
+                        )
+                        .on_click(move |_, _, cx| {
+                            let _ = cx.update_entity(&pin_handle, |panel, cx| {
+                                panel.select(index, cx);
+                                panel.toggle_selected_pin(cx);
+                                cx.notify();
+                            });
+                            cx.stop_propagation();
+                        }),
+                )
+                .child(
+                    div()
+                        .id(("clipboard-row-delete", index))
+                        .size(px(24.0)).rounded(px(4.0))
+                        .flex().items_center().justify_center()
+                        .hover(|s| s.bg(theme::semantic().row_hover).cursor_pointer())
+                        .child(
+                            Icon::new(IconName::Delete)
+                                .with_size(ComponentSize::Small)
+                                .text_color(theme::semantic().text_placeholder),
+                        )
+                        .on_click(move |_, _, cx| {
+                            let _ = cx.update_entity(&delete_handle, |panel, cx| {
+                                panel.select(index, cx);
+                                panel.delete_selected(cx);
+                                cx.notify();
+                            });
+                            cx.stop_propagation();
+                        }),
                 ),
         )
 }
