@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
+gpui-component.workspace = true
 qingqi-platform = { path = "../qingqi-platform" }
 qingqi-plugin = { path = "../qingqi-plugin" }
 qingqi-ui = { path = "../qingqi-ui" }
