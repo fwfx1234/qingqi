@@ -1488,7 +1488,7 @@ fn footer_bar(
                         }),
                 )
                 .child(
-                    ghost_button("🗑 清空", dark)
+                    ghost_button("清空", dark)
                         .id("image-compress-clear")
                         .on_click({
                             let handle = handle.clone();

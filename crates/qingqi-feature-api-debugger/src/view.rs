@@ -1019,7 +1019,7 @@ fn collection_tree(
                         } else {
                             theme::semantic().text_regular
                         })
-                        .child("📂 集合"),
+                        .child("集合"),
                 )
                 .child(icon_button("api-tree-add", "+", dark, {
                     let view = view.clone();
@@ -1560,7 +1560,7 @@ fn scenario_banner(scenario: ApiScenario, request: ApiRequest, dark: bool) -> im
                 .text_size(px(11.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(api_accent())
-                .child(format!("📋 {}", scenario.name)),
+                .child(format!("{}", scenario.name)),
         )
         .child(scenario_status_label(scenario.status, dark))
         .child(div().flex_1())
@@ -2148,7 +2148,7 @@ fn env_manager_dialog(
                                     div()
                                         .flex()
                                         .gap(px(6.0))
-                                        .child(soft_button("api-env-dup", "📋 复制", dark, {
+                                        .child(soft_button("api-env-dup", "复制", dark, {
                                             let view = view.clone();
                                             move |_, cx| {
                                                 view.update(cx, |view, cx| {
@@ -2156,7 +2156,7 @@ fn env_manager_dialog(
                                                 });
                                             }
                                         }))
-                                        .child(soft_button("api-env-del", "🗑 删除", dark, {
+                                        .child(soft_button("api-env-del", "删除", dark, {
                                             let view = view.clone();
                                             move |_, cx| {
                                                 view.update(cx, |view, cx| {
@@ -2330,7 +2330,7 @@ fn env_manager_dialog(
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme::semantic().danger)
                         .hover(move |style| style.cursor_pointer())
-                        .child("🗑 删除此环境"),
+                        .child("删除此环境"),
                 ),
         )
 }
@@ -2486,7 +2486,7 @@ fn context_menu_overlay(
                 .child(menu_separator())
                 .child(context_menu_item(
                     "api-collection-menu-duplicate",
-                    "📋 复制路径",
+                    "复制路径",
                     "",
                     {
                         let view = view.clone();
@@ -2501,7 +2501,7 @@ fn context_menu_overlay(
                 .child(menu_separator())
                 .child(context_menu_item(
                     "api-collection-menu-delete",
-                    "🗑 删除",
+                    "删除",
                     "",
                     {
                         let view = view.clone();

@@ -876,7 +876,7 @@ fn url_input_bar(
                 .child(url_input.into_any_element()),
         )
         .child(
-            action_button("\u{1f4cb} 粘贴", dark)
+            action_button("粘贴", dark)
                 .id("download-paste")
                 .on_click({
                     let h = handle.clone();
@@ -952,7 +952,7 @@ fn filter_bar(
                 }))
                 .child(div().flex_1())
                 .child(
-                    action_button("\u{25b6} 全部开始", dark)
+                    action_button("全部开始", dark)
                         .id("download-start-all")
                         .on_click({
                             let h = handle.clone();
@@ -965,7 +965,7 @@ fn filter_bar(
                         }),
                 )
                 .child(
-                    action_button("\u{23f8} 全部暂停", dark)
+                    action_button("全部暂停", dark)
                         .id("download-pause-all")
                         .on_click({
                             let h = handle.clone();
@@ -978,7 +978,7 @@ fn filter_bar(
                         }),
                 )
                 .child(
-                    action_button("\u{1f5d1} 清除已完成", dark)
+                    action_button("清除已完成", dark)
                         .id("download-clear-done")
                         .on_click({
                             let h = handle.clone();
@@ -991,7 +991,7 @@ fn filter_bar(
                         }),
                 )
                 .child(
-                    action_button("\u{26a0} 清除失败", dark)
+                    action_button("清除失败", dark)
                         .id("download-clear-failed")
                         .on_click({
                             let h = handle.clone();

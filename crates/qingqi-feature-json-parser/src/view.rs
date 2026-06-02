@@ -272,37 +272,41 @@ fn status_footer(status_text: String, stats_text: String, error_loc_text: String
 // ── JSON Syntax Highlighting ──
 
 fn highlight_json(text: &str) -> impl IntoElement {
-    let segments = tokenize_json(text);
-    div().flex().flex_wrap().children(segments.into_iter().map(|(s, color)| {
-        div().text_color(color).child(s)
-    }))
+    div().flex().flex_col().children(
+        text.lines().map(|line| {
+            let segments = tokenize_line(line);
+            div().flex().children(
+                segments.into_iter().map(|(s, color)| {
+                    div().text_color(color).child(s)
+                })
+            )
+        })
+    )
 }
 
-fn tokenize_json(text: &str) -> Vec<(String, gpui::Rgba)> {
+fn tokenize_line(line: &str) -> Vec<(String, gpui::Rgba)> {
     let mut out = Vec::new();
-    let chars: Vec<char> = text.chars().collect();
+    let chars: Vec<char> = line.chars().collect();
     let n = chars.len();
     let mut i = 0;
     let key_color = theme::semantic().info;
     let string_color = theme::semantic().success;
     let number_color = theme::semantic().warning;
-    let bool_null_color = gpui::rgb(0x8B5CF6); // purple
+    let bool_null_color = gpui::rgb(0x8B5CF6);
     let punct_color = theme::semantic().text_regular;
     let default_color = theme::semantic().text_primary;
 
     while i < n {
         let c = chars[i];
         if c == '"' {
-            // String — read until closing unescaped quote
             let start = i;
             i += 1;
             while i < n && chars[i] != '"' {
                 if chars[i] == '\\' && i + 1 < n { i += 1; }
                 i += 1;
             }
-            if i < n { i += 1; } // closing quote
+            if i < n { i += 1; }
             let raw: String = chars[start..i].iter().collect();
-            // Determine if this is a key (followed by ':') or a value string
             let mut j = i;
             while j < n && chars[j].is_whitespace() { j += 1; }
             let is_key = j < n && chars[j] == ':';
@@ -314,11 +318,11 @@ fn tokenize_json(text: &str) -> Vec<(String, gpui::Rgba)> {
                 i += 1;
             }
             out.push((chars[start..i].iter().collect(), number_color));
-        } else if c == 't' && text[i..].starts_with("true") {
+        } else if c == 't' && line[i..].starts_with("true") {
             out.push(("true".into(), bool_null_color)); i += 4;
-        } else if c == 'f' && text[i..].starts_with("false") {
+        } else if c == 'f' && line[i..].starts_with("false") {
             out.push(("false".into(), bool_null_color)); i += 5;
-        } else if c == 'n' && text[i..].starts_with("null") {
+        } else if c == 'n' && line[i..].starts_with("null") {
             out.push(("null".into(), bool_null_color)); i += 4;
         } else if c == '{' || c == '}' || c == '[' || c == ']' || c == ':' || c == ',' {
             out.push((c.to_string(), punct_color)); i += 1;
