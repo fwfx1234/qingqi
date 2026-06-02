@@ -84,7 +84,6 @@ pub struct Launcher {
     selected: usize,
     results_visible_start: usize,
     message: String,
-    self_handle: Option<Entity<Launcher>>,
     window_controller: Option<WindowControllerHandle>,
     last_query: String,
     pending_query: String,
@@ -153,7 +152,6 @@ impl Launcher {
             clipboard_boost_map: boost_map,
             results_visible_start: 0,
             message: String::from("搜索功能或打开应用..."),
-            self_handle: None,
             window_controller: None,
             last_query: String::new(),
             pending_query: String::new(),
@@ -213,6 +211,7 @@ impl Launcher {
     /// 事件驱动：唤起启动器时，从 DB 读最新使用数据重建排序。
     pub fn refresh_on_show(&mut self, cx: &mut App) {
         self.refresh_clipboard_boost_map(cx);
+        self.refresh_plugin_visuals();
         let commands = self.default_commands_with_clipboard();
         let query = self.query(cx);
         if query.trim().is_empty() {
@@ -270,8 +269,9 @@ impl Launcher {
         }
     }
 
-    pub fn attach_handle(&mut self, handle: Entity<Launcher>) {
-        self.self_handle = Some(handle);
+    pub fn attach_handle(&mut self, _handle: Entity<Launcher>) {
+        // No longer needed — cx.entity() is used in render instead.
+        // Keep method as no-op for compatibility with window_controller.rs.
     }
 
     pub fn attach_window_controller(&mut self, handle: WindowControllerHandle) {
@@ -356,6 +356,10 @@ impl Launcher {
         let Some(query_input) = self.query_input.clone() else {
             return;
         };
+        // Guard against duplicate calls — clear old subscriptions
+        if !self._subscriptions.is_empty() {
+            self._subscriptions.clear();
+        }
         let subscription = cx.observe(&query_input, |launcher, _, cx| {
             launcher.handle_query_changed(cx);
         });
@@ -409,6 +413,18 @@ impl Launcher {
                 e.into_inner()
             }),
         );
+    }
+
+    fn refresh_plugin_visuals(&mut self) {
+        if let Ok(manager) = self.plugin_manager.lock() {
+            self.plugin_visuals = manager
+                .manifests()
+                .into_iter()
+                .map(|m| {
+                    (m.id.to_string(), PluginVisual { mode: m.mode, status: m.status })
+                })
+                .collect();
+        }
     }
 
     fn default_commands_with_clipboard(&mut self) -> Vec<Command> {
@@ -989,7 +1005,18 @@ impl Launcher {
         cx.notify();
     }
 
+    /// Must be called before window removal to ensure plugin views get on_close().
+    pub fn cleanup_before_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !matches!(self.mode, LauncherMode::Search) {
+            self.close_plugin_mode(window, cx);
+        }
+    }
+
     fn close_window(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Clean up plugin mode — ensures on_close() is called
+        if !matches!(self.mode, LauncherMode::Search) {
+            self.close_plugin_mode(window, cx);
+        }
         if let Some(controller) = self.window_controller.as_ref() {
             controller
                 .lock()
@@ -1003,6 +1030,18 @@ impl Launcher {
     }
 
     fn close_window_app(&mut self, window: &mut Window, cx: &mut App) {
+        // Clean up plugin mode — inline because close_plugin_mode needs &mut Context<Self>
+        if !matches!(self.mode, LauncherMode::Search) {
+            match std::mem::replace(&mut self.mode, LauncherMode::Search) {
+                LauncherMode::InlinePlugin { mut view, .. } => {
+                    let _ = catch_unwind(AssertUnwindSafe(|| view.on_close()));
+                }
+                LauncherMode::ListPlugin { mut view, .. } => {
+                    let _ = catch_unwind(AssertUnwindSafe(|| view.on_close()));
+                }
+                LauncherMode::Search => {}
+            }
+        }
         if let Some(controller) = self.window_controller.as_ref() {
             controller
                 .lock()
@@ -1013,6 +1052,23 @@ impl Launcher {
                 .clear_launcher_window();
         }
         window.defer(cx, |window, _cx| window.remove_window());
+    }
+}
+
+impl Drop for Launcher {
+    fn drop(&mut self) {
+        self.search_task.take();
+        self.event_task.take();
+        self._subscriptions.clear();
+        match std::mem::replace(&mut self.mode, LauncherMode::Search) {
+            LauncherMode::InlinePlugin { mut view, .. } => {
+                let _ = catch_unwind(AssertUnwindSafe(|| view.on_close()));
+            }
+            LauncherMode::ListPlugin { mut view, .. } => {
+                let _ = catch_unwind(AssertUnwindSafe(|| view.on_close()));
+            }
+            LauncherMode::Search => {}
+        }
     }
 }
 
@@ -1030,7 +1086,7 @@ impl Render for Launcher {
         }
 
         let dark = theme_mode::is_dark();
-        let handle = self.self_handle.clone();
+        let handle = Some(cx.entity());
         let query_input = self.query_input.clone();
         let query = self.query(cx);
         let results = self.results.clone();

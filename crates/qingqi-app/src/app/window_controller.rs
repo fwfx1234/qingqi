@@ -110,7 +110,10 @@ impl WindowController {
         };
         if let Some(window_handle) = stored_window_handle {
             if let Some(handle) = window_handle.downcast::<Launcher>() {
-                match handle.update(cx, |_, window, _| window.remove_window()) {
+                match handle.update(cx, |launcher, window, cx| {
+                    launcher.cleanup_before_close(window, cx);
+                    window.defer(cx, |window, _cx| window.remove_window());
+                }) {
                     Ok(_) => {
                                                     lock_or_recover(&controller, "window_controller")
                             .launcher_window = None;
