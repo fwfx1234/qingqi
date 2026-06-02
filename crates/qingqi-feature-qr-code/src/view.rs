@@ -5,14 +5,11 @@ use std::{
 
 use anyhow::Result;
 use gpui::{
-    App, AppContext, Context, Entity, ExternalPaths, InteractiveElement, IntoElement,
-    ParentElement, Render, StatefulInteractiveElement, Styled, Window, div, hsla, px,
+    App, AppContext, Context, Entity, InteractiveElement, IntoElement, ObjectFit,
+    ParentElement, Render, StatefulInteractiveElement, Styled, StyledImage, Window, div, hsla, img, px,
 };
 
-use crate::{
-    service::QrCodeService,
-    store::{QrHistoryKind, QrHistoryRecord},
-};
+use crate::service::QrCodeService;
 use qingqi_plugin::storage::AppPaths;
 use qingqi_ui::{
     text_input::{TextInput, TextInputStyle},
@@ -29,36 +26,20 @@ enum StatusTone {
 
 pub struct QrView {
     input: Option<Entity<TextInput>>,
-    history_query_input: Option<Entity<TextInput>>,
-    scan_path_input: Option<Entity<TextInput>>,
     service: QrCodeService,
     qr_matrix: Vec<bool>,
     qr_size: usize,
     message: String,
     tone: StatusTone,
-    show_scan: bool,
-    show_history: bool,
-    history: Vec<QrHistoryRecord>,
-    scan_result: String,
-    scan_error: String,
+    scanned_image_path: Option<PathBuf>,
     pending_action: Arc<Mutex<Option<QrBackgroundResult>>>,
 }
 
 enum QrBackgroundResult {
     Preview(std::result::Result<crate::service::QrMatrix, String>),
-    History(std::result::Result<Vec<QrHistoryRecord>, String>),
-    Save {
-        text: String,
-        result: std::result::Result<PathBuf, String>,
-    },
-    Scan(std::result::Result<(String, String), String>),
-    Export(std::result::Result<PathBuf, String>),
-    ClearHistory(std::result::Result<(), String>),
-    RemoveHistory(std::result::Result<bool, String>),
-    RecordCopy {
-        success_message: String,
-        result: std::result::Result<(), String>,
-    },
+    Save { result: std::result::Result<PathBuf, String> },
+    Scan(std::result::Result<(String, PathBuf), String>),
+    RecordCopy { success_message: String, result: std::result::Result<(), String> },
 }
 
 impl QrView {
@@ -66,18 +47,12 @@ impl QrView {
         let service = QrCodeService::new(paths)?;
         Ok(Self {
             input: None,
-            history_query_input: None,
-            scan_path_input: None,
             service,
             qr_matrix: Vec::new(),
             qr_size: 0,
             message: String::from("输入文本后点击生成"),
             tone: StatusTone::Neutral,
-            show_scan: false,
-            show_history: false,
-            history: Vec::new(),
-            scan_result: String::new(),
-            scan_error: String::new(),
+            scanned_image_path: None,
             pending_action: Arc::new(Mutex::new(None)),
         })
     }
@@ -85,553 +60,164 @@ impl QrView {
     pub fn ensure_inputs(&mut self, cx: &mut Context<Self>) {
         if self.input.is_none() {
             self.input = Some(cx.new(|cx| {
-                let mut input = TextInput::new(cx, "输入文本或 URL", "");
+                let mut input = TextInput::new(cx, "输入文本或粘贴图片...", "");
                 input.set_multiline(true, cx);
-                input.set_monospace(true, cx);
                 input.set_chrome(false, cx);
-                input.set_style(
-                    TextInputStyle {
-                        height: 172.0,
-                        font_size: 12.0,
-                        padding: 10.0,
-                    },
-                    cx,
-                );
-                input
-            }));
-        }
-
-        if self.history_query_input.is_none() {
-            self.history_query_input = Some(cx.new(|cx| {
-                let mut input = TextInput::new(cx, "搜索历史内容", "");
-                input.set_chrome(false, cx);
-                input.set_style(
-                    TextInputStyle {
-                        height: 32.0,
-                        font_size: 12.0,
-                        padding: 8.0,
-                    },
-                    cx,
-                );
-                input
-            }));
-        }
-
-        if self.scan_path_input.is_none() {
-            self.scan_path_input = Some(cx.new(|cx| {
-                let mut input = TextInput::new(cx, "选择或粘贴二维码图片路径", "");
-                input.set_chrome(false, cx);
-                input.set_style(
-                    TextInputStyle {
-                        height: 32.0,
-                        font_size: 12.0,
-                        padding: 8.0,
-                    },
-                    cx,
-                );
+                input.set_style(TextInputStyle { height: 200.0, font_size: 12.0, padding: 8.0 }, cx);
                 input
             }));
         }
     }
 
     fn input_text(&self, cx: &App) -> String {
-        self.input
-            .as_ref()
-            .map(|input| input.read(cx).text())
-            .unwrap_or_default()
-    }
-
-    fn history_query(&self, cx: &App) -> String {
-        self.history_query_input
-            .as_ref()
-            .map(|input| input.read(cx).text())
-            .unwrap_or_default()
-    }
-
-    fn scan_path(&self, cx: &App) -> String {
-        self.scan_path_input
-            .as_ref()
-            .map(|input| input.read(cx).text())
-            .unwrap_or_default()
+        self.input.as_ref().map(|i| i.read(cx).text()).unwrap_or_default()
     }
 
     pub fn set_input_text(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
         self.ensure_inputs(cx);
         if let Some(input) = self.input.as_ref() {
-            let text = text.into();
-            input.update(cx, |input, input_cx| input.set_text(text, input_cx));
-        }
-    }
-
-    fn set_scan_path(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
-        self.ensure_inputs(cx);
-        if let Some(input) = self.scan_path_input.as_ref() {
-            let text = text.into();
-            input.update(cx, |input, input_cx| input.set_text(text, input_cx));
+            input.update(cx, |input, cx| input.set_text(text.into(), cx));
         }
     }
 
     pub fn set_launch_input(&mut self, text: &str, cx: &mut Context<Self>) {
-        self.set_input_text(text.to_string(), cx);
-        if text.trim().is_empty() {
-            self.qr_matrix.clear();
-            self.qr_size = 0;
-            self.message = String::from("输入文本后点击生成");
-            self.tone = StatusTone::Neutral;
-            return;
-        }
-        self.generate_from_text(text, cx);
+        self.set_input_text(text, cx);
+        if !text.trim().is_empty() { self.generate_from_text(text, cx); }
     }
 
     pub fn generate_from_text(&mut self, text: &str, cx: &mut Context<Self>) {
-        self.message = String::from("正在生成二维码...");
-        self.tone = StatusTone::Neutral;
+        let trimmed = text.trim();
+        if trimmed.is_empty() { self.message = "请先输入文本".into(); self.tone = StatusTone::Error; return; }
+        self.scanned_image_path = None;
         let service = self.service.clone();
+        let text = trimmed.to_string();
+        self.message = "正在生成...".into(); self.tone = StatusTone::Neutral;
         let pending = Arc::clone(&self.pending_action);
-        let text = text.to_string();
-        cx.spawn(async move |this, async_cx| {
-            let result = async_cx
-                .background_executor()
-                .spawn(async move { service.preview(&text).map_err(|error| error.to_string()) })
-                .await;
-            if let Ok(mut slot) = pending.lock() {
-                *slot = Some(QrBackgroundResult::Preview(result));
-            }
-            let _ = this.update(async_cx, |_, cx| cx.notify());
-        })
-        .detach();
-    }
-
-    pub fn refresh_history(&mut self, cx: &mut Context<Self>) {
-        self.message = String::from("正在读取历史...");
-        self.tone = StatusTone::Neutral;
-        let query = self.history_query(cx);
-        let service = self.service.clone();
-        let pending = Arc::clone(&self.pending_action);
-        cx.spawn(async move |this, async_cx| {
-            let result = async_cx
-                .background_executor()
-                .spawn(async move {
-                    service
-                        .list_history(&query)
-                        .map_err(|error| error.to_string())
-                })
-                .await;
-            if let Ok(mut slot) = pending.lock() {
-                *slot = Some(QrBackgroundResult::History(result));
-            }
-            let _ = this.update(async_cx, |_, cx| cx.notify());
-        })
-        .detach();
-    }
-
-    pub fn toggle_history(&mut self, cx: &mut Context<Self>) {
-        self.show_history = !self.show_history;
-        if self.show_history {
-            self.show_scan = false;
-        }
-        if self.show_history {
-            self.refresh_history(cx);
-        }
-    }
-
-    pub fn toggle_scan(&mut self) {
-        self.show_scan = !self.show_scan;
-        if self.show_scan {
-            self.show_history = false;
-        }
+        cx.spawn(async move |this, cx| {
+            let r = cx.background_executor().spawn(async move { service.preview(&text).map_err(|e| e.to_string()) }).await;
+            if let Ok(mut s) = pending.lock() { *s = Some(QrBackgroundResult::Preview(r)); }
+            let _ = this.update(cx, |_, cx| cx.notify());
+        }).detach();
     }
 
     pub fn save_current(&mut self, cx: &mut Context<Self>) {
         let text = self.input_text(cx);
-        let target_dir = match qingqi_platform::shell::choose_directory("选择保存文件夹") {
-            Ok(Some(path)) => path,
-            Ok(None) => {
-                self.message = String::from("已取消保存");
-                self.tone = StatusTone::Neutral;
-                return;
-            }
-            Err(error) => {
-                self.message = format!("打开文件夹选择失败: {error}");
-                self.tone = StatusTone::Error;
-                return;
-            }
+        if text.trim().is_empty() { self.message = "无可保存内容".into(); self.tone = StatusTone::Error; return; }
+        let dir = match qingqi_platform::shell::choose_directory("选择保存位置") {
+            Ok(Some(p)) => p, Ok(None) => { self.message = "已取消".into(); return; }
+            Err(e) => { self.message = format!("{e}"); self.tone = StatusTone::Error; return; }
         };
-
-        self.message = String::from("正在保存二维码...");
-        self.tone = StatusTone::Neutral;
         let service = self.service.clone();
         let pending = Arc::clone(&self.pending_action);
-        cx.spawn(async move |this, async_cx| {
-            let save_text = text.clone();
-            let result = async_cx
-                .background_executor()
-                .spawn(async move {
-                    service
-                        .save_to_dir(&save_text, &target_dir)
-                        .map_err(|error| error.to_string())
-                })
-                .await;
-            if let Ok(mut slot) = pending.lock() {
-                *slot = Some(QrBackgroundResult::Save { text, result });
-            }
-            let _ = this.update(async_cx, |_, cx| cx.notify());
-        })
-        .detach();
+        let save_text = text.clone();
+        self.message = "正在保存...".into(); self.tone = StatusTone::Neutral;
+        cx.spawn(async move |this, cx| {
+            let r = cx.background_executor().spawn(async move { service.save_to_dir(&save_text, &dir).map_err(|e| e.to_string()) }).await;
+            if let Ok(mut s) = pending.lock() { *s = Some(QrBackgroundResult::Save { result: r }); }
+            let _ = this.update(cx, |_, cx| cx.notify());
+        }).detach();
     }
 
     pub fn copy_current(&mut self, cx: &mut Context<Self>) {
         let text = self.input_text(cx);
-        if text.trim().is_empty() {
-            self.message = String::from("无可复制内容");
-            self.tone = StatusTone::Error;
-            return;
-        }
-        qingqi_platform::clipboard::write_text(cx, text.clone());
-        self.record_copy_async(text, String::from("已复制内容"), cx);
+        if text.trim().is_empty() { self.message = "无可复制内容".into(); self.tone = StatusTone::Error; return; }
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.clone()));
+        self.message = "已复制".into(); self.tone = StatusTone::Success;
+        self.record_copy(text, cx);
     }
 
     pub fn fill_from_clipboard(&mut self, cx: &mut Context<Self>) {
-        let text = qingqi_platform::clipboard::read_text(cx).unwrap_or_default();
-        if text.trim().is_empty() {
-            self.message = String::from("剪贴板没有可用文本");
-            self.tone = StatusTone::Error;
+        // Try image first
+        if let Some(image) = qingqi_platform::clipboard::read_image(cx) {
+            let service = self.service.clone();
+            let pending = Arc::clone(&self.pending_action);
+            self.message = "正在识别...".into(); self.tone = StatusTone::Neutral;
+            cx.spawn(async move |this, cx| {
+                let r = cx.background_executor().spawn(async move {
+                    let tmp = std::env::temp_dir().join(format!("qr_{}.png", std::process::id()));
+                    std::fs::write(&tmp, &image.bytes).map_err(|e| format!("{e}"))?;
+                    let text = service.scan_image(&tmp).map_err(|e| format!("{e}"))?;
+                    Ok((text, tmp))
+                }).await;
+                if let Ok(mut s) = pending.lock() { *s = Some(QrBackgroundResult::Scan(r)); }
+                let _ = this.update(cx, |_, cx| cx.notify());
+            }).detach();
             return;
         }
+        // Fall back to text
+        let text = qingqi_platform::clipboard::read_text(cx).unwrap_or_default();
+        if text.trim().is_empty() { self.message = "剪贴板无可用内容".into(); self.tone = StatusTone::Error; return; }
         self.set_input_text(text.clone(), cx);
         self.generate_from_text(&text, cx);
+    }
+
+    pub fn choose_scan_image(&mut self, cx: &mut Context<Self>) {
+        let service = self.service.clone();
+        let pending = Arc::clone(&self.pending_action);
+        self.message = "正在识别...".into(); self.tone = StatusTone::Neutral;
+        cx.spawn(async move |this, cx| {
+            let r = cx.background_executor().spawn(async move {
+                match qingqi_platform::shell::choose_file("选择二维码图片") {
+                    Ok(Some(p)) => { let text = service.scan_image(&p).map_err(|e| format!("{e}"))?; Ok((text, p)) }
+                    Ok(None) => Err("已取消".into()),
+                    Err(e) => Err(format!("{e}")),
+                }
+            }).await;
+            if let Ok(mut s) = pending.lock() { *s = Some(QrBackgroundResult::Scan(r)); }
+            let _ = this.update(cx, |_, cx| cx.notify());
+        }).detach();
     }
 
     pub fn clear_input(&mut self, cx: &mut Context<Self>) {
         self.ensure_inputs(cx);
-        if let Some(input) = self.input.as_ref() {
-            input.update(cx, |input, input_cx| input.clear(input_cx));
-        }
-        self.qr_matrix.clear();
-        self.qr_size = 0;
-        self.message = String::from("已清空");
-        self.tone = StatusTone::Neutral;
+        if let Some(i) = self.input.as_ref() { i.update(cx, |i, cx| i.clear(cx)); }
+        self.qr_matrix.clear(); self.qr_size = 0;
+        self.scanned_image_path = None;
+        self.message = "已清空".into(); self.tone = StatusTone::Neutral;
     }
 
-    pub fn choose_scan_image(&mut self, cx: &mut Context<Self>) {
-        match qingqi_platform::shell::choose_file("选择二维码图片") {
-            Ok(Some(path)) => {
-                let path = path.to_string_lossy().to_string();
-                self.set_scan_path(path, cx);
-                self.scan_selected_path(cx);
-            }
-            Ok(None) => {
-                self.message = String::from("已取消选择图片");
-                self.tone = StatusTone::Neutral;
-            }
-            Err(error) => {
-                self.message = format!("打开文件选择失败: {error}");
-                self.tone = StatusTone::Error;
-            }
-        }
-    }
-
-    pub fn scan_selected_path(&mut self, cx: &mut Context<Self>) {
-        let path = self.scan_path(cx);
-        if path.trim().is_empty() {
-            self.scan_result.clear();
-            self.scan_error = String::from("请先选择二维码图片");
-            self.message = self.scan_error.clone();
-            self.tone = StatusTone::Error;
-            return;
-        }
-
-        self.scan_path_text(path, cx);
-    }
-
-    pub fn scan_path_text(&mut self, path: String, cx: &mut Context<Self>) {
-        self.message = String::from("正在扫描二维码...");
-        self.tone = StatusTone::Neutral;
+    fn record_copy(&mut self, text: String, cx: &mut Context<Self>) {
         let service = self.service.clone();
         let pending = Arc::clone(&self.pending_action);
-        cx.spawn(async move |this, async_cx| {
-            let result = async_cx
-                .background_executor()
-                .spawn(async move {
-                    service
-                        .scan_image_input(&path)
-                        .map(|(text, normalized_path)| {
-                            (text, normalized_path.to_string_lossy().to_string())
-                        })
-                        .map_err(|error| error.to_string())
-                })
-                .await;
-            if let Ok(mut slot) = pending.lock() {
-                *slot = Some(QrBackgroundResult::Scan(result));
-            }
-            let _ = this.update(async_cx, |_, cx| cx.notify());
-        })
-        .detach();
-    }
-
-    pub fn copy_scan_result(&mut self, cx: &mut Context<Self>) {
-        if self.scan_result.trim().is_empty() {
-            self.message = String::from("暂无扫描结果");
-            self.tone = StatusTone::Error;
-            return;
-        }
-
-        qingqi_platform::clipboard::write_text(cx, self.scan_result.clone());
-        self.record_copy_async(self.scan_result.clone(), String::from("已复制扫描结果"), cx);
-    }
-
-    pub fn use_scan_result(&mut self, cx: &mut Context<Self>) {
-        if self.scan_result.trim().is_empty() {
-            self.message = String::from("暂无扫描结果");
-            self.tone = StatusTone::Error;
-            return;
-        }
-        let text = self.scan_result.clone();
-        self.set_input_text(text.clone(), cx);
-        self.generate_from_text(&text, cx);
-        self.message = String::from("已将扫描结果用作生成内容");
-        self.tone = StatusTone::Success;
-    }
-
-    pub fn export_history(&mut self, cx: &mut Context<Self>) {
-        let target_dir = match qingqi_platform::shell::choose_directory("选择导出文件夹") {
-            Ok(Some(path)) => path,
-            Ok(None) => {
-                self.message = String::from("已取消导出");
-                self.tone = StatusTone::Neutral;
-                return;
-            }
-            Err(error) => {
-                self.message = format!("打开文件夹选择失败: {error}");
-                self.tone = StatusTone::Error;
-                return;
-            }
-        };
-
-        self.message = String::from("正在导出历史...");
-        self.tone = StatusTone::Neutral;
-        let service = self.service.clone();
-        let pending = Arc::clone(&self.pending_action);
-        cx.spawn(async move |this, async_cx| {
-            let result = async_cx
-                .background_executor()
-                .spawn(async move {
-                    service
-                        .export_history_to_dir(&target_dir)
-                        .map_err(|error| error.to_string())
-                })
-                .await;
-            if let Ok(mut slot) = pending.lock() {
-                *slot = Some(QrBackgroundResult::Export(result));
-            }
-            let _ = this.update(async_cx, |_, cx| cx.notify());
-        })
-        .detach();
-    }
-
-    pub fn clear_history(&mut self, cx: &mut Context<Self>) {
-        self.message = String::from("正在清空历史...");
-        self.tone = StatusTone::Neutral;
-        let service = self.service.clone();
-        let pending = Arc::clone(&self.pending_action);
-        cx.spawn(async move |this, async_cx| {
-            let result = async_cx
-                .background_executor()
-                .spawn(async move { service.clear_history().map_err(|error| error.to_string()) })
-                .await;
-            if let Ok(mut slot) = pending.lock() {
-                *slot = Some(QrBackgroundResult::ClearHistory(result));
-            }
-            let _ = this.update(async_cx, |_, cx| cx.notify());
-        })
-        .detach();
-    }
-
-    pub fn remove_history_item(&mut self, id: &str, cx: &mut Context<Self>) {
-        self.message = String::from("正在删除历史...");
-        self.tone = StatusTone::Neutral;
-        let service = self.service.clone();
-        let pending = Arc::clone(&self.pending_action);
-        let id = id.to_string();
-        cx.spawn(async move |this, async_cx| {
-            let result = async_cx
-                .background_executor()
-                .spawn(async move {
-                    service
-                        .remove_history(&id)
-                        .map_err(|error| error.to_string())
-                })
-                .await;
-            if let Ok(mut slot) = pending.lock() {
-                *slot = Some(QrBackgroundResult::RemoveHistory(result));
-            }
-            let _ = this.update(async_cx, |_, cx| cx.notify());
-        })
-        .detach();
-    }
-
-    pub fn copy_history_item(&mut self, item: &QrHistoryRecord, cx: &mut Context<Self>) {
-        qingqi_platform::clipboard::write_text(cx, item.content.clone());
-        self.record_copy_async(item.content.clone(), String::from("已复制历史内容"), cx);
-    }
-
-    pub fn use_history_item(&mut self, item: &QrHistoryRecord, cx: &mut Context<Self>) {
-        self.set_input_text(item.content.clone(), cx);
-        self.generate_from_text(&item.content, cx);
-        self.message = format!("已载入{}记录", item.kind.label());
-        self.tone = StatusTone::Success;
-    }
-
-    fn record_copy_async(&mut self, text: String, success_message: String, cx: &mut Context<Self>) {
-        self.message = String::from("正在写入历史...");
-        self.tone = StatusTone::Neutral;
-        let service = self.service.clone();
-        let pending = Arc::clone(&self.pending_action);
-        cx.spawn(async move |this, async_cx| {
-            let result = async_cx
-                .background_executor()
-                .spawn(async move {
-                    service
-                        .record_copy(&text)
-                        .map(|_| ())
-                        .map_err(|error| error.to_string())
-                })
-                .await;
-            if let Ok(mut slot) = pending.lock() {
-                *slot = Some(QrBackgroundResult::RecordCopy {
-                    success_message,
-                    result,
-                });
-            }
-            let _ = this.update(async_cx, |_, cx| cx.notify());
-        })
-        .detach();
+        cx.spawn(async move |this, cx| {
+            let r = cx.background_executor().spawn(async move { service.record_copy(&text).map(|_| ()).map_err(|e| e.to_string()) }).await;
+            if let Ok(mut s) = pending.lock() { *s = Some(QrBackgroundResult::RecordCopy { success_message: "已复制".into(), result: r }); }
+            let _ = this.update(cx, |_, cx| cx.notify());
+        }).detach();
     }
 
     fn collect_pending(&mut self, cx: &mut Context<Self>) {
-        let pending = self
-            .pending_action
-            .lock()
-            .ok()
-            .and_then(|mut slot| slot.take());
-        let Some(action) = pending else {
-            return;
-        };
-
-        match action {
-            QrBackgroundResult::Preview(result) => match result {
-                Ok(matrix) => {
-                    self.qr_size = matrix.size;
-                    self.qr_matrix = matrix.cells;
-                    self.message = format!("二维码已生成 ({}x{})", self.qr_size, self.qr_size);
-                    self.tone = StatusTone::Success;
-                }
-                Err(error) => {
-                    self.message = error;
-                    self.tone = StatusTone::Error;
-                    self.qr_matrix.clear();
-                    self.qr_size = 0;
-                }
+        let action = self.pending_action.lock().ok().and_then(|mut s| s.take());
+        let Some(a) = action else { return; };
+        match a {
+            QrBackgroundResult::Preview(r) => match r {
+                Ok(m) => { self.qr_size = m.size; self.qr_matrix = m.cells; self.message = format!("已生成 ({}x{})", m.size, m.size); self.tone = StatusTone::Success; }
+                Err(e) => { self.qr_matrix.clear(); self.qr_size = 0; self.message = e; self.tone = StatusTone::Error; }
             },
-            QrBackgroundResult::History(result) => match result {
-                Ok(history) => self.history = history,
-                Err(error) => {
-                    self.history.clear();
-                    self.message = format!("读取历史失败: {error}");
-                    self.tone = StatusTone::Error;
-                }
+            QrBackgroundResult::Save { result } => match result {
+                Ok(p) => { self.message = format!("已保存: {}", p.display()); self.tone = StatusTone::Success; }
+                Err(e) => { self.message = e; self.tone = StatusTone::Error; }
             },
-            QrBackgroundResult::Save { text, result } => match result {
-                Ok(path) => {
-                    self.message = format!("已保存到: {}", path.display());
-                    self.tone = StatusTone::Success;
-                    self.generate_from_text(&text, cx);
-                    self.refresh_history(cx);
+            QrBackgroundResult::Scan(r) => match r {
+                Ok((text, path)) => {
+                    if let Some(i) = self.input.as_ref() { i.update(cx, |i, cx| i.set_text(text, cx)); }
+                    self.scanned_image_path = Some(path);
+                    self.qr_matrix.clear(); self.qr_size = 0;
+                    self.message = "已识别".into(); self.tone = StatusTone::Success;
                 }
-                Err(error) => {
-                    self.message = format!("保存失败: {error}");
-                    self.tone = StatusTone::Error;
-                }
+                Err(e) => { self.message = e; self.tone = StatusTone::Error; }
             },
-            QrBackgroundResult::Scan(result) => match result {
-                Ok((text, normalized)) => {
-                    self.set_scan_path(normalized, cx);
-                    self.scan_result = text;
-                    self.scan_error.clear();
-                    self.message = String::from("扫描成功");
-                    self.tone = StatusTone::Success;
-                    self.refresh_history(cx);
-                }
-                Err(error) => {
-                    self.scan_result.clear();
-                    self.scan_error = error.clone();
-                    self.message = format!("扫描失败: {error}");
-                    self.tone = StatusTone::Error;
-                }
-            },
-            QrBackgroundResult::Export(result) => match result {
-                Ok(path) => {
-                    self.message = format!("已导出到: {}", path.display());
-                    self.tone = StatusTone::Success;
-                    self.refresh_history(cx);
-                }
-                Err(error) => {
-                    self.message = format!("导出失败: {error}");
-                    self.tone = StatusTone::Error;
-                }
-            },
-            QrBackgroundResult::ClearHistory(result) => match result {
-                Ok(()) => {
-                    self.history.clear();
-                    self.message = String::from("历史记录已清空");
-                    self.tone = StatusTone::Success;
-                }
-                Err(error) => {
-                    self.message = format!("清空历史失败: {error}");
-                    self.tone = StatusTone::Error;
-                }
-            },
-            QrBackgroundResult::RemoveHistory(result) => match result {
-                Ok(true) => {
-                    self.message = String::from("已删除历史记录");
-                    self.tone = StatusTone::Success;
-                    self.refresh_history(cx);
-                }
-                Ok(false) => {
-                    self.message = String::from("未找到对应的历史记录");
-                    self.tone = StatusTone::Error;
-                }
-                Err(error) => {
-                    self.message = format!("删除历史失败: {error}");
-                    self.tone = StatusTone::Error;
-                }
-            },
-            QrBackgroundResult::RecordCopy {
-                success_message,
-                result,
-            } => match result {
-                Ok(()) => {
-                    self.message = success_message;
-                    self.tone = StatusTone::Success;
-                    self.refresh_history(cx);
-                }
-                Err(error) => {
-                    self.message = format!("写入历史失败: {error}");
-                    self.tone = StatusTone::Error;
-                }
+            QrBackgroundResult::RecordCopy { success_message, result } => match result {
+                Ok(()) => { self.message = success_message; self.tone = StatusTone::Success; }
+                Err(e) => { self.message = e; self.tone = StatusTone::Error; }
             },
         }
     }
 
     pub fn clear_view_state(&mut self) {
-        self.qr_matrix.clear();
-        self.qr_size = 0;
-        self.message = String::from("输入文本后点击生成");
-        self.tone = StatusTone::Neutral;
-        self.show_scan = false;
-        self.show_history = false;
-        self.scan_result.clear();
-        self.scan_error.clear();
+        self.qr_matrix.clear(); self.qr_size = 0;
+        self.scanned_image_path = None;
+        self.message = "输入文本后点击生成".into(); self.tone = StatusTone::Neutral;
     }
 }
 
@@ -642,847 +228,96 @@ impl Render for QrView {
 
         let entity = cx.entity();
         let dark = qingqi_ui::theme_mode::is_dark();
-        let input = self.input.clone().expect("qr input should exist");
-        let history_query = self
-            .history_query_input
-            .clone()
-            .expect("history query input should exist");
-        let scan_path_input = self
-            .scan_path_input
-            .clone()
-            .expect("scan path input should exist");
+        let input = self.input.clone().expect("qr input missing");
         let qr_matrix = self.qr_matrix.clone();
         let qr_size = self.qr_size;
         let message = self.message.clone();
         let tone = self.tone;
-        let show_scan = self.show_scan;
-        let show_history = self.show_history;
-        let history = self.history.clone();
-        let scan_result = self.scan_result.clone();
-        let scan_error = self.scan_error.clone();
-        let history_count = history.len();
-        let input_text = input.read(cx).text();
+        let scanned = self.scanned_image_path.clone();
 
-        ui::plugin_surface()
-            .relative()
-            .child(
-                ui::plugin_scroll_content()
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .text_size(px(14.0))
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .text_color(theme::semantic().text_primary)
-                                    .child("二维码"),
-                            )
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap_2()
-                                    .child(
-                                        utility_button("扫描", show_scan, dark)
-                                            .id("qr-scan-btn")
-                                            .on_click({
-                                                let entity = entity.clone();
-                                                move |_, _window, cx| {
-                                                    entity.update(cx, |this, ctx| {
-                                                        this.toggle_scan();
-                                                        ctx.notify();
-                                                    });
-                                                }
-                                            }),
-                                    )
-                                    .child(
-                                        icon_button(show_history, dark, history_count)
-                                            .id("qr-history-btn")
-                                            .on_click({
-                                                let entity = entity.clone();
-                                                move |_, _window, cx| {
-                                                    entity.update(cx, |this, ctx| {
-                                                        this.toggle_history(ctx);
-                                                        ctx.notify();
-                                                    });
-                                                }
-                                            }),
-                                    ),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .gap_4()
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .flex()
-                                    .flex_col()
-                                    .gap_2()
-                                    .child(
-                                        div()
-                                            .rounded(px(12.0))
-                                            .bg(theme::rgba_with_alpha(
-                                                theme::semantic().bg_surface,
-                                                0.82,
-                                            ))
-                                            .border_1()
-                                            .border_color(ui::border_light())
-                                            .child(input),
-                                    )
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .items_center()
-                                            .gap_2()
-                                            .child(
-                                                primary_action_button("另存为", dark)
-                                                    .id("qr-save-btn")
-                                                    .on_click({
-                                                        let entity = entity.clone();
-                                                        move |_, _window, cx| {
-                                                            entity.update(cx, |this, ctx| {
-                                                                this.save_current(ctx);
-                                                                ctx.notify();
-                                                            });
-                                                        }
-                                                    }),
-                                            )
-                                            .child(
-                                                action_button("复制内容", dark)
-                                                    .id("qr-copy-btn")
-                                                    .on_click({
-                                                        let entity = entity.clone();
-                                                        move |_, _window, cx| {
-                                                            entity.update(cx, |this, ctx| {
-                                                                this.copy_current(ctx);
-                                                                ctx.notify();
-                                                            });
-                                                        }
-                                                    }),
-                                            )
-                                            .child(
-                                                action_button("从剪贴板", dark)
-                                                    .id("qr-paste-btn")
-                                                    .on_click({
-                                                        let entity = entity.clone();
-                                                        move |_, _window, cx| {
-                                                            entity.update(cx, |this, ctx| {
-                                                                this.fill_from_clipboard(ctx);
-                                                                ctx.notify();
-                                                            });
-                                                        }
-                                                    }),
-                                            )
-                                            .child(div().flex_1())
-                                            .child(
-                                                ghost_button("生成", dark)
-                                                    .id("qr-generate-btn")
-                                                    .on_click({
-                                                        let entity = entity.clone();
-                                                        move |_, _window, cx| {
-                                                            entity.update(cx, |this, ctx| {
-                                                                let text = this.input_text(ctx);
-                                                                this.generate_from_text(&text, ctx);
-                                                                ctx.notify();
-                                                            });
-                                                        }
-                                                    }),
-                                            )
-                                            .child(
-                                                ghost_button("清空", dark)
-                                                    .id("qr-clear-btn")
-                                                    .on_click({
-                                                        let entity = entity.clone();
-                                                        move |_, _window, cx| {
-                                                            entity.update(cx, |this, ctx| {
-                                                                this.clear_input(ctx);
-                                                                ctx.notify();
-                                                            });
-                                                        }
-                                                    }),
-                                            ),
-                                    )
-                                    .child(status_bar(message, tone, dark)),
-                            )
-                            .child(preview_panel(dark, qr_matrix, qr_size)),
-                    ),
-            )
-            .child(if show_scan {
-                overlay_shell(
-                    dark,
-                    "qr-scan-overlay",
-                    entity.clone(),
-                    scan_panel(
-                        entity.clone(),
-                        scan_path_input,
-                        scan_result,
-                        scan_error,
-                        dark,
-                    ),
+        ui::plugin_surface().child(
+            ui::plugin_scroll_content()
+                .flex().flex_col().gap_2()
+                // Header
+                .child(
+                    div().flex().items_center().justify_between()
+                        .child(div().text_size(px(14.0)).font_weight(gpui::FontWeight::SEMIBOLD).text_color(theme::semantic().text_primary).child("二维码"))
+                        .child(
+                            div().flex().items_center().gap_2()
+                                .child(action_btn("选择图片", dark).id("qr-choose-img").on_click({ let e = entity.clone(); move |_, _, cx| { e.update(cx, |t, cx| { t.choose_scan_image(cx); cx.notify(); }); } }))
+                                .child(ghost_btn("清空", dark).id("qr-clear").on_click({ let e = entity.clone(); move |_, _, cx| { e.update(cx, |t, cx| { t.clear_input(cx); cx.notify(); }); } })),
+                        ),
                 )
-                .into_any_element()
-            } else if show_history {
-                overlay_shell(
-                    dark,
-                    "qr-history-overlay",
-                    entity.clone(),
-                    history_panel(
-                        entity.clone(),
-                        history_query,
-                        history,
-                        dark,
-                        input_text.is_empty(),
-                    ),
+                // Content: input (left) | preview (right)
+                .child(
+                    div().flex().gap_4()
+                        .child(
+                            div().flex_1().flex().flex_col().gap_2()
+                                .child(div().rounded(px(10.0)).bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7)).border_1().border_color(ui::border_light()).overflow_hidden().child(input))
+                                .child(
+                                    div().flex().items_center().gap_2()
+                                        .child(primary_btn("另存为", dark).id("qr-save").on_click({ let e = entity.clone(); move |_, _, cx| { e.update(cx, |t, cx| { t.save_current(cx); cx.notify(); }); } }))
+                                        .child(action_btn("复制", dark).id("qr-copy").on_click({ let e = entity.clone(); move |_, _, cx| { e.update(cx, |t, cx| { t.copy_current(cx); cx.notify(); }); } }))
+                                        .child(action_btn("粘贴", dark).id("qr-paste").on_click({ let e = entity.clone(); move |_, _, cx| { e.update(cx, |t, cx| { t.fill_from_clipboard(cx); cx.notify(); }); } }))
+                                        .child(div().flex_1())
+                                        .child(ghost_btn("生成", dark).id("qr-gen").on_click({ let e = entity.clone(); move |_, _, cx| { e.update(cx, |t, cx| { let text = t.input_text(cx); t.generate_from_text(&text, cx); cx.notify(); }); } })),
+                                )
+                                .child(status_bar(message, tone, dark)),
+                        )
+                        .child(preview_panel(dark, qr_matrix, qr_size, scanned)),
                 )
-                .into_any_element()
-            } else {
-                div().into_any_element()
-            })
+        )
     }
 }
 
-fn preview_panel(dark: bool, qr_matrix: Vec<bool>, qr_size: usize) -> impl IntoElement {
-    div()
-        .w(px(220.0))
-        .flex()
-        .child(
-            div()
-                .size(px(220.0))
-                .rounded(px(14.0))
-                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.88))
-                .border_1()
-                .border_color(ui::border_light())
-                .flex()
-                .items_center()
-                .justify_center()
-                .child({
-                    if !qr_matrix.is_empty() && qr_size > 0 {
-                        let max_preview = 176.0;
-                        let cell_size = (max_preview / qr_size as f32).floor().max(2.0);
-                        let total_px = qr_size as f32 * cell_size;
-                        let dark_color = if dark {
-                            hsla(0.0, 0.0, 0.92, 1.0)
-                        } else {
-                            hsla(0.0, 0.0, 0.0, 1.0)
-                        };
-                        let light_color = if dark {
-                            hsla(0.0, 0.0, 0.18, 1.0)
-                        } else {
-                            hsla(0.0, 0.0, 1.0, 1.0)
-                        };
-
-                        div()
-                            .rounded(px(10.0))
-                            .bg(light_color)
-                            .p(px(12.0))
-                            .child(div().size(px(total_px)).flex().flex_col().children(
-                                (0..qr_size).map(|row| {
-                                    let cells: Vec<_> = (0..qr_size)
-                                        .map(|col| {
-                                            let idx = row * qr_size + col;
-                                            let filled =
-                                                qr_matrix.get(idx).copied().unwrap_or(false);
-                                            div().size(px(cell_size)).bg(if filled {
-                                                dark_color
-                                            } else {
-                                                light_color
-                                            })
-                                        })
-                                        .collect();
-                                    div().flex().children(cells)
-                                }),
-                            ))
-                            .into_any_element()
-                    } else {
-                        div()
-                            .text_size(px(12.0))
-                            .text_color(ui::text_tertiary())
-                            .child("二维码预览")
-                            .into_any_element()
-                    }
-                }),
-        )
-}
-
-fn scan_panel(
-    entity: Entity<QrView>,
-    scan_path_input: Entity<TextInput>,
-    scan_result: String,
-    scan_error: String,
-    dark: bool,
-) -> impl IntoElement {
-    let result_text = if !scan_error.is_empty() {
-        scan_error.clone()
-    } else if !scan_result.is_empty() {
-        scan_result.clone()
-    } else {
-        String::from("扫描结果将显示在这里")
-    };
-    let result_tone = if !scan_error.is_empty() {
-        theme::semantic().danger
-    } else if !scan_result.is_empty() {
-        theme::semantic().text_primary
-    } else {
-        theme::semantic().text_secondary
-    };
-
-    div()
-        .w(px(520.0))
-        .rounded(px(10.0))
-        .shadow_lg()
-        .bg(theme::semantic().bg_surface)
-        .border_1()
-        .border_color(theme::semantic().border_default)
-        .flex()
-        .flex_col()
-        .child(
-            div()
-                .h(px(42.0))
-                .px_3()
-                .border_b_1()
-                .border_color(theme::semantic().border_default)
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .text_size(px(13.0))
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .child("扫描二维码"),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .gap_2()
-                        .child(
-                            action_button("选择图片", dark)
-                                .id("qr-scan-choose")
-                                .on_click({
-                                    let entity = entity.clone();
-                                    move |_, _window, cx| {
-                                        entity.update(cx, |this, ctx| {
-                                            this.choose_scan_image(ctx);
-                                            ctx.notify();
-                                        });
-                                    }
-                                }),
-                        )
-                        .child(action_button("扫描", dark).id("qr-scan-run").on_click({
-                            let entity = entity.clone();
-                            move |_, _window, cx| {
-                                entity.update(cx, |this, ctx| {
-                                    this.scan_selected_path(ctx);
-                                    ctx.notify();
-                                });
-                            }
-                        }))
-                        .child(action_button("关闭", dark).id("qr-scan-close").on_click({
-                            let entity = entity.clone();
-                            move |_, _window, cx| {
-                                entity.update(cx, |this, ctx| {
-                                    this.show_scan = false;
-                                    ctx.notify();
-                                });
-                            }
-                        })),
-                ),
-        )
-        .child(
-            div()
-                .px_3()
-                .py_2()
-                .border_b_1()
-                .border_color(theme::semantic().border_default)
-                .child(
-                    div()
-                        .id("qr-scan-drop-zone")
-                        .rounded(px(8.0))
-                        .bg(theme::semantic().bg_page)
-                        .border_1()
-                        .border_color(theme::semantic().border_default)
-                        .drag_over::<ExternalPaths>(move |style, _, _, _| {
-                            style.bg(theme::rgba_with_alpha(
-                                theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan),
-                                if dark { 0.18 } else { 0.10 },
-                            ))
-                        })
-                        .on_drop({
-                            let entity = entity.clone();
-                            move |paths: &ExternalPaths, _window, cx| {
-                                if let Some(path) = paths.paths().first() {
-                                    entity.update(cx, |this, ctx| {
-                                        this.scan_path_text(
-                                            path.to_string_lossy().to_string(),
-                                            ctx,
-                                        );
-                                        ctx.notify();
-                                    });
-                                }
-                            }
-                        })
-                        .child(scan_path_input),
-                ),
-        )
-        .child(
-            div()
-                .px_3()
-                .py_2()
-                .h(px(150.0))
-                .id("qr-scan-result-scroll")
-                .overflow_y_scroll()
-                .child(
-                    div()
-                        .font_family("SF Mono")
-                        .text_size(px(12.0))
-                        .line_height(px(18.0))
-                        .text_color(result_tone)
-                        .child(result_text),
-                ),
-        )
-        .child(
-            div()
-                .px_3()
-                .pb_3()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(
-                    action_button("复制结果", dark)
-                        .id("qr-scan-copy")
-                        .on_click({
-                            let entity = entity.clone();
-                            move |_, _window, cx| {
-                                entity.update(cx, |this, ctx| {
-                                    this.copy_scan_result(ctx);
-                                    ctx.notify();
-                                });
-                            }
-                        }),
-                )
-                .child(
-                    action_button("用作生成内容", dark)
-                        .id("qr-scan-use")
-                        .on_click({
-                            let entity = entity.clone();
-                            move |_, _window, cx| {
-                                entity.update(cx, |this, ctx| {
-                                    this.use_scan_result(ctx);
-                                    ctx.notify();
-                                });
-                            }
-                        }),
-                ),
-        )
-}
-
-fn history_panel(
-    entity: Entity<QrView>,
-    history_query: Entity<TextInput>,
-    history: Vec<QrHistoryRecord>,
-    dark: bool,
-    _input_is_empty: bool,
-) -> impl IntoElement {
-    let count = history.len();
-    div()
-        .w(px(560.0))
-        .rounded(px(10.0))
-        .shadow_lg()
-        .bg(theme::semantic().bg_surface)
-        .border_1()
-        .border_color(theme::semantic().border_default)
-        .flex()
-        .flex_col()
-        .child(
-            div()
-                .h(px(42.0))
-                .px_3()
-                .border_b_1()
-                .border_color(theme::semantic().border_default)
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(
-                            div()
-                                .text_size(px(13.0))
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .child("历史记录"),
-                        )
-                        .child(
-                            div()
-                                .h(px(20.0))
-                                .px_2()
-                                .rounded(px(999.0))
-                                .bg(theme::semantic().bg_subtle)
-                                .text_size(px(11.0))
-                                .text_color(theme::semantic().text_secondary)
-                                .flex()
-                                .items_center()
-                                .child(format!("{count} 条")),
-                        ),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .gap_2()
-                        .child(
-                            action_button("导出", dark)
-                                .id("qr-history-export")
-                                .on_click({
-                                    let entity = entity.clone();
-                                    move |_, _window, cx| {
-                                        entity.update(cx, |this, ctx| {
-                                            this.export_history(ctx);
-                                            ctx.notify();
-                                        });
-                                    }
-                                }),
-                        )
-                        .child(
-                            action_button("清空", dark)
-                                .id("qr-history-clear")
-                                .on_click({
-                                    let entity = entity.clone();
-                                    move |_, _window, cx| {
-                                        entity.update(cx, |this, ctx| {
-                                            this.clear_history(ctx);
-                                            ctx.notify();
-                                        });
-                                    }
-                                }),
-                        )
-                        .child(
-                            action_button("关闭", dark)
-                                .id("qr-history-close")
-                                .on_click({
-                                    let entity = entity.clone();
-                                    move |_, _window, cx| {
-                                        entity.update(cx, |this, ctx| {
-                                            this.show_history = false;
-                                            ctx.notify();
-                                        });
-                                    }
-                                }),
-                        ),
-                ),
-        )
-        .child(
-            div()
-                .px_3()
-                .py_2()
-                .border_b_1()
-                .border_color(theme::semantic().border_default)
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(
-                            div()
-                                .flex_1()
-                                .rounded(px(8.0))
-                                .bg(theme::semantic().bg_page)
-                                .border_1()
-                                .border_color(theme::semantic().border_default)
-                                .child(history_query),
-                        )
-                        .child(
-                            action_button("筛选", dark)
-                                .id("qr-history-filter")
-                                .on_click({
-                                    let entity = entity.clone();
-                                    move |_, _window, cx| {
-                                        entity.update(cx, |this, ctx| {
-                                            this.refresh_history(ctx);
-                                            ctx.notify();
-                                        });
-                                    }
-                                }),
-                        ),
-                ),
-        )
-        .child(if history.is_empty() {
-            div()
-                .h(px(120.0))
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(px(12.0))
-                .text_color(theme::semantic().text_secondary)
-                .child("暂无历史记录")
-                .into_any_element()
-        } else {
-            div()
-                .h(px(220.0))
-                .id("qr-history-scroll")
-                .overflow_y_scroll()
-                .children(
-                    history
-                        .into_iter()
-                        .enumerate()
-                        .map(|(index, item)| history_row(entity.clone(), item, index, dark)),
-                )
-                .into_any_element()
-        })
-}
-
-fn overlay_shell(
-    dark: bool,
-    backdrop_id: &'static str,
-    entity: Entity<QrView>,
-    content: impl IntoElement,
-) -> impl IntoElement {
-    div()
-        .size_full()
-        .absolute()
-        .top_0()
-        .left_0()
-        .child(
-            div()
-                .size_full()
-                .absolute()
-                .top_0()
-                .left_0()
-                .bg(hsla(0.0, 0.0, 0.0, if dark { 0.42 } else { 0.24 }))
-                .id(backdrop_id)
-                .on_click({
-                    let entity = entity.clone();
-                    move |_, _window, cx| {
-                        entity.update(cx, |this, ctx| {
-                            this.show_scan = false;
-                            this.show_history = false;
-                            ctx.notify();
-                        });
-                    }
-                }),
-        )
-        .child(
-            div()
-                .size_full()
-                .absolute()
-                .top_0()
-                .left_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(content),
-        )
-}
-
-fn history_row(
-    entity: Entity<QrView>,
-    item: QrHistoryRecord,
-    index: usize,
-    dark: bool,
-) -> impl IntoElement {
-    let tone = match item.kind {
-        QrHistoryKind::Save => theme::semantic().success,
-        QrHistoryKind::Copy => theme::semantic().primary_active,
-        QrHistoryKind::Scan => theme::semantic().info,
-    };
-
-    div()
-        .h(px(44.0))
-        .px_3()
-        .border_b_1()
-        .border_color(theme::semantic().border_default)
-        .flex()
-        .items_center()
-        .gap_2()
-        .child(
-            div()
-                .w(px(36.0))
-                .text_size(px(11.0))
-                .text_color(tone)
-                .child(item.kind.label()),
-        )
-        .child(
-            div()
-                .flex_1()
-                .text_size(px(12.0))
-                .font_family("SF Mono")
-                .text_color(theme::semantic().text_primary)
-                .child(item.content.clone()),
-        )
-        .child(
-            div()
-                .w(px(76.0))
-                .text_size(px(11.0))
-                .text_color(theme::semantic().text_secondary)
-                .child(item.created_at.split(' ').last().unwrap_or("").to_string()),
-        )
-        .child(
-            action_button("用", dark)
-                .id(("qr-history-use", index))
-                .on_click({
-                    let entity = entity.clone();
-                    let item = item.clone();
-                    move |_, _window, cx| {
-                        entity.update(cx, |this, ctx| {
-                            this.use_history_item(&item, ctx);
-                            ctx.notify();
-                        });
-                    }
-                }),
-        )
-        .child(
-            action_button("复制", dark)
-                .id(("qr-history-copy", index))
-                .on_click({
-                    let entity = entity.clone();
-                    let item = item.clone();
-                    move |_, _window, cx| {
-                        entity.update(cx, |this, ctx| {
-                            this.copy_history_item(&item, ctx);
-                            ctx.notify();
-                        });
-                    }
-                }),
-        )
-        .child(
-            action_button("删除", dark)
-                .id(("qr-history-delete", index))
-                .on_click({
-                    let entity = entity.clone();
-                    let item_id = item.id.clone();
-                    move |_, _window, cx| {
-                        entity.update(cx, |this, ctx| {
-                            this.remove_history_item(&item_id, ctx);
-                            ctx.notify();
-                        });
-                    }
-                }),
-        )
+fn preview_panel(dark: bool, qr_matrix: Vec<bool>, qr_size: usize, scanned: Option<PathBuf>) -> impl IntoElement {
+    let preview_size = 200.0;
+    div().w(px(preview_size)).flex_none().child(
+        div()
+            .size(px(preview_size)).rounded(px(10.0))
+            .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
+            .border_1().border_color(ui::border_light())
+            .flex().items_center().justify_center().overflow_hidden()
+            .child({
+                if let Some(path) = scanned {
+                    img(path).object_fit(ObjectFit::Contain).size_full().into_any_element()
+                } else if !qr_matrix.is_empty() && qr_size > 0 {
+                    let cell_size = ((preview_size - 24.0) / qr_size as f32).floor().max(2.0);
+                    let total = qr_size as f32 * cell_size;
+                    let dark_c = if dark { hsla(0.0, 0.0, 0.92, 1.0) } else { hsla(0.0, 0.0, 0.0, 1.0) };
+                    let light_c = if dark { hsla(0.0, 0.0, 0.18, 1.0) } else { hsla(0.0, 0.0, 1.0, 1.0) };
+                    div().rounded(px(8.0)).bg(light_c).p(px(12.0))
+                        .child(div().size(px(total)).flex().flex_col().children(
+                            (0..qr_size).map(|row| div().flex().children((0..qr_size).map(|col| {
+                                let filled = qr_matrix.get(row * qr_size + col).copied().unwrap_or(false);
+                                div().size(px(cell_size)).bg(if filled { dark_c } else { light_c })
+                            })))
+                        )).into_any_element()
+                } else {
+                    div().text_size(px(12.0)).text_color(ui::text_tertiary()).child("预览").into_any_element()
+                }
+            }),
+    )
 }
 
 fn status_bar(message: String, tone: StatusTone, _dark: bool) -> impl IntoElement {
-    div()
-        .h(px(32.0))
-        .rounded(px(10.0))
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
-        .border_1()
-        .border_color(ui::border_light())
-        .px_3()
-        .flex()
-        .items_center()
-        .gap_2()
-        .child(
-            div()
-                .flex_1()
-                .text_size(px(11.0))
-                .text_color(match tone {
-                    StatusTone::Neutral => ui::text_secondary(),
-                    StatusTone::Success => theme::semantic().success,
-                    StatusTone::Error => theme::semantic().danger,
-                })
-                .child(message),
-        )
+    div().h(px(28.0)).rounded(px(8.0))
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.5))
+        .border_1().border_color(ui::border_light())
+        .px_3().flex().items_center()
+        .child(div().flex_1().text_size(px(11.0)).text_color(match tone {
+            StatusTone::Neutral => ui::text_secondary(),
+            StatusTone::Success => theme::semantic().success,
+            StatusTone::Error => theme::semantic().danger,
+        }).child(message))
 }
 
-fn primary_action_button(label: &str, _dark: bool) -> gpui::Div {
-    components::button(
-        label.to_string(),
-        components::ButtonVariant::Primary,
-        Some(qingqi_plugin::plugin_spec::PluginAccent::Blue),
-        _dark,
-    )
+fn primary_btn(label: &str, dark: bool) -> gpui::Div {
+    components::button(label.to_string(), components::ButtonVariant::Primary, Some(qingqi_plugin::plugin_spec::PluginAccent::Blue), dark)
 }
-
-fn action_button(label: &str, dark: bool) -> gpui::Div {
-    components::button(
-        label.to_string(),
-        components::ButtonVariant::Secondary,
-        None,
-        dark,
-    )
+fn action_btn(label: &str, dark: bool) -> gpui::Div {
+    components::button(label.to_string(), components::ButtonVariant::Secondary, None, dark)
 }
-
-fn utility_button(label: &str, active: bool, _dark: bool) -> gpui::Div {
-    div()
-        .h(px(28.0))
-        .px_2()
-        .rounded(px(999.0))
-        .bg(if active {
-            theme::rgba_with_alpha(
-                ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue),
-                0.18,
-            )
-        } else {
-            theme::rgba_with_alpha(theme::semantic().bg_surface, 0.8)
-        })
-        .border_1()
-        .border_color(ui::border_light())
-        .hover(move |style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .text_color(if active {
-            ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
-        } else {
-            theme::semantic().text_primary
-        })
-        .child(label.to_string())
-}
-
-fn icon_button(active: bool, _dark: bool, count: usize) -> gpui::Div {
-    div()
-        .h(px(28.0))
-        .px_2()
-        .rounded(px(999.0))
-        .bg(if active {
-            theme::rgba_with_alpha(
-                ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue),
-                0.18,
-            )
-        } else {
-            theme::rgba_with_alpha(theme::semantic().bg_surface, 0.8)
-        })
-        .border_1()
-        .border_color(ui::border_light())
-        .hover(move |style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .gap_1()
-        .px_2()
-        .child(ui::icon_element(
-            "icons/history.svg",
-            if active {
-                ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
-            } else {
-                theme::semantic().text_primary
-            },
-            13.0,
-        ))
-        .child(
-            div()
-                .text_size(px(11.0))
-                .text_color(if active {
-                    ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
-                } else {
-                    theme::semantic().text_primary
-                })
-                .child(count.to_string()),
-        )
-}
-
-
-fn ghost_button(label: &str, dark: bool) -> gpui::Div {
-    components::button(
-        label.to_string(),
-        components::ButtonVariant::Ghost,
-        None,
-        dark,
-    )
+fn ghost_btn(label: &str, dark: bool) -> gpui::Div {
+    components::button(label.to_string(), components::ButtonVariant::Ghost, None, dark)
 }
