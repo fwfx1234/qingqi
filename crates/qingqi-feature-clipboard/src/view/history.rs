@@ -412,7 +412,7 @@ fn history_row(
                         .child(meta),
                 ),
         )
-        // Pin + Delete — subtle, always visible on the right
+        // Pin + Delete — subtle icon buttons on the right
         .child(
             div().flex().items_center().gap(px(2.0))
                 .child(
@@ -425,12 +425,12 @@ fn history_row(
                             Icon::new(if pinned { IconName::Star } else { IconName::StarOff })
                                 .with_size(ComponentSize::Small)
                                 .text_color(if pinned {
-                                    ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
+                                    theme::semantic().text_primary
                                 } else {
                                     theme::semantic().text_placeholder
                                 }),
                         )
-                        .on_click(move |_, _, cx| {
+                        .on_click(move |_event, _, cx| {
                             let _ = cx.update_entity(&pin_handle, |panel, cx| {
                                 panel.select(index, cx);
                                 panel.toggle_selected_pin(cx);
@@ -450,7 +450,7 @@ fn history_row(
                                 .with_size(ComponentSize::Small)
                                 .text_color(theme::semantic().text_placeholder),
                         )
-                        .on_click(move |_, _, cx| {
+                        .on_click(move |_event, _, cx| {
                             let _ = cx.update_entity(&delete_handle, |panel, cx| {
                                 panel.select(index, cx);
                                 panel.delete_selected(cx);
