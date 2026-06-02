@@ -450,7 +450,7 @@ pub fn plugin_surface() -> gpui::Div {
 }
 
 pub fn plugin_content() -> gpui::Div {
-    div().size_full().p_4()
+    div().size_full().p_3()
 }
 
 pub fn plugin_scroll_content() -> gpui::Stateful<gpui::Div> {
