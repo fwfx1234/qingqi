@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use crate::log_error;
 
 #[derive(Clone, Debug)]
 pub struct AppPaths {
@@ -39,37 +40,37 @@ impl AppPaths {
 
     pub fn config(&self, name: &str) -> PathBuf {
         let dir = self.data_dir.join("config");
-        let _ = fs::create_dir_all(&dir);
+        log_error!(fs::create_dir_all(&dir), warn, "创建配置目录失败");
         dir.join(name)
     }
 
     pub fn log_file(&self, name: &str) -> PathBuf {
         let dir = self.data_dir.join("logs");
-        let _ = fs::create_dir_all(&dir);
+        log_error!(fs::create_dir_all(&dir), warn, "创建日志目录失败");
         dir.join(name)
     }
 
     pub fn feature_dir(&self, feature: &str) -> PathBuf {
         let dir = self.data_dir.join("features").join(feature);
-        let _ = fs::create_dir_all(&dir);
+        log_error!(fs::create_dir_all(&dir), warn, "创建 feature 目录失败");
         dir
     }
 
     pub fn feature_output_dir(&self, feature: &str) -> PathBuf {
         let dir = self.feature_dir(feature).join("output");
-        let _ = fs::create_dir_all(&dir);
+        log_error!(fs::create_dir_all(&dir), warn, "创建输出目录失败");
         dir
     }
 
     pub fn feature_state(&self, feature: &str, name: &str) -> PathBuf {
         let dir = self.feature_dir(feature).join("state");
-        let _ = fs::create_dir_all(&dir);
+        log_error!(fs::create_dir_all(&dir), warn, "创建状态目录失败");
         dir.join(name)
     }
 
     pub fn imported_plugins_dir(&self) -> PathBuf {
         let dir = self.data_dir.join("plugins").join("imported");
-        let _ = fs::create_dir_all(&dir);
+        log_error!(fs::create_dir_all(&dir), warn, "创建插件导入目录失败");
         dir
     }
 }

@@ -1817,9 +1817,9 @@ fn terminal_workspace(
     panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
     let connected = summary.is_some_and(|summary| summary.status == ConnectionStatus::Connected);
-    let terminal_bg = ui::terminal_bg();
-    let terminal_fg = ui::terminal_fg();
-    let terminal_muted = ui::terminal_muted();
+    let terminal_bg = theme::terminal_bg();
+    let terminal_fg = theme::terminal_fg();
+    let terminal_muted = theme::terminal_muted();
     div()
         .flex_1()
         .min_h(px(0.0))
@@ -1922,7 +1922,7 @@ fn terminal_workspace(
                         .overflow_y_scroll()
                         .rounded(px(6.0))
                         .border_1()
-                        .border_color(ui::terminal_border())
+                        .border_color(theme::terminal_border())
                         .bg(terminal_bg)
                         .px(px(8.0))
                         .py(px(6.0))

@@ -5,6 +5,11 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use time::{Date, OffsetDateTime, macros::format_description};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::Layer;
+
 use anyhow::Result;
 use gpui::{App, Menu, MenuItem};
 use qingqi_plugin::host::{AppIndexHandleRef, ShortcutHandleRef, ThemeHandleRef};
@@ -119,17 +124,19 @@ pub struct AppHost {
     pub app_catalog: Arc<AppCatalog>,
     pub power_manager: Arc<Mutex<PowerManager>>,
     pub shortcut_service: Arc<Mutex<ShortcutService>>,
+    _log_guard: Option<tracing_appender::non_blocking::WorkerGuard>,
 }
 
 pub fn bootstrap() -> Result<AppHost> {
     let paths = AppPaths::resolve()?;
-    let log_path = paths.log_file("qingqi.log");
-    init_tracing(log_path.as_path());
-    install_panic_hook(log_path.with_file_name("qingqi-crash.log"));
 
-    tracing::debug!(
+    let logs_dir = paths.data_dir().join("logs");
+    let _log_guard = init_tracing(&logs_dir);
+    install_panic_hook(logs_dir.join("qingqi-crash.log"));
+
+    tracing::info!(
         data_dir = %paths.data_dir().display(),
-        log_file = %paths.log_file("qingqi.log").display(),
+        logs_dir = %logs_dir.display(),
         "qingqi starting"
     );
 
@@ -159,6 +166,7 @@ pub fn bootstrap() -> Result<AppHost> {
         app_catalog,
         power_manager,
         shortcut_service,
+        _log_guard,
     })
 }
 
@@ -171,6 +179,7 @@ pub fn run(host: AppHost) -> Result<()> {
         app_catalog,
         power_manager,
         shortcut_service,
+        _log_guard: _,
     } = host;
     let plugins = Arc::new(Mutex::new(plugins));
     {
@@ -342,70 +351,93 @@ fn install_panic_hook(crash_log: PathBuf) {
     }));
 }
 
-fn init_tracing(log_path: &Path) {
-    let log_file = open_log_file(log_path);
-    let writer = move || TeeWriter {
-        stderr: io::stderr(),
-        file: log_file
-            .as_ref()
-            .and_then(|file| file.try_clone().ok())
-            .map(Mutex::new),
+fn init_tracing(logs_dir: &Path) -> Option<tracing_appender::non_blocking::WorkerGuard> {
+    // 确保日志目录存在（在 subscriber 初始化之前）
+    if let Err(error) = fs::create_dir_all(logs_dir) {
+        eprintln!("[qingqi] 无法创建日志目录 {}: {error}", logs_dir.display());
+    }
+
+    let env_filter = resolve_log_filter();
+
+    // 文件 layer：完整格式，含 target 和时间戳，按天轮转
+    let file_appender = tracing_appender::rolling::daily(logs_dir, "qingqi");
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+
+    let file_layer = tracing_subscriber::fmt::layer()
+        .with_ansi(false)
+        .with_target(true)
+        .with_writer(non_blocking)
+        .with_filter(env_filter);
+
+    // stderr layer：精简格式，仅 WARN 及以上，避免干扰终端
+    let stderr_layer = tracing_subscriber::fmt::layer()
+        .compact()
+        .with_target(false)
+        .with_writer(io::stderr)
+        .with_filter(tracing_subscriber::EnvFilter::new("warn"));
+
+    tracing_subscriber::registry()
+        .with(file_layer)
+        .with(stderr_layer)
+        .init();
+
+    // 清理旧日志
+    prune_old_logs(logs_dir, 7);
+
+    Some(guard)
+}
+
+/// 解析日志级别过滤，优先级：QINGQI_LOG > RUST_LOG > 编译时默认
+fn resolve_log_filter() -> tracing_subscriber::EnvFilter {
+    // 1. QINGQI_LOG 环境变量（最高优先级）
+    if let Ok(val) = std::env::var("QINGQI_LOG") {
+        if let Ok(filter) = val.parse() {
+            return filter;
+        }
+        eprintln!("[qingqi] QINGQI_LOG 值无效: {val}，使用默认值");
+    }
+
+    // 2. RUST_LOG 环境变量（兼容）
+    if let Ok(filter) = tracing_subscriber::EnvFilter::try_from_default_env() {
+        return filter;
+    }
+
+    // 3. 编译时默认
+    if cfg!(debug_assertions) {
+        tracing_subscriber::EnvFilter::new("debug")
+    } else {
+        tracing_subscriber::EnvFilter::new("info")
+    }
+}
+
+/// 清理超过 `retain_days` 天的旧日志文件
+fn prune_old_logs(logs_dir: &Path, retain_days: u32) {
+    let fmt = format_description!("[year]-[month]-[day]");
+    let Some(cutoff) = OffsetDateTime::now_utc()
+        .checked_sub(time::Duration::days(retain_days as i64))
+    else {
+        return;
     };
 
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("qingqi=debug,warn"));
+    let Ok(entries) = fs::read_dir(logs_dir) else {
+        return;
+    };
 
-    tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .with_target(false)
-        .with_writer(writer)
-        .compact()
-        .init();
-}
-
-fn open_log_file(path: &Path) -> Option<fs::File> {
-    if let Some(parent) = path.parent()
-        && let Err(error) = fs::create_dir_all(parent)
-    {
-        eprintln!("failed to create log dir {}: {error}", parent.display());
-        return None;
-    }
-
-    OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .map_err(|error| {
-            eprintln!("failed to open log file {}: {error}", path.display());
-            error
-        })
-        .ok()
-}
-
-struct TeeWriter {
-    stderr: io::Stderr,
-    file: Option<Mutex<fs::File>>,
-}
-
-impl Write for TeeWriter {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.stderr.write_all(buf)?;
-        if let Some(file) = &self.file
-            && let Ok(mut file) = file.lock()
-        {
-            let _ = file.write_all(buf);
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        // 匹配 tracing_appender rolling::daily 格式: qingqi.YYYY-MM-DD
+        if !name.starts_with("qingqi.") {
+            continue;
         }
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.stderr.flush()?;
-        if let Some(file) = &self.file
-            && let Ok(mut file) = file.lock()
-        {
-            let _ = file.flush();
+        let date_str = &name["qingqi.".len()..];
+        if let Ok(date) = Date::parse(date_str, &fmt) {
+            if date < cutoff.date() {
+                let _ = fs::remove_file(&path);
+            }
         }
-        Ok(())
     }
 }
 

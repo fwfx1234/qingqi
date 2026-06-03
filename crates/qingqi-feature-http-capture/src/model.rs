@@ -84,6 +84,8 @@ pub enum DetailTab {
     ResponseHeaders,
     ResponseBody,
     Timing,
+    /// Mock 规则管理
+    Mock,
 }
 
 impl DetailTab {
@@ -95,16 +97,18 @@ impl DetailTab {
             Self::ResponseHeaders => "响应头",
             Self::ResponseBody => "响应体",
             Self::Timing => "计时",
+            Self::Mock => "Mock",
         }
     }
 
-    pub const ALL: [DetailTab; 6] = [
+    pub const ALL: [DetailTab; 7] = [
         DetailTab::Overview,
         DetailTab::RequestHeaders,
         DetailTab::RequestBody,
         DetailTab::ResponseHeaders,
         DetailTab::ResponseBody,
         DetailTab::Timing,
+        DetailTab::Mock,
     ];
 }
 
@@ -525,10 +529,11 @@ mod tests {
     }
 
     #[test]
-    fn detail_tab_all_has_six_variants() {
-        assert_eq!(DetailTab::ALL.len(), 6);
+    fn detail_tab_all_has_seven_variants() {
+        assert_eq!(DetailTab::ALL.len(), 7);
         assert_eq!(DetailTab::ALL[0], DetailTab::Overview);
         assert_eq!(DetailTab::ALL[5], DetailTab::Timing);
+        assert_eq!(DetailTab::ALL[6], DetailTab::Mock);
     }
 
     #[test]

@@ -25,7 +25,7 @@ mod settings;
 mod shared;
 
 use history::{history_page, history_titlebar_slot, keyboard_filters};
-use settings::{format_ignore_patterns, settings_page};
+use settings::{format_ignore_patterns, settings_page, settings_titlebar_slot};
 
 const HISTORY_PAGE_SIZE: usize = 120;
 const HISTORY_PREFETCH_THRESHOLD: usize = 40;
@@ -1103,8 +1103,11 @@ impl Render for ClipboardView {
             })
             .child(ui::popup_window_chrome_with_titlebar_slot(
                 chrome_config,
-                (tab == ClipboardTab::History)
-                    .then(|| history_titlebar_slot(handle, query_input, dark).into_any_element()),
+                if tab == ClipboardTab::History {
+                    Some(history_titlebar_slot(handle.clone(), query_input, dark).into_any_element())
+                } else {
+                    Some(settings_titlebar_slot(handle.clone(), dark).into_any_element())
+                },
             ))
             .into_any_element()
     }

@@ -499,12 +499,22 @@ impl WindowController {
                 })
             }
             activation @ Activation::Run(Action::PluginAction { .. }) => {
+                let plugin_id = activation.plugin_id().to_string();
                 let plugin_manager =                     lock_or_recover(&controller, "window_controller")
                     .plugin_manager();
-                                    lock_or_recover(&plugin_manager, "window_controller")
+                match lock_or_recover(&plugin_manager, "window_controller")
                     .handle_command(CommandInvocation { activation }, cx)
-                    .ok()
-                    .and_then(|outcome| outcome.message)
+                {
+                    Ok(outcome) => outcome.message,
+                    Err(error) => {
+                        tracing::error!(
+                            plugin_id = %plugin_id,
+                            error = %error,
+                            "command execution failed"
+                        );
+                        Some(format!("执行失败: {error}"))
+                    }
+                }
             }
         }
     }
@@ -623,7 +633,7 @@ fn plugin_window_options(
                 ..Default::default()
             }),
             kind: WindowKind::Normal,
-            is_resizable: false,
+            is_resizable: true,
             is_minimizable: true,
             window_background: WindowBackgroundAppearance::Opaque,
             window_min_size: Some(bounds.size),

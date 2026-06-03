@@ -1174,38 +1174,6 @@ impl Render for Launcher {
                                     .into_any_element()
                             }),
                     )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(8.0))
-                            .child(launcher_quick_tab(
-                                handle.clone(),
-                                "clipboard",
-                                "剪贴板",
-                                "TAB",
-                            ))
-                            .child(launcher_quick_tab(
-                                handle.clone(),
-                                "system-settings",
-                                "设置",
-                                "SET",
-                            ))
-                            .child(
-                                div()
-                                    .h(px(24.0))
-                                    .px(px(10.0))
-                                    .rounded(px(6.0))
-                                    .bg(theme::keycap_bg())
-                                    .border_1()
-                                    .border_color(theme::launcher_soft_line())
-                                    .flex()
-                                    .items_center()
-                                    .text_size(px(10.0))
-                                    .text_color(placeholder_color)
-                                    .child("Space"),
-                            ),
-                    ),
             )
             .when(search_mode, |launcher| {
                 let results_clone = results.clone();
@@ -1338,59 +1306,6 @@ impl Render for Launcher {
                 ))
             })
     }
-}
-
-fn launcher_quick_tab(
-    handle: Option<Entity<Launcher>>,
-    plugin_id: &'static str,
-    label: &'static str,
-    icon_label: &'static str,
-) -> impl IntoElement {
-    div()
-        .h(px(24.0))
-        .px(px(8.0))
-        .rounded(px(6.0))
-        .bg(theme::keycap_bg())
-        .border_1()
-        .border_color(theme::launcher_soft_line())
-        .cursor_pointer()
-        .hover(move |style| style.bg(theme::launcher_row_selected()).cursor_pointer())
-        .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
-            let Some(handle) = handle.clone() else {
-                return;
-            };
-            cx.update_entity(&handle, |launcher, entity_cx| {
-                if let Some(item) = launcher
-                    .default_commands_with_clipboard()
-                    .iter()
-                    .find(|item| {
-                        item.plugin_id == plugin_id
-                            && item.kind == CommandKind::Plugin
-                            && matches!(item.activation, Activation::Open { .. })
-                    })
-                    .cloned()
-                {
-                    let trace =
-                        PluginOpenTrace::new(PLUGIN_OPEN_TRACE_ID.fetch_add(1, Ordering::Relaxed));
-                    launcher.open_command(item, window, entity_cx, trace);
-                }
-            });
-        })
-        .flex()
-        .items_center()
-        .gap(px(5.0))
-        .child(
-            div()
-                .text_size(px(11.0))
-                .text_color(theme::launcher_muted_text())
-                .child(icon_label),
-        )
-        .child(
-            div()
-                .text_size(px(10.0))
-                .text_color(theme::launcher_muted_text())
-                .child(label),
-        )
 }
 
 fn plugin_list(

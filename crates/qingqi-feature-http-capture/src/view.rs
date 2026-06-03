@@ -1,6 +1,10 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
+    certificate::CaManager,
+    engine::CaptureEngine,
+    mock_model::MockRule,
+    mock_store::MockStore,
     model::{BodyDisplay, CapturedExchange, DetailTab, FilterState},
     store::CaptureStore,
 };
@@ -19,6 +23,9 @@ const PAGE_SIZE: i64 = 50;
 
 pub struct CaptureView {
     store: Arc<Mutex<CaptureStore>>,
+    engine: Arc<CaptureEngine>,
+    mock_store: Arc<Mutex<MockStore>>,
+    ca_manager: Arc<Mutex<CaManager>>,
     search_input: Entity<TextInput>,
     host_input: Entity<TextInput>,
     filter: FilterState,
@@ -29,16 +36,33 @@ pub struct CaptureView {
     detail_tab: DetailTab,
     offset: i64,
     engine_running: bool,
+    engine_port: u16,
     notice: Option<String>,
     loading: bool,
     load_generation: u64,
     reload_task: Option<Task<()>>,
     detail_task: Option<Task<()>>,
     subscriptions: Vec<Subscription>,
+    /// Mock 规则列表缓存
+    mock_rules: Vec<MockRule>,
+    /// 是否显示 Mock 规则面板
+    show_mock_panel: bool,
+    /// Mock 编辑文本
+    mock_edit_name: String,
+    mock_edit_url_pattern: String,
+    mock_edit_method: String,
+    mock_edit_status: String,
+    mock_edit_body: String,
 }
 
 impl CaptureView {
-    pub fn new(store: Arc<Mutex<CaptureStore>>, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        store: Arc<Mutex<CaptureStore>>,
+        engine: Arc<CaptureEngine>,
+        mock_store: Arc<Mutex<MockStore>>,
+        ca_manager: Arc<Mutex<CaManager>>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let search_input = cx.new(|cx| {
             let mut input = TextInput::new(cx, "搜索 URL 关键词", "");
             input.set_style(
@@ -68,6 +92,9 @@ impl CaptureView {
 
         let mut this = Self {
             store,
+            engine,
+            mock_store,
+            ca_manager,
             search_input,
             host_input,
             filter: FilterState::default(),
@@ -78,12 +105,20 @@ impl CaptureView {
             detail_tab: DetailTab::Overview,
             offset: 0,
             engine_running: false,
+            engine_port: 0,
             notice: None,
             loading: false,
             load_generation: 0,
             reload_task: None,
             detail_task: None,
             subscriptions: Vec::new(),
+            mock_rules: Vec::new(),
+            show_mock_panel: false,
+            mock_edit_name: String::new(),
+            mock_edit_url_pattern: String::new(),
+            mock_edit_method: String::new(),
+            mock_edit_status: String::new(),
+            mock_edit_body: String::new(),
         };
         this.observe_inputs(cx);
         this.refresh_from_store(cx);
@@ -1104,6 +1139,7 @@ fn render_detail_tab_content(
             render_body_section("响应体", detail.response_body_display(), dark)
         }
         DetailTab::Timing => render_timing_section(detail, dark),
+        DetailTab::Mock => todo!(),
     }
 }
 

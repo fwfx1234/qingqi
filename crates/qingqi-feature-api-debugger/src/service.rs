@@ -21,7 +21,7 @@ use crate::{
     store::ApiWorkspace,
     variable_service,
 };
-use qingqi_plugin::{database::DatabaseService, storage::AppPaths};
+use qingqi_plugin::{database::DatabaseService, log_error, storage::AppPaths};
 
 // Re-export model types for backward compatibility
 pub use crate::model::{
@@ -344,13 +344,17 @@ impl ApiService {
                 let title = resp.status_line.clone();
                 let method = request.method.label().to_string();
                 let url_str = build_final_url(&environment, &request);
-                let _ = service.data_source.insert_history(
-                    &tid,
-                    &method,
-                    &url_str,
-                    resp.status_code as i64,
-                    &title,
-                    &resp.body,
+                log_error!(
+                    service.data_source.insert_history(
+                        &tid,
+                        &method,
+                        &url_str,
+                        resp.status_code as i64,
+                        &title,
+                        &resp.body,
+                    ),
+                    warn,
+                    "保存请求历史失败"
                 );
             }
             // Save tab state if we have a meaningful tab_id
@@ -398,7 +402,7 @@ impl ApiService {
                     active_request_tab: existing_active_tab,
                     updated_at: String::new(),
                 };
-                let _ = service.data_source.save_tab(&tab);
+                log_error!(service.data_source.save_tab(&tab), warn, "保存标签页状态失败");
             }
 
             service.revision.fetch_add(1, Ordering::SeqCst);
@@ -601,7 +605,7 @@ impl ApiService {
     pub fn save_tab_state_async(self: &Arc<Self>, tab: HttpTab) {
         let service = Arc::clone(self);
         thread::spawn(move || {
-            let _ = service.save_tab_state(&tab);
+            log_error!(service.save_tab_state(&tab), warn, "保存标签页状态失败");
         });
     }
 
@@ -616,7 +620,7 @@ impl ApiService {
     pub fn delete_persisted_tab_async(self: &Arc<Self>, tab_id: String) {
         let service = Arc::clone(self);
         thread::spawn(move || {
-            let _ = service.delete_persisted_tab(&tab_id);
+            log_error!(service.delete_persisted_tab(&tab_id), warn, "删除持久化标签页失败");
         });
     }
 
@@ -874,8 +878,8 @@ fn perform_request(
 
     let raw_headers = fs::read_to_string(&header_path).unwrap_or_default();
     let raw_body = fs::read_to_string(&body_path).unwrap_or_default();
-    let _ = fs::remove_file(&header_path);
-    let _ = fs::remove_file(&body_path);
+    log_error!(fs::remove_file(&header_path), warn, "删除临时header文件失败");
+    log_error!(fs::remove_file(&body_path), warn, "删除临时body文件失败");
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -1341,7 +1345,7 @@ impl HttpMethod {
 mod tests {
     use super::*;
     use crate::model::RequestSnapshot;
-    use qingqi_plugin::{database::DatabaseService, storage::AppPaths};
+    use qingqi_plugin::{database::DatabaseService, log_error, storage::AppPaths};
     use std::fs;
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};

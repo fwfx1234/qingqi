@@ -82,7 +82,7 @@ pub fn bg_keycap() -> gpui::Hsla {
     theme::keycap_bg()
 }
 
-/// Row hover background (replaces launcher_row_selected in plugin views)
+/// Row hover background (replaced by theme::semantic().bg_hover)
 pub fn row_hover() -> gpui::Rgba {
     theme::semantic().bg_hover
 }
@@ -98,26 +98,6 @@ pub fn panel_heading_text() -> gpui::Rgba {
     } else {
         rgb(0x444458)
     }
-}
-
-pub fn terminal_bg() -> gpui::Rgba {
-    let dark = crate::theme_mode::is_dark();
-    if dark { rgb(0x0b1118) } else { rgb(0x111827) }
-}
-
-pub fn terminal_fg() -> gpui::Rgba {
-    let dark = crate::theme_mode::is_dark();
-    if dark { rgb(0xd7e2ee) } else { rgb(0xe5e7eb) }
-}
-
-pub fn terminal_muted() -> gpui::Rgba {
-    let dark = crate::theme_mode::is_dark();
-    if dark { rgb(0x7dd3fc) } else { rgb(0xbfdbfe) }
-}
-
-pub fn terminal_border() -> gpui::Rgba {
-    let dark = crate::theme_mode::is_dark();
-    if dark { rgb(0x1f2937) } else { rgb(0x374151) }
 }
 
 pub fn accent_color(accent: PluginAccent) -> gpui::Rgba {

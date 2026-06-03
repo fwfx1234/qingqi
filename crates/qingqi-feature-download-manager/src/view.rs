@@ -382,6 +382,7 @@ impl DownloadManagerView {
                     if let Some(tid) = task_id {
                         let start_result = { lock_or_recover(&self.service, "download-service").start_download(&tid) };
                         if let Err(e) = start_result {
+                            tracing::error!(error = %e, "下载启动失败");
                             self.message = format!("启动失败: {e}");
                         }
                     }
@@ -533,10 +534,12 @@ impl DownloadManagerView {
 
         if !save_root.is_empty() {
             if let Err(e) = lock_or_recover(&self.service, "download-service").set_save_root(&save_root) {
+                tracing::error!(error = %e, "保存目录设置失败");
                 self.message = format!("保存目录设置失败: {e}");
             }
         }
         if let Err(e) = lock_or_recover(&self.service, "download-service").set_max_concurrent(concurrent) {
+            tracing::error!(error = %e, "并发设置失败");
             self.message = format!("并发设置失败: {e}");
         }
         if let Err(e) = self
@@ -545,6 +548,7 @@ impl DownloadManagerView {
             .unwrap()
             .set_speed_limit_kbps(speed_limit)
         {
+            tracing::error!(error = %e, "限速设置失败");
             self.message = format!("限速设置失败: {e}");
         }
         if let Err(e) = lock_or_recover(&self.service, "download-service").set_network_options(
@@ -556,6 +560,7 @@ impl DownloadManagerView {
             timeout,
             retry,
         ) {
+            tracing::error!(error = %e, "网络设置失败");
             self.message = format!("网络设置失败: {e}");
         }
 
@@ -566,6 +571,7 @@ impl DownloadManagerView {
 
     pub fn pause_task(&mut self, id: &str) {
         if let Err(e) = lock_or_recover(&self.service, "download-service").pause_job(&JobId::new(id)) {
+            tracing::error!(error = %e, task_id = id, "暂停下载失败");
             self.message = format!("暂停失败: {e}");
         } else {
             self.message = String::from("已暂停");
@@ -575,6 +581,7 @@ impl DownloadManagerView {
 
     pub fn resume_task(&mut self, id: &str) {
         if let Err(e) = lock_or_recover(&self.service, "download-service").resume_job(&JobId::new(id)) {
+            tracing::error!(error = %e, task_id = id, "恢复下载失败");
             self.message = format!("恢复失败: {e}");
         } else {
             self.message = String::from("已恢复");
@@ -584,6 +591,7 @@ impl DownloadManagerView {
 
     pub fn cancel_task(&mut self, id: &str) {
         if let Err(e) = lock_or_recover(&self.service, "download-service").cancel_job(&JobId::new(id)) {
+            tracing::error!(error = %e, task_id = id, "取消下载失败");
             self.message = format!("取消失败: {e}");
         } else {
             self.message = String::from("已取消");
@@ -593,6 +601,7 @@ impl DownloadManagerView {
 
     pub fn delete_task(&mut self, id: &str) {
         if let Err(e) = lock_or_recover(&self.service, "download-service").delete_task(id) {
+            tracing::error!(error = %e, task_id = id, "删除下载任务失败");
             self.message = format!("删除失败: {e}");
         } else {
             self.message = String::from("已删除");
@@ -612,6 +621,7 @@ impl DownloadManagerView {
 
     pub fn pause_all(&mut self) {
         if let Err(e) = lock_or_recover(&self.service, "download-service").pause_all() {
+            tracing::error!(error = %e, "批量暂停下载失败");
             self.message = format!("暂停失败: {e}");
         } else {
             self.message = String::from("已暂停全部");
@@ -621,6 +631,7 @@ impl DownloadManagerView {
 
     pub fn resume_all(&mut self) {
         if let Err(e) = lock_or_recover(&self.service, "download-service").resume_all() {
+            tracing::error!(error = %e, "批量恢复下载失败");
             self.message = format!("恢复失败: {e}");
         } else {
             self.message = String::from("已恢复全部");
@@ -670,6 +681,7 @@ impl DownloadManagerView {
     pub fn open_save_dir(&mut self) {
         let dir = lock_or_recover(&self.service, "download-service").effective_save_dir();
         if let Err(e) = std::fs::create_dir_all(&dir) {
+            tracing::error!(error = %e, dir = %dir.display(), "创建目录失败");
             self.message = format!("创建目录失败: {e}");
             return;
         }

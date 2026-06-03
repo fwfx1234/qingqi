@@ -9,6 +9,7 @@ use gpui::{
 
 use qingqi_plugin::{
     command::Command,
+    log_error,
     plugin::{Manifest, Plugin, PluginCx, PluginId, PluginView, WindowView},
     storage::AppPaths,
 };
@@ -45,12 +46,16 @@ impl AntiPeepingPlugin {
     fn save_custom_image(paths: &AppPaths, path: &str) {
         let config_path = paths.config("anti-peeping.json");
         if let Some(parent) = config_path.parent() {
-            let _ = std::fs::create_dir_all(parent);
+            log_error!(std::fs::create_dir_all(parent), warn, "创建防窥配置目录失败");
         }
         let value = serde_json::json!({"image_path": path});
-        let _ = std::fs::write(
-            &config_path,
-            serde_json::to_string_pretty(&value).unwrap_or_default(),
+        log_error!(
+            std::fs::write(
+                &config_path,
+                serde_json::to_string_pretty(&value).unwrap_or_default(),
+            ),
+            warn,
+            "保存防窥配置失败"
         );
     }
 

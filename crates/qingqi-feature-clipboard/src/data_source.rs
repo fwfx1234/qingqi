@@ -93,7 +93,7 @@ CREATE INDEX IF NOT EXISTS idx_clipboard_order
 CREATE INDEX IF NOT EXISTS idx_clipboard_type
     ON clipboard_history(item_type);
 CREATE VIRTUAL TABLE IF NOT EXISTS clipboard_history_fts
-    USING fts5(search_text, content='');
+    USING fts5(search_text, content='', contentless_delete=1);
 CREATE TABLE IF NOT EXISTS clipboard_config (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     capture_text INTEGER NOT NULL DEFAULT 1,
@@ -435,6 +435,50 @@ impl ClipboardDataSource {
     fn ensure_schema(&self) -> Result<()> {
         let conn = self.connection()?;
         conn.execute_batch(SCHEMA_SQL)?;
+
+        // 迁移：已有 FTS 表缺少 contentless_delete=1 选项，不支持 DELETE，
+        // 需要重建 FTS 表以启用该选项。
+        let fts_ddl: String = conn.query_row(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='clipboard_history_fts'",
+            [],
+            |row| row.get(0),
+        )?;
+        if !fts_ddl.contains("contentless_delete") {
+            conn.execute_batch("DROP TABLE IF EXISTS clipboard_history_fts")?;
+            conn.execute_batch(
+                "CREATE VIRTUAL TABLE clipboard_history_fts
+                 USING fts5(search_text, content='', contentless_delete=1)",
+            )?;
+            // 从主表重建 FTS 索引
+            let mut stmt =
+                conn.prepare("SELECT id, item_type, content, preview, badge FROM clipboard_history")?;
+            let rows: Vec<(i64, String, String, String, String)> = stmt
+                .query_map([], |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                })?
+                .filter_map(|r| r.ok())
+                .collect();
+
+            let mut insert = conn.prepare(
+                "INSERT INTO clipboard_history_fts(rowid, search_text) VALUES (?1, ?2)",
+            )?;
+            for (id, item_type, content, preview, badge) in &rows {
+                let kind = match item_type.as_str() {
+                    "image" => ClipboardItemKind::Image,
+                    "files" => ClipboardItemKind::Files,
+                    _ => ClipboardItemKind::Text,
+                };
+                let search_text =
+                    search_text_for_record(kind, content, preview, badge);
+                insert.execute(params![id, search_text])?;
+            }
+        }
         Ok(())
     }
 

@@ -1,4 +1,4 @@
-use qingqi_plugin::lock_or_recover;
+use qingqi_plugin::{lock_or_recover, log_error};
 use std::{
     collections::HashMap,
     fs::{self, File, OpenOptions},
@@ -46,7 +46,7 @@ pub struct DownloadService {
 
 impl DownloadService {
     pub fn new(store: DownloadStore, save_dir: PathBuf) -> Self {
-        fs::create_dir_all(&save_dir).ok();
+        log_error!(fs::create_dir_all(&save_dir), error, "创建下载保存目录失败");
         let settings = Self::load_settings_from_store(&store, &save_dir);
         Self {
             store: Arc::new(Mutex::new(store)),
@@ -107,7 +107,7 @@ impl DownloadService {
     pub fn effective_save_dir(&self) -> PathBuf {
         let settings = lock_or_recover(&self.settings, "download-settings");
         let dir = PathBuf::from(&settings.save_root);
-        fs::create_dir_all(&dir).ok();
+        log_error!(fs::create_dir_all(&dir), error, "创建下载目录失败");
         dir
     }
 
@@ -223,7 +223,7 @@ impl DownloadService {
         for url in urls {
             match self.add_task(&url) {
                 Ok(task) => {
-                    let _ = self.start_download(&task.id);
+                    log_error!(self.start_download(&task.id), warn, "启动下载失败");
                     tasks.push(task);
                 }
                 Err(e) => {
@@ -341,30 +341,36 @@ impl DownloadService {
                     tracing::info!(task_id, file_name, "download completed");
                 }
                 Err(DownloadError::Cancelled) => {
-                    store
-                        .lock()
-                        .unwrap()
-                        .update_status(&task_id, TaskStatus::Cancelled, "已取消")
-                        .ok();
+                    log_error!(
+                        store.lock().unwrap().update_status(
+                            &task_id, TaskStatus::Cancelled, "已取消"
+                        ),
+                        warn,
+                        "更新下载状态失败"
+                    );
                     revision.fetch_add(1, Ordering::SeqCst);
                     tracing::info!(task_id, "download cancelled");
                 }
                 Err(DownloadError::Paused) => {
                     let downloaded = progress.load(Ordering::Relaxed);
-                    store
-                        .lock()
-                        .unwrap()
-                        .update_status(&task_id, TaskStatus::Paused, "")
-                        .ok();
+                    log_error!(
+                        store.lock().unwrap().update_status(
+                            &task_id, TaskStatus::Paused, ""
+                        ),
+                        warn,
+                        "更新下载状态失败"
+                    );
                     revision.fetch_add(1, Ordering::SeqCst);
                     tracing::info!(task_id, downloaded, "download paused");
                 }
                 Err(DownloadError::Other(err)) => {
-                    store
-                        .lock()
-                        .unwrap()
-                        .update_status(&task_id, TaskStatus::Failed, &err.to_string())
-                        .ok();
+                    log_error!(
+                        store.lock().unwrap().update_status(
+                            &task_id, TaskStatus::Failed, &err.to_string()
+                        ),
+                        warn,
+                        "更新下载状态失败"
+                    );
                     revision.fetch_add(1, Ordering::SeqCst);
                     tracing::warn!(task_id, error = %err, "download failed");
                 }
@@ -411,7 +417,7 @@ impl DownloadService {
     }
 
     pub fn delete_task(&self, task_id: &str) -> Result<()> {
-        self.cancel_task(task_id).ok();
+        log_error!(self.cancel_task(task_id), warn, "取消下载任务失败");
         let task = {
             let store = lock_or_recover(&self.store, "download-store");
             store.get_task(task_id)?
@@ -419,7 +425,7 @@ impl DownloadService {
         if let Some(task) = task {
             let path = Path::new(&task.save_path);
             if path.exists() {
-                fs::remove_file(path).ok();
+                log_error!(fs::remove_file(path), warn, "删除下载文件失败");
             }
             lock_or_recover(&self.store, "download-store").delete_task(task_id)?;
             self.bump_revision();
@@ -436,7 +442,7 @@ impl DownloadService {
         };
         let count = pending.len();
         for task in pending {
-            self.start_download(&task.id).ok();
+            log_error!(self.start_download(&task.id), warn, "批量启动下载失败");
         }
         Ok(count)
     }
@@ -445,7 +451,7 @@ impl DownloadService {
         // Pause active downloads
         let ids: Vec<String> = { lock_or_recover(&self.active, "download-active").keys().cloned().collect() };
         for id in ids {
-            self.pause_task(&id).ok();
+            log_error!(self.pause_task(&id), warn, "批量暂停下载失败");
         }
         // Also pause queued tasks (in store)
         {
@@ -475,7 +481,7 @@ impl DownloadService {
                 .collect()
         };
         for id in ids {
-            self.resume_task(&id).ok();
+            log_error!(self.resume_task(&id), warn, "批量恢复下载失败");
         }
         Ok(())
     }
@@ -802,7 +808,7 @@ fn download_file(
         let s = lock_or_recover(&store, "download-store");
         if let Ok(Some(mut task)) = s.get_task(task_id) {
             task.file_size = Some(size);
-            s.update_task(&task).ok();
+            log_error!(s.update_task(&task), warn, "更新下载任务信息失败");
         }
     }
 
@@ -814,7 +820,7 @@ fn download_file(
     } else {
         progress.store(0, Ordering::Relaxed);
         if let Some(parent) = Path::new(save_path).parent() {
-            fs::create_dir_all(parent).ok();
+            log_error!(fs::create_dir_all(parent), error, "创建下载子目录失败");
         }
         File::create(save_path).with_context(|| format!("无法创建文件 {}", save_path))?
     };
@@ -859,16 +865,18 @@ fn download_file(
         }
 
         if last_db_update.elapsed().as_millis() >= MIN_UPDATE_INTERVAL_MS {
-            store
-                .lock()
-                .unwrap()
-                .update_progress(task_id, downloaded, current_speed, TaskStatus::Downloading)
-                .ok();
+            log_error!(
+                store.lock().unwrap().update_progress(
+                    task_id, downloaded, current_speed, TaskStatus::Downloading
+                ),
+                warn,
+                "更新下载进度失败"
+            );
             last_db_update = Instant::now();
         }
     }
 
-    file.flush().ok();
+    log_error!(file.flush(), warn, "刷新下载文件失败");
 
     // Mark as completed
     store

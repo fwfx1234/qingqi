@@ -6,12 +6,15 @@ pub mod events;
 pub mod host;
 pub mod icon;
 pub mod job;
+pub mod log;
 pub mod page;
 pub mod plugin;
 pub mod plugin_spec;
 pub mod shortcut;
 pub mod storage;
 pub mod theme;
+
+pub use log::log_and_return;
 
 /// Lock a std::sync::Mutex with poison recovery.
 pub fn lock_or_recover<'a, T>(

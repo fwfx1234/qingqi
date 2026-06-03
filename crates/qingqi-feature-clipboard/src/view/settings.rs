@@ -1,10 +1,55 @@
-use super::shared::{header_action_button, theme_button};
+use super::shared::theme_button;
 use super::*;
+use gpui_component::{Icon, IconName, Sizable, Size as ComponentSize};
 use gpui_component::scroll::ScrollableElement;
+
+/// macOS 风格标题栏：左箭头 + 标题，融入系统窗口 chrome。
+pub(super) fn settings_titlebar_slot(
+    handle: Entity<ClipboardView>,
+    _dark: bool,
+) -> impl IntoElement {
+    let back_handle = handle.clone();
+    div()
+        .h_full()
+        .flex()
+        .items_center()
+        .gap(px(6.0))
+        .child(
+            div()
+                .id("clipboard-settings-back")
+                .size(px(26.0))
+                .rounded(px(5.0))
+                .flex()
+                .items_center()
+                .justify_center()
+                .hover(|style| {
+                    style.bg(theme::semantic().bg_hover).cursor_pointer()
+                })
+                .child(
+                    Icon::new(IconName::ChevronLeft)
+                        .with_size(ComponentSize::Small)
+                        .text_color(theme::semantic().text_secondary),
+                )
+                .on_click(move |_, _, cx| {
+                    cx.stop_propagation();
+                    let _ = cx.update_entity(&back_handle, |panel, cx| {
+                        panel.set_tab(ClipboardTab::History);
+                        cx.notify();
+                    });
+                }),
+        )
+        .child(
+            div()
+                .text_size(px(12.0))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme::semantic().text_primary)
+                .child("设置"),
+        )
+}
 
 pub(super) fn settings_page(
     handle: Entity<ClipboardView>,
-    status_text: String,
+    _status_text: String,
     config: ClipboardConfig,
     inputs: (Entity<TextInput>, Entity<TextInput>, Entity<TextInput>),
     dark: bool,
@@ -16,12 +61,6 @@ pub(super) fn settings_page(
         .flex()
         .flex_col()
         .overflow_hidden()
-        .child(settings_header(
-            handle.clone(),
-            status_text,
-            dark,
-            chrome_metrics,
-        ))
         .child(
             div()
                 .flex_1()
@@ -30,60 +69,6 @@ pub(super) fn settings_page(
                 .p(px(8.0))
                 .child(settings_panel(handle, config, inputs, dark)),
         )
-}
-
-fn settings_header(
-    handle: Entity<ClipboardView>,
-    status_text: String,
-    dark: bool,
-    chrome_metrics: ui::WindowChromeMetrics,
-) -> impl IntoElement {
-    div()
-        .h(px(44.0))
-        .pl(px(chrome_metrics.safe_left.max(74.0)))
-        .pr(px(chrome_metrics.safe_right.max(8.0)))
-        .border_b_1()
-        .border_color(ui::border_light())
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.45))
-        .flex()
-        .items_center()
-        .gap(px(6.0))
-        .child(header_action_button(
-            "clipboard-settings-back",
-            dark,
-            "返回",
-            {
-                let handle = handle.clone();
-                move |_, cx| {
-                    let _ = cx.update_entity(&handle, |panel, cx| {
-                        panel.set_tab(ClipboardTab::History);
-                        cx.notify();
-                    });
-                }
-            },
-        ))
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(1.0))
-                .child(
-                    div()
-                        .text_size(px(12.0))
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(theme::semantic().text_primary)
-                        .child("剪贴板设置"),
-                )
-                .child(
-                    div()
-                        .max_w(px(360.0))
-                        .text_size(px(10.0))
-                        .line_clamp(1)
-                        .text_color(theme::semantic().text_secondary)
-                        .child(status_text),
-                ),
-        )
-        .child(div().flex_1())
 }
 
 fn settings_panel(

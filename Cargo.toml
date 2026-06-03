@@ -23,7 +23,7 @@ qrcode = "0.14"
 quircs = "0.10"
 r2d2 = "0.8"
 r2d2_sqlite = { version = "0.31.0", features = ["bundled"] }
-rcgen = { version = "0.13", features = ["crypto"] }
+rcgen = { version = "0.14", features = ["crypto"] }
 regex = "1.12"
 reqwest = { version = "0.12", features = ["blocking", "stream"] }
 rfd = "0.15"
@@ -36,7 +36,8 @@ time = { version = "0.3", features = ["formatting", "local-offset", "macros"] }
 tiny-skia = "0.11"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "std"] }
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "std", "registry"] }
 tray-icon = { version = "0.21", default-features = false }
 unicode-segmentation = "1.12"
 usvg = "0.45"

@@ -85,9 +85,13 @@ impl PowerManager {
     fn save(&self) {
         if let Ok(json) = serde_json::to_string_pretty(&self.mode) {
             if let Some(parent) = self.config_path.parent() {
-                let _ = fs::create_dir_all(parent);
+                if let Err(e) = fs::create_dir_all(parent) {
+                    tracing::warn!(error = %e, "创建电源配置目录失败");
+                }
             }
-            let _ = fs::write(&self.config_path, json);
+            if let Err(e) = fs::write(&self.config_path, json) {
+                tracing::warn!(error = %e, "保存电源配置失败");
+            }
         }
     }
 }

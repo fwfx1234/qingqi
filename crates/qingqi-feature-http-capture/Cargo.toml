@@ -9,12 +9,21 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
+http-body-util = "0.1"
+hudsucker = { workspace = true }
+hyper = { version = "1", features = ["server", "client", "http1"] }
+hyper-util = { version = "0.1", features = ["server-auto", "client-legacy", "tokio", "http1"] }
 qingqi-plugin = { path = "../qingqi-plugin" }
 qingqi-ui = { path = "../qingqi-ui" }
+rcgen = { workspace = true }
 rusqlite.workspace = true
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", "tls12"] }
 serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
+tokio = { workspace = true }
+tokio-rustls = "0.26"
+tracing.workspace = true
 
 [lints]
 workspace = true
