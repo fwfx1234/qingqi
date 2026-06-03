@@ -9,16 +9,64 @@ on:
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
+  # 提取版本号，供后续 job 使用
+  version:
+    name: Extract version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="snapshot-${GITHUB_SHA::8}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
   build-macos:
     name: Build macOS
     runs-on: macos-latest
+    needs: version
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Rust toolchain
+        run: rustup show && rustup update
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+            target
+          key: macos-${{ runner.arch }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            macos-${{ runner.arch }}-cargo-
+
+      - name: Cache cargo-bundle
+        id: cache-bundle
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-bundle
+          key: cargo-bundle-${{ runner.os }}-${{ runner.arch }}
+
       - name: Install cargo-bundle
+        if: steps.cache-bundle.outputs.cache-hit != 'true'
         run: cargo install cargo-bundle --locked
 
       - name: Bundle macOS app
@@ -26,27 +74,44 @@ jobs:
           cargo bundle -p qingqi --release
           APP_PATH="$(ls -d target/release/bundle/osx/*.app | head -n 1)"
           mkdir -p dist
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "dist/Qingqi-macos-${{ runner.arch }}.zip"
+          VERSION="${{ needs.version.outputs.version }}"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "dist/Qingqi-v${VERSION}-macos-${{ runner.arch }}.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: qingqi-macos-${{ runner.arch }}
-          path: dist/Qingqi-macos-${{ runner.arch }}.zip
+          path: dist/Qingqi-v${{ needs.version.outputs.version }}-macos-${{ runner.arch }}.zip
 
       - name: Release upload
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/Qingqi-macos-${{ runner.arch }}.zip
+          files: dist/Qingqi-v${{ needs.version.outputs.version }}-macos-${{ runner.arch }}.zip
 
   build-windows:
     name: Build Windows (x86_64)
     runs-on: windows-latest
+    needs: version
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        run: rustup show && rustup update
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+            target
+          key: windows-x86_64-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            windows-x86_64-cargo-
 
       - name: Configure GPUI shader compiler
         shell: pwsh
@@ -61,23 +126,24 @@ jobs:
           "GPUI_FXC_PATH=$fxc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build release
-        run: cargo build --release
+        run: cargo build -p qingqi --release
 
       - name: Package single binary
         shell: pwsh
         run: |
+          $VERSION = "${{ needs.version.outputs.version }}"
           New-Item -ItemType Directory -Force -Path dist
-          Copy-Item target/release/qingqi.exe dist/Qingqi.exe
-          Compress-Archive -Force -Path dist/Qingqi.exe -DestinationPath dist/Qingqi-windows-x86_64.zip
+          Copy-Item target/release/qingqi.exe "dist/Qingqi-v${VERSION}.exe"
+          Compress-Archive -Force -Path "dist/Qingqi-v${VERSION}.exe" -DestinationPath "dist/Qingqi-v${VERSION}-windows-x86_64.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: qingqi-windows-x86_64
-          path: dist/Qingqi-windows-x86_64.zip
+          path: dist/Qingqi-v${{ needs.version.outputs.version }}-windows-x86_64.zip
 
       - name: Release upload
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/Qingqi-windows-x86_64.zip
+          files: dist/Qingqi-v${{ needs.version.outputs.version }}-windows-x86_64.zip

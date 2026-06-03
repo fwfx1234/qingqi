@@ -1,3 +1,6 @@
+[alias]
+bundle-app = "bundle -p qingqi"
+
 [source.crates-io]
 replace-with = "rsproxy-sparse"
 
