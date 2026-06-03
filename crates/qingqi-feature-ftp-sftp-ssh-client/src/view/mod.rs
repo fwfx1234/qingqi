@@ -1,5 +1,5 @@
-pub mod mac_ui;
 pub mod glass;
+pub mod mac_ui;
 
 use std::{collections::HashMap, path::Path, sync::Arc};
 
@@ -317,7 +317,6 @@ impl FtpSftpSshView {
         }
     }
 
-
     fn save_editor(&mut self, cx: &mut Context<Self>) {
         self.log_ui_action("save_editor");
         self.ensure_editor_inputs(cx);
@@ -338,8 +337,6 @@ impl FtpSftpSshView {
             }
         }
     }
-
-
 
     fn duplicate_profile(&mut self, profile: &RemoteProfile, cx: &mut Context<Self>) {
         self.log_ui_action_with_profile("duplicate_profile", profile.id);
@@ -452,7 +449,9 @@ impl FtpSftpSshView {
         self.log_ui_action_with_profile("connect_profile", profile_id);
         let _ = self.service.select_profile(profile_id);
         let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.connect_profile(profile_id) { tracing::error!(%e, "connect_profile failed"); }
+        if let Err(e) = svc.connect_profile(profile_id) {
+            tracing::error!(%e, "connect_profile failed");
+        }
         self.profile_menu = None;
     }
 
@@ -470,7 +469,9 @@ impl FtpSftpSshView {
                 .into_iter()
                 .map(|path| path.to_string_lossy().into_owned())
                 .collect::<Vec<_>>();
-            if let Err(e) = svc.upload_paths(raw) { tracing::error!(%e, "upload_paths failed"); }
+            if let Err(e) = svc.upload_paths(raw) {
+                tracing::error!(%e, "upload_paths failed");
+            }
         }
     }
 
@@ -478,7 +479,9 @@ impl FtpSftpSshView {
         self.log_ui_action("upload_folder");
         let svc = Arc::clone(&self.service);
         if let Some(path) = rfd::FileDialog::new().pick_folder() {
-            if let Err(e) = svc.upload_paths(vec![path.to_string_lossy().into_owned()]) { tracing::error!(%e, "upload_paths failed"); }
+            if let Err(e) = svc.upload_paths(vec![path.to_string_lossy().into_owned()]) {
+                tracing::error!(%e, "upload_paths failed");
+            }
         }
     }
 
@@ -490,7 +493,9 @@ impl FtpSftpSshView {
         let svc = Arc::clone(&self.service);
         if let Some(dir) = rfd::FileDialog::new().pick_folder() {
             let local_dir = dir.to_string_lossy().into_owned();
-            if let Err(e) = svc.start_download(item.path.clone(), &local_dir, item.size) { tracing::error!(%e, "start_download failed"); }
+            if let Err(e) = svc.start_download(item.path.clone(), &local_dir, item.size) {
+                tracing::error!(%e, "start_download failed");
+            }
         }
         self.file_menu = None;
     }
@@ -498,34 +503,44 @@ impl FtpSftpSshView {
     fn open_text_file(&mut self, item: &RemoteFileItem) {
         self.log_ui_action("open_text_file");
         let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.open_text_file(item) { tracing::error!(%e, "open_text_file failed"); }
+        if let Err(e) = svc.open_text_file(item) {
+            tracing::error!(%e, "open_text_file failed");
+        }
         self.file_menu = None;
     }
 
     fn delete_remote_item(&mut self, item: &RemoteFileItem) {
         self.log_ui_action("delete_remote_item");
         let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.remote_delete(&item.path, item.is_dir) { tracing::error!(%e, "remote_delete failed"); }
+        if let Err(e) = svc.remote_delete(&item.path, item.is_dir) {
+            tracing::error!(%e, "remote_delete failed");
+        }
         self.file_menu = None;
     }
 
     fn navigate_dir(&mut self, path: &str) {
         self.log_ui_action("navigate_dir");
         let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.navigate_dir(path) { tracing::error!(%e, "navigate_dir failed"); }
+        if let Err(e) = svc.navigate_dir(path) {
+            tracing::error!(%e, "navigate_dir failed");
+        }
         self.file_menu = None;
     }
 
     fn refresh_dir(&mut self) {
         self.log_ui_action("refresh_dir");
         let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.refresh_dir() { tracing::error!(%e, "refresh_dir failed"); }
+        if let Err(e) = svc.refresh_dir() {
+            tracing::error!(%e, "refresh_dir failed");
+        }
     }
 
     fn navigate_up(&mut self) {
         self.log_ui_action("navigate_up");
         let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.navigate_up() { tracing::error!(%e, "navigate_up failed"); }
+        if let Err(e) = svc.navigate_up() {
+            tracing::error!(%e, "navigate_up failed");
+        }
     }
 
     fn open_profile_menu(&mut self, profile: RemoteProfile, position: Point<Pixels>) {
@@ -576,7 +591,9 @@ impl FtpSftpSshView {
             format!("{base}/{name}")
         };
         let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.remote_mkdir(&path) { tracing::error!(%e, "remote_mkdir failed"); }
+        if let Err(e) = svc.remote_mkdir(&path) {
+            tracing::error!(%e, "remote_mkdir failed");
+        }
         self.folder_sheet_open = false;
     }
 
@@ -627,7 +644,9 @@ impl FtpSftpSshView {
             "ftp/sftp/ssh ui action"
         );
         let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.upload_draft(draft_id, force) { tracing::error!(%e, "upload_draft failed"); }
+        if let Err(e) = svc.upload_draft(draft_id, force) {
+            tracing::error!(%e, "upload_draft failed");
+        }
     }
 
     fn reopen_local_draft(&mut self, draft: &RemoteEditDraft) {
@@ -1063,16 +1082,12 @@ fn sidebar(
                         .items_center()
                         .justify_between()
                         .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(6.0))
-                                .child(
-                                    div()
-                                        .text_size(px(12.0))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .child("连接管理"),
-                                )
+                            div().flex().items_center().gap(px(6.0)).child(
+                                div()
+                                    .text_size(px(12.0))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child("连接管理"),
+                            ),
                         )
                         .child(
                             div()
@@ -1538,7 +1553,9 @@ fn file_workspace(
                             .map(|path| path.to_string_lossy().into_owned())
                             .collect::<Vec<_>>();
                         let svc = Arc::clone(&panel.read(cx).service);
-                        if let Err(e) = svc.upload_paths(raw) { tracing::error!(%e, "upload_paths failed"); }
+                        if let Err(e) = svc.upload_paths(raw) {
+                            tracing::error!(%e, "upload_paths failed");
+                        }
                         window.refresh();
                     }
                 })
@@ -1972,10 +1989,12 @@ fn terminal_workspace(
                         .border_color(ui::border_light())
                         .bg(ui::bg_keycap())
                         .child(
-                            terminal_input.map(|i| i.into_any_element()).unwrap_or_else(|| {
-                                tracing::error!("terminal input should be initialized");
-                                div().child("终端输入未初始化").into_any_element()
-                            }),
+                            terminal_input
+                                .map(|i| i.into_any_element())
+                                .unwrap_or_else(|| {
+                                    tracing::error!("terminal input should be initialized");
+                                    div().child("终端输入未初始化").into_any_element()
+                                }),
                         ),
                 )
                 .child(
@@ -2627,7 +2646,7 @@ fn profile_editor_overlay(
                                 ProfileEditorMode::Existing(_) => "编辑连接",
                                 ProfileEditorMode::New => "新建连接",
                             }),
-                    )
+                    ),
             )
             .child(
                 div()
@@ -3135,7 +3154,7 @@ fn profile_menu_overlay(
                 .border_1()
                 .border_color(ui::border_light())
                 .bg(theme::semantic().bg_elevated)
-                    .p(px(4.0))
+                .p(px(4.0))
                 .flex()
                 .flex_col()
                 .gap(px(3.0))
@@ -3246,7 +3265,7 @@ fn file_menu_overlay(
                 .border_1()
                 .border_color(ui::border_light())
                 .bg(theme::semantic().bg_elevated)
-                    .p(px(4.0))
+                .p(px(4.0))
                 .flex()
                 .flex_col()
                 .gap(px(3.0))
@@ -3414,7 +3433,6 @@ fn editor_section_title(label: &'static str, _dark: bool) -> impl IntoElement {
         .text_color(ui::text_tertiary())
         .child(label)
 }
-
 
 fn segmented_chip(label: &'static str, active: bool, dark: bool) -> gpui::Div {
     div()
@@ -3620,7 +3638,6 @@ fn status_bar(dark: bool, accent: gpui::Rgba, message: String) -> impl IntoEleme
             },
         ))
 }
-
 
 fn profile_input(
     cx: &mut App,

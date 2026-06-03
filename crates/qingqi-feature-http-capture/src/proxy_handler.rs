@@ -3,17 +3,14 @@ use std::{
     time::Instant,
 };
 
+use http_body_util::BodyExt;
 use hudsucker::{
     Body, HttpContext, HttpHandler, RequestOrResponse,
     hyper::{Request, Response},
 };
-use http_body_util::BodyExt;
 use serde_json;
 
-use crate::{
-    mock_engine::MockEngine,
-    store::CaptureStore,
-};
+use crate::{mock_engine::MockEngine, store::CaptureStore};
 use qingqi_plugin::events::{AppEventBus, AppEventKind};
 
 /// 请求/响应体最大截取大小（1 MB）。
@@ -112,9 +109,7 @@ impl ProxyHttpHandler {
 
     /// 从 URL 中提取 Host。
     fn extract_host(uri: &hyper::Uri) -> String {
-        uri.host()
-            .unwrap_or("unknown")
-            .to_string()
+        uri.host().unwrap_or("unknown").to_string()
     }
 }
 
@@ -146,11 +141,7 @@ impl HttpHandler for ProxyHttpHandler {
             .collect();
 
         // 1. 检查 Mock 规则 — 匹配时直接返回模拟响应
-        if let Some(mock_result) = self.mock_engine.match_request(
-            &method,
-            &url,
-            &req_headers,
-        ) {
+        if let Some(mock_result) = self.mock_engine.match_request(&method, &url, &req_headers) {
             // 模拟延迟
             if mock_result.delay_ms > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(
@@ -161,8 +152,8 @@ impl HttpHandler for ProxyHttpHandler {
 
             let duration_ms = start.elapsed().as_millis() as i64;
             let body_bytes = mock_result.body.as_bytes();
-            let response_headers_json = serde_json::to_string(&mock_result.headers)
-                .unwrap_or_else(|_| "[]".to_string());
+            let response_headers_json =
+                serde_json::to_string(&mock_result.headers).unwrap_or_else(|_| "[]".to_string());
 
             // 记录 Mock 交换
             self.capture_and_store(
@@ -191,9 +182,7 @@ impl HttpHandler for ProxyHttpHandler {
                 resp_builder = resp_builder.header(name.as_str(), value.as_str());
             }
 
-            let resp = resp_builder
-                .body(Body::from(mock_result.body))
-                .unwrap();
+            let resp = resp_builder.body(Body::from(mock_result.body)).unwrap();
 
             return RequestOrResponse::Response(resp);
         }
@@ -204,9 +193,7 @@ impl HttpHandler for ProxyHttpHandler {
             Ok(c) => c,
             Err(e) => {
                 tracing::warn!("读取请求体失败: {e}");
-                return RequestOrResponse::Request(
-                    Request::from_parts(parts, Body::empty()),
-                );
+                return RequestOrResponse::Request(Request::from_parts(parts, Body::empty()));
             }
         };
         let body_bytes = collected.to_bytes();
@@ -237,11 +224,7 @@ impl HttpHandler for ProxyHttpHandler {
         RequestOrResponse::Request(new_req)
     }
 
-    async fn handle_response(
-        &mut self,
-        _ctx: &HttpContext,
-        res: Response<Body>,
-    ) -> Response<Body> {
+    async fn handle_response(&mut self, _ctx: &HttpContext, res: Response<Body>) -> Response<Body> {
         // 提取响应体
         let (parts, body) = res.into_parts();
         let collected = match body.collect().await {

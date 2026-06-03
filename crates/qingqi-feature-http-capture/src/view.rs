@@ -1023,7 +1023,11 @@ impl Render for CaptureView {
                                             .h(px(28.0))
                                             .rounded(theme::radius_sm())
                                             .bg(if active {
-                                                if qingqi_ui::theme_mode::is_dark() { theme::semantic().primary } else { theme::semantic().primary_soft }
+                                                if qingqi_ui::theme_mode::is_dark() {
+                                                    theme::semantic().primary
+                                                } else {
+                                                    theme::semantic().primary_soft
+                                                }
                                             } else {
                                                 theme::semantic().bg_subtle
                                             })

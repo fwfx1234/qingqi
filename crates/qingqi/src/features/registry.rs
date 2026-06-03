@@ -103,7 +103,13 @@ pub fn register_builtin_plugins(host: &mut AppHost) -> Result<()> {
     registry.register(
         PluginDescriptor::builtin(feature_http_capture::manifest::manifest())
             .with_databases(feature_http_capture::databases()),
-        |cx| feature_http_capture::build(Arc::clone(&cx.database), cx.paths.clone(), cx.events.clone()),
+        |cx| {
+            feature_http_capture::build(
+                Arc::clone(&cx.database),
+                cx.paths.clone(),
+                cx.events.clone(),
+            )
+        },
     );
 
     registry.build_all(&host.build_cx, &mut host.plugins)?;

@@ -7,6 +7,7 @@ use gpui_component::{Icon, IconName, Sizable, Size as ComponentSize};
 use crate::{theme, ui};
 
 pub const TITLE_BAR_HEIGHT: f32 = 36.0;
+const MACOS_TRAFFIC_LIGHT_SAFE_WIDTH: f32 = 86.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WindowChromeStyle {
@@ -326,44 +327,9 @@ fn macos_window_chrome(
         } else {
             ui::border_light()
         })
-        .child(
-            div()
-                .w(px(86.0))
-                .h_full()
-                .flex_none()
-                .flex()
-                .items_center()
-                .pl(px(14.0))
-                .gap(px(8.0))
-                .children(config.show_close.then(|| {
-                    macos_traffic_light(
-                        "qingqi-window-close",
-                        rgb_hex(0xff5f57),
-                        true,
-                        |window, cx| {
-                            window.defer(cx, |window, _cx| window.remove_window());
-                        },
-                    )
-                }))
-                .children(config.show_minimize.then(|| {
-                    macos_traffic_light(
-                        "qingqi-window-minimize",
-                        rgb_hex(0xffbd2e),
-                        false,
-                        |window, _cx| window.minimize_window(),
-                    )
-                }))
-                .children(config.show_maximize.then(|| {
-                    macos_traffic_light(
-                        "qingqi-window-zoom",
-                        rgb_hex(0x28c840),
-                        false,
-                        |window, _cx| window.zoom_window(),
-                    )
-                })),
-        )
+        .child(macos_native_traffic_light_spacer())
         .child(macos_titlebar_content(config.title.clone(), titlebar_slot))
-        .child(div().w(px(86.0)).h_full().flex_none())
+        .child(title_drag_spacer(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH))
 }
 
 fn macos_titlebar_content(
@@ -379,7 +345,7 @@ fn macos_titlebar_content(
             .items_center()
             .child(
                 div()
-                    .w(px(86.0))
+                    .w(px(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH))
                     .h_full()
                     .flex_none()
                     .window_control_area(WindowControlArea::Drag),
@@ -394,7 +360,7 @@ fn macos_titlebar_content(
             )
             .child(
                 div()
-                    .w(px(86.0))
+                    .w(px(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH))
                     .h_full()
                     .flex_none()
                     .window_control_area(WindowControlArea::Drag),
@@ -412,37 +378,11 @@ fn macos_titlebar_content(
     }
 }
 
-fn macos_traffic_light(
-    id: &'static str,
-    color: gpui::Rgba,
-    is_close: bool,
-    action: impl Fn(&mut Window, &mut App) + 'static,
-) -> impl IntoElement {
+fn macos_native_traffic_light_spacer() -> gpui::Div {
     div()
-        .id(id)
-        .size(px(12.0))
-        .rounded(px(999.0))
-        .border_1()
-        .border_color(if is_close {
-            theme::rgba_with_alpha(gpui::rgb(0x7a1f1b), 0.28)
-        } else {
-            theme::rgba_with_alpha(gpui::rgb(0x000000), 0.16)
-        })
-        .bg(color)
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(8.0))
-        .font_weight(gpui::FontWeight::BOLD)
-        .text_color(theme::rgba_with_alpha(gpui::rgb(0x000000), 0.50))
-        .hover(|style| style.cursor_pointer())
-        .on_mouse_down(MouseButton::Left, |_, _window, cx| {
-            cx.stop_propagation();
-        })
-        .on_click(move |_event, window, cx| {
-            action(window, cx);
-            cx.stop_propagation();
-        })
+        .w(px(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH))
+        .h_full()
+        .flex_none()
 }
 
 fn title_drag_region() -> gpui::Div {
@@ -467,6 +407,6 @@ fn title_drag_region() -> gpui::Div {
         })
 }
 
-fn rgb_hex(value: u32) -> gpui::Rgba {
-    gpui::rgb(value)
+fn title_drag_spacer(width: f32) -> gpui::Div {
+    title_drag_region().w(px(width)).flex_none()
 }

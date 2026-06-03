@@ -54,8 +54,7 @@ impl MockRule {
 
     /// 解析响应头条件为键值对列表。
     pub fn action_headers_entries(&self) -> Vec<(String, String)> {
-        serde_json::from_str::<Vec<(String, String)>>(&self.action_headers_json)
-            .unwrap_or_default()
+        serde_json::from_str::<Vec<(String, String)>>(&self.action_headers_json).unwrap_or_default()
     }
 }
 

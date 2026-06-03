@@ -34,7 +34,7 @@ ssh2 = "0.9"
 suppaftp = { version = "6.0", features = ["secure"] }
 time = { version = "0.3", features = ["formatting", "local-offset", "macros"] }
 tiny-skia = "0.11"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "std", "registry"] }

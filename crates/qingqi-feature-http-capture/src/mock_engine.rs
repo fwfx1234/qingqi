@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use crate::mock_model::{MockMatchResult};
+use crate::mock_model::MockMatchResult;
 use crate::mock_store::MockStore;
 
 /// Mock 规则匹配引擎。
@@ -108,10 +108,7 @@ impl MockEngine {
     }
 
     /// 请求头匹配：规则中指定的每个头键值对必须存在于请求头中。
-    fn headers_match(
-        match_json: &str,
-        request_headers: &[(String, String)],
-    ) -> bool {
+    fn headers_match(match_json: &str, request_headers: &[(String, String)]) -> bool {
         let conditions: Vec<(String, String)> =
             serde_json::from_str(match_json).unwrap_or_default();
 
@@ -188,16 +185,31 @@ mod tests {
 
     #[test]
     fn url_matches_contains() {
-        assert!(MockEngine::url_matches("*/api/*", "https://example.com/api/users/123"));
-        assert!(MockEngine::url_matches("*/api/*", "http://localhost:8080/api/v2/health"));
-        assert!(!MockEngine::url_matches("*/api/*", "https://example.com/home"));
+        assert!(MockEngine::url_matches(
+            "*/api/*",
+            "https://example.com/api/users/123"
+        ));
+        assert!(MockEngine::url_matches(
+            "*/api/*",
+            "http://localhost:8080/api/v2/health"
+        ));
+        assert!(!MockEngine::url_matches(
+            "*/api/*",
+            "https://example.com/home"
+        ));
     }
 
     #[test]
     fn url_matches_exact_substring() {
         // 无通配符时做 substring 包含匹配
-        assert!(MockEngine::url_matches("api/users", "https://example.com/api/users/123"));
-        assert!(!MockEngine::url_matches("api/posts", "https://example.com/api/users"));
+        assert!(MockEngine::url_matches(
+            "api/users",
+            "https://example.com/api/users/123"
+        ));
+        assert!(!MockEngine::url_matches(
+            "api/posts",
+            "https://example.com/api/users"
+        ));
     }
 
     #[test]
@@ -229,7 +241,10 @@ mod tests {
     #[test]
     fn headers_match_empty_conditions() {
         assert!(MockEngine::headers_match("[]", &[]));
-        assert!(MockEngine::headers_match("[]", &[("X".to_string(), "y".to_string())]));
+        assert!(MockEngine::headers_match(
+            "[]",
+            &[("X".to_string(), "y".to_string())]
+        ));
     }
 
     #[test]
@@ -237,11 +252,7 @@ mod tests {
         let rule = MockRule::new("API Mock", "*/api/*");
         let engine = setup_engine(vec![rule]);
 
-        let result = engine.match_request(
-            "GET",
-            "https://example.com/api/users",
-            &[],
-        );
+        let result = engine.match_request("GET", "https://example.com/api/users", &[]);
         assert!(result.is_some());
         assert_eq!(result.unwrap().status, 200);
     }
@@ -251,11 +262,7 @@ mod tests {
         let rule = MockRule::new("API Mock", "*/api/*");
         let engine = setup_engine(vec![rule]);
 
-        let result = engine.match_request(
-            "GET",
-            "https://example.com/home",
-            &[],
-        );
+        let result = engine.match_request("GET", "https://example.com/home", &[]);
         assert!(result.is_none());
     }
 
@@ -265,11 +272,15 @@ mod tests {
         rule.match_method = "POST".to_string();
         let engine = setup_engine(vec![rule]);
 
-        assert!(engine
-            .match_request("POST", "https://x.com/api/create", &[])
-            .is_some());
-        assert!(engine
-            .match_request("GET", "https://x.com/api/list", &[])
-            .is_none());
+        assert!(
+            engine
+                .match_request("POST", "https://x.com/api/create", &[])
+                .is_some()
+        );
+        assert!(
+            engine
+                .match_request("GET", "https://x.com/api/list", &[])
+                .is_none()
+        );
     }
 }

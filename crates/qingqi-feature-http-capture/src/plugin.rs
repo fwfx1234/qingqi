@@ -3,13 +3,8 @@ use std::sync::{Arc, Mutex};
 use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 
 use crate::{
-    certificate::CaManager,
-    engine::CaptureEngine,
-    manifest,
-    mock_engine::MockEngine,
-    mock_store::MockStore,
-    store::CaptureStore,
-    view::CaptureView,
+    certificate::CaManager, engine::CaptureEngine, manifest, mock_engine::MockEngine,
+    mock_store::MockStore, store::CaptureStore, view::CaptureView,
 };
 use qingqi_plugin::{
     command::{Command, ContextKind, ContextMatcher},

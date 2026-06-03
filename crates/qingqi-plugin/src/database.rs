@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, RwLock},
 };
 
 use anyhow::{Context, Result};
@@ -79,16 +79,16 @@ pub fn feature_database_key(feature: &str, name: &str) -> String {
 #[derive(Clone, Debug)]
 pub struct DatabaseService {
     paths: AppPaths,
-    pools: Arc<Mutex<HashMap<PathBuf, SqlitePool>>>,
-    registrations: Arc<Mutex<HashMap<String, PathBuf>>>,
+    pools: Arc<RwLock<HashMap<PathBuf, SqlitePool>>>,
+    registrations: Arc<RwLock<HashMap<String, PathBuf>>>,
 }
 
 impl DatabaseService {
     pub fn new(paths: AppPaths) -> Self {
         Self {
             paths,
-            pools: Arc::new(Mutex::new(HashMap::new())),
-            registrations: Arc::new(Mutex::new(HashMap::new())),
+            pools: Arc::new(RwLock::new(HashMap::new())),
+            registrations: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -100,7 +100,7 @@ impl DatabaseService {
         let path = spec.location.resolve(&self.paths);
         let mut registrations = self
             .registrations
-            .lock()
+            .write()
             .map_err(|_| anyhow::anyhow!("database registration registry lock poisoned"))?;
         if let Some(existing) = registrations.get(&spec.key) {
             if *existing != path {
@@ -130,7 +130,7 @@ impl DatabaseService {
 
     pub fn path_for_key(&self, key: &str) -> Result<PathBuf> {
         self.registrations
-            .lock()
+            .read()
             .map_err(|_| anyhow::anyhow!("database registration registry lock poisoned"))?
             .get(key)
             .cloned()
@@ -161,7 +161,7 @@ impl DatabaseService {
 
         if let Some(pool) = self
             .pools
-            .lock()
+            .read()
             .map_err(|_| anyhow::anyhow!("database pool registry lock poisoned"))?
             .get(&canonical_key)
             .cloned()
@@ -176,14 +176,15 @@ impl DatabaseService {
 
         let manager = SqliteConnectionManager::file(&path);
         let pool = Pool::builder()
-            .max_size(8)
+            .max_size(2)
+            .idle_timeout(Some(std::time::Duration::from_secs(60)))
             .connection_customizer(Box::new(ConnectionCustomizer))
             .build(manager)
             .with_context(|| format!("cannot build sqlite pool {}", path.display()))?;
 
         let mut pools = self
             .pools
-            .lock()
+            .write()
             .map_err(|_| anyhow::anyhow!("database pool registry lock poisoned"))?;
         let pool = pools.entry(canonical_key).or_insert_with(|| pool.clone());
         Ok(pool.clone())
@@ -211,10 +212,10 @@ impl DatabaseService {
     }
 
     pub fn shutdown(&self) {
-        if let Ok(mut pools) = self.pools.lock() {
+        if let Ok(mut pools) = self.pools.write() {
             pools.clear();
         }
-        if let Ok(mut registrations) = self.registrations.lock() {
+        if let Ok(mut registrations) = self.registrations.write() {
             registrations.clear();
         }
     }

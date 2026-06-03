@@ -357,7 +357,8 @@ impl DownloadManagerView {
         // Try multi-URL extraction first
         let urls = super::model::extract_urls_from_text(&text);
         if urls.len() > 1 {
-            let result = { lock_or_recover(&self.service, "download-service").add_urls_from_text(&text) };
+            let result =
+                { lock_or_recover(&self.service, "download-service").add_urls_from_text(&text) };
             match result {
                 Ok(tasks) => {
                     self.clear_url_input(cx);
@@ -380,7 +381,9 @@ impl DownloadManagerView {
                     self.clear_url_input(cx);
                     self.message = format!("已添加: {}", task.file_name);
                     if let Some(tid) = task_id {
-                        let start_result = { lock_or_recover(&self.service, "download-service").start_download(&tid) };
+                        let start_result = {
+                            lock_or_recover(&self.service, "download-service").start_download(&tid)
+                        };
                         if let Err(e) = start_result {
                             tracing::error!(error = %e, "下载启动失败");
                             self.message = format!("启动失败: {e}");
@@ -533,12 +536,16 @@ impl DownloadManagerView {
             .unwrap_or_default();
 
         if !save_root.is_empty() {
-            if let Err(e) = lock_or_recover(&self.service, "download-service").set_save_root(&save_root) {
+            if let Err(e) =
+                lock_or_recover(&self.service, "download-service").set_save_root(&save_root)
+            {
                 tracing::error!(error = %e, "保存目录设置失败");
                 self.message = format!("保存目录设置失败: {e}");
             }
         }
-        if let Err(e) = lock_or_recover(&self.service, "download-service").set_max_concurrent(concurrent) {
+        if let Err(e) =
+            lock_or_recover(&self.service, "download-service").set_max_concurrent(concurrent)
+        {
             tracing::error!(error = %e, "并发设置失败");
             self.message = format!("并发设置失败: {e}");
         }
@@ -570,7 +577,9 @@ impl DownloadManagerView {
     }
 
     pub fn pause_task(&mut self, id: &str) {
-        if let Err(e) = lock_or_recover(&self.service, "download-service").pause_job(&JobId::new(id)) {
+        if let Err(e) =
+            lock_or_recover(&self.service, "download-service").pause_job(&JobId::new(id))
+        {
             tracing::error!(error = %e, task_id = id, "暂停下载失败");
             self.message = format!("暂停失败: {e}");
         } else {
@@ -580,7 +589,9 @@ impl DownloadManagerView {
     }
 
     pub fn resume_task(&mut self, id: &str) {
-        if let Err(e) = lock_or_recover(&self.service, "download-service").resume_job(&JobId::new(id)) {
+        if let Err(e) =
+            lock_or_recover(&self.service, "download-service").resume_job(&JobId::new(id))
+        {
             tracing::error!(error = %e, task_id = id, "恢复下载失败");
             self.message = format!("恢复失败: {e}");
         } else {
@@ -590,7 +601,9 @@ impl DownloadManagerView {
     }
 
     pub fn cancel_task(&mut self, id: &str) {
-        if let Err(e) = lock_or_recover(&self.service, "download-service").cancel_job(&JobId::new(id)) {
+        if let Err(e) =
+            lock_or_recover(&self.service, "download-service").cancel_job(&JobId::new(id))
+        {
             tracing::error!(error = %e, task_id = id, "取消下载失败");
             self.message = format!("取消失败: {e}");
         } else {
@@ -887,21 +900,17 @@ fn url_input_bar(
                 .items_center()
                 .child(url_input.into_any_element()),
         )
-        .child(
-            action_button("粘贴", dark)
-                .id("download-paste")
-                .on_click({
-                    let h = handle.clone();
-                    move |_, _window, cx| {
-                        cx.update_entity(&h, |panel, cx| {
-                            panel.paste_and_add(cx);
-                            let text = panel.url_text.clone();
-                            panel.set_url_input_text(text, cx);
-                            cx.notify();
-                        });
-                    }
-                }),
-        )
+        .child(action_button("粘贴", dark).id("download-paste").on_click({
+            let h = handle.clone();
+            move |_, _window, cx| {
+                cx.update_entity(&h, |panel, cx| {
+                    panel.paste_and_add(cx);
+                    let text = panel.url_text.clone();
+                    panel.set_url_input_text(text, cx);
+                    cx.notify();
+                });
+            }
+        }))
         .child(
             primary_btn("添加下载", PluginAccent::Green, dark)
                 .id("download-add")

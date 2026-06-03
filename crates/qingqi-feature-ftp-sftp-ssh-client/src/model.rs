@@ -69,13 +69,22 @@ pub enum FtpsMode {
 
 impl FtpsMode {
     pub fn as_str(self) -> &'static str {
-        match self { Self::Explicit => "explicit", Self::Implicit => "implicit" }
+        match self {
+            Self::Explicit => "explicit",
+            Self::Implicit => "implicit",
+        }
     }
     pub fn label(self) -> &'static str {
-        match self { Self::Explicit => "显式 TLS (AUTH TLS)", Self::Implicit => "隐式 TLS" }
+        match self {
+            Self::Explicit => "显式 TLS (AUTH TLS)",
+            Self::Implicit => "隐式 TLS",
+        }
     }
     pub fn from_db(value: &str) -> Self {
-        match value { "implicit" => Self::Implicit, _ => Self::Explicit }
+        match value {
+            "implicit" => Self::Implicit,
+            _ => Self::Explicit,
+        }
     }
 }
 
@@ -304,7 +313,8 @@ impl RemoteProfileDraft {
                 jump_private_key_passphrase: String::new(),
                 pinned: false,
                 notes: String::from("用于静态资源发布"),
-                group_id: None, ftps_mode: FtpsMode::Explicit,
+                group_id: None,
+                ftps_mode: FtpsMode::Explicit,
             },
             2 => Self {
                 name: String::from("旧版迁移机"),
@@ -329,7 +339,9 @@ impl RemoteProfileDraft {
                 jump_private_key_path: String::new(),
                 jump_private_key_passphrase: String::new(),
                 pinned: false,
-                notes: String::from("FTP 后端待接入"), group_id: None, ftps_mode: FtpsMode::Explicit,
+                notes: String::from("FTP 后端待接入"),
+                group_id: None,
+                ftps_mode: FtpsMode::Explicit,
             },
             3 => Self {
                 name: String::from("测试环境"),
@@ -354,7 +366,9 @@ impl RemoteProfileDraft {
                 jump_private_key_path: String::new(),
                 jump_private_key_passphrase: String::new(),
                 pinned: false,
-                notes: String::from("终端桥接待迁移"), group_id: None, ftps_mode: FtpsMode::Explicit,
+                notes: String::from("终端桥接待迁移"),
+                group_id: None,
+                ftps_mode: FtpsMode::Explicit,
             },
             _ => Self {
                 name: String::from("生产服务器"),
@@ -379,7 +393,9 @@ impl RemoteProfileDraft {
                 jump_private_key_path: String::new(),
                 jump_private_key_passphrase: String::new(),
                 pinned: true,
-                notes: String::from("示例配置"), group_id: None, ftps_mode: FtpsMode::Explicit,
+                notes: String::from("示例配置"),
+                group_id: None,
+                ftps_mode: FtpsMode::Explicit,
             },
         }
     }

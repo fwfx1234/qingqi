@@ -450,8 +450,8 @@ impl ClipboardDataSource {
                  USING fts5(search_text, content='', contentless_delete=1)",
             )?;
             // 从主表重建 FTS 索引
-            let mut stmt =
-                conn.prepare("SELECT id, item_type, content, preview, badge FROM clipboard_history")?;
+            let mut stmt = conn
+                .prepare("SELECT id, item_type, content, preview, badge FROM clipboard_history")?;
             let rows: Vec<(i64, String, String, String, String)> = stmt
                 .query_map([], |row| {
                     Ok((
@@ -465,17 +465,15 @@ impl ClipboardDataSource {
                 .filter_map(|r| r.ok())
                 .collect();
 
-            let mut insert = conn.prepare(
-                "INSERT INTO clipboard_history_fts(rowid, search_text) VALUES (?1, ?2)",
-            )?;
+            let mut insert = conn
+                .prepare("INSERT INTO clipboard_history_fts(rowid, search_text) VALUES (?1, ?2)")?;
             for (id, item_type, content, preview, badge) in &rows {
                 let kind = match item_type.as_str() {
                     "image" => ClipboardItemKind::Image,
                     "files" => ClipboardItemKind::Files,
                     _ => ClipboardItemKind::Text,
                 };
-                let search_text =
-                    search_text_for_record(kind, content, preview, badge);
+                let search_text = search_text_for_record(kind, content, preview, badge);
                 insert.execute(params![id, search_text])?;
             }
         }

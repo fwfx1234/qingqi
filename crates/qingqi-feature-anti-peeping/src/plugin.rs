@@ -46,7 +46,11 @@ impl AntiPeepingPlugin {
     fn save_custom_image(paths: &AppPaths, path: &str) {
         let config_path = paths.config("anti-peeping.json");
         if let Some(parent) = config_path.parent() {
-            log_error!(std::fs::create_dir_all(parent), warn, "创建防窥配置目录失败");
+            log_error!(
+                std::fs::create_dir_all(parent),
+                warn,
+                "创建防窥配置目录失败"
+            );
         }
         let value = serde_json::json!({"image_path": path});
         log_error!(

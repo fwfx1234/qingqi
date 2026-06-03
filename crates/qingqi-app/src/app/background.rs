@@ -1,6 +1,6 @@
 use std::{
     collections::HashSet,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
 
@@ -139,33 +139,34 @@ impl BackgroundSupervisor {
 
         tracing::debug!("low-level keyboard hook installed");
 
+        let rx = Arc::new(Mutex::new(rx));
         let task = cx.spawn(async move |async_cx| {
-            // Keep the hook alive while polling for events.
+            // Keep the hook alive while waiting for events.
             let _hook = hook;
             loop {
-                // Poll rx periodically — WH_KEYBOARD_LL events arrive at
-                // human timescales, so 50 ms is more than responsive enough.
-                async_cx
+                let rx = Arc::clone(&rx);
+                let result = async_cx
                     .background_executor()
-                    .timer(Duration::from_millis(50))
+                    .spawn(async move { rx.lock().ok()?.recv().ok() })
                     .await;
-                while let Ok(hook_id) = rx.try_recv() {
-                    let window_controller = Arc::clone(&window_controller);
-                    let _ = async_cx.update(move |cx| {
-                        let target = cx
-                            .try_global::<ShortcutGlobal>()
-                            .and_then(|service| service.dispatch_low_level(hook_id));
-                        if let Some(target) = target {
-                            shortcut::dispatch_target(&target, window_controller, cx);
-                        }
-                    });
-                }
+                let Some(hook_id) = result.flatten() else {
+                    break;
+                };
+                let window_controller = Arc::clone(&window_controller);
+                let _ = async_cx.update(move |cx| {
+                    let target = cx
+                        .try_global::<ShortcutGlobal>()
+                        .and_then(|service| service.dispatch_low_level(hook_id));
+                    if let Some(target) = target {
+                        shortcut::dispatch_target(&target, window_controller, cx);
+                    }
+                });
             }
         });
         self.tasks.push(task);
     }
 
-    pub fn start_theme_poll(&mut self, theme_store: Arc<Mutex<ThemeStore>>, cx: &mut App) {
+    pub fn start_theme_poll(&mut self, theme_store: Arc<RwLock<ThemeStore>>, cx: &mut App) {
         if !self.mark_started("theme-poll") {
             return;
         }
@@ -174,11 +175,11 @@ impl BackgroundSupervisor {
             loop {
                 async_cx
                     .background_executor()
-                    .timer(Duration::from_secs(3))
+                    .timer(Duration::from_secs(30))
                     .await;
                 let store = Arc::clone(&theme_store);
                 let _ = async_cx.update(move |_cx| {
-                    if let Ok(mut ts) = store.lock() {
+                    if let Ok(mut ts) = store.write() {
                         let _ = ts.sync_system_changed();
                     }
                 });
@@ -197,7 +198,7 @@ impl BackgroundSupervisor {
             loop {
                 async_cx
                     .background_executor()
-                    .timer(Duration::from_secs(5))
+                    .timer(Duration::from_secs(15))
                     .await;
                 let pm = Arc::clone(&power_manager);
                 let _ = async_cx.update(move |_cx| {

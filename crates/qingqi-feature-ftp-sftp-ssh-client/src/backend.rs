@@ -56,7 +56,12 @@ pub trait RemoteBackend: Send {
     }
     fn clear_protocol_log(&self) {}
     fn remote_file_version(&self, remote: &str) -> Result<String>;
-    fn start_port_forward(&self, local_port: u16, remote_host: &str, remote_port: u16) -> Result<()> {
+    fn start_port_forward(
+        &self,
+        local_port: u16,
+        remote_host: &str,
+        remote_port: u16,
+    ) -> Result<()> {
         let _ = (local_port, remote_host, remote_port);
         Err(anyhow!("端口转发仅支持 SSH/SFTP 连接"))
     }
@@ -280,25 +285,42 @@ impl SftpBackend {
         use std::os::unix::net::UnixStream;
         // 1. 连接跳板机
         let jump_addr = format!("{}:{}", self.profile.jump_host, self.profile.jump_port);
-        let jump_tcp = TcpStream::connect_timeout(&jump_addr.parse().map_err(|e| anyhow!("跳板机地址无效: {e}"))?, timeout)
-            .map_err(|e| anyhow!("连接跳板机失败: {e}"))?;
+        let jump_tcp = TcpStream::connect_timeout(
+            &jump_addr
+                .parse()
+                .map_err(|e| anyhow!("跳板机地址无效: {e}"))?,
+            timeout,
+        )
+        .map_err(|e| anyhow!("连接跳板机失败: {e}"))?;
         let mut jump_sess = ssh2::Session::new().context("创建跳板机会话失败")?;
         jump_sess.set_timeout(timeout.as_millis() as u32);
         jump_sess.set_tcp_stream(jump_tcp);
         jump_sess.handshake().context("跳板机握手失败")?;
         // 2. 认证跳板机
-        Self::authenticate_session(&jump_sess, &self.profile.jump_username, &self.profile.jump_password,
-            &self.profile.jump_private_key_path, &self.profile.jump_private_key_passphrase,
-            if !self.profile.jump_private_key_path.trim().is_empty() { AuthMethod::PrivateKey } else { AuthMethod::Password })?;
+        Self::authenticate_session(
+            &jump_sess,
+            &self.profile.jump_username,
+            &self.profile.jump_password,
+            &self.profile.jump_private_key_path,
+            &self.profile.jump_private_key_passphrase,
+            if !self.profile.jump_private_key_path.trim().is_empty() {
+                AuthMethod::PrivateKey
+            } else {
+                AuthMethod::Password
+            },
+        )?;
         // 3. 创建 TCP 隧道
-        let mut channel = jump_sess.channel_direct_tcpip(&self.profile.host, self.profile.port, None::<(&str, u16)>)
+        let mut channel = jump_sess
+            .channel_direct_tcpip(&self.profile.host, self.profile.port, None::<(&str, u16)>)
             .context("创建跳板机隧道失败")?;
         // 4. 双向转发 via UnixStream pair
         let (mut to_target, from_channel) = UnixStream::pair().context("创建代理 socket 失败")?;
         let mut to_channel = from_channel.try_clone().context("克隆 socket 失败")?;
         to_target.set_nonblocking(false).ok();
         // channel → target
-        thread::spawn(move || { let _ = std::io::copy(&mut channel, &mut to_target); });
+        thread::spawn(move || {
+            let _ = std::io::copy(&mut channel, &mut to_target);
+        });
         // target → channel (handled by the session via from_channel)
         // 5. 建立目标 SSH 会话
         let mut target_sess = ssh2::Session::new().context("创建目标会话失败")?;
@@ -306,12 +328,20 @@ impl SftpBackend {
         target_sess.set_tcp_stream(from_channel);
         target_sess.handshake().context("目标握手失败")?;
         // 6. 认证目标
-        Self::authenticate_session(&target_sess, &self.profile.username, &self.profile.password,
-            &self.profile.private_key_path, &self.profile.private_key_passphrase, self.profile.auth_method)?;
+        Self::authenticate_session(
+            &target_sess,
+            &self.profile.username,
+            &self.profile.password,
+            &self.profile.private_key_path,
+            &self.profile.private_key_passphrase,
+            self.profile.auth_method,
+        )?;
         // 7. SFTP 子系统
         if self.profile.protocol.supports_file_browser() {
             self.sftp = Some(target_sess.sftp().context("SFTP 子系统失败")?);
-        } else { self.sftp = None; }
+        } else {
+            self.sftp = None;
+        }
         self.session = Some(target_sess);
         // Keep jump session alive for tunnel lifetime via to_channel
         std::mem::forget(jump_sess);
@@ -529,11 +559,17 @@ impl RemoteBackend for SftpBackend {
         ))
     }
 
-    fn start_port_forward(&self, local_port: u16, remote_host: &str, remote_port: u16) -> Result<()> {
+    fn start_port_forward(
+        &self,
+        local_port: u16,
+        remote_host: &str,
+        remote_port: u16,
+    ) -> Result<()> {
         use std::io::{Read as _, Write as _};
         use std::net::TcpStream;
         let sess = self.session.as_ref().context("SSH 会话未建立")?;
-        let mut ch = sess.channel_direct_tcpip(remote_host, remote_port, None::<(&str, u16)>)
+        let mut ch = sess
+            .channel_direct_tcpip(remote_host, remote_port, None::<(&str, u16)>)
             .context("创建 SSH 隧道失败")?;
         let mut tcp = TcpStream::connect(format!("127.0.0.1:{local_port}"))
             .context(format!("连接本地端口 {local_port} 失败"))?;
@@ -600,8 +636,8 @@ impl RemoteBackend for FtpBackend {
 
         if self.profile.protocol == RemoteProtocol::Ftps {
             self.log_cmd(format!("FTPS {}:{}", self.profile.host, self.profile.port));
-            let mut ftp = suppaftp::FtpStream::connect_timeout(addr, timeout)
-                .context("FTP 连接失败")?;
+            let mut ftp =
+                suppaftp::FtpStream::connect_timeout(addr, timeout).context("FTP 连接失败")?;
             self.log_resp("220 service ready");
             // FTPS: suppaftp 6.x 的 TLS connector 类型系统和 FtpStream=ImplFtpStream<NoTlsStream>
             // 的类型别名导致 into_secure/connect_secure_implicit 均要求
@@ -610,7 +646,9 @@ impl RemoteBackend for FtpBackend {
             self.log_error(format!("FTPS 模式: {}", self.profile.ftps_mode.label()));
             return Err(anyhow!(
                 "FTPS 连接需要 suppaftp TLS 适配。当前请使用 SFTP。\n配置: {} 模式 → {}:{}",
-                self.profile.ftps_mode.label(), self.profile.host, self.profile.port
+                self.profile.ftps_mode.label(),
+                self.profile.host,
+                self.profile.port
             ));
         }
 
@@ -789,7 +827,6 @@ impl RemoteBackend for FtpBackend {
             .unwrap_or(0);
         Ok(format!("{size}:{modified}"))
     }
-
 }
 
 pub fn create_backend(profile: &RemoteProfile) -> Box<dyn RemoteBackend> {

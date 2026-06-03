@@ -9,8 +9,7 @@ use serde_json::Value;
 
 /// 解析 Postman Collection v2.1 JSON
 pub fn parse_postman(content: &str) -> Result<ImportedCollection, String> {
-    let root: Value =
-        serde_json::from_str(content).map_err(|e| format!("JSON 解析失败: {e}"))?;
+    let root: Value = serde_json::from_str(content).map_err(|e| format!("JSON 解析失败: {e}"))?;
 
     let info = root.get("info").unwrap_or(&Value::Null);
     let title = info
@@ -121,7 +120,8 @@ fn parse_items(
                                     .iter()
                                     .filter_map(|p| {
                                         let k = p.get("key").and_then(|v| v.as_str())?;
-                                        let v = p.get("value").and_then(|v| v.as_str()).unwrap_or("");
+                                        let v =
+                                            p.get("value").and_then(|v| v.as_str()).unwrap_or("");
                                         Some(format!("{k}={v}"))
                                     })
                                     .collect::<Vec<_>>()
@@ -135,7 +135,8 @@ fn parse_items(
                                     .iter()
                                     .filter_map(|p| {
                                         let k = p.get("key").and_then(|v| v.as_str())?;
-                                        let v = p.get("value").and_then(|v| v.as_str()).unwrap_or("");
+                                        let v =
+                                            p.get("value").and_then(|v| v.as_str()).unwrap_or("");
                                         Some(format!("{k}={v}"))
                                     })
                                     .collect::<Vec<_>>()
@@ -155,7 +156,9 @@ fn parse_items(
                             if let Some(token) = find_auth_value(auth, "token") {
                                 let rows = parse_or_empty(&snapshot.headers_text);
                                 let mut new_rows = rows;
-                                let has_auth = new_rows.iter().any(|r| r.key.eq_ignore_ascii_case("Authorization"));
+                                let has_auth = new_rows
+                                    .iter()
+                                    .any(|r| r.key.eq_ignore_ascii_case("Authorization"));
                                 if !has_auth {
                                     new_rows.push(KeyValueRow::new(
                                         "Authorization".to_string(),
@@ -173,7 +176,9 @@ fn parse_items(
                             let user = find_auth_value(auth, "username").unwrap_or_default();
                             let pass = find_auth_value(auth, "password").unwrap_or_default();
                             let rows = parse_or_empty(&snapshot.headers_text);
-                            let has_auth = rows.iter().any(|r| r.key.eq_ignore_ascii_case("Authorization"));
+                            let has_auth = rows
+                                .iter()
+                                .any(|r| r.key.eq_ignore_ascii_case("Authorization"));
                             if !has_auth && (!user.is_empty() || !pass.is_empty()) {
                                 let mut new_rows = rows;
                                 new_rows.push(KeyValueRow::new(
@@ -192,13 +197,15 @@ fn parse_items(
                 }
             }
 
-            result.endpoints.push(crate::import_openapi::ImportedEndpoint {
-                name,
-                method,
-                url: url_str,
-                parent_folder: parent_folder.map(|s| s.to_string()),
-                snapshot,
-            });
+            result
+                .endpoints
+                .push(crate::import_openapi::ImportedEndpoint {
+                    name,
+                    method,
+                    url: url_str,
+                    parent_folder: parent_folder.map(|s| s.to_string()),
+                    snapshot,
+                });
         }
     }
 }
@@ -262,7 +269,9 @@ fn find_auth_value(auth: &Value, key: &str) -> Option<String> {
             .map(|s| s.to_string());
     }
     // 另一种格式: key 直接在 auth 对象上
-    auth.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    auth.get(key)
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
 }
 
 fn parse_or_empty(text: &str) -> Vec<KeyValueRow> {

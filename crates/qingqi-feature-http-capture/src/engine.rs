@@ -235,13 +235,10 @@ impl CaptureEngine {
 
     /// 当前代理端口（仅在运行时有效）。
     pub fn port(&self) -> Option<u16> {
-        self.state
-            .lock()
-            .ok()
-            .and_then(|s| match s.proxy_state {
-                ProxyState::Running { port } => Some(port),
-                ProxyState::Stopped => None,
-            })
+        self.state.lock().ok().and_then(|s| match s.proxy_state {
+            ProxyState::Running { port } => Some(port),
+            ProxyState::Stopped => None,
+        })
     }
 
     /// 获取当前代理状态。

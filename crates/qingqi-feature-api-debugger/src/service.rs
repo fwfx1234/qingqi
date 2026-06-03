@@ -402,7 +402,11 @@ impl ApiService {
                     active_request_tab: existing_active_tab,
                     updated_at: String::new(),
                 };
-                log_error!(service.data_source.save_tab(&tab), warn, "保存标签页状态失败");
+                log_error!(
+                    service.data_source.save_tab(&tab),
+                    warn,
+                    "保存标签页状态失败"
+                );
             }
 
             service.revision.fetch_add(1, Ordering::SeqCst);
@@ -620,7 +624,11 @@ impl ApiService {
     pub fn delete_persisted_tab_async(self: &Arc<Self>, tab_id: String) {
         let service = Arc::clone(self);
         thread::spawn(move || {
-            log_error!(service.delete_persisted_tab(&tab_id), warn, "删除持久化标签页失败");
+            log_error!(
+                service.delete_persisted_tab(&tab_id),
+                warn,
+                "删除持久化标签页失败"
+            );
         });
     }
 
@@ -878,7 +886,11 @@ fn perform_request(
 
     let raw_headers = fs::read_to_string(&header_path).unwrap_or_default();
     let raw_body = fs::read_to_string(&body_path).unwrap_or_default();
-    log_error!(fs::remove_file(&header_path), warn, "删除临时header文件失败");
+    log_error!(
+        fs::remove_file(&header_path),
+        warn,
+        "删除临时header文件失败"
+    );
     log_error!(fs::remove_file(&body_path), warn, "删除临时body文件失败");
 
     if !output.status.success() {

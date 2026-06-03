@@ -3,8 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
 use crate::log_error;
+use anyhow::{Context, Result};
 
 #[derive(Clone, Debug)]
 pub struct AppPaths {

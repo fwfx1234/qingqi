@@ -212,7 +212,12 @@ impl PluginManager {
         commands: &[Command],
         require_positive_score: bool,
     ) -> Vec<Command> {
-        self.sorted_commands_with_clipboard(query, commands, require_positive_score, &HashMap::new())
+        self.sorted_commands_with_clipboard(
+            query,
+            commands,
+            require_positive_score,
+            &HashMap::new(),
+        )
     }
 
     fn sorted_commands_with_clipboard(
@@ -273,14 +278,8 @@ impl PluginManager {
         boost_map: &HashMap<String, i32>,
     ) {
         scored.sort_by(|(left_score, left), (right_score, right)| {
-            let left_u = usage_map
-                .get(&left.usage_key)
-                .cloned()
-                .unwrap_or_default();
-            let right_u = usage_map
-                .get(&right.usage_key)
-                .cloned()
-                .unwrap_or_default();
+            let left_u = usage_map.get(&left.usage_key).cloned().unwrap_or_default();
+            let right_u = usage_map.get(&right.usage_key).cloned().unwrap_or_default();
             let left_boost = boost_map.get(&left.plugin_id).copied().unwrap_or(0) as f64;
             let right_boost = boost_map.get(&right.plugin_id).copied().unwrap_or(0) as f64;
             let left_total =

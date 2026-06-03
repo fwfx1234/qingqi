@@ -7,12 +7,10 @@ use std::{
 use gpui::{
     AnyWindowHandle, App, Bounds, Context, Focusable, IntoElement, ParentElement, Render, Styled,
     TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds, WindowDecorations,
-    WindowKind, WindowOptions, div, point, prelude::*, px, size,
+    WindowKind, WindowOptions, div, prelude::*, px, size,
 };
 
-use crate::{
-    app::{app_catalog::AppCatalog, launcher::Launcher},
-};
+use crate::app::{app_catalog::AppCatalog, launcher::Launcher};
 use qingqi_core::lock_or_recover;
 use qingqi_core::plugin::{PluginManager, WindowView};
 use qingqi_plugin::command::{Action, Activation, CommandInvocation};
@@ -80,7 +78,7 @@ impl WindowController {
 
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::new(
-                point(px(-10000.0), px(-10000.0)),
+                gpui::point(px(-10000.0), px(-10000.0)),
                 size(px(1.0), px(1.0)),
             ))),
             titlebar: None,
@@ -104,10 +102,8 @@ impl WindowController {
     }
 
     pub fn toggle_launcher(controller: WindowControllerHandle, cx: &mut App) {
-        let stored_window_handle = {
-                            lock_or_recover(&controller, "window_controller")
-                .launcher_window
-        };
+        let stored_window_handle =
+            { lock_or_recover(&controller, "window_controller").launcher_window };
         if let Some(window_handle) = stored_window_handle {
             if let Some(handle) = window_handle.downcast::<Launcher>() {
                 match handle.update(cx, |launcher, window, cx| {
@@ -115,20 +111,17 @@ impl WindowController {
                     window.defer(cx, |window, _cx| window.remove_window());
                 }) {
                     Ok(_) => {
-                                                    lock_or_recover(&controller, "window_controller")
-                            .launcher_window = None;
+                        lock_or_recover(&controller, "window_controller").launcher_window = None;
                         return;
                     }
                     Err(error) => {
                         tracing::warn!(error = %error, "toggle existing launcher window failed");
-                                                    lock_or_recover(&controller, "window_controller")
-                            .launcher_window = None;
+                        lock_or_recover(&controller, "window_controller").launcher_window = None;
                     }
                 }
             } else {
                 tracing::warn!("stored launcher window handle had unexpected root type");
-                                    lock_or_recover(&controller, "window_controller")
-                    .launcher_window = None;
+                lock_or_recover(&controller, "window_controller").launcher_window = None;
             }
         }
 
@@ -136,10 +129,8 @@ impl WindowController {
     }
 
     pub fn show_launcher(controller: WindowControllerHandle, cx: &mut App) {
-        let stored_window_handle = {
-                            lock_or_recover(&controller, "window_controller")
-                .launcher_window
-        };
+        let stored_window_handle =
+            { lock_or_recover(&controller, "window_controller").launcher_window };
         if let Some(window_handle) = stored_window_handle {
             if let Some(handle) = window_handle.downcast::<Launcher>() {
                 cx.activate(true);
@@ -157,14 +148,12 @@ impl WindowController {
                     }
                     Err(error) => {
                         tracing::warn!(error = %error, "activate existing launcher window failed");
-                                                    lock_or_recover(&controller, "window_controller")
-                            .launcher_window = None;
+                        lock_or_recover(&controller, "window_controller").launcher_window = None;
                     }
                 }
             } else {
                 tracing::warn!("stored launcher window handle had unexpected root type");
-                                    lock_or_recover(&controller, "window_controller")
-                    .launcher_window = None;
+                lock_or_recover(&controller, "window_controller").launcher_window = None;
             }
         }
 
@@ -172,14 +161,12 @@ impl WindowController {
     }
 
     fn open_launcher(controller: WindowControllerHandle, cx: &mut App) {
-        let plugin_manager =             lock_or_recover(&controller, "window_controller")
-            .plugin_manager();
-        let app_catalog =             lock_or_recover(&controller, "window_controller")
-            .app_catalog();
-        let events =             lock_or_recover(&controller, "window_controller")
+        let plugin_manager = lock_or_recover(&controller, "window_controller").plugin_manager();
+        let app_catalog = lock_or_recover(&controller, "window_controller").app_catalog();
+        let events = lock_or_recover(&controller, "window_controller")
             .events
             .clone();
-        let initial_results =             lock_or_recover(&plugin_manager, "window_controller")
+        let initial_results = lock_or_recover(&plugin_manager, "window_controller")
             .commands_with_clipboard(&HashMap::new())
             .len();
         let window_size = size(
@@ -198,7 +185,7 @@ impl WindowController {
             titlebar: Some(TitlebarOptions {
                 title: Some("Qingqi".into()),
                 appears_transparent: true,
-                traffic_light_position: Some(point(px(-80.0), px(-80.0))),
+                traffic_light_position: Some(gpui::point(px(-80.0), px(-80.0))),
                 ..Default::default()
             }),
             kind: WindowKind::PopUp,
@@ -231,8 +218,8 @@ impl WindowController {
             launcher
         }) {
             Ok(handle) => {
-                                    lock_or_recover(&controller, "window_controller")
-                    .launcher_window = Some(handle.into());
+                lock_or_recover(&controller, "window_controller").launcher_window =
+                    Some(handle.into());
                 cx.activate(true);
                 let _ = handle.update(cx, |launcher, window, cx| {
                     window.activate_window();
@@ -259,9 +246,8 @@ impl WindowController {
     ) {
         let plugin_id = plugin_id.as_ref().to_string();
         let started = Instant::now();
-        let plugin_manager =             lock_or_recover(&controller, "window_controller")
-            .plugin_manager();
-        let manifest =             lock_or_recover(&plugin_manager, "window_controller")
+        let plugin_manager = lock_or_recover(&controller, "window_controller").plugin_manager();
+        let manifest = lock_or_recover(&plugin_manager, "window_controller")
             .manifests()
             .into_iter()
             .find(|manifest| manifest.id.as_ref() == plugin_id);
@@ -285,7 +271,7 @@ impl WindowController {
         }
 
         let view_started = Instant::now();
-        let view = match             lock_or_recover(&plugin_manager, "window_controller")
+        let view = match lock_or_recover(&plugin_manager, "window_controller")
             .open_window_view(&plugin_id, cx)
         {
             Ok(view) => view,
@@ -318,7 +304,7 @@ impl WindowController {
                     cx.activate(true);
                     window.activate_window();
                 });
-                                    lock_or_recover(&controller, "window_controller")
+                lock_or_recover(&controller, "window_controller")
                     .set_plugin_window(plugin_id_for_window, handle.into());
             }
             Err(error) => tracing::warn!(
@@ -341,7 +327,7 @@ impl WindowController {
         cx: &mut App,
     ) -> bool {
         let stored_window_handle = {
-                            lock_or_recover(&controller, "window_controller")
+            lock_or_recover(&controller, "window_controller")
                 .plugin_windows
                 .get(plugin_id)
                 .copied()
@@ -363,7 +349,7 @@ impl WindowController {
                             error = %error,
                             "activate existing plugin window failed"
                         );
-                                                    lock_or_recover(&controller, "window_controller")
+                        lock_or_recover(&controller, "window_controller")
                             .clear_plugin_window(plugin_id);
                     }
                 }
@@ -372,8 +358,7 @@ impl WindowController {
                     plugin_id,
                     "stored plugin window handle had unexpected root type"
                 );
-                                    lock_or_recover(&controller, "window_controller")
-                    .clear_plugin_window(plugin_id);
+                lock_or_recover(&controller, "window_controller").clear_plugin_window(plugin_id);
             }
         }
 
@@ -394,7 +379,7 @@ impl WindowController {
                 plugin_window.reopen(window, cx);
                 window.activate_window();
             });
-                            lock_or_recover(&controller, "window_controller")
+            lock_or_recover(&controller, "window_controller")
                 .set_plugin_window(plugin_id.to_string(), window_handle);
             cx.activate(true);
             return true;
@@ -409,7 +394,7 @@ impl WindowController {
         cx: &mut App,
     ) -> bool {
         let stored_window_handle = {
-                            lock_or_recover(&controller, "window_controller")
+            lock_or_recover(&controller, "window_controller")
                 .plugin_windows
                 .get(plugin_id)
                 .copied()
@@ -420,7 +405,7 @@ impl WindowController {
                     window.defer(cx, |window, _cx| window.remove_window());
                 }) {
                     Ok(_) => {
-                                                    lock_or_recover(&controller, "window_controller")
+                        lock_or_recover(&controller, "window_controller")
                             .clear_plugin_window(plugin_id);
                         return true;
                     }
@@ -430,7 +415,7 @@ impl WindowController {
                             error = %error,
                             "close existing plugin window failed"
                         );
-                                                    lock_or_recover(&controller, "window_controller")
+                        lock_or_recover(&controller, "window_controller")
                             .clear_plugin_window(plugin_id);
                     }
                 }
@@ -439,8 +424,7 @@ impl WindowController {
                     plugin_id,
                     "stored plugin window handle had unexpected root type"
                 );
-                                    lock_or_recover(&controller, "window_controller")
-                    .clear_plugin_window(plugin_id);
+                lock_or_recover(&controller, "window_controller").clear_plugin_window(plugin_id);
             }
         }
 
@@ -461,8 +445,7 @@ impl WindowController {
                     window.defer(cx, |window, _cx| window.remove_window());
                 })
                 .is_ok();
-                            lock_or_recover(&controller, "window_controller")
-                .clear_plugin_window(plugin_id);
+            lock_or_recover(&controller, "window_controller").clear_plugin_window(plugin_id);
             if closed {
                 return true;
             }
@@ -491,8 +474,7 @@ impl WindowController {
                 None
             }
             Activation::Run(Action::LaunchApp { path }) => {
-                let app_catalog =                     lock_or_recover(&controller, "window_controller")
-                    .app_catalog();
+                let app_catalog = lock_or_recover(&controller, "window_controller").app_catalog();
                 Some(match app_catalog.launch(&path) {
                     Ok(()) => format!("已打开 {}", std::path::Path::new(&path).display()),
                     Err(error) => error,
@@ -500,8 +482,8 @@ impl WindowController {
             }
             activation @ Activation::Run(Action::PluginAction { .. }) => {
                 let plugin_id = activation.plugin_id().to_string();
-                let plugin_manager =                     lock_or_recover(&controller, "window_controller")
-                    .plugin_manager();
+                let plugin_manager =
+                    lock_or_recover(&controller, "window_controller").plugin_manager();
                 match lock_or_recover(&plugin_manager, "window_controller")
                     .handle_command(CommandInvocation { activation }, cx)
                 {
@@ -536,8 +518,7 @@ impl WindowController {
     }
 
     fn close_idle_plugin(&mut self, plugin_id: &str) {
-                    lock_or_recover(&self.plugin_manager, "window_controller")
-            .close_idle(plugin_id);
+        lock_or_recover(&self.plugin_manager, "window_controller").close_idle(plugin_id);
         self.clear_plugin_window(plugin_id);
     }
 }
@@ -600,9 +581,10 @@ fn plugin_window_options(
     // Two flavours of independent plugin window:
     //   • always_on_top = false → an ordinary OS-decorated window with a
     //     native titlebar + close button (full tools that needn't float).
-    //   • always_on_top = true  → a borderless, client-drawn `PopUp` that
-    //     floats above other windows (clipboard, anti-peeping).  These have
-    //     no OS titlebar, so the window host overlays `ui::window_close_button`.
+    //   • always_on_top = true  → a client-decorated `PopUp` that floats above
+    //     other windows (clipboard, anti-peeping). macOS keeps native traffic
+    //     lights on the transparent titlebar; other platforms get an overlaid
+    //     `ui::window_close_button`.
     let always_on_top = manifest.is_some_and(|m| m.window.always_on_top);
 
     if always_on_top {
@@ -612,7 +594,6 @@ fn plugin_window_options(
             titlebar: Some(TitlebarOptions {
                 title: Some(title.to_string().into()),
                 appears_transparent: true,
-                traffic_light_position: Some(point(px(-80.0), px(-80.0))),
                 ..Default::default()
             }),
             kind: WindowKind::PopUp,
@@ -695,8 +676,8 @@ struct PluginWindow {
     controller: WindowControllerHandle,
     view: Option<Box<dyn WindowView>>,
     plugin_id: String,
-    /// Whether this window is client-drawn (always-on-top, no OS titlebar) and
-    /// therefore needs an overlaid close button.
+    /// Whether this window uses client decorations. Non-macOS platforms need
+    /// an overlaid close button; macOS keeps native traffic lights.
     client_drawn: bool,
 }
 
@@ -743,9 +724,9 @@ impl Render for PluginWindow {
                 }),
             )
             .child(content)
-            // Client-drawn (always-on-top) windows have no OS titlebar, so
-            // overlay a system-style close button at the top-right.  On macOS
-            // the GPUI chrome renders traffic lights (close/min/max) — skip.
+            // Client-drawn (always-on-top) windows have no OS titlebar on
+            // non-macOS platforms, so overlay a close button. macOS keeps the
+            // native traffic lights even with a transparent titlebar.
             .children((client_drawn && !cfg!(target_os = "macos")).then(|| {
                 div()
                     .absolute()
@@ -761,7 +742,6 @@ impl Drop for PluginWindow {
         if let Some(mut view) = self.view.take() {
             view.on_close();
         }
-                    lock_or_recover(&self.controller, "window_controller")
-            .close_idle_plugin(&self.plugin_id);
+        lock_or_recover(&self.controller, "window_controller").close_idle_plugin(&self.plugin_id);
     }
 }

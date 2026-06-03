@@ -907,7 +907,6 @@ impl Render for ImageCompressView {
     }
 }
 
-
 fn mode_chip(label: &str, active: bool, _dark: bool) -> gpui::Div {
     div()
         .h(px(28.0))
@@ -956,12 +955,27 @@ fn quality_button(label: &str, _dark: bool) -> gpui::Div {
 fn drop_zone(pending_count: usize) -> gpui::Div {
     div()
         .rounded(px(10.0))
-        .bg(theme::rgba_with_alpha(ui::accent_color(PluginAccent::Amber), 0.05))
-        .border_1().border_color(theme::rgba_with_alpha(ui::accent_color(PluginAccent::Amber), 0.18))
-        .p_3().flex().items_center().gap_3()
+        .bg(theme::rgba_with_alpha(
+            ui::accent_color(PluginAccent::Amber),
+            0.05,
+        ))
+        .border_1()
+        .border_color(theme::rgba_with_alpha(
+            ui::accent_color(PluginAccent::Amber),
+            0.18,
+        ))
+        .p_3()
+        .flex()
+        .items_center()
+        .gap_3()
         .child(
-            div().flex_1().flex().items_center().gap_3()
-                .child(div().text_size(px(12.0)).font_weight(gpui::FontWeight::MEDIUM).text_color(theme::semantic().text_primary).child(format!("{pending_count} 张图片")))
+            div().flex_1().flex().items_center().gap_3().child(
+                div()
+                    .text_size(px(12.0))
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .text_color(theme::semantic().text_primary)
+                    .child(format!("{pending_count} 张图片")),
+            ),
         )
 }
 

@@ -197,9 +197,7 @@ impl MockStore {
     }
 
     fn connection(&self) -> Result<PooledConnection> {
-        self.pool
-            .get()
-            .context("无法获取 mock 数据库连接")
+        self.pool.get().context("无法获取 mock 数据库连接")
     }
 }
 

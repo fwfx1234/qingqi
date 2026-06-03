@@ -57,18 +57,11 @@ pub fn parse_openapi(content: &str) -> Result<ImportedCollection, String> {
             .get("host")
             .and_then(|v| v.as_str())
             .unwrap_or("localhost");
-        let base_path = value
-            .get("basePath")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let base_path = value.get("basePath").and_then(|v| v.as_str()).unwrap_or("");
         let schemes = value
             .get("schemes")
             .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-            })
+            .map(|arr| arr.iter().filter_map(|s| s.as_str()).collect::<Vec<_>>())
             .unwrap_or_else(|| vec!["http"]);
         let scheme = schemes.first().unwrap_or(&"http");
         result
@@ -152,10 +145,7 @@ pub fn parse_openapi(content: &str) -> Result<ImportedCollection, String> {
                 snapshot.path_params_text = format_rows(&path_pairs);
                 // 合并 headers
                 let existing_hdrs = parse_rows(&snapshot.headers_text);
-                let all_hdrs: Vec<_> = existing_hdrs
-                    .into_iter()
-                    .chain(header_pairs)
-                    .collect();
+                let all_hdrs: Vec<_> = existing_hdrs.into_iter().chain(header_pairs).collect();
                 snapshot.headers_text = format_rows(&all_hdrs);
             }
 
@@ -193,7 +183,9 @@ pub fn parse_openapi(content: &str) -> Result<ImportedCollection, String> {
             if let Some(produces) = value.get("produces").and_then(|v| v.as_array()) {
                 if let Some(first) = produces.first().and_then(|v| v.as_str()) {
                     let existing = parse_rows(&snapshot.headers_text);
-                    let has_ct = existing.iter().any(|r| r.key.eq_ignore_ascii_case("Content-Type"));
+                    let has_ct = existing
+                        .iter()
+                        .any(|r| r.key.eq_ignore_ascii_case("Content-Type"));
                     if !has_ct {
                         let mut new_hdrs = existing;
                         new_hdrs.push(KeyValueRow::new("Content-Type", first.to_string()));
@@ -257,20 +249,22 @@ fn generate_example_from_schema(schema: &Value) -> Option<String> {
                         ),
                         Some("number") => {
                             if let Some(n) = prop.get("example").and_then(|v| v.as_f64()) {
-                                serde_json::Number::from_f64(n).map(Value::Number).unwrap_or(Value::Number(0.into()))
+                                serde_json::Number::from_f64(n)
+                                    .map(Value::Number)
+                                    .unwrap_or(Value::Number(0.into()))
                             } else {
                                 Value::Number(0.into())
                             }
                         }
-                        Some("boolean") => {
-                            Value::Bool(prop.get("example").and_then(|v| v.as_bool()).unwrap_or(false))
-                        }
+                        Some("boolean") => Value::Bool(
+                            prop.get("example")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false),
+                        ),
                         Some("array") => Value::Array(vec![]),
-                        Some("object") => {
-                            generate_example_from_schema(prop)
-                                .and_then(|s| serde_json::from_str(&s).ok())
-                                .unwrap_or(Value::Object(serde_json::Map::new()))
-                        }
+                        Some("object") => generate_example_from_schema(prop)
+                            .and_then(|s| serde_json::from_str(&s).ok())
+                            .unwrap_or(Value::Object(serde_json::Map::new())),
                         _ => Value::String("".into()),
                     };
                     map.insert(key.clone(), example_val);
@@ -358,15 +352,27 @@ mod tests {
         assert_eq!(result.base_urls, vec!["https://api.example.com/v1"]);
         assert_eq!(result.endpoints.len(), 3);
 
-        let get_users = result.endpoints.iter().find(|e| e.method == "GET" && e.url == "/users").unwrap();
+        let get_users = result
+            .endpoints
+            .iter()
+            .find(|e| e.method == "GET" && e.url == "/users")
+            .unwrap();
         assert_eq!(get_users.name, "获取用户列表");
         assert_eq!(get_users.parent_folder.as_deref(), Some("用户管理"));
         assert!(get_users.snapshot.params_text.contains("page=1"));
 
-        let post_users = result.endpoints.iter().find(|e| e.method == "POST").unwrap();
+        let post_users = result
+            .endpoints
+            .iter()
+            .find(|e| e.method == "POST")
+            .unwrap();
         assert!(!post_users.snapshot.body_text.is_empty());
 
-        let health = result.endpoints.iter().find(|e| e.url == "/health").unwrap();
+        let health = result
+            .endpoints
+            .iter()
+            .find(|e| e.url == "/health")
+            .unwrap();
         assert!(health.parent_folder.is_none());
     }
 

@@ -2,13 +2,13 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use time::{Date, OffsetDateTime, macros::format_description};
+use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::Layer;
 
 use anyhow::Result;
 use gpui::{App, Menu, MenuItem};
@@ -36,7 +36,7 @@ use qingqi_core::{command_usage::CommandUsageStore, plugin::PluginManager, regis
 use qingqi_platform::power::PowerManager;
 
 struct ThemeHandleAdapter {
-    store: Arc<Mutex<ThemeStore>>,
+    store: Arc<RwLock<ThemeStore>>,
 }
 
 struct AppIndexHandleAdapter {
@@ -50,28 +50,28 @@ struct ShortcutHandleAdapter {
 impl qingqi_plugin::host::ThemeHandle for ThemeHandleAdapter {
     fn mode(&self) -> qingqi_plugin::theme::ThemeMode {
         self.store
-            .lock()
+            .read()
             .map(|store| store.mode())
             .unwrap_or(qingqi_plugin::theme::ThemeMode::System)
     }
 
     fn config_path(&self) -> String {
         self.store
-            .lock()
+            .read()
             .map(|store| store.config_path().display().to_string())
             .unwrap_or_default()
     }
 
     fn system_dark(&self) -> bool {
         self.store
-            .lock()
+            .read()
             .map(|store| store.system_dark())
             .unwrap_or(false)
     }
 
     fn set_mode(&self, mode: qingqi_plugin::theme::ThemeMode) -> anyhow::Result<()> {
         self.store
-            .lock()
+            .write()
             .map_err(|_| anyhow::anyhow!("theme store lock poisoned"))?
             .set_mode(mode)
     }
@@ -119,7 +119,7 @@ impl qingqi_plugin::host::ShortcutHandle for ShortcutHandleAdapter {
 pub struct AppHost {
     pub plugins: PluginManager,
     pub build_cx: BuildCx,
-    pub theme_store: Arc<Mutex<ThemeStore>>,
+    pub theme_store: Arc<RwLock<ThemeStore>>,
     pub app_index_service: Arc<AppIndexService>,
     pub app_catalog: Arc<AppCatalog>,
     pub power_manager: Arc<Mutex<PowerManager>>,
@@ -144,7 +144,7 @@ pub fn bootstrap() -> Result<AppHost> {
     let database = Arc::new(DatabaseService::new(paths.clone()));
     database.register_database(DatabaseSpec::app("command-usage", "command_usage.db"))?;
     database.register_database(DatabaseSpec::app("app-launcher/index", "app_index.db"))?;
-    let theme_store = Arc::new(Mutex::new(ThemeStore::new(paths.config("theme.json"))));
+    let theme_store = Arc::new(RwLock::new(ThemeStore::new(paths.config("theme.json"))));
     let app_index_service = Arc::new(AppIndexService::with_events(
         Arc::clone(&database),
         events.clone(),
@@ -217,8 +217,7 @@ pub fn run(host: AppHost) -> Result<()> {
         cx.on_action(|_: &Quit, cx| cx.quit());
 
         #[cfg(target_os = "windows")]
-        lock_or_recover(&window_controller, "window_controller")
-            .ensure_keep_alive_window(cx);
+        lock_or_recover(&window_controller, "window_controller").ensure_keep_alive_window(cx);
 
         set_menus(cx);
         app_catalog.start_background();
@@ -406,15 +405,15 @@ fn resolve_log_filter() -> tracing_subscriber::EnvFilter {
     if cfg!(debug_assertions) {
         tracing_subscriber::EnvFilter::new("debug")
     } else {
-        tracing_subscriber::EnvFilter::new("info")
+        tracing_subscriber::EnvFilter::new("warn,qingqi=info")
     }
 }
 
 /// 清理超过 `retain_days` 天的旧日志文件
 fn prune_old_logs(logs_dir: &Path, retain_days: u32) {
     let fmt = format_description!("[year]-[month]-[day]");
-    let Some(cutoff) = OffsetDateTime::now_utc()
-        .checked_sub(time::Duration::days(retain_days as i64))
+    let Some(cutoff) =
+        OffsetDateTime::now_utc().checked_sub(time::Duration::days(retain_days as i64))
     else {
         return;
     };

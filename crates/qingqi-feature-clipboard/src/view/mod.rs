@@ -656,10 +656,6 @@ impl ClipboardView {
         }));
     }
 
-
-
-
-
     fn set_tab(&mut self, tab: ClipboardTab) {
         self.tab = tab;
         self.status_text = self.status_text();
@@ -1104,7 +1100,9 @@ impl Render for ClipboardView {
             .child(ui::popup_window_chrome_with_titlebar_slot(
                 chrome_config,
                 if tab == ClipboardTab::History {
-                    Some(history_titlebar_slot(handle.clone(), query_input, dark).into_any_element())
+                    Some(
+                        history_titlebar_slot(handle.clone(), query_input, dark).into_any_element(),
+                    )
                 } else {
                     Some(settings_titlebar_slot(handle.clone(), dark).into_any_element())
                 },

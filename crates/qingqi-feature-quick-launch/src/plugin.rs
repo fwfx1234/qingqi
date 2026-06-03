@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::{Arc, Mutex};
 
 use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 
@@ -107,18 +107,23 @@ impl Plugin for QuickLaunchPlugin {
         self.watch_started = true;
 
         let service = Arc::clone(&self.service);
+        // 事件驱动：在 revision 变化时通过 channel 唤醒，代替定时轮询
+        let rx = Arc::new(Mutex::new(
+            service
+                .take_notify_receiver()
+                .expect("quick launch notify receiver already taken"),
+        ));
         cx.spawn(async move |async_cx| {
-            let mut revision = service.revision();
             loop {
-                async_cx
+                let rx = Arc::clone(&rx);
+                let Ok(()) = async_cx
                     .background_executor()
-                    .timer(Duration::from_millis(250))
-                    .await;
-                let next_revision = service.revision();
-                if next_revision != revision {
-                    revision = next_revision;
-                    events.publish(manifest::PLUGIN_ID, AppEventKind::CommandsChanged);
-                }
+                    .spawn(async move { rx.lock().unwrap().recv() })
+                    .await
+                else {
+                    break;
+                };
+                events.publish(manifest::PLUGIN_ID, AppEventKind::CommandsChanged);
             }
         })
         .detach();

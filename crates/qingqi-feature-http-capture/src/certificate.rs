@@ -51,11 +51,9 @@ impl CaManager {
     pub fn ensure_ca(&mut self) -> anyhow::Result<()> {
         if self.cert_path.exists() && self.key_path.exists() {
             // 从文件加载
-            let key_pem = fs::read_to_string(&self.key_path)
-                .context("读取 CA 私钥文件失败")?;
+            let key_pem = fs::read_to_string(&self.key_path).context("读取 CA 私钥文件失败")?;
 
-            let key = KeyPair::from_pem(&key_pem)
-                .context("解析 CA 私钥 PEM 失败")?;
+            let key = KeyPair::from_pem(&key_pem).context("解析 CA 私钥 PEM 失败")?;
 
             // 重建 CertificateParams（生成时使用的 CA 参数）
             let mut params = CertificateParams::default();
@@ -99,17 +97,12 @@ impl CaManager {
             KeyUsagePurpose::DigitalSignature,
         ];
 
-        let key = KeyPair::generate()
-            .context("生成 CA 密钥对失败")?;
-        let ca = params
-            .self_signed(&key)
-            .context("CA 自签名失败")?;
+        let key = KeyPair::generate().context("生成 CA 密钥对失败")?;
+        let ca = params.self_signed(&key).context("CA 自签名失败")?;
 
         // 持久化到文件
-        fs::write(&self.cert_path, ca.pem())
-            .context("写入 CA 证书文件失败")?;
-        fs::write(&self.key_path, key.serialize_pem())
-            .context("写入 CA 私钥文件失败")?;
+        fs::write(&self.cert_path, ca.pem()).context("写入 CA 证书文件失败")?;
+        fs::write(&self.key_path, key.serialize_pem()).context("写入 CA 私钥文件失败")?;
 
         self.ca_params = Some(params);
         self.ca_key = Some(key);
@@ -119,8 +112,7 @@ impl CaManager {
 
     /// 返回 PEM 编码的证书内容（供导出）。
     pub fn cert_pem(&self) -> anyhow::Result<Vec<u8>> {
-        let pem_str = fs::read_to_string(&self.cert_path)
-            .context("读取证书文件失败")?;
+        let pem_str = fs::read_to_string(&self.cert_path).context("读取证书文件失败")?;
         Ok(pem_str.into_bytes())
     }
 
@@ -225,8 +217,7 @@ impl CaManager {
 
     /// 读取证书 PEM 字符串（供导出等用途）。
     pub fn cert_pem_str(&self) -> anyhow::Result<String> {
-        fs::read_to_string(&self.cert_path)
-            .context("读取证书 PEM 文件失败")
+        fs::read_to_string(&self.cert_path).context("读取证书 PEM 文件失败")
     }
 
     /// 获取 CA 证书参数引用（供构建 `Issuer<'static, KeyPair>`）。
@@ -238,10 +229,8 @@ impl CaManager {
 
     /// 重新加载密钥对（获取 owned KeyPair，因为 KeyPair 不实现 Clone）。
     pub fn load_key_pair(&self) -> anyhow::Result<KeyPair> {
-        let key_pem = fs::read_to_string(&self.key_path)
-            .context("读取 CA 私钥文件失败")?;
-        KeyPair::from_pem(&key_pem)
-            .context("解析 CA 私钥 PEM 失败")
+        let key_pem = fs::read_to_string(&self.key_path).context("读取 CA 私钥文件失败")?;
+        KeyPair::from_pem(&key_pem).context("解析 CA 私钥 PEM 失败")
     }
 }
 

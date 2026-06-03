@@ -49,11 +49,13 @@ pub(super) fn history_page(
                         .min_h(px(0.0))
                         .flex()
                         .flex_col()
-                        .child(div().px(px(10.0)).pt(px(12.0)).pb(px(4.0)).child(render_filter_tabs(
-                            handle.clone(),
-                            current_filter,
-                            dark,
-                        )))
+                        .child(
+                            div()
+                                .px(px(10.0))
+                                .pt(px(12.0))
+                                .pb(px(4.0))
+                                .child(render_filter_tabs(handle.clone(), current_filter, dark)),
+                        )
                         .child(history_filter_divider(dark))
                         .child(div().flex_1().min_h(px(0.0)).px(px(4.0)).pb(px(6.0)).child(
                             history_list(
@@ -84,11 +86,7 @@ pub(super) fn history_page(
                         .px(px(14.0))
                         .pt(px(14.0))
                         .pb(px(8.0))
-                        .child(detail_panel(
-                            selected_record,
-                            preview_input,
-                            dark,
-                        )),
+                        .child(detail_panel(selected_record, preview_input, dark)),
                 ),
         )
 }
@@ -414,21 +412,31 @@ fn history_row(
         )
         // Pin + Delete — subtle icon buttons on the right
         .child(
-            div().flex().items_center().gap(px(2.0))
+            div()
+                .flex()
+                .items_center()
+                .gap(px(2.0))
                 .child(
                     div()
                         .id(("clipboard-row-pin", index))
-                        .size(px(24.0)).rounded(px(4.0))
-                        .flex().items_center().justify_center()
+                        .size(px(24.0))
+                        .rounded(px(4.0))
+                        .flex()
+                        .items_center()
+                        .justify_center()
                         .hover(|s| s.bg(theme::semantic().bg_hover).cursor_pointer())
                         .child(
-                            Icon::new(if pinned { IconName::Star } else { IconName::StarOff })
-                                .with_size(ComponentSize::Small)
-                                .text_color(if pinned {
-                                    theme::semantic().text_primary
-                                } else {
-                                    theme::semantic().text_placeholder
-                                }),
+                            Icon::new(if pinned {
+                                IconName::Star
+                            } else {
+                                IconName::StarOff
+                            })
+                            .with_size(ComponentSize::Small)
+                            .text_color(if pinned {
+                                theme::semantic().text_primary
+                            } else {
+                                theme::semantic().text_placeholder
+                            }),
                         )
                         .on_click(move |_event, _, cx| {
                             let _ = cx.update_entity(&pin_handle, |panel, cx| {
@@ -442,8 +450,11 @@ fn history_row(
                 .child(
                     div()
                         .id(("clipboard-row-delete", index))
-                        .size(px(24.0)).rounded(px(4.0))
-                        .flex().items_center().justify_center()
+                        .size(px(24.0))
+                        .rounded(px(4.0))
+                        .flex()
+                        .items_center()
+                        .justify_center()
                         .hover(|s| s.bg(theme::semantic().bg_hover).cursor_pointer())
                         .child(
                             Icon::new(IconName::Delete)
@@ -631,24 +642,20 @@ fn detail_panel(
     preview_input: Entity<TextInput>,
     dark: bool,
 ) -> impl IntoElement {
-    div()
-        .size_full()
-        .flex()
-        .flex_col()
-        .child(
-            div()
-                .flex_1()
-                .min_h(px(0.0))
-                .rounded(px(8.0))
-                .border_1()
-                .border_color(ui::border_light())
-                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.5))
-                .shadow(glass_shadow())
-                .overflow_y_scrollbar()
-                .child(
-                    selected_record
-                        .map(|item| preview_content(item, preview_input, dark).into_any_element())
-                        .unwrap_or_else(|| preview_empty(dark).into_any_element()),
-                ),
-        )
+    div().size_full().flex().flex_col().child(
+        div()
+            .flex_1()
+            .min_h(px(0.0))
+            .rounded(px(8.0))
+            .border_1()
+            .border_color(ui::border_light())
+            .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.5))
+            .shadow(glass_shadow())
+            .overflow_y_scrollbar()
+            .child(
+                selected_record
+                    .map(|item| preview_content(item, preview_input, dark).into_any_element())
+                    .unwrap_or_else(|| preview_empty(dark).into_any_element()),
+            ),
+    )
 }

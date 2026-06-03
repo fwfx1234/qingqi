@@ -26,9 +26,7 @@ use crate::{
         app_catalog::AppCatalog,
         window_controller::{PluginOpenTrace, WindowControllerHandle},
     },
-    core::{
-        clipboard::current_payload,
-    },
+    core::clipboard::current_payload,
 };
 use qingqi_core::command_usage::CommandUsage;
 use qingqi_core::plugin::{
@@ -421,7 +419,13 @@ impl Launcher {
                 .manifests()
                 .into_iter()
                 .map(|m| {
-                    (m.id.to_string(), PluginVisual { mode: m.mode, status: m.status })
+                    (
+                        m.id.to_string(),
+                        PluginVisual {
+                            mode: m.mode,
+                            status: m.status,
+                        },
+                    )
                 })
                 .collect();
         }
@@ -1173,7 +1177,7 @@ impl Render for Launcher {
                                     .child("搜索工具、命令、文件...")
                                     .into_any_element()
                             }),
-                    )
+                    ),
             )
             .when(search_mode, |launcher| {
                 let results_clone = results.clone();

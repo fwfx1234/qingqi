@@ -1,7 +1,7 @@
 use super::shared::theme_button;
 use super::*;
-use gpui_component::{Icon, IconName, Sizable, Size as ComponentSize};
 use gpui_component::scroll::ScrollableElement;
+use gpui_component::{Icon, IconName, Sizable, Size as ComponentSize};
 
 /// macOS 风格标题栏：左箭头 + 标题，融入系统窗口 chrome。
 pub(super) fn settings_titlebar_slot(
@@ -22,9 +22,7 @@ pub(super) fn settings_titlebar_slot(
                 .flex()
                 .items_center()
                 .justify_center()
-                .hover(|style| {
-                    style.bg(theme::semantic().bg_hover).cursor_pointer()
-                })
+                .hover(|style| style.bg(theme::semantic().bg_hover).cursor_pointer())
                 .child(
                     Icon::new(IconName::ChevronLeft)
                         .with_size(ComponentSize::Small)

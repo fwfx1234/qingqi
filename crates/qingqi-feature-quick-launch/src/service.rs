@@ -33,6 +33,9 @@ pub struct QuickLaunchService {
     store: Mutex<QuickLaunchStore>,
     execution: Mutex<ExecutionState>,
     revision: AtomicU64,
+    /// 每次 revision 变化时发送通知，用于唤醒后台 watcher（代替定时轮询）
+    notify_tx: mpsc::SyncSender<()>,
+    notify_rx: Mutex<Option<mpsc::Receiver<()>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -102,13 +105,28 @@ impl QuickLaunchService {
             database,
             &qingqi_plugin::database::feature_database_key(PLUGIN_ID, "actions"),
         )?;
+        let (notify_tx, notify_rx) = mpsc::sync_channel(1);
         let service = Self {
             store: Mutex::new(store),
             execution: Mutex::new(ExecutionState::default()),
             revision: AtomicU64::new(0),
+            notify_tx,
+            notify_rx: Mutex::new(Some(notify_rx)),
         };
         service.seed_defaults()?;
         Ok(service)
+    }
+
+    /// 取出通知接收器（仅可调用一次），用于事件驱动的后台 watcher
+    pub fn take_notify_receiver(&self) -> Option<mpsc::Receiver<()>> {
+        self.notify_rx.lock().ok()?.take()
+    }
+
+    /// 版本号加一并通过 channel 通知后台 watcher
+    fn bump_revision(&self) -> u64 {
+        let rev = self.revision.fetch_add(1, Ordering::SeqCst) + 1;
+        let _ = self.notify_tx.send(());
+        rev
     }
 
     pub fn revision(&self) -> u64 {
@@ -338,7 +356,7 @@ impl QuickLaunchService {
                 "动作当前未在运行"
             );
             state.stopping_action_ids.insert(action_id);
-            let revision = self.revision.fetch_add(1, Ordering::SeqCst) + 1;
+            let revision = self.bump_revision();
             state.last_event = Some(QuickLaunchEvent {
                 revision,
                 action_id,
@@ -366,7 +384,7 @@ impl QuickLaunchService {
         state.running_action_ids.insert(action.id);
         state.stopping_action_ids.remove(&action.id);
         state.active_pids.remove(&action.id);
-        let revision = self.revision.fetch_add(1, Ordering::SeqCst) + 1;
+        let revision = self.bump_revision();
         state.last_event = Some(QuickLaunchEvent {
             revision,
             action_id: action.id,
@@ -383,7 +401,7 @@ impl QuickLaunchService {
         state.running_action_ids.remove(&action.id);
         state.stopping_action_ids.remove(&action.id);
         state.active_pids.remove(&action.id);
-        let revision = self.revision.fetch_add(1, Ordering::SeqCst) + 1;
+        let revision = self.bump_revision();
         state.last_event = Some(QuickLaunchEvent {
             revision,
             action_id: action.id,
@@ -412,7 +430,7 @@ impl QuickLaunchService {
         message: String,
     ) {
         let mut state = self.execution.lock().expect("quick launch state poisoned");
-        let revision = self.revision.fetch_add(1, Ordering::SeqCst) + 1;
+        let revision = self.bump_revision();
         state.last_event = Some(QuickLaunchEvent {
             revision,
             action_id,
@@ -1047,10 +1065,13 @@ mod tests {
             &qingqi_plugin::database::feature_database_key("quick-launch", "actions"),
         )
         .expect("store should open");
+        let (notify_tx, notify_rx) = mpsc::sync_channel(1);
         Arc::new(QuickLaunchService {
             store: Mutex::new(store),
             execution: Mutex::new(ExecutionState::default()),
             revision: AtomicU64::new(0),
+            notify_tx,
+            notify_rx: Mutex::new(Some(notify_rx)),
         })
     }
 

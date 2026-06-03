@@ -61,7 +61,7 @@ impl DownloadManagerPlugin {
             loop {
                 async_cx
                     .background_executor()
-                    .timer(Duration::from_millis(400))
+                    .timer(Duration::from_millis(1000))
                     .await;
                 let (active_count, next_revision) = {
                     let svc = service.lock().unwrap();

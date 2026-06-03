@@ -306,31 +306,101 @@ pub fn semantic() -> SemanticColors {
 pub fn http_method_color(method: &str) -> Rgba {
     let dark = crate::theme_mode::is_dark();
     match method {
-        "GET" => if dark { green_400() } else { green_500() },
-        "POST" => if dark { amber_400() } else { amber_500() },
-        "PUT" => if dark { blue_400() } else { rgb(0x3b82f6) },
-        "DELETE" => if dark { red_400() } else { red_500() },
-        "PATCH" => if dark { cyan_400() } else { cyan_500() },
-        _ => if dark { slate_400() } else { slate_500() },
+        "GET" => {
+            if dark {
+                green_400()
+            } else {
+                green_500()
+            }
+        }
+        "POST" => {
+            if dark {
+                amber_400()
+            } else {
+                amber_500()
+            }
+        }
+        "PUT" => {
+            if dark {
+                blue_400()
+            } else {
+                rgb(0x3b82f6)
+            }
+        }
+        "DELETE" => {
+            if dark {
+                red_400()
+            } else {
+                red_500()
+            }
+        }
+        "PATCH" => {
+            if dark {
+                cyan_400()
+            } else {
+                cyan_500()
+            }
+        }
+        _ => {
+            if dark {
+                slate_400()
+            } else {
+                slate_500()
+            }
+        }
     }
 }
 
 // ── Layer 3: Terminal Colors ────────────────────────────
 
-pub fn terminal_bg() -> Rgba { if crate::theme_mode::is_dark() { rgb(0x0b1118) } else { rgb(0x111827) } }
-pub fn terminal_fg() -> Rgba { if crate::theme_mode::is_dark() { rgb(0xd7e2ee) } else { rgb(0xe5e7eb) } }
-pub fn terminal_muted() -> Rgba { if crate::theme_mode::is_dark() { rgb(0x7dd3fc) } else { rgb(0xbfdbfe) } }
-pub fn terminal_border() -> Rgba { if crate::theme_mode::is_dark() { rgb(0x1f2937) } else { rgb(0x374151) } }
+pub fn terminal_bg() -> Rgba {
+    if crate::theme_mode::is_dark() {
+        rgb(0x0b1118)
+    } else {
+        rgb(0x111827)
+    }
+}
+pub fn terminal_fg() -> Rgba {
+    if crate::theme_mode::is_dark() {
+        rgb(0xd7e2ee)
+    } else {
+        rgb(0xe5e7eb)
+    }
+}
+pub fn terminal_muted() -> Rgba {
+    if crate::theme_mode::is_dark() {
+        rgb(0x7dd3fc)
+    } else {
+        rgb(0xbfdbfe)
+    }
+}
+pub fn terminal_border() -> Rgba {
+    if crate::theme_mode::is_dark() {
+        rgb(0x1f2937)
+    } else {
+        rgb(0x374151)
+    }
+}
 
 // ── Layer 3: Keycap background ─────────────────────────
 
-pub fn keycap_bg() -> Hsla { if crate::theme_mode::is_dark() { hsla(0.0, 0.0, 1.0, 0.03) } else { hsla(0.0, 0.0, 0.0, 0.04) } }
+pub fn keycap_bg() -> Hsla {
+    if crate::theme_mode::is_dark() {
+        hsla(0.0, 0.0, 1.0, 0.03)
+    } else {
+        hsla(0.0, 0.0, 0.0, 0.04)
+    }
+}
 
 // ── Layer 3: Launcher colors ───────────────────────────
 
 /// Row hover background used in launcher item hover states.
 pub fn launcher_row_selected() -> Rgba {
-    if crate::theme_mode::is_dark() { rgb(0x241b48) } else { rgb(0xf7f7fa) }
+    if crate::theme_mode::is_dark() {
+        rgb(0x241b48)
+    } else {
+        rgb(0xf7f7fa)
+    }
 }
 
 /// Icon surface background (unselected state).  Returns a colour with
@@ -359,7 +429,6 @@ pub fn launcher_accent() -> Rgba {
     if dark { rgb(0xc8b8ff) } else { rgb(0x6b4fcf) }
 }
 
-
 pub fn launcher_glass() -> Hsla {
     let dark = crate::theme_mode::is_dark();
     if dark {
@@ -369,7 +438,6 @@ pub fn launcher_glass() -> Hsla {
     }
 }
 
-
 pub fn launcher_soft_line() -> Hsla {
     let dark = crate::theme_mode::is_dark();
     if dark {
@@ -378,7 +446,6 @@ pub fn launcher_soft_line() -> Hsla {
         rgba_with_alpha(rgb(0xe6e6eb), 0.9)
     }
 }
-
 
 pub fn launcher_muted_text() -> Rgba {
     let dark = crate::theme_mode::is_dark();

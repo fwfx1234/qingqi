@@ -136,7 +136,7 @@ impl ClipboardService {
             loop {
                 async_cx
                     .background_executor()
-                    .timer(Duration::from_millis(700))
+                    .timer(Duration::from_millis(1500))
                     .await;
 
                 let service_for_snapshot = Arc::clone(&service);

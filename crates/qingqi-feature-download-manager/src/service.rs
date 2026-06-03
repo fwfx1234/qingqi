@@ -42,18 +42,40 @@ pub struct DownloadService {
     active: Arc<Mutex<HashMap<String, ActiveDownload>>>,
     revision: Arc<AtomicU64>,
     settings: Arc<Mutex<DownloadSettings>>,
+    /// 复用的 HTTP 客户端，设置变更时重建以节省 TLS 握手和连接建立开销
+    client: Mutex<reqwest::blocking::Client>,
 }
 
 impl DownloadService {
     pub fn new(store: DownloadStore, save_dir: PathBuf) -> Self {
         log_error!(fs::create_dir_all(&save_dir), error, "创建下载保存目录失败");
         let settings = Self::load_settings_from_store(&store, &save_dir);
+        let client = Self::build_client(&settings);
         Self {
             store: Arc::new(Mutex::new(store)),
             active: Arc::new(Mutex::new(HashMap::new())),
             revision: Arc::new(AtomicU64::new(0)),
             settings: Arc::new(Mutex::new(settings)),
+            client: Mutex::new(client),
         }
+    }
+
+    /// 根据设置构建复用的 HTTP 客户端
+    fn build_client(settings: &DownloadSettings) -> reqwest::blocking::Client {
+        let mut builder = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(settings.timeout_secs as u64))
+            .connect_timeout(Duration::from_secs(10));
+        if !settings.proxy_url.is_empty() {
+            if let Ok(proxy) = reqwest::Proxy::all(&settings.proxy_url) {
+                builder = builder.proxy(proxy);
+            }
+        }
+        builder.build().expect("构建 HTTP 客户端失败")
+    }
+
+    /// 获取当前复用的 HTTP 客户端克隆（内部使用 Arc，克隆开销极低）
+    pub(crate) fn http_client(&self) -> reqwest::blocking::Client {
+        self.client.lock().unwrap().clone()
     }
 
     fn load_settings_from_store(store: &DownloadStore, save_dir: &Path) -> DownloadSettings {
@@ -141,8 +163,12 @@ impl DownloadService {
         let max_concurrent = settings.max_concurrent.clamp(1, 16);
         let timeout_secs = settings.timeout_secs.clamp(1, 3600);
         let retry_limit = settings.retry_limit.min(10);
+        let proxy_changed;
+        let timeout_changed;
         {
             let mut s = lock_or_recover(&self.settings, "download-settings");
+            proxy_changed = s.proxy_url != settings.proxy_url;
+            timeout_changed = s.timeout_secs != settings.timeout_secs;
             s.save_root = settings.save_root.clone();
             s.max_concurrent = max_concurrent;
             s.speed_limit_kbps = settings.speed_limit_kbps;
@@ -153,6 +179,13 @@ impl DownloadService {
             s.referer = settings.referer.clone();
             s.cookie = settings.cookie.clone();
             s.custom_headers = settings.custom_headers.clone();
+        }
+        // 代理或超时变更时重建 HTTP 客户端
+        if proxy_changed || timeout_changed {
+            let settings_snapshot = self.settings_snapshot();
+            if let Ok(mut client) = self.client.lock() {
+                *client = Self::build_client(&settings_snapshot);
+            }
         }
         self.persist_settings()?;
         self.bump_revision();
@@ -313,6 +346,7 @@ impl DownloadService {
         let active_map = Arc::clone(&self.active);
         let revision = Arc::clone(&self.revision);
         let settings = Arc::clone(&self.settings);
+        let client = self.http_client();
         let task_id = task_id.to_string();
         let url = task.url.clone();
         let save_path = task.save_path.clone();
@@ -331,6 +365,7 @@ impl DownloadService {
                 &speed,
                 &store,
                 &settings,
+                &client,
             );
 
             lock_or_recover(&active_map, "download-active-map").remove(&task_id);
@@ -343,7 +378,9 @@ impl DownloadService {
                 Err(DownloadError::Cancelled) => {
                     log_error!(
                         store.lock().unwrap().update_status(
-                            &task_id, TaskStatus::Cancelled, "已取消"
+                            &task_id,
+                            TaskStatus::Cancelled,
+                            "已取消"
                         ),
                         warn,
                         "更新下载状态失败"
@@ -354,9 +391,10 @@ impl DownloadService {
                 Err(DownloadError::Paused) => {
                     let downloaded = progress.load(Ordering::Relaxed);
                     log_error!(
-                        store.lock().unwrap().update_status(
-                            &task_id, TaskStatus::Paused, ""
-                        ),
+                        store
+                            .lock()
+                            .unwrap()
+                            .update_status(&task_id, TaskStatus::Paused, ""),
                         warn,
                         "更新下载状态失败"
                     );
@@ -366,7 +404,9 @@ impl DownloadService {
                 Err(DownloadError::Other(err)) => {
                     log_error!(
                         store.lock().unwrap().update_status(
-                            &task_id, TaskStatus::Failed, &err.to_string()
+                            &task_id,
+                            TaskStatus::Failed,
+                            &err.to_string()
                         ),
                         warn,
                         "更新下载状态失败"
@@ -449,7 +489,12 @@ impl DownloadService {
 
     pub fn pause_all(&self) -> Result<()> {
         // Pause active downloads
-        let ids: Vec<String> = { lock_or_recover(&self.active, "download-active").keys().cloned().collect() };
+        let ids: Vec<String> = {
+            lock_or_recover(&self.active, "download-active")
+                .keys()
+                .cloned()
+                .collect()
+        };
         for id in ids {
             log_error!(self.pause_task(&id), warn, "批量暂停下载失败");
         }
@@ -589,7 +634,9 @@ impl DownloadService {
     }
 
     pub fn task_counts(&self) -> super::store::TaskCounts {
-        lock_or_recover(&self.store, "download-store").task_counts().unwrap_or_default()
+        lock_or_recover(&self.store, "download-store")
+            .task_counts()
+            .unwrap_or_default()
     }
 
     pub fn tasks_by_category(&self, category: super::model::FileCategory) -> Vec<DownloadTask> {
@@ -710,10 +757,9 @@ fn download_file(
     speed: &Mutex<f64>,
     store: &Arc<Mutex<DownloadStore>>,
     settings: &Arc<Mutex<DownloadSettings>>,
+    client: &reqwest::blocking::Client,
 ) -> Result<(), DownloadError> {
     let (
-        timeout,
-        proxy_url,
         user_agent,
         referer,
         cookie,
@@ -723,8 +769,6 @@ fn download_file(
     ) = {
         let s = lock_or_recover(&settings, "download-settings");
         (
-            s.timeout_secs,
-            s.proxy_url.clone(),
             s.user_agent.clone(),
             s.referer.clone(),
             s.cookie.clone(),
@@ -733,18 +777,6 @@ fn download_file(
             s.retry_limit,
         )
     };
-
-    let mut client_builder = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(timeout as u64))
-        .connect_timeout(Duration::from_secs(10));
-
-    if !proxy_url.is_empty() {
-        if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-            client_builder = client_builder.proxy(proxy);
-        }
-    }
-
-    let client = client_builder.build().context("无法创建 HTTP 客户端")?;
 
     let mut request = client.get(url);
 
@@ -867,7 +899,10 @@ fn download_file(
         if last_db_update.elapsed().as_millis() >= MIN_UPDATE_INTERVAL_MS {
             log_error!(
                 store.lock().unwrap().update_progress(
-                    task_id, downloaded, current_speed, TaskStatus::Downloading
+                    task_id,
+                    downloaded,
+                    current_speed,
+                    TaskStatus::Downloading
                 ),
                 warn,
                 "更新下载进度失败"

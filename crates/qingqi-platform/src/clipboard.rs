@@ -993,9 +993,7 @@ unsafe fn pasteboard_has_any_type(pasteboard: *mut std::ffi::c_void, wanted: &[&
 unsafe fn pasteboard_types(pasteboard: *mut std::ffi::c_void) -> Option<Vec<String>> {
     // SAFETY: all operations in this function are Objective-C runtime
     // calls or other well-defined unsafe operations.
-    unsafe {
-        nsarray_to_strings(send_id(pasteboard, "types"))
-    }
+    unsafe { nsarray_to_strings(send_id(pasteboard, "types")) }
 }
 
 #[cfg(target_os = "macos")]
@@ -1019,9 +1017,7 @@ unsafe fn nsarray_to_strings(array: *mut std::ffi::c_void) -> Option<Vec<String>
 unsafe fn nsarray_count(array: *mut std::ffi::c_void) -> Option<usize> {
     // SAFETY: all operations in this function are Objective-C runtime
     // calls or other well-defined unsafe operations.
-    unsafe {
-        (!array.is_null()).then(|| send_usize(array, "count"))
-    }
+    unsafe { (!array.is_null()).then(|| send_usize(array, "count")) }
 }
 
 #[cfg(target_os = "macos")]
@@ -1062,9 +1058,10 @@ unsafe fn nsarray_of_file_urls(paths: &[String]) -> anyhow::Result<*mut std::ffi
     // SAFETY: all operations in this function are Objective-C runtime
     // calls or other well-defined unsafe operations.
     unsafe {
-        let array =
-            new_mutable_array().ok_or_else(|| anyhow::anyhow!("failed to allocate NSMutableArray"))?;
-        let url_class = get_class("NSURL").ok_or_else(|| anyhow::anyhow!("failed to load NSURL"))?;
+        let array = new_mutable_array()
+            .ok_or_else(|| anyhow::anyhow!("failed to allocate NSMutableArray"))?;
+        let url_class =
+            get_class("NSURL").ok_or_else(|| anyhow::anyhow!("failed to load NSURL"))?;
         for path in paths {
             let ns_path = nsstring(path)
                 .ok_or_else(|| anyhow::anyhow!("failed to convert path into NSString"))?;
@@ -1178,8 +1175,10 @@ unsafe fn send_id(object: *mut std::ffi::c_void, selector_name: &str) -> *mut st
             fn objc_msgSend();
         }
 
-        type MsgSend =
-            unsafe extern "C" fn(*mut std::ffi::c_void, *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+        type MsgSend = unsafe extern "C" fn(
+            *mut std::ffi::c_void,
+            *mut std::ffi::c_void,
+        ) -> *mut std::ffi::c_void;
 
         let Some(sel) = selector(selector_name) else {
             return std::ptr::null_mut();
@@ -1275,9 +1274,7 @@ unsafe fn send_cstr(
 ) -> *const std::os::raw::c_char {
     // SAFETY: all operations in this function are Objective-C runtime
     // calls or other well-defined unsafe operations.
-    unsafe {
-        send_ptr(object, selector_name).cast()
-    }
+    unsafe { send_ptr(object, selector_name).cast() }
 }
 
 #[cfg(target_os = "macos")]
@@ -1347,8 +1344,11 @@ unsafe fn send_void_arg(
             fn objc_msgSend();
         }
 
-        type MsgSend =
-            unsafe extern "C" fn(*mut std::ffi::c_void, *mut std::ffi::c_void, *mut std::ffi::c_void);
+        type MsgSend = unsafe extern "C" fn(
+            *mut std::ffi::c_void,
+            *mut std::ffi::c_void,
+            *mut std::ffi::c_void,
+        );
 
         let Some(sel) = selector(selector_name) else {
             return;
