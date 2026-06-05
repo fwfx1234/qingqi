@@ -12,7 +12,7 @@ use tokio::sync::mpsc as tokio_mpsc;
 
 use crate::{
     manifest::PLUGIN_ID,
-    model::{Profile, ProfileDraft, SessionId, SessionStatus, SessionSummary},
+    model::{Profile, ProfileDraft, RemoteProtocol, SessionId, SessionStatus, SessionSummary},
     protocols::{ConnectionHealth, RemoteEntry, connect_ssh, create_file_client},
     store::ProfileStore,
     terminal::{TerminalEngine, TerminalFrame, TerminalInput},
@@ -190,7 +190,7 @@ impl RemoteRuntime {
 
         let mut file_client = create_file_client(&profile);
         let connection = file_client.connect()?;
-        let remote_root = normalize_remote_dir(&profile.paths.remote_root);
+        let remote_root = normalize_remote_dir(&profile.paths.remote_root, profile.protocol);
         let remote_entries = file_client.list(&remote_root).unwrap_or_default();
         let session_id = SessionId::new();
 
@@ -286,7 +286,7 @@ impl RemoteRuntime {
                 .get(session_id)
                 .with_context(|| format!("session 不存在: {}", session_id.0))?;
             let remote_root = path
-                .map(normalize_remote_dir)
+                .map(|p| normalize_remote_dir(p, session.profile.protocol))
                 .unwrap_or_else(|| session.snapshot.remote_root.clone());
             (session.profile.clone(), remote_root)
         };
@@ -1012,11 +1012,12 @@ fn default_downloads_dir() -> PathBuf {
     dirs::download_dir().unwrap_or_else(std::env::temp_dir)
 }
 
-fn normalize_remote_dir(path: &str) -> String {
+fn normalize_remote_dir(path: &str, protocol: RemoteProtocol) -> String {
     let trimmed = path.trim();
     if trimmed.is_empty() || trimmed == "." {
-        String::from("/")
-    } else if trimmed == "~" || trimmed.starts_with("~/") {
+        return protocol.default_remote_root().to_string();
+    }
+    if trimmed == "~" || trimmed.starts_with("~/") {
         trimmed.trim_end_matches('/').to_string().if_empty("~")
     } else if trimmed.starts_with('/') {
         trimmed.trim_end_matches('/').to_string().if_empty("/")
@@ -1040,7 +1041,7 @@ impl StringEmptyExt for String {
 }
 
 fn remote_parent_dir(path: &str) -> String {
-    let current = normalize_remote_dir(path);
+    let current = normalize_remote_dir(path, RemoteProtocol::Ssh);
     if current == "~" {
         return current;
     }

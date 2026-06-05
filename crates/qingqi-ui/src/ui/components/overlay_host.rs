@@ -32,9 +32,17 @@ pub fn overlay_host(
                 .absolute()
                 .top_0()
                 .left_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(content),
+                .id("overlay-content")
+                .on_click(|_, _, cx| {
+                    cx.stop_propagation();
+                })
+                .child(
+                    div()
+                        .size_full()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(content),
+                ),
         )
 }

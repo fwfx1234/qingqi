@@ -798,9 +798,9 @@ pub(crate) async fn connect_ssh(profile: Profile) -> Result<SshConnection> {
     let state = Arc::new(Mutex::new(HostKeyCheckState::default()));
     let handler = HostKeyHandler::new(profile.clone(), Arc::clone(&state));
     let config = Arc::new(client::Config {
-        inactivity_timeout: Some(Duration::from_secs(
-            profile.limits.connect_timeout_secs as u64,
-        )),
+        inactivity_timeout: None, // 不因空闲断开连接；使用 keepalive 保持连接
+        keepalive_interval: Some(Duration::from_secs(30)),
+        keepalive_max: 3,
         ..Default::default()
     });
     let mut session: Handle<HostKeyHandler> =
