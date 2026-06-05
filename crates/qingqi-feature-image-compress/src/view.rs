@@ -5,13 +5,12 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread,
-    time::Duration,
 };
 
 use anyhow::Context as _;
 
 use gpui::{
-    App, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
+    App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
     StatefulInteractiveElement, Styled, Window, div, img, px,
 };
 
@@ -43,10 +42,44 @@ struct SharedBatchState {
 }
 
 /// Thread-safe handle for the background worker to report results back to the UI.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct SharedBatchResults {
     inner: Arc<Mutex<SharedBatchState>>,
     cancel_requested: Arc<AtomicBool>,
+    /// 每处理完一个文件时发送通知，替代轮询。Drop 后通道关闭，drain 循环退出。
+    notify_tx: Arc<Mutex<Option<std::sync::mpsc::Sender<()>>>>,
+}
+
+impl Default for SharedBatchResults {
+    fn default() -> Self {
+        let (tx, _rx) = std::sync::mpsc::channel();
+        Self {
+            inner: Arc::default(),
+            cancel_requested: Arc::default(),
+            notify_tx: Arc::new(Mutex::new(Some(tx))),
+        }
+    }
+}
+
+impl SharedBatchResults {
+    /// 通知 UI 有新结果可渲染。
+    fn notify_ui(&self) {
+        if let Ok(guard) = self.notify_tx.lock()
+            && let Some(tx) = guard.as_ref()
+        {
+            let _ = tx.send(());
+        }
+    }
+
+    /// 获取接收端（消费式，仅可调用一次）。
+    fn take_receiver(&self) -> Option<std::sync::mpsc::Receiver<()>> {
+        let mut guard = self.notify_tx.lock().ok()?;
+        let tx = guard.take()?;
+        drop(tx); // 关闭发送端，让 worker 创建新的
+        let (new_tx, rx) = std::sync::mpsc::channel();
+        *guard = Some(new_tx);
+        Some(rx)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -89,8 +122,10 @@ pub struct ImageCompressView {
     batch_total: usize,
     /// Shared state handle for the background worker to report per-file results.
     shared: SharedBatchResults,
-    /// Foreground drain task — periodically refreshes UI while batch is running.
+    /// Foreground drain task — 事件驱动，替代原来 100ms 轮询。
     drain_task: Option<gpui::Task<()>>,
+    /// 弱引用自身 Entity，供 drain task 触发重绘。
+    self_entity: Option<gpui::WeakEntity<ImageCompressView>>,
 }
 
 impl ImageCompressView {
@@ -108,7 +143,13 @@ impl ImageCompressView {
             batch_total: 0,
             shared: SharedBatchResults::default(),
             drain_task: None,
+            self_entity: None,
         }
+    }
+
+    /// 设置自身 Entity 弱引用，在 Plugin::open 中调用。
+    pub fn set_entity(&mut self, entity: gpui::Entity<ImageCompressView>) {
+        self.self_entity = Some(entity.downgrade());
     }
 
     pub fn clear_transient_state(&mut self) {
@@ -510,8 +551,8 @@ impl ImageCompressView {
                         state.results.push(batch_item);
                     }
 
-                    // Yield the OS thread so the foreground drain can refresh the UI.
-                    thread::yield_now();
+                    // 通知 UI 有新结果，替代轮询。
+                    shared.notify_ui();
                 }
 
                 let processed = shared.inner.lock().map(|s| s.results.len()).unwrap_or(0);
@@ -538,23 +579,32 @@ impl ImageCompressView {
             })
             .detach();
 
-        // Schedule a periodic foreground drain to refresh the UI during compression.
-        let drain_shared = self.shared.clone();
+        // 事件驱动的 UI 刷新，替代原来 100ms 轮询。
+        // 后台线程每处理一个文件通过 channel 发通知，GPUI 收到后触发重绘。
+        let rx = self
+            .shared
+            .take_receiver()
+            .expect("SharedBatchResults receiver already taken");
+        let rx = Arc::new(Mutex::new(rx));
+        let self_entity = self
+            .self_entity
+            .clone()
+            .expect("ImageCompressView::set_entity must be called before run_compression");
         self.drain_task = Some(cx.spawn(async move |async_cx| {
             loop {
-                async_cx
+                let rx = Arc::clone(&rx);
+                let recv_result = async_cx
                     .background_executor()
-                    .timer(Duration::from_millis(100))
+                    .spawn(async move { rx.lock().ok()?.recv().ok() })
                     .await;
-
-                let batch_done = drain_shared
-                    .inner
-                    .lock()
-                    .map(|s| s.batch_done)
-                    .unwrap_or(true);
-
-                if batch_done {
-                    break;
+                if recv_result.is_none() {
+                    break; // 通道关闭，worker 已结束
+                }
+                // 触发重绘以展示最新结果
+                if let Some(entity) = self_entity.upgrade() {
+                    let _ = async_cx.update_entity(&entity, |_view, cx| {
+                        cx.notify();
+                    });
                 }
             }
         }));
@@ -1867,6 +1917,7 @@ mod tests {
             running: true,
             shared: shared.clone(),
             drain_task: None,
+            self_entity: None,
         };
 
         let changed = panel.collect_results();
@@ -1938,6 +1989,7 @@ mod tests {
             running: true,
             shared: shared.clone(),
             drain_task: None,
+            self_entity: None,
         };
 
         let changed = panel.collect_results();
@@ -2001,6 +2053,7 @@ mod tests {
             running: true,
             shared: shared.clone(),
             drain_task: None,
+            self_entity: None,
         };
 
         panel.request_cancel();
@@ -2036,6 +2089,7 @@ mod tests {
             running: false,
             shared: shared.clone(),
             drain_task: None,
+            self_entity: None,
         };
 
         panel.request_cancel();
@@ -2057,6 +2111,7 @@ mod tests {
             batch_total: 5,
             shared: SharedBatchResults::default(),
             drain_task: None,
+            self_entity: None,
         };
 
         // No items running, batch_total = 5 -> completed = 5
@@ -2103,6 +2158,7 @@ mod tests {
             batch_total: 0,
             shared: SharedBatchResults::default(),
             drain_task: None,
+            self_entity: None,
         };
 
         assert_eq!(panel.batch_completed(), 0);
@@ -2191,6 +2247,7 @@ mod tests {
             running: true,
             shared: shared.clone(),
             drain_task: None,
+            self_entity: None,
         };
 
         let changed = panel.collect_results();
@@ -2258,6 +2315,7 @@ mod tests {
             running: true,
             shared: shared.clone(),
             drain_task: None,
+            self_entity: None,
         };
 
         panel.collect_results();
@@ -2306,6 +2364,7 @@ mod tests {
             running: true,
             shared: shared.clone(),
             drain_task: None,
+            self_entity: None,
         };
 
         panel.collect_results();
@@ -2388,6 +2447,7 @@ mod tests {
             running: true,
             shared: shared.clone(),
             drain_task: None,
+            self_entity: None,
         };
 
         panel.request_cancel();
@@ -2476,6 +2536,7 @@ mod tests {
             running: true,
             shared: shared.clone(),
             drain_task: None,
+            self_entity: None,
         };
 
         let changed = panel.collect_results();
@@ -2503,6 +2564,7 @@ mod tests {
             batch_total: 3,
             shared: SharedBatchResults::default(),
             drain_task: None,
+            self_entity: None,
         };
 
         // Add 5 running items — more than batch_total

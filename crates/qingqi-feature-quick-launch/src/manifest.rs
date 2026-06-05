@@ -26,7 +26,7 @@ pub fn manifest() -> Manifest {
         window: WindowSpec::fixed(860.0, 620.0),
         category: PluginCategory::Tool,
         status: PluginStatus::Ready,
-        background: true,
+        background: false,
         dynamic_commands: true,
         visual: Some(PluginVisualSpec {
             icon: IconRef::asset("icons/bolt.svg"),

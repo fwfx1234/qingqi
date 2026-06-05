@@ -3,9 +3,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[cfg(target_os = "macos")]
-use std::process::Command;
-
 use anyhow::{Context, Result, bail};
 pub use qingqi_plugin::theme::ThemeMode;
 
@@ -158,25 +155,7 @@ impl ThemeStore {
     }
 
     fn read_system_dark() -> bool {
-        #[cfg(target_os = "macos")]
-        {
-            Command::new("defaults")
-                .args(["read", "-g", "AppleInterfaceStyle"])
-                .output()
-                .ok()
-                .filter(|output| output.status.success())
-                .map(|output| {
-                    String::from_utf8_lossy(&output.stdout)
-                        .trim()
-                        .eq_ignore_ascii_case("dark")
-                })
-                .unwrap_or(false)
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            false
-        }
+        qingqi_platform::theme::read_system_dark()
     }
 }
 

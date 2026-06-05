@@ -223,7 +223,7 @@ pub fn run(host: AppHost) -> Result<()> {
         app_catalog.start_background();
         qingqi_core::lock_or_recover(&plugins, "plugin-manager").start_background(cx);
         let mut background = BackgroundSupervisor::new();
-        background.start_theme_poll(Arc::clone(&theme_store), cx);
+        background.start_theme_listener(Arc::clone(&theme_store), cx);
 
         register_in_app_bindings(cx);
         cx.on_action({
@@ -271,7 +271,7 @@ pub fn run(host: AppHost) -> Result<()> {
                     Arc::clone(&power_manager),
                     cx,
                 );
-                background.start_power_poll(Arc::clone(&power_manager), cx);
+                background.start_power_listener(Arc::clone(&power_manager), cx);
             }
             Err(error) => tracing::warn!(error, "system tray install failed"),
         }

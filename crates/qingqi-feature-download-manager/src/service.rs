@@ -759,14 +759,7 @@ fn download_file(
     settings: &Arc<Mutex<DownloadSettings>>,
     client: &reqwest::blocking::Client,
 ) -> Result<(), DownloadError> {
-    let (
-        user_agent,
-        referer,
-        cookie,
-        custom_headers_str,
-        speed_limit_kbps,
-        retry_limit,
-    ) = {
+    let (user_agent, referer, cookie, custom_headers_str, speed_limit_kbps, retry_limit) = {
         let s = lock_or_recover(&settings, "download-settings");
         (
             s.user_agent.clone(),

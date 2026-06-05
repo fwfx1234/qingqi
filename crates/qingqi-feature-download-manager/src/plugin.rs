@@ -1,14 +1,10 @@
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::sync::{Arc, Mutex};
 
-use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Task, Window};
+use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 
 use qingqi_plugin::{
     command::{Command, ContextKind, ContextMatcher},
     database::DatabaseService,
-    events::{AppEventBus, AppEventKind},
     plugin::{Manifest, Plugin, PluginCx, PluginId, PluginView, WindowView},
     storage::AppPaths,
 };
@@ -19,7 +15,6 @@ pub struct DownloadManagerPlugin {
     database: Arc<DatabaseService>,
     paths: AppPaths,
     service: Option<Arc<Mutex<DownloadService>>>,
-    watcher_task: Option<Task<()>>,
 }
 
 impl DownloadManagerPlugin {
@@ -28,7 +23,6 @@ impl DownloadManagerPlugin {
             database,
             paths,
             service: None,
-            watcher_task: None,
         })
     }
 
@@ -44,35 +38,6 @@ impl DownloadManagerPlugin {
         let service = Arc::new(Mutex::new(DownloadService::new(store, save_dir)));
         self.service = Some(Arc::clone(&service));
         Ok(service)
-    }
-
-    fn ensure_watcher(
-        &mut self,
-        service: Arc<Mutex<DownloadService>>,
-        events: AppEventBus,
-        cx: &mut App,
-    ) {
-        if self.watcher_task.is_some() {
-            return;
-        }
-
-        self.watcher_task = Some(cx.spawn(async move |async_cx| {
-            let mut revision = service.lock().unwrap().revision();
-            loop {
-                async_cx
-                    .background_executor()
-                    .timer(Duration::from_millis(1000))
-                    .await;
-                let (active_count, next_revision) = {
-                    let svc = service.lock().unwrap();
-                    (svc.active_count(), svc.revision())
-                };
-                if active_count > 0 || next_revision != revision {
-                    revision = next_revision;
-                    events.publish(manifest::PLUGIN_ID, AppEventKind::JobsChanged);
-                }
-            }
-        }));
     }
 }
 
@@ -100,7 +65,6 @@ impl Plugin for DownloadManagerPlugin {
 
     fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let service = self.service()?;
-        self.ensure_watcher(Arc::clone(&service), cx.events.clone(), cx.app);
 
         let panel = cx.app.new(|cx| {
             let mut panel = view::DownloadManagerView::new(service);
@@ -112,12 +76,7 @@ impl Plugin for DownloadManagerPlugin {
     }
 
     fn close_idle(&mut self) {
-        // Stop the job watcher when the window closes. Keep `service` so the
-        // same instance is reused on reopen — its `active` map stays consistent
-        // and in-flight downloads (whose threads own their own Arc clones)
-        // remain visible. Dropping/recreating the service here would orphan the
-        // running downloads behind a fresh, empty service.
-        self.watcher_task = None;
+        // Keep `service` so in-flight downloads remain visible on reopen.
     }
 }
 

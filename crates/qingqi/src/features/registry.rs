@@ -72,7 +72,13 @@ pub fn register_builtin_plugins(host: &mut AppHost) -> Result<()> {
     registry.register(
         PluginDescriptor::builtin(feature_quick_launch::manifest::manifest())
             .with_databases(feature_quick_launch::databases()),
-        |cx| feature_quick_launch::build(Arc::clone(&cx.database), cx.paths.clone()),
+        |cx| {
+            feature_quick_launch::build(
+                Arc::clone(&cx.database),
+                cx.paths.clone(),
+                cx.events.clone(),
+            )
+        },
     );
     registry.register(
         PluginDescriptor::builtin(feature_system_settings::manifest::manifest())

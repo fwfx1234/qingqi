@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use qingqi_plugin::{
     database::{DatabaseService, DatabaseSpec},
+    events::AppEventBus,
     plugin::Plugin,
     storage::AppPaths,
 };
@@ -22,6 +23,12 @@ pub fn databases() -> Vec<DatabaseSpec> {
     )]
 }
 
-pub fn build(database: Arc<DatabaseService>, paths: AppPaths) -> anyhow::Result<Box<dyn Plugin>> {
-    Ok(Box::new(plugin::QuickLaunchPlugin::new(database, paths)?))
+pub fn build(
+    database: Arc<DatabaseService>,
+    paths: AppPaths,
+    events: AppEventBus,
+) -> anyhow::Result<Box<dyn Plugin>> {
+    Ok(Box::new(plugin::QuickLaunchPlugin::new(
+        database, paths, events,
+    )?))
 }

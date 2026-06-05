@@ -1,6 +1,16 @@
 //! Power management: prevent system sleep via IOPMAssertion (macOS).
+//!
+//! - [`PowerChangeListener`] 通过 `IOPSNotificationCreateRunLoopSource` 监听电源变化，
+//!   替代 15s 轮询。
 
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{
+        Arc, Mutex,
+        mpsc::{Receiver, channel},
+    },
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +31,50 @@ impl PreventSleepMode {
             PreventSleepMode::AlwaysOn => "始终开启",
             PreventSleepMode::WhenPluggedIn => "仅接入电源开启",
         }
+    }
+}
+
+/// 电源变化监听器。通过 IOKit 的 `IOPSNotificationCreateRunLoopSource`
+/// 注册回调，当电源状态变化时通过 channel 通知，替代轮询。
+///
+/// 在非 macOS 平台上返回一个永远不会收到消息的监听器。
+pub struct PowerChangeListener {
+    receiver: Arc<Mutex<Receiver<()>>>,
+    #[cfg(target_os = "macos")]
+    _source: macos_power::PowerSource,
+    #[cfg(not(target_os = "macos"))]
+    _marker: (),
+}
+
+impl PowerChangeListener {
+    pub fn new() -> Self {
+        #[cfg(target_os = "macos")]
+        {
+            let (tx, rx) = channel();
+            let source = macos_power::PowerSource::new(tx);
+            Self {
+                receiver: Arc::new(Mutex::new(rx)),
+                _source: source,
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let (_tx, rx) = channel::<()>();
+            Self {
+                receiver: Arc::new(Mutex::new(rx)),
+                _marker: (),
+            }
+        }
+    }
+
+    pub fn receiver(&self) -> Arc<Mutex<Receiver<()>>> {
+        Arc::clone(&self.receiver)
+    }
+}
+
+impl Default for PowerChangeListener {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -268,4 +322,108 @@ unsafe extern "C" {
     ) -> *const std::ffi::c_void;
 
     fn CFEqual(cf1: *const std::ffi::c_void, cf2: *const std::ffi::c_void) -> bool;
+}
+
+// ── 电源变化通知 (IOKit RunLoop source) ──
+
+#[cfg(target_os = "macos")]
+mod macos_power {
+    use std::{ffi::c_void, sync::mpsc::Sender};
+
+    type CFRunLoopSourceRef = *const c_void;
+
+    // 回调：通过 context 指针访问 Sender 并发送通知
+    type IOPowerSourceCallbackType = unsafe extern "C" fn(context: *const c_void);
+
+    #[link(name = "IOKit", kind = "framework")]
+    unsafe extern "C" {
+        fn IOPSNotificationCreateRunLoopSource(
+            callback: IOPowerSourceCallbackType,
+            context: *const c_void,
+        ) -> CFRunLoopSourceRef;
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    unsafe extern "C" {
+        fn CFRunLoopGetMain() -> *const c_void;
+        fn CFRunLoopAddSource(rl: *const c_void, source: CFRunLoopSourceRef, mode: *const c_void);
+        fn CFRunLoopRemoveSource(
+            rl: *const c_void,
+            source: CFRunLoopSourceRef,
+            mode: *const c_void,
+        );
+        fn CFRunLoopSourceInvalidate(source: CFRunLoopSourceRef);
+    }
+
+    unsafe fn cfstr(s: &str) -> *const c_void {
+        unsafe {
+            let c_str = std::ffi::CString::new(s).expect("CString::new failed");
+            // CFStringCreateWithCString 已在父级声明，c_str 参数类型是 *const i8
+            super::CFStringCreateWithCString(
+                std::ptr::null(),
+                c_str.as_ptr() as *const i8,
+                super::K_CF_STRING_ENCODING_UTF8,
+            )
+        }
+    }
+
+    /// 持有 CFRunLoopSource 的 RAII 句柄，Drop 时自动移除并释放。
+    pub(super) struct PowerSource {
+        source: CFRunLoopSourceRef,
+        // Sender 的堆分配指针，回调通过它发送通知
+        sender_ptr: *mut Sender<()>,
+    }
+
+    // PowerSource 由 PowerChangeListener 持有，Send 安全
+    unsafe impl Send for PowerSource {}
+
+    impl PowerSource {
+        pub(super) fn new(tx: Sender<()>) -> Self {
+            let sender_ptr = Box::into_raw(Box::new(tx));
+
+            unsafe {
+                let source = IOPSNotificationCreateRunLoopSource(
+                    power_change_callback,
+                    sender_ptr as *const c_void,
+                );
+
+                if source.is_null() {
+                    // 回收 Box
+                    let _ = Box::from_raw(sender_ptr);
+                    panic!("IOPSNotificationCreateRunLoopSource returned NULL");
+                }
+
+                let main_loop = CFRunLoopGetMain();
+                let mode = cfstr("kCFRunLoopDefaultMode");
+                CFRunLoopAddSource(main_loop, source, mode);
+                super::CFRelease(mode);
+
+                Self { source, sender_ptr }
+            }
+        }
+    }
+
+    impl Drop for PowerSource {
+        fn drop(&mut self) {
+            unsafe {
+                let main_loop = CFRunLoopGetMain();
+                let mode = cfstr("kCFRunLoopDefaultMode");
+                CFRunLoopRemoveSource(main_loop, self.source, mode);
+                super::CFRelease(mode);
+                CFRunLoopSourceInvalidate(self.source);
+                super::CFRelease(self.source);
+
+                // 回收 Box
+                let _ = Box::from_raw(self.sender_ptr);
+            }
+        }
+    }
+
+    /// IOKit 回调：电源状态变化时调用，通过 Sender 通知。
+    unsafe extern "C" fn power_change_callback(context: *const c_void) {
+        let sender = context as *const Sender<()>;
+        unsafe {
+            let _ = (*sender).send(());
+        }
+    }
 }

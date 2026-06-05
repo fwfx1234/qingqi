@@ -1,10 +1,10 @@
-pub mod backend;
 pub mod manifest;
 pub mod model;
 pub mod plugin;
-pub mod pool;
-pub mod service;
+pub mod protocols;
+pub mod runtime;
 pub mod store;
+pub mod terminal;
 pub mod transfer;
 pub mod view;
 
@@ -18,7 +18,7 @@ use qingqi_plugin::{
 
 pub fn databases() -> Vec<DatabaseSpec> {
     vec![DatabaseSpec::feature(
-        "ftp-sftp-ssh-client",
+        manifest::PLUGIN_ID,
         "profiles",
         "profiles.db",
     )]

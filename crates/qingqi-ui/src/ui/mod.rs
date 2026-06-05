@@ -1,9 +1,10 @@
 pub mod components;
+pub mod glass;
 mod window_chrome;
 
 pub use window_chrome::{
     WindowChromeConfig, WindowChromeMetrics, WindowChromeMode, WindowChromeStyle,
-    popup_window_chrome, popup_window_chrome_with_titlebar_slot,
+    WindowChromeTitlebarSlotAlignment, popup_window_chrome, popup_window_chrome_with_titlebar_slot,
 };
 
 use gpui::{

@@ -1,6 +1,9 @@
+pub mod code_gen;
+pub mod curl_parser;
 pub mod data_source;
 pub mod import_openapi;
 pub mod import_postman;
+pub mod mac_ui;
 pub mod manifest;
 pub mod model;
 pub mod plugin;

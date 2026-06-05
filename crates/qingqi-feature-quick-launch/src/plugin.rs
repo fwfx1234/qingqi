@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 
@@ -6,21 +6,23 @@ use crate::{manifest, service::QuickLaunchService, view::QuickLaunchView};
 use qingqi_plugin::{
     command::{Action, Activation, Command, CommandInvocation, CommandOutcome},
     database::DatabaseService,
-    events::{AppEventBus, AppEventKind},
+    events::AppEventBus,
     plugin::{Plugin, PluginCx, PluginId, PluginView, WindowView},
     storage::AppPaths,
 };
 
 pub struct QuickLaunchPlugin {
     service: Arc<QuickLaunchService>,
-    watch_started: bool,
 }
 
 impl QuickLaunchPlugin {
-    pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> anyhow::Result<Self> {
+    pub fn new(
+        database: Arc<DatabaseService>,
+        paths: AppPaths,
+        events: AppEventBus,
+    ) -> anyhow::Result<Self> {
         Ok(Self {
-            service: Arc::new(QuickLaunchService::new(database, paths)?),
-            watch_started: false,
+            service: Arc::new(QuickLaunchService::new(database, paths, events)?),
         })
     }
 }
@@ -100,33 +102,8 @@ impl Plugin for QuickLaunchPlugin {
         Ok(CommandOutcome::default())
     }
 
-    fn start_background(&mut self, events: AppEventBus, cx: &mut App) {
-        if self.watch_started {
-            return;
-        }
-        self.watch_started = true;
-
-        let service = Arc::clone(&self.service);
-        // 事件驱动：在 revision 变化时通过 channel 唤醒，代替定时轮询
-        let rx = Arc::new(Mutex::new(
-            service
-                .take_notify_receiver()
-                .expect("quick launch notify receiver already taken"),
-        ));
-        cx.spawn(async move |async_cx| {
-            loop {
-                let rx = Arc::clone(&rx);
-                let Ok(()) = async_cx
-                    .background_executor()
-                    .spawn(async move { rx.lock().unwrap().recv() })
-                    .await
-                else {
-                    break;
-                };
-                events.publish(manifest::PLUGIN_ID, AppEventKind::CommandsChanged);
-            }
-        })
-        .detach();
+    fn shutdown(&mut self) {
+        self.service.shutdown_all();
     }
 
     fn close_idle(&mut self) {}
@@ -193,7 +170,7 @@ mod tests {
                 "echo ok",
             ))
             .unwrap();
-        let runtime = QuickLaunchPlugin::new(database, paths).unwrap();
+        let runtime = QuickLaunchPlugin::new(database, paths, AppEventBus::new()).unwrap();
 
         let command = runtime
             .commands("")

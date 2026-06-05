@@ -1,3709 +1,3358 @@
-pub mod glass;
-pub mod mac_ui;
+use std::{
+    ops::Range,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
-use std::{collections::HashMap, path::Path, sync::Arc};
+use gpui::{
+    AnyElement, App, AppContext, Context, Entity, ExternalPaths, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, ParentElement, Render, ScrollDelta, ScrollWheelEvent, StatefulInteractiveElement,
+    Styled, Task, Window, div, hsla, prelude::FluentBuilder, px, rgb, uniform_list,
+};
+use gpui_component::scroll::ScrollableElement;
+use qingqi_plugin::plugin_spec::PluginAccent;
+use qingqi_ui::{
+    text_input::{TextInput, TextInputStyle},
+    theme, theme_mode, ui,
+};
 
 use crate::{
     model::{
-        AuthMethod, ConnectionStatus, ProtocolLogEntry, ProtocolLogKind, RemoteEditDraft,
-        RemoteEditState, RemoteFileItem, RemoteProfile, RemoteProfileDraft, RemoteProtocol,
-        RightPanelMode, SessionSummary, SessionTransferItem, TerminalSnapshot, TransferItem,
-        TransferStatus,
+        AuthMethod, Profile, ProfileDraft, RemoteProtocol, SessionId, SessionSummary,
+        SshHostKeyPolicy, TlsVerifyPolicy,
     },
-    service::{FtpSftpSshService, looks_like_text_file_name},
-    transfer::transfer_counts,
+    protocols::RemoteEntry,
+    runtime::{EditableFile, RemoteRuntime, RemoteRuntimeEvent, SessionSnapshot},
+    terminal::{
+        TerminalCellStyle, TerminalInput, TerminalMouseButton, TerminalMouseEventKind,
+        TerminalMouseModifiers, TerminalMouseScrollDirection,
+    },
+    transfer::{TransferSnapshot, TransferStatus},
 };
-use gpui::{
-    App, AppContext, Context, Entity, ExternalPaths, FontWeight, InteractiveElement, IntoElement,
-    MouseButton, ParentElement, Pixels, Point, Render, SharedString, StatefulInteractiveElement,
-    Styled, Window, div, hsla, prelude::FluentBuilder, px,
-};
-use gpui_component::{Icon, IconName, Sizable};
-use qingqi_ui::{
-    text_input::{TextInput, TextInputStyle},
-    theme, ui,
-};
+
+mod glass;
+mod mac_ui;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RemoteActionKind {
+    CreateDirectory,
+    Rename,
+    Delete,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ProfileEditorMode {
-    Existing(i64),
-    New,
+    Create,
+    Edit(i64),
 }
 
-#[derive(Clone)]
-struct ProfileEditorInputs {
-    name: Entity<TextInput>,
-    host: Entity<TextInput>,
-    port: Entity<TextInput>,
-    username: Entity<TextInput>,
-    password: Entity<TextInput>,
-    private_key_path: Entity<TextInput>,
-    private_key_passphrase: Entity<TextInput>,
-    remote_dir: Entity<TextInput>,
-    local_dir: Entity<TextInput>,
-    encoding: Entity<TextInput>,
-    connect_timeout_secs: Entity<TextInput>,
-    jump_host: Entity<TextInput>,
-    jump_port: Entity<TextInput>,
-    jump_username: Entity<TextInput>,
-    jump_password: Entity<TextInput>,
-    jump_private_key_path: Entity<TextInput>,
-    jump_private_key_passphrase: Entity<TextInput>,
-    notes: Entity<TextInput>,
+impl ProfileEditorMode {
+    fn existing_profile_id(self) -> Option<i64> {
+        match self {
+            Self::Create => None,
+            Self::Edit(id) => Some(id),
+        }
+    }
 }
 
-#[derive(Clone)]
-struct ProfileEditorSnapshot {
-    inputs: ProfileEditorInputs,
+struct ProfileEditorState {
     mode: ProfileEditorMode,
-    protocol: RemoteProtocol,
-    auth_method: AuthMethod,
-    passive_mode: bool,
-    jump_enabled: bool,
-    pinned: bool,
-    notice: String,
-    show_advanced: bool,
+    draft: ProfileDraft,
+    name_input: Entity<TextInput>,
+    host_input: Entity<TextInput>,
+    port_input: Entity<TextInput>,
+    username_input: Entity<TextInput>,
+    password_input: Entity<TextInput>,
+    private_key_path_input: Entity<TextInput>,
+    private_key_passphrase_input: Entity<TextInput>,
+    remote_root_input: Entity<TextInput>,
+    local_root_input: Entity<TextInput>,
+    connect_timeout_input: Entity<TextInput>,
+    transfer_concurrency_input: Entity<TextInput>,
+    pinned_host_key_input: Entity<TextInput>,
+    pinned_tls_sha256_input: Entity<TextInput>,
+    notes_input: Entity<TextInput>,
 }
 
-#[derive(Clone)]
-struct ProfileMenuState {
-    profile: RemoteProfile,
-    position: Point<Pixels>,
+struct RemoteActionState {
+    kind: RemoteActionKind,
+    target_path: Option<String>,
+    target_name: String,
+    input: Option<Entity<TextInput>>,
+    is_dir: bool,
 }
 
-#[derive(Clone)]
-struct FileMenuState {
-    item: RemoteFileItem,
-    position: Point<Pixels>,
+#[derive(Clone, Debug)]
+struct RemoteMenuState {
+    x: f32,
+    y: f32,
+    target_path: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct TerminalLayoutSnapshot {
+    origin_x: f32,
+    origin_y: f32,
+    width: f32,
+    height: f32,
 }
 
 pub struct FtpSftpSshView {
-    service: Arc<FtpSftpSshService>,
-    profiles_cache: Vec<RemoteProfile>,
-    selected_profile_cache: Option<RemoteProfile>,
-    service_revision: u64,
-    search_input: Option<Entity<TextInput>>,
-    terminal_input: Option<Entity<TextInput>>,
-    new_folder_input: Option<Entity<TextInput>>,
-    editor_inputs: Option<ProfileEditorInputs>,
-    editor_mode: ProfileEditorMode,
-    editor_protocol: RemoteProtocol,
-    editor_auth_method: AuthMethod,
-    editor_passive_mode: bool,
-    editor_jump_enabled: bool,
-    editor_pinned: bool,
-    editor_notice: String,
-    editor_open: bool,
-    editor_show_advanced: bool,
-    folder_sheet_open: bool,
-    show_global_transfers: bool,
-    transfer_collapsed: bool,
-    profile_menu: Option<ProfileMenuState>,
-    file_menu: Option<FileMenuState>,
+    runtime: Arc<RemoteRuntime>,
+    focus_handle: FocusHandle,
+    event_task: Option<Task<()>>,
+    terminal_layout: Arc<Mutex<Option<TerminalLayoutSnapshot>>>,
+    profiles: Vec<Profile>,
+    sessions: Vec<SessionSummary>,
+    transfers: Vec<TransferSnapshot>,
+    selected_profile_id: Option<i64>,
+    selected_session_id: Option<SessionId>,
+    selected_remote_path: Option<String>,
+    profile_editor: Option<ProfileEditorState>,
+    remote_action: Option<RemoteActionState>,
+    remote_menu: Option<RemoteMenuState>,
+    notice: String,
+    terminal_frame: Option<crate::terminal::TerminalFrame>,
+    last_terminal_revision: u64,
 }
 
 impl FtpSftpSshView {
-    fn log_ui_action(&self, action: &'static str) {
-        tracing::info!(target: "ftp_sftp_ssh.ui", action, "ftp/sftp/ssh ui action");
-    }
-
-    fn log_ui_action_with_profile(&self, action: &'static str, profile_id: i64) {
-        tracing::info!(
-            target: "ftp_sftp_ssh.ui",
-            action,
-            profile_id,
-            "ftp/sftp/ssh ui action"
-        );
-    }
-
-    pub fn new(service: Arc<FtpSftpSshService>) -> Self {
-        let selected = service.selected_profile().ok().flatten();
-        let profiles_cache = service.list_profiles().unwrap_or_default();
-        let draft = selected
-            .as_ref()
-            .map(RemoteProfileDraft::from_profile)
-            .unwrap_or_else(RemoteProfileDraft::blank);
-        Self {
-            service,
-            profiles_cache,
-            selected_profile_cache: selected.clone(),
-            service_revision: 0,
-            search_input: None,
-            terminal_input: None,
-            new_folder_input: None,
-            editor_inputs: None,
-            editor_mode: selected
-                .as_ref()
-                .map(|profile| ProfileEditorMode::Existing(profile.id))
-                .unwrap_or(ProfileEditorMode::New),
-            editor_protocol: draft.protocol,
-            editor_auth_method: draft.auth_method,
-            editor_passive_mode: draft.passive_mode,
-            editor_jump_enabled: draft.jump_enabled,
-            editor_pinned: draft.pinned,
-            editor_notice: String::from("常用配置默认展开，高级配置可折叠"),
-            editor_open: false,
-            editor_show_advanced: false,
-            folder_sheet_open: false,
-            show_global_transfers: false,
-            transfer_collapsed: false,
-            profile_menu: None,
-            file_menu: None,
-        }
-    }
-
-    fn refresh_cached_profiles_if_needed(&mut self) {
-        let revision = self.service.revision();
-        if revision == self.service_revision {
-            return;
-        }
-        self.profiles_cache = self.service.list_profiles().unwrap_or_default();
-        self.selected_profile_cache = self.service.selected_profile().ok().flatten();
-        self.service_revision = revision;
-    }
-
-    fn ensure_inputs(&mut self, cx: &mut Context<Self>) {
-        if self.search_input.is_none() {
-            self.search_input = Some(cx.new(|cx| {
-                let mut input = TextInput::new(cx, "搜索连接 / 主机 / 协议", "");
-                input.set_chrome(false, cx);
-                input.set_style(
-                    TextInputStyle {
-                        height: 30.0,
-                        font_size: 11.0,
-                        padding: 7.0,
-                    },
-                    cx,
-                );
-                input
-            }));
-        }
-        if self.terminal_input.is_none() {
-            self.terminal_input = Some(cx.new(|cx| {
-                let mut input = TextInput::new(cx, "command", "");
-                input.set_chrome(false, cx);
-                input.set_monospace(true, cx);
-                input.set_style(
-                    TextInputStyle {
-                        height: 24.0,
-                        font_size: 11.0,
-                        padding: 6.0,
-                    },
-                    cx,
-                );
-                input
-            }));
-        }
-        if self.new_folder_input.is_none() {
-            self.new_folder_input = Some(profile_input(cx, "新建文件夹", "", false, 34.0));
-        }
-    }
-
-    fn ensure_editor_inputs(&mut self, cx: &mut Context<Self>) {
-        if self.editor_inputs.is_some() {
-            return;
-        }
-        self.refresh_cached_profiles_if_needed();
-        let draft = match self.editor_mode {
-            ProfileEditorMode::Existing(id) => self
-                .profiles()
-                .into_iter()
-                .find(|profile| profile.id == id)
-                .map(|profile| RemoteProfileDraft::from_profile(&profile))
-                .unwrap_or_else(RemoteProfileDraft::blank),
-            ProfileEditorMode::New => RemoteProfileDraft::blank(),
+    pub fn new(runtime: Arc<RemoteRuntime>, cx: &mut Context<Self>) -> Self {
+        let mut view = Self {
+            runtime,
+            focus_handle: cx.focus_handle(),
+            event_task: None,
+            terminal_layout: Arc::new(Mutex::new(None)),
+            profiles: Vec::new(),
+            sessions: Vec::new(),
+            transfers: Vec::new(),
+            selected_profile_id: None,
+            selected_session_id: None,
+            selected_remote_path: None,
+            profile_editor: None,
+            remote_action: None,
+            remote_menu: None,
+            notice: String::from("选择左侧连接配置，然后打开一个 session"),
+            terminal_frame: None,
+            last_terminal_revision: 0,
         };
-        self.editor_inputs = Some(ProfileEditorInputs::from_draft(cx, &draft));
+        view.start_event_task(cx);
+        view.reload();
+        view
     }
 
-    fn profiles(&self) -> Vec<RemoteProfile> {
-        self.profiles_cache.clone()
-    }
-
-    fn selected_profile(&self) -> Option<RemoteProfile> {
-        self.selected_profile_cache.clone()
-    }
-
-    fn search_text(&self, cx: &Context<Self>) -> String {
-        self.search_input
-            .as_ref()
-            .map(|input| input.read(cx).text())
-            .unwrap_or_default()
-    }
-
-    fn filtered_profiles(&self, cx: &Context<Self>) -> Vec<RemoteProfile> {
-        let query = self.search_text(cx).trim().to_ascii_lowercase();
-        let mut profiles = self.profiles();
-        if query.is_empty() {
-            return profiles;
+    fn start_event_task(&mut self, cx: &mut Context<Self>) {
+        if self.event_task.is_some() {
+            return;
         }
-        profiles.retain(|profile| {
-            let haystack = format!(
-                "{} {} {} {} {}",
-                profile.name,
-                profile.host,
-                profile.username,
-                profile.protocol.label(),
-                profile.notes
-            )
-            .to_ascii_lowercase();
-            haystack.contains(&query)
-        });
-        profiles
-    }
 
-    fn editor_snapshot(&self) -> Option<ProfileEditorSnapshot> {
-        Some(ProfileEditorSnapshot {
-            inputs: self.editor_inputs.as_ref()?.clone(),
-            mode: self.editor_mode,
-            protocol: self.editor_protocol,
-            auth_method: self.editor_auth_method,
-            passive_mode: self.editor_passive_mode,
-            jump_enabled: self.editor_jump_enabled,
-            pinned: self.editor_pinned,
-            notice: self.editor_notice.clone(),
-            show_advanced: self.editor_show_advanced,
-        })
-    }
-
-    fn begin_new_profile(&mut self, cx: &mut Context<Self>) {
-        self.log_ui_action("begin_new_profile");
-        self.refresh_cached_profiles_if_needed();
-        self.editor_mode = ProfileEditorMode::New;
-        self.editor_open = true;
-        self.editor_show_advanced = false;
-        self.profile_menu = None;
-        self.file_menu = None;
-        self.load_editor_draft(RemoteProfileDraft::blank(), cx);
-        self.editor_notice = String::from("正在新建连接配置");
-    }
-
-    fn open_profile_editor(&mut self, id: i64, cx: &mut Context<Self>) {
-        self.log_ui_action_with_profile("open_profile_editor", id);
-        self.refresh_cached_profiles_if_needed();
-        self.profile_menu = None;
-        self.file_menu = None;
-        self.editor_open = true;
-        self.editor_show_advanced = false;
-        self.select_profile_for_editor(id, cx);
-    }
-
-    fn close_editor(&mut self) {
-        self.log_ui_action("close_editor");
-        self.editor_open = false;
-    }
-
-    fn select_profile(&mut self, id: i64) {
-        self.log_ui_action_with_profile("select_profile", id);
-        let _ = self.service.select_profile(id);
-        self.refresh_cached_profiles_if_needed();
-        self.profile_menu = None;
-    }
-
-    fn select_profile_for_editor(&mut self, id: i64, cx: &mut Context<Self>) {
-        match self.service.select_profile(id) {
-            Ok(()) => {
-                self.refresh_cached_profiles_if_needed();
-                self.editor_mode = ProfileEditorMode::Existing(id);
-                if let Some(profile) = self.profiles().into_iter().find(|profile| profile.id == id)
+        let runtime = Arc::clone(&self.runtime);
+        self.event_task = Some(cx.spawn(async move |view, async_cx| {
+            let receiver = Arc::new(Mutex::new(runtime.subscribe_events()));
+            loop {
+                let rx = Arc::clone(&receiver);
+                let events = async_cx
+                    .background_executor()
+                    .spawn(async move {
+                        let mut events = Vec::new();
+                        let receiver = rx.lock().ok()?;
+                        let first = receiver.recv().ok()?;
+                        events.push(first);
+                        let drain_until = Instant::now() + Duration::from_millis(16);
+                        while events.len() < 128 {
+                            let remaining = drain_until.saturating_duration_since(Instant::now());
+                            if remaining.is_zero() {
+                                break;
+                            }
+                            match receiver.recv_timeout(remaining) {
+                                Ok(event) => events.push(event),
+                                Err(_) => break,
+                            }
+                        }
+                        Some(events)
+                    })
+                    .await;
+                let Some(events) = events else {
+                    break;
+                };
+                if view
+                    .update(async_cx, |view, cx| {
+                        if view.apply_runtime_events(&events) {
+                            cx.notify();
+                        }
+                    })
+                    .is_err()
                 {
-                    self.load_editor_draft(RemoteProfileDraft::from_profile(&profile), cx);
-                    self.editor_notice = format!("正在编辑 {}", profile.name);
+                    break;
                 }
             }
-            Err(error) => {
-                self.editor_notice = format!("切换配置失败: {error}");
+        }));
+    }
+
+    fn apply_runtime_events(&mut self, events: &[RemoteRuntimeEvent]) -> bool {
+        let selected = self.selected_session_id.clone();
+        let mut profiles_changed = false;
+        let mut sessions_changed = false;
+        let mut transfers_changed = false;
+        let mut terminal_dirty = false;
+        for event in events {
+            match event {
+                RemoteRuntimeEvent::ProfilesChanged => profiles_changed = true,
+                RemoteRuntimeEvent::SessionsChanged => sessions_changed = true,
+                RemoteRuntimeEvent::SessionChanged(id) => {
+                    sessions_changed = true;
+                    if selected.as_ref() == Some(id) {
+                        terminal_dirty = true;
+                    }
+                }
+                RemoteRuntimeEvent::TransfersChanged => transfers_changed = true,
+                RemoteRuntimeEvent::TerminalChanged(id) => {
+                    if selected.as_ref() == Some(id) {
+                        terminal_dirty = true;
+                    }
+                }
             }
+        }
+
+        let mut dirty = false;
+        if profiles_changed {
+            self.reload();
+            dirty = true;
+        } else if sessions_changed {
+            self.refresh_session_list();
+            dirty = true;
+        }
+        if transfers_changed {
+            self.transfers = self.runtime.all_transfer_snapshots();
+            dirty = true;
+        }
+        if terminal_dirty && self.refresh_selected_terminal() {
+            dirty = true;
+        }
+        dirty
+    }
+
+    fn reload(&mut self) {
+        self.profiles = self.runtime.list_profiles().unwrap_or_default();
+        self.refresh_runtime_state();
+
+        if self.selected_profile_id.is_none() {
+            self.selected_profile_id = self.profiles.first().map(|profile| profile.id);
+        }
+        if let Some(editor) = self.profile_editor.as_ref()
+            && let Some(profile_id) = editor.mode.existing_profile_id()
+            && self.profiles.iter().all(|profile| profile.id != profile_id)
+        {
+            self.profile_editor = None;
         }
     }
 
-    fn save_editor(&mut self, cx: &mut Context<Self>) {
-        self.log_ui_action("save_editor");
-        self.ensure_editor_inputs(cx);
-        let draft = self.editor_draft(cx);
-        let result = match self.editor_mode {
-            ProfileEditorMode::Existing(id) => self.service.update_profile(id, draft),
-            ProfileEditorMode::New => self.service.create_profile(draft),
+    fn refresh_runtime_state(&mut self) {
+        self.refresh_session_list();
+        self.transfers = self.runtime.all_transfer_snapshots();
+    }
+
+    fn refresh_session_list(&mut self) {
+        self.sessions = self.runtime.session_summaries();
+
+        if self.selected_session_id.is_none() {
+            self.selected_session_id = self
+                .sessions
+                .first()
+                .map(|session| session.session_id.clone());
+        }
+        if let Some(selected) = self.selected_session_id.clone()
+            && self
+                .sessions
+                .iter()
+                .all(|session| session.session_id != selected)
+        {
+            self.selected_session_id = self
+                .sessions
+                .first()
+                .map(|session| session.session_id.clone());
+            self.selected_remote_path = None;
+        }
+
+        let selected_paths = self
+            .selected_session()
+            .map(|snapshot| {
+                snapshot
+                    .remote_entries
+                    .iter()
+                    .map(|entry| entry.path.clone())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        if let Some(selected_remote_path) = self.selected_remote_path.clone()
+            && !selected_paths
+                .iter()
+                .any(|path| path == &selected_remote_path)
+        {
+            self.selected_remote_path = selected_paths.first().cloned();
+        }
+
+        if self.selected_remote_path.is_none() {
+            self.selected_remote_path = selected_paths.first().cloned();
+        }
+    }
+
+    /// 仅当选中 session 的终端帧版本号变化时才更新缓存的 frame，返回是否发生变化。
+    /// 这样无变化的 TerminalChanged 事件不会触发重绘。
+    fn refresh_selected_terminal(&mut self) -> bool {
+        let Some(session_id) = self.selected_session_id.clone() else {
+            return self.clear_terminal_frame();
         };
-        match result {
-            Ok(profile) => {
-                self.refresh_cached_profiles_if_needed();
-                self.editor_mode = ProfileEditorMode::Existing(profile.id);
-                self.load_editor_draft(RemoteProfileDraft::from_profile(&profile), cx);
-                self.editor_notice = format!("已保存 {}", profile.name);
-            }
-            Err(error) => {
-                self.editor_notice = format!("保存失败: {error}");
-            }
+        let Some(revision) = self.runtime.terminal_revision(&session_id) else {
+            return self.clear_terminal_frame();
+        };
+        if revision == self.last_terminal_revision && self.terminal_frame.is_some() {
+            return false;
+        }
+        if let Some(frame) = self.runtime.terminal_frame(&session_id) {
+            self.last_terminal_revision = frame.revision;
+            self.terminal_frame = Some(frame);
+            true
+        } else {
+            self.clear_terminal_frame()
         }
     }
 
-    fn duplicate_profile(&mut self, profile: &RemoteProfile, cx: &mut Context<Self>) {
-        self.log_ui_action_with_profile("duplicate_profile", profile.id);
-        let mut draft = RemoteProfileDraft::from_profile(profile);
-        draft.name = format!("{} 副本", profile.name);
-        match self.service.create_profile(draft) {
-            Ok(profile) => {
-                self.refresh_cached_profiles_if_needed();
-                self.editor_mode = ProfileEditorMode::Existing(profile.id);
-                self.load_editor_draft(RemoteProfileDraft::from_profile(&profile), cx);
-                self.editor_notice = format!("已复制 {}", profile.name);
-                self.editor_open = true;
+    fn clear_terminal_frame(&mut self) -> bool {
+        self.last_terminal_revision = 0;
+        self.terminal_frame.take().is_some()
+    }
+
+    fn selected_profile(&self) -> Option<Profile> {
+        let profile_id = self.selected_profile_id?;
+        self.profiles
+            .iter()
+            .find(|profile| profile.id == profile_id)
+            .cloned()
+    }
+
+    fn selected_session(&self) -> Option<SessionSnapshot> {
+        let session_id = self.selected_session_id.as_ref()?;
+        self.runtime.session_snapshot(session_id)
+    }
+
+    fn selected_terminal_session_id(&self) -> Option<SessionId> {
+        self.selected_session()
+            .filter(|snapshot| snapshot.summary.has_terminal)
+            .map(|snapshot| snapshot.summary.session_id)
+    }
+
+    fn selected_remote_entry(&self, snapshot: &SessionSnapshot) -> Option<RemoteEntry> {
+        let selected_path = self.selected_remote_path.as_ref()?;
+        snapshot
+            .remote_entries
+            .iter()
+            .find(|entry| &entry.path == selected_path)
+            .cloned()
+    }
+
+    fn selected_editable_file<'a>(
+        &self,
+        snapshot: &'a SessionSnapshot,
+    ) -> Option<&'a EditableFile> {
+        let selected_path = self.selected_remote_path.as_ref()?;
+        snapshot
+            .editable_files
+            .iter()
+            .find(|item| &item.remote_path == selected_path)
+    }
+
+    fn editable_for_path<'a>(
+        &self,
+        snapshot: &'a SessionSnapshot,
+        remote_path: &str,
+    ) -> Option<&'a EditableFile> {
+        snapshot
+            .editable_files
+            .iter()
+            .find(|item| item.remote_path == remote_path)
+    }
+
+    fn terminal_layout_snapshot(&self) -> Option<TerminalLayoutSnapshot> {
+        self.terminal_layout.lock().ok().and_then(|layout| *layout)
+    }
+
+    fn select_profile(&mut self, profile_id: i64) {
+        self.selected_profile_id = Some(profile_id);
+        self.notice = String::from("已选择连接配置");
+    }
+
+    fn select_session(&mut self, session_id: SessionId) {
+        self.selected_session_id = Some(session_id);
+        self.selected_remote_path = None;
+        self.notice = String::from("已切换 session");
+        self.last_terminal_revision = 0;
+        self.terminal_frame = None;
+        self.reload();
+        self.refresh_selected_terminal();
+    }
+
+    fn select_remote_entry(&mut self, remote_path: String) {
+        self.selected_remote_path = Some(remote_path);
+        self.notice = String::from("已选择远端项目");
+    }
+
+    fn open_profile_creator(&mut self, cx: &mut Context<Self>) {
+        self.profile_editor = Some(build_profile_editor_state(
+            ProfileEditorMode::Create,
+            ProfileDraft::default(),
+            cx,
+        ));
+        self.notice = String::from("新建连接配置");
+    }
+
+    fn open_profile_editor(&mut self, cx: &mut Context<Self>) {
+        let Some(profile) = self.selected_profile() else {
+            self.notice = String::from("先选择一个连接配置");
+            return;
+        };
+        self.profile_editor = Some(build_profile_editor_state(
+            ProfileEditorMode::Edit(profile.id),
+            ProfileDraft::from_profile(&profile),
+            cx,
+        ));
+        self.notice = format!("编辑 {}", profile.name);
+    }
+
+    fn close_profile_editor(&mut self) {
+        self.profile_editor = None;
+        self.notice = String::from("已关闭连接配置编辑器");
+    }
+
+    fn editor_mut(&mut self) -> Option<&mut ProfileEditorState> {
+        self.profile_editor.as_mut()
+    }
+
+    fn open_selected_profile(&mut self) {
+        let Some(profile_id) = self.selected_profile_id else {
+            self.notice = String::from("先选择一个连接配置");
+            return;
+        };
+        match self.runtime.open_session(profile_id) {
+            Ok(session_id) => {
+                self.selected_session_id = Some(session_id);
+                self.selected_remote_path = None;
+                self.notice = String::from("已打开新的 session");
             }
             Err(error) => {
-                self.editor_notice = format!("复制失败: {error}");
+                self.notice = format!("打开 session 失败: {error}");
             }
         }
-        self.profile_menu = None;
+        self.reload();
+    }
+
+    fn close_session(&mut self, session_id: SessionId) {
+        match self.runtime.close_session(&session_id) {
+            Ok(true) => self.notice = String::from("session 已关闭"),
+            Ok(false) => self.notice = String::from("session 不存在"),
+            Err(error) => self.notice = format!("关闭 session 失败: {error}"),
+        }
+        self.reload();
+    }
+
+    fn cancel_transfer(&mut self, transfer_id: crate::model::TransferId) {
+        self.runtime.cancel_transfer(&transfer_id);
+        self.notice = String::from("已取消传输任务");
+        self.reload();
+    }
+
+    fn refresh_remote_entries(&mut self) {
+        let Some(session_id) = self.selected_session_id.clone() else {
+            self.notice = String::from("先打开一个 session");
+            return;
+        };
+        match self.runtime.refresh_session_directory(&session_id, None) {
+            Ok(_) => self.notice = String::from("已刷新远端目录"),
+            Err(error) => self.notice = format!("刷新目录失败: {error}"),
+        }
+        self.reload();
+    }
+
+    fn go_to_parent_directory(&mut self) {
+        let Some(session_id) = self.selected_session_id.clone() else {
+            self.notice = String::from("先打开一个 session");
+            return;
+        };
+        match self.runtime.parent_directory(&session_id) {
+            Ok(()) => {
+                self.selected_remote_path = None;
+                self.notice = String::from("已返回上级目录");
+            }
+            Err(error) => self.notice = format!("切换上级目录失败: {error}"),
+        }
+        self.reload();
+    }
+
+    fn open_remote_entry_by_path(&mut self, remote_path: &str) {
+        let Some(snapshot) = self.selected_session() else {
+            self.notice = String::from("先打开一个 session");
+            return;
+        };
+        let Some(entry) = snapshot
+            .remote_entries
+            .iter()
+            .find(|entry| entry.path == remote_path)
+            .cloned()
+        else {
+            self.notice = String::from("远端项目不存在");
+            return;
+        };
+        self.selected_remote_path = Some(entry.path.clone());
+        if entry.is_dir {
+            match self
+                .runtime
+                .enter_directory(&snapshot.summary.session_id, &entry.path)
+            {
+                Ok(()) => {
+                    self.selected_remote_path = None;
+                    self.notice = format!("已进入 {}", entry.path);
+                }
+                Err(error) => self.notice = format!("进入目录失败: {error}"),
+            }
+        } else {
+            self.edit_selected_entry();
+            return;
+        }
+        self.reload();
+    }
+
+    fn upload_into_current_directory(&mut self) {
+        let Some(local_paths) = rfd::FileDialog::new()
+            .set_title("选择要上传的文件")
+            .pick_files()
+        else {
+            self.notice = String::from("已取消上传");
+            return;
+        };
+        self.upload_paths_into_current_directory(local_paths);
+    }
+
+    fn upload_paths_into_current_directory(&mut self, local_paths: Vec<PathBuf>) {
+        let Some(snapshot) = self.selected_session() else {
+            self.notice = String::from("先打开一个 session");
+            return;
+        };
+
+        let mut queued = 0usize;
+        let mut skipped = 0usize;
+        let mut failed = Vec::new();
+        let mut last_remote_path = None;
+
+        for local_path in local_paths {
+            if !local_path.is_file() {
+                skipped += 1;
+                continue;
+            }
+            let Some(file_name) = local_path.file_name().and_then(|name| name.to_str()) else {
+                skipped += 1;
+                continue;
+            };
+            let remote_path = join_remote_path(&snapshot.remote_root, file_name);
+            match self
+                .runtime
+                .upload_file(&snapshot.summary.session_id, &local_path, &remote_path)
+            {
+                Ok(()) => {
+                    queued += 1;
+                    last_remote_path = Some(remote_path);
+                }
+                Err(error) => failed.push(format!("{}: {error}", local_path.display())),
+            }
+        }
+
+        if let Some(path) = last_remote_path {
+            self.selected_remote_path = Some(path);
+        }
+        self.notice = match (queued, skipped, failed.len()) {
+            (0, 0, 0) => String::from("没有可上传的文件"),
+            (0, skipped, 0) => format!("未上传；已跳过 {skipped} 个非文件项目"),
+            (queued, 0, 0) => format!("已加入上传队列 {queued} 个文件"),
+            (queued, skipped, 0) => {
+                format!("已加入上传队列 {queued} 个文件，跳过 {skipped} 个项目")
+            }
+            (queued, skipped, failed) => {
+                format!("已加入上传队列 {queued} 个文件，跳过 {skipped} 个项目，失败 {failed} 个")
+            }
+        };
+        self.reload();
+    }
+
+    fn download_selected_entry(&mut self) {
+        let Some(snapshot) = self.selected_session() else {
+            self.notice = String::from("先打开一个 session");
+            return;
+        };
+        let Some(entry) = self.selected_remote_entry(&snapshot) else {
+            self.notice = String::from("先选择一个远端文件");
+            return;
+        };
+        self.download_entry(&snapshot, &entry);
+    }
+
+    fn download_entry(&mut self, snapshot: &SessionSnapshot, entry: &RemoteEntry) {
+        if entry.is_dir {
+            self.notice = String::from("目录暂不支持整体下载");
+            return;
+        }
+        let default_target = match self
+            .runtime
+            .default_download_path(&snapshot.summary.session_id, &entry.path)
+        {
+            Ok(path) => path,
+            Err(error) => {
+                self.notice = format!("准备下载路径失败: {error}");
+                return;
+            }
+        };
+        let save_target = rfd::FileDialog::new()
+            .set_title("保存远端文件")
+            .set_file_name(
+                default_target
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("downloaded-file"),
+            )
+            .save_file()
+            .unwrap_or(default_target);
+
+        match self
+            .runtime
+            .download_entry(&snapshot.summary.session_id, &entry.path, &save_target)
+        {
+            Ok(local_path) => self.notice = format!("已下载到 {}", local_path.display()),
+            Err(error) => self.notice = format!("下载失败: {error}"),
+        }
+        self.reload();
+    }
+
+    fn edit_selected_entry(&mut self) {
+        let Some(snapshot) = self.selected_session() else {
+            self.notice = String::from("先打开一个 session");
+            return;
+        };
+        let Some(entry) = self.selected_remote_entry(&snapshot) else {
+            self.notice = String::from("先选择一个远端文件");
+            return;
+        };
+        self.edit_entry(&snapshot, &entry);
+    }
+
+    fn edit_entry(&mut self, snapshot: &SessionSnapshot, entry: &RemoteEntry) {
+        if entry.is_dir {
+            self.notice = String::from("目录不能直接编辑");
+            return;
+        }
+        match self
+            .runtime
+            .download_for_edit(&snapshot.summary.session_id, &entry.path)
+        {
+            Ok(local_path) => match qingqi_platform::shell::open_path(&local_path) {
+                Ok(()) => {
+                    self.notice = format!("已打开本地编辑副本 {}", local_path.display());
+                }
+                Err(error) => {
+                    self.notice = format!("下载完成，但打开本地文件失败: {error}");
+                }
+            },
+            Err(error) => self.notice = format!("准备编辑失败: {error}"),
+        }
+        self.reload();
+    }
+
+    fn upload_back_for_path(&mut self, remote_path: &str) {
+        let Some(snapshot) = self.selected_session() else {
+            self.notice = String::from("先打开一个 session");
+            return;
+        };
+        let Some(editable) = self.editable_for_path(&snapshot, remote_path) else {
+            self.notice = String::from("当前文件还没有本地编辑副本");
+            return;
+        };
+        match self.runtime.upload_edited_file(
+            &snapshot.summary.session_id,
+            &editable.local_path,
+            &editable.remote_path,
+        ) {
+            Ok(()) => self.notice = format!("已回传 {}", editable.remote_path),
+            Err(error) => self.notice = format!("回传失败: {error}"),
+        }
+        self.reload();
+    }
+
+    fn open_create_directory_prompt(&mut self, cx: &mut Context<Self>) {
+        let Some(snapshot) = self.selected_session() else {
+            self.notice = String::from("先打开一个 session");
+            return;
+        };
+        self.remote_action = Some(RemoteActionState {
+            kind: RemoteActionKind::CreateDirectory,
+            target_path: Some(snapshot.remote_root.clone()),
+            target_name: String::new(),
+            input: Some(compact_input(cx, "", "new-folder", false)),
+            is_dir: true,
+        });
+        self.remote_menu = None;
+        self.notice = String::from("输入新目录名称");
+    }
+
+    fn open_rename_prompt_for_path(&mut self, remote_path: &str, cx: &mut Context<Self>) {
+        let Some(snapshot) = self.selected_session() else {
+            self.notice = String::from("先打开一个 session");
+            return;
+        };
+        let Some(entry) = snapshot
+            .remote_entries
+            .iter()
+            .find(|entry| entry.path == remote_path)
+            .cloned()
+        else {
+            self.notice = String::from("远端项目不存在");
+            return;
+        };
+        self.selected_remote_path = Some(entry.path.clone());
+        self.remote_action = Some(RemoteActionState {
+            kind: RemoteActionKind::Rename,
+            target_path: Some(entry.path.clone()),
+            target_name: entry.name.clone(),
+            input: Some(compact_input(cx, &entry.name, "rename", false)),
+            is_dir: entry.is_dir,
+        });
+        self.remote_menu = None;
+        self.notice = format!("重命名 {}", entry.name);
+    }
+
+    fn open_delete_prompt_for_path(&mut self, remote_path: &str) {
+        let Some(snapshot) = self.selected_session() else {
+            self.notice = String::from("先打开一个 session");
+            return;
+        };
+        let Some(entry) = snapshot
+            .remote_entries
+            .iter()
+            .find(|entry| entry.path == remote_path)
+            .cloned()
+        else {
+            self.notice = String::from("远端项目不存在");
+            return;
+        };
+        self.selected_remote_path = Some(entry.path.clone());
+        self.remote_action = Some(RemoteActionState {
+            kind: RemoteActionKind::Delete,
+            target_path: Some(entry.path.clone()),
+            target_name: entry.name.clone(),
+            input: None,
+            is_dir: entry.is_dir,
+        });
+        self.remote_menu = None;
+        self.notice = format!("确认删除 {}", entry.name);
+    }
+
+    fn close_remote_action(&mut self) {
+        self.remote_action = None;
+        self.notice = String::from("已取消远端操作");
+    }
+
+    fn confirm_remote_action(&mut self, cx: &mut Context<Self>) {
+        let Some(snapshot) = self.selected_session() else {
+            self.notice = String::from("先打开一个 session");
+            self.remote_action = None;
+            return;
+        };
+        let Some(action) = self.remote_action.take() else {
+            return;
+        };
+
+        match action.kind {
+            RemoteActionKind::CreateDirectory => {
+                let Some(input) = action.input.as_ref() else {
+                    self.notice = String::from("缺少目录名称输入");
+                    return;
+                };
+                let name = input.read(cx).text().trim().to_string();
+                if name.is_empty() {
+                    self.notice = String::from("目录名称不能为空");
+                    self.remote_action = Some(action);
+                    return;
+                }
+                let base = action
+                    .target_path
+                    .clone()
+                    .unwrap_or_else(|| snapshot.remote_root.clone());
+                let remote_path = join_remote_path(&base, &name);
+                match self
+                    .runtime
+                    .create_remote_directory(&snapshot.summary.session_id, &remote_path)
+                {
+                    Ok(()) => {
+                        self.selected_remote_path = Some(remote_path.clone());
+                        self.notice = format!("已创建目录 {}", remote_path);
+                    }
+                    Err(error) => self.notice = format!("创建目录失败: {error}"),
+                }
+            }
+            RemoteActionKind::Rename => {
+                let Some(target_path) = action.target_path.as_ref() else {
+                    self.notice = String::from("缺少待重命名路径");
+                    return;
+                };
+                let Some(input) = action.input.as_ref() else {
+                    self.notice = String::from("缺少新名称输入");
+                    return;
+                };
+                let new_name = input.read(cx).text().trim().to_string();
+                if new_name.is_empty() {
+                    self.notice = String::from("新名称不能为空");
+                    self.remote_action = Some(action);
+                    return;
+                }
+                let parent = remote_parent_path(target_path);
+                let new_path = join_remote_path(&parent, &new_name);
+                match self.runtime.rename_remote_entry(
+                    &snapshot.summary.session_id,
+                    target_path,
+                    &new_path,
+                ) {
+                    Ok(()) => {
+                        self.selected_remote_path = Some(new_path.clone());
+                        self.notice = format!("已重命名为 {}", new_path);
+                    }
+                    Err(error) => self.notice = format!("重命名失败: {error}"),
+                }
+            }
+            RemoteActionKind::Delete => {
+                let Some(target_path) = action.target_path.as_ref() else {
+                    self.notice = String::from("缺少待删除路径");
+                    return;
+                };
+                match self.runtime.remove_remote_entry(
+                    &snapshot.summary.session_id,
+                    target_path,
+                    action.is_dir,
+                ) {
+                    Ok(()) => {
+                        if self
+                            .selected_remote_path
+                            .as_ref()
+                            .is_some_and(|selected| selected == target_path)
+                        {
+                            self.selected_remote_path = None;
+                        }
+                        self.notice = format!("已删除 {}", action.target_name);
+                    }
+                    Err(error) => self.notice = format!("删除失败: {error}"),
+                }
+            }
+        }
+        self.reload();
+    }
+
+    fn open_remote_menu(&mut self, x: f32, y: f32, target_path: Option<String>) {
+        self.remote_menu = Some(RemoteMenuState { x, y, target_path });
+    }
+
+    fn close_remote_menu(&mut self) {
+        self.remote_menu = None;
+    }
+
+    fn choose_private_key_path(&mut self, cx: &mut Context<Self>) {
+        let Some(editor) = self.editor_mut() else {
+            self.notice = String::from("当前没有打开配置编辑器");
+            return;
+        };
+        let Some(path) = rfd::FileDialog::new().set_title("选择私钥文件").pick_file() else {
+            self.notice = String::from("已取消选择私钥");
+            return;
+        };
+        let path_string = path.display().to_string();
+        editor.draft.auth.private_key_path = path_string.clone();
+        editor
+            .private_key_path_input
+            .update(cx, |input, input_cx| input.set_text(path_string, input_cx));
+        self.notice = String::from("已更新私钥路径");
+    }
+
+    fn choose_local_root(&mut self, cx: &mut Context<Self>) {
+        let Some(editor) = self.editor_mut() else {
+            self.notice = String::from("当前没有打开配置编辑器");
+            return;
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("选择默认下载目录")
+            .pick_folder()
+        else {
+            self.notice = String::from("已取消选择本地目录");
+            return;
+        };
+        let path_string = path.display().to_string();
+        editor.draft.paths.local_root = path_string.clone();
+        editor
+            .local_root_input
+            .update(cx, |input, input_cx| input.set_text(path_string, input_cx));
+        self.notice = String::from("已更新本地目录");
     }
 
     fn set_editor_protocol(&mut self, protocol: RemoteProtocol, cx: &mut Context<Self>) {
-        self.ensure_editor_inputs(cx);
-        let old_protocol = self.editor_protocol;
-        self.editor_protocol = protocol;
-        if let Some(inputs) = self.editor_inputs.as_ref() {
-            let current_port = inputs.port.read(cx).text();
-            if current_port.trim().is_empty()
-                || parse_u16_or_default(&current_port, old_protocol.default_port())
-                    == old_protocol.default_port()
-            {
-                inputs.port.update(cx, |input, input_cx| {
-                    input.set_text(protocol.default_port().to_string(), input_cx)
-                });
-            }
+        let Some(editor) = self.editor_mut() else {
+            return;
+        };
+        let previous_protocol = editor.draft.protocol;
+        editor.draft.protocol = protocol;
+        if editor.draft.port == 0 || editor.draft.port == previous_protocol.default_port() {
+            editor.draft.port = protocol.default_port();
+        }
+        if editor.draft.paths.remote_root.trim().is_empty()
+            || editor.draft.paths.remote_root == previous_protocol.default_remote_root()
+        {
+            editor.draft.paths.remote_root = protocol.default_remote_root().to_string();
+        }
+        editor.port_input.update(cx, |input, input_cx| {
+            input.set_text(editor.draft.port.to_string(), input_cx);
+        });
+        editor.remote_root_input.update(cx, |input, input_cx| {
+            input.set_text(editor.draft.paths.remote_root.clone(), input_cx);
+            input.set_placeholder(protocol.default_remote_root(), input_cx);
+        });
+        self.notice = format!("协议已切换为 {}", protocol.label());
+    }
+
+    fn set_editor_auth_method(&mut self, method: AuthMethod) {
+        if let Some(editor) = self.editor_mut() {
+            editor.draft.auth.method = method;
+            self.notice = format!("认证方式已切换为 {}", method.label());
         }
     }
 
-    fn set_editor_auth_method(&mut self, auth_method: AuthMethod) {
-        self.editor_auth_method = auth_method;
+    fn set_editor_ssh_policy(&mut self, policy: SshHostKeyPolicy) {
+        if let Some(editor) = self.editor_mut() {
+            editor.draft.security.ssh_host_key = policy;
+            self.notice = format!("SSH 安全策略已切换为 {}", policy.label());
+        }
+    }
+
+    fn set_editor_tls_policy(&mut self, policy: TlsVerifyPolicy) {
+        if let Some(editor) = self.editor_mut() {
+            editor.draft.security.tls_verify = policy;
+            self.notice = format!("TLS 校验策略已切换为 {}", policy.label());
+        }
     }
 
     fn toggle_editor_passive_mode(&mut self) {
-        self.editor_passive_mode = !self.editor_passive_mode;
-    }
-
-    fn toggle_editor_jump_enabled(&mut self) {
-        self.editor_jump_enabled = !self.editor_jump_enabled;
-    }
-
-    fn toggle_editor_pinned(&mut self) {
-        self.editor_pinned = !self.editor_pinned;
-    }
-
-    fn toggle_editor_show_advanced(&mut self) {
-        self.editor_show_advanced = !self.editor_show_advanced;
-    }
-
-    fn load_editor_draft(&mut self, draft: RemoteProfileDraft, cx: &mut Context<Self>) {
-        self.ensure_editor_inputs(cx);
-        self.editor_protocol = draft.protocol;
-        self.editor_auth_method = draft.auth_method;
-        self.editor_passive_mode = draft.passive_mode;
-        self.editor_jump_enabled = draft.jump_enabled;
-        self.editor_pinned = draft.pinned;
-        if let Some(inputs) = self.editor_inputs.as_ref() {
-            inputs.apply_draft(&draft, cx);
+        if let Some(editor) = self.editor_mut() {
+            editor.draft.limits.passive_mode = !editor.draft.limits.passive_mode;
+            self.notice = if editor.draft.limits.passive_mode {
+                String::from("已启用 FTP 被动模式")
+            } else {
+                String::from("已关闭 FTP 被动模式")
+            };
         }
     }
 
-    fn editor_draft(&self, cx: &Context<Self>) -> RemoteProfileDraft {
-        let Some(inputs) = self.editor_inputs.as_ref() else {
-            return RemoteProfileDraft::blank();
+    fn save_profile_editor(&mut self, cx: &mut Context<Self>) {
+        let Some(editor) = self.profile_editor.as_ref() else {
+            self.notice = String::from("当前没有可保存的配置");
+            return;
         };
-        RemoteProfileDraft {
-            name: inputs.name.read(cx).text(),
-            protocol: self.editor_protocol,
-            host: inputs.host.read(cx).text(),
-            port: parse_u16_or_default(
-                &inputs.port.read(cx).text(),
-                self.editor_protocol.default_port(),
-            ),
-            username: inputs.username.read(cx).text(),
-            auth_method: self.editor_auth_method,
-            password: inputs.password.read(cx).text(),
-            private_key_path: inputs.private_key_path.read(cx).text(),
-            private_key_passphrase: inputs.private_key_passphrase.read(cx).text(),
-            remote_dir: inputs.remote_dir.read(cx).text(),
-            local_dir: inputs.local_dir.read(cx).text(),
-            encoding: inputs.encoding.read(cx).text(),
-            passive_mode: self.editor_passive_mode,
-            connect_timeout_secs: parse_u16_or_default(
-                &inputs.connect_timeout_secs.read(cx).text(),
-                15,
-            ),
-            jump_enabled: self.editor_jump_enabled,
-            jump_host: inputs.jump_host.read(cx).text(),
-            jump_port: parse_u16_or_default(&inputs.jump_port.read(cx).text(), 22),
-            jump_username: inputs.jump_username.read(cx).text(),
-            jump_password: inputs.jump_password.read(cx).text(),
-            jump_private_key_path: inputs.jump_private_key_path.read(cx).text(),
-            jump_private_key_passphrase: inputs.jump_private_key_passphrase.read(cx).text(),
-            pinned: self.editor_pinned,
-            notes: inputs.notes.read(cx).text(),
-            group_id: None,
-            ftps_mode: crate::model::FtpsMode::Explicit,
+
+        let mut draft = editor.draft.clone();
+        draft.name = editor.name_input.read(cx).text();
+        draft.host = editor.host_input.read(cx).text();
+        draft.port = editor
+            .port_input
+            .read(cx)
+            .text()
+            .trim()
+            .parse::<u16>()
+            .unwrap_or(draft.protocol.default_port());
+        draft.auth.username = editor.username_input.read(cx).text();
+        draft.auth.password = editor.password_input.read(cx).text();
+        draft.auth.private_key_path = editor.private_key_path_input.read(cx).text();
+        draft.auth.private_key_passphrase = editor.private_key_passphrase_input.read(cx).text();
+        draft.paths.remote_root = editor.remote_root_input.read(cx).text();
+        draft.paths.local_root = editor.local_root_input.read(cx).text();
+        draft.security.pinned_host_key = editor.pinned_host_key_input.read(cx).text();
+        draft.security.pinned_tls_sha256 = editor.pinned_tls_sha256_input.read(cx).text();
+        draft.limits.connect_timeout_secs = editor
+            .connect_timeout_input
+            .read(cx)
+            .text()
+            .trim()
+            .parse::<u16>()
+            .unwrap_or(draft.limits.connect_timeout_secs);
+        draft.limits.transfer_concurrency = editor
+            .transfer_concurrency_input
+            .read(cx)
+            .text()
+            .trim()
+            .parse::<u16>()
+            .unwrap_or(draft.limits.transfer_concurrency);
+        draft.notes = editor.notes_input.read(cx).text();
+
+        match editor.mode {
+            ProfileEditorMode::Create => match self.runtime.create_profile(draft.normalize()) {
+                Ok(profile) => {
+                    self.selected_profile_id = Some(profile.id);
+                    self.profile_editor = None;
+                    self.notice = format!("已创建连接 {}", profile.name);
+                }
+                Err(error) => {
+                    self.notice = format!("创建连接失败: {error}");
+                    return;
+                }
+            },
+            ProfileEditorMode::Edit(profile_id) => {
+                match self.runtime.update_profile(profile_id, draft.normalize()) {
+                    Ok(Some(profile)) => {
+                        self.selected_profile_id = Some(profile.id);
+                        self.profile_editor = None;
+                        self.notice = format!("已保存连接 {}", profile.name);
+                    }
+                    Ok(None) => {
+                        self.notice = String::from("连接配置不存在，可能已被删除");
+                        return;
+                    }
+                    Err(error) => {
+                        self.notice = format!("保存连接失败: {error}");
+                        return;
+                    }
+                }
+            }
         }
+
+        self.reload();
     }
 
-    fn connect_profile(&mut self, profile_id: i64) {
-        self.log_ui_action_with_profile("connect_profile", profile_id);
-        let _ = self.service.select_profile(profile_id);
-        let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.connect_profile(profile_id) {
-            tracing::error!(%e, "connect_profile failed");
+    fn delete_selected_profile(&mut self) {
+        let Some(profile_id) = self.selected_profile_id else {
+            self.notice = String::from("先选择一个连接配置");
+            return;
+        };
+        if self.runtime.has_live_session(profile_id) {
+            self.notice = String::from("请先关闭这个连接的活动 session");
+            return;
         }
-        self.profile_menu = None;
+        match self.runtime.delete_profile(profile_id) {
+            Ok(true) => {
+                self.notice = String::from("已删除连接配置");
+                self.profile_editor = None;
+                self.selected_profile_id = self
+                    .profiles
+                    .iter()
+                    .find(|profile| profile.id != profile_id)
+                    .map(|profile| profile.id);
+            }
+            Ok(false) => self.notice = String::from("连接配置不存在"),
+            Err(error) => self.notice = format!("删除连接失败: {error}"),
+        }
+        self.reload();
     }
 
-    fn disconnect_profile(&mut self, profile_id: i64) {
-        self.log_ui_action_with_profile("disconnect_profile", profile_id);
-        self.service.disconnect_profile(profile_id);
-        self.profile_menu = None;
+    fn focus_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        window.focus(&self.focus_handle(cx));
+        cx.notify();
     }
 
-    fn upload_files(&mut self) {
-        self.log_ui_action("upload_files");
-        let svc = Arc::clone(&self.service);
-        if let Some(paths) = rfd::FileDialog::new().pick_files() {
-            let raw = paths
-                .into_iter()
-                .map(|path| path.to_string_lossy().into_owned())
-                .collect::<Vec<_>>();
-            if let Err(e) = svc.upload_paths(raw) {
-                tracing::error!(%e, "upload_paths failed");
+    fn handle_terminal_key(
+        &mut self,
+        event: &KeyDownEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(input) = terminal_input_for_event(event, cx) else {
+            return;
+        };
+
+        let Some(session_id) = self.selected_terminal_session_id() else {
+            self.notice = String::from("当前 session 没有可用终端");
+            cx.notify();
+            return;
+        };
+
+        match self.runtime.send_terminal_input(&session_id, input) {
+            Ok(()) => cx.stop_propagation(),
+            Err(error) => {
+                self.notice = format!("终端输入失败: {error}");
+                cx.notify();
             }
         }
     }
 
-    fn upload_folder(&mut self) {
-        self.log_ui_action("upload_folder");
-        let svc = Arc::clone(&self.service);
-        if let Some(path) = rfd::FileDialog::new().pick_folder() {
-            if let Err(e) = svc.upload_paths(vec![path.to_string_lossy().into_owned()]) {
-                tracing::error!(%e, "upload_paths failed");
-            }
-        }
-    }
-
-    fn download_file(&mut self, item: &RemoteFileItem) {
-        self.log_ui_action("download_file");
-        if item.path.is_empty() {
-            return;
-        }
-        let svc = Arc::clone(&self.service);
-        if let Some(dir) = rfd::FileDialog::new().pick_folder() {
-            let local_dir = dir.to_string_lossy().into_owned();
-            if let Err(e) = svc.start_download(item.path.clone(), &local_dir, item.size) {
-                tracing::error!(%e, "start_download failed");
-            }
-        }
-        self.file_menu = None;
-    }
-
-    fn open_text_file(&mut self, item: &RemoteFileItem) {
-        self.log_ui_action("open_text_file");
-        let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.open_text_file(item) {
-            tracing::error!(%e, "open_text_file failed");
-        }
-        self.file_menu = None;
-    }
-
-    fn delete_remote_item(&mut self, item: &RemoteFileItem) {
-        self.log_ui_action("delete_remote_item");
-        let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.remote_delete(&item.path, item.is_dir) {
-            tracing::error!(%e, "remote_delete failed");
-        }
-        self.file_menu = None;
-    }
-
-    fn navigate_dir(&mut self, path: &str) {
-        self.log_ui_action("navigate_dir");
-        let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.navigate_dir(path) {
-            tracing::error!(%e, "navigate_dir failed");
-        }
-        self.file_menu = None;
-    }
-
-    fn refresh_dir(&mut self) {
-        self.log_ui_action("refresh_dir");
-        let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.refresh_dir() {
-            tracing::error!(%e, "refresh_dir failed");
-        }
-    }
-
-    fn navigate_up(&mut self) {
-        self.log_ui_action("navigate_up");
-        let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.navigate_up() {
-            tracing::error!(%e, "navigate_up failed");
-        }
-    }
-
-    fn open_profile_menu(&mut self, profile: RemoteProfile, position: Point<Pixels>) {
-        self.file_menu = None;
-        self.profile_menu = Some(ProfileMenuState { profile, position });
-    }
-
-    fn open_file_menu(&mut self, item: RemoteFileItem, position: Point<Pixels>) {
-        self.profile_menu = None;
-        self.file_menu = Some(FileMenuState { item, position });
-    }
-
-    fn close_menus(&mut self) {
-        self.profile_menu = None;
-        self.file_menu = None;
-    }
-
-    fn open_folder_sheet(&mut self, cx: &mut Context<Self>) {
-        self.log_ui_action("open_folder_sheet");
-        self.folder_sheet_open = true;
-        if let Some(input) = self.new_folder_input.as_ref() {
-            set_input_text(input, String::from("新建文件夹"), cx);
-        }
-    }
-
-    fn close_folder_sheet(&mut self) {
-        self.log_ui_action("close_folder_sheet");
-        self.folder_sheet_open = false;
-    }
-
-    fn create_new_folder(&mut self, cx: &mut Context<Self>) {
-        self.log_ui_action("create_new_folder");
-        let Some(input) = self.new_folder_input.as_ref() else {
+    fn handle_terminal_mouse_down(
+        &mut self,
+        event: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.focus_terminal(window, cx);
+        let Some(session_id) = self.selected_terminal_session_id() else {
+            cx.stop_propagation();
             return;
         };
-        let raw = input.read(cx).text();
-        let name = raw.trim();
-        if name.is_empty() {
-            return;
-        }
-        let base = self.service.current_remote_path();
-        if base.is_empty() {
-            return;
-        }
-        let path = if base.ends_with('/') {
-            format!("{base}{name}")
-        } else {
-            format!("{base}/{name}")
-        };
-        let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.remote_mkdir(&path) {
-            tracing::error!(%e, "remote_mkdir failed");
-        }
-        self.folder_sheet_open = false;
-    }
-
-    fn send_terminal(&mut self, cx: &mut Context<Self>) {
-        self.log_ui_action("send_terminal");
-        let Some(input) = self.terminal_input.as_ref() else {
+        let Some(frame) = self.terminal_frame.as_ref() else {
+            cx.stop_propagation();
             return;
         };
-        let mut text = input.read(cx).text();
-        if text.trim().is_empty() {
+        if !frame.input.mouse_reporting {
+            cx.stop_propagation();
             return;
         }
-        if !text.ends_with('\n') {
-            text.push('\n');
+        let input = self
+            .terminal_layout_snapshot()
+            .and_then(|layout| terminal_mouse_press_input(event, frame, layout));
+        if let Some(input) = input {
+            let _ = self.runtime.send_terminal_input(&session_id, input);
         }
-        if let Err(e) = self.service.send_terminal_input(&text) {
-            tracing::error!(%e, "send_terminal_input failed");
+        cx.stop_propagation();
+    }
+
+    fn handle_terminal_mouse_up(
+        &mut self,
+        event: &MouseUpEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(session_id) = self.selected_terminal_session_id() else {
+            return;
+        };
+        let Some(frame) = self.terminal_frame.as_ref() else {
+            return;
+        };
+        if !frame.input.mouse_reporting {
+            return;
         }
-        input.update(cx, |input, input_cx| input.clear(input_cx));
-    }
-
-    fn toggle_transfer_scope(&mut self, show_global: bool) {
-        tracing::info!(
-            target: "ftp_sftp_ssh.ui",
-            action = "toggle_transfer_scope",
-            show_global,
-            "ftp/sftp/ssh ui action"
-        );
-        self.show_global_transfers = show_global;
-    }
-
-    fn set_transfer_collapsed(&mut self, collapsed: bool) {
-        tracing::info!(
-            target: "ftp_sftp_ssh.ui",
-            action = "set_transfer_collapsed",
-            collapsed,
-            "ftp/sftp/ssh ui action"
-        );
-        self.transfer_collapsed = collapsed;
-    }
-
-    fn upload_draft(&mut self, draft_id: &str, force: bool) {
-        tracing::info!(
-            target: "ftp_sftp_ssh.ui",
-            action = "upload_draft",
-            draft_id,
-            force,
-            "ftp/sftp/ssh ui action"
-        );
-        let svc = Arc::clone(&self.service);
-        if let Err(e) = svc.upload_draft(draft_id, force) {
-            tracing::error!(%e, "upload_draft failed");
+        let input = self
+            .terminal_layout_snapshot()
+            .and_then(|layout| terminal_mouse_release_input(event, frame, layout));
+        if let Some(input) = input {
+            let _ = self.runtime.send_terminal_input(&session_id, input);
+            cx.stop_propagation();
         }
     }
 
-    fn reopen_local_draft(&mut self, draft: &RemoteEditDraft) {
-        tracing::info!(
-            target: "ftp_sftp_ssh.ui",
-            action = "reopen_local_draft",
-            path = %draft.local_cache_path,
-            "ftp/sftp/ssh ui action"
-        );
-        if let Err(e) = qingqi_platform::shell::open_path(Path::new(&draft.local_cache_path)) {
-            tracing::error!(%e, "open_path failed");
+    fn handle_terminal_mouse_move(
+        &mut self,
+        event: &MouseMoveEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(session_id) = self.selected_terminal_session_id() else {
+            return;
+        };
+        let Some(frame) = self.terminal_frame.as_ref() else {
+            return;
+        };
+        if !frame.input.mouse_reporting {
+            return;
         }
-    }
-}
-
-impl ProfileEditorInputs {
-    fn from_draft(cx: &mut App, draft: &RemoteProfileDraft) -> Self {
-        Self {
-            name: profile_input(cx, "未命名连接", &draft.name, false, 34.0),
-            host: profile_input(cx, "example.com / 192.168.1.10", &draft.host, true, 34.0),
-            port: profile_input(cx, "22", &draft.port.to_string(), true, 34.0),
-            username: profile_input(cx, "用户名", &draft.username, true, 34.0),
-            password: profile_input(cx, "密码", &draft.password, true, 34.0),
-            private_key_path: profile_input(
-                cx,
-                "~/.ssh/id_ed25519",
-                &draft.private_key_path,
-                true,
-                34.0,
-            ),
-            private_key_passphrase: profile_input(
-                cx,
-                "私钥口令（可选）",
-                &draft.private_key_passphrase,
-                true,
-                34.0,
-            ),
-            remote_dir: profile_input(cx, "/", &draft.remote_dir, true, 34.0),
-            local_dir: profile_input(cx, "~/Downloads", &draft.local_dir, true, 34.0),
-            encoding: profile_input(cx, "utf-8", &draft.encoding, true, 34.0),
-            connect_timeout_secs: profile_input(
-                cx,
-                "15",
-                &draft.connect_timeout_secs.to_string(),
-                true,
-                34.0,
-            ),
-            jump_host: profile_input(cx, "跳板机主机", &draft.jump_host, true, 34.0),
-            jump_port: profile_input(cx, "22", &draft.jump_port.to_string(), true, 34.0),
-            jump_username: profile_input(cx, "跳板机用户", &draft.jump_username, true, 34.0),
-            jump_password: profile_input(cx, "跳板机密码", &draft.jump_password, true, 34.0),
-            jump_private_key_path: profile_input(
-                cx,
-                "跳板机私钥路径",
-                &draft.jump_private_key_path,
-                true,
-                34.0,
-            ),
-            jump_private_key_passphrase: profile_input(
-                cx,
-                "跳板机私钥口令",
-                &draft.jump_private_key_passphrase,
-                true,
-                34.0,
-            ),
-            notes: profile_input(cx, "备注", &draft.notes, false, 78.0),
+        let input = self
+            .terminal_layout_snapshot()
+            .and_then(|layout| terminal_mouse_move_input(event, frame, layout));
+        if let Some(input) = input {
+            let _ = self.runtime.send_terminal_input(&session_id, input);
+            cx.stop_propagation();
         }
     }
 
-    fn apply_draft(&self, draft: &RemoteProfileDraft, cx: &mut App) {
-        set_input_text(&self.name, draft.name.clone(), cx);
-        set_input_text(&self.host, draft.host.clone(), cx);
-        set_input_text(&self.port, draft.port.to_string(), cx);
-        set_input_text(&self.username, draft.username.clone(), cx);
-        set_input_text(&self.password, draft.password.clone(), cx);
-        set_input_text(&self.private_key_path, draft.private_key_path.clone(), cx);
-        set_input_text(
-            &self.private_key_passphrase,
-            draft.private_key_passphrase.clone(),
-            cx,
-        );
-        set_input_text(&self.remote_dir, draft.remote_dir.clone(), cx);
-        set_input_text(&self.local_dir, draft.local_dir.clone(), cx);
-        set_input_text(&self.encoding, draft.encoding.clone(), cx);
-        set_input_text(
-            &self.connect_timeout_secs,
-            draft.connect_timeout_secs.to_string(),
-            cx,
-        );
-        set_input_text(&self.jump_host, draft.jump_host.clone(), cx);
-        set_input_text(&self.jump_port, draft.jump_port.to_string(), cx);
-        set_input_text(&self.jump_username, draft.jump_username.clone(), cx);
-        set_input_text(&self.jump_password, draft.jump_password.clone(), cx);
-        set_input_text(
-            &self.jump_private_key_path,
-            draft.jump_private_key_path.clone(),
-            cx,
-        );
-        set_input_text(
-            &self.jump_private_key_passphrase,
-            draft.jump_private_key_passphrase.clone(),
-            cx,
-        );
-        set_input_text(&self.notes, draft.notes.clone(), cx);
+    fn handle_terminal_scroll(
+        &mut self,
+        event: &ScrollWheelEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(session_id) = self.selected_terminal_session_id() else {
+            return;
+        };
+        let Some(frame) = self.terminal_frame.as_ref() else {
+            return;
+        };
+        if !frame.input.mouse_reporting {
+            return;
+        }
+        let input = self
+            .terminal_layout_snapshot()
+            .and_then(|layout| terminal_mouse_scroll_input(event, frame, layout));
+        if let Some(input) = input {
+            let _ = self.runtime.send_terminal_input(&session_id, input);
+            cx.stop_propagation();
+        }
     }
 }
 
 impl Render for FtpSftpSshView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let dark = qingqi_ui::theme_mode::is_dark();
-        let accent = theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan);
-        let accent_soft = if dark {
-            theme::accent_soft_dark(qingqi_plugin::plugin_spec::PluginAccent::Cyan)
-        } else {
-            theme::accent_soft(qingqi_plugin::plugin_spec::PluginAccent::Cyan)
-        };
-
-        self.refresh_cached_profiles_if_needed();
-        self.ensure_inputs(cx);
-        self.ensure_editor_inputs(cx);
-
-        let entity = cx.entity();
-
-        let profiles = self.filtered_profiles(cx);
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let selected_profile = self.selected_profile();
-        let session_summaries = self.service.session_summaries();
-        let remote_items = self.service.remote_items();
-        let current_path = self.service.current_remote_path();
-        let message = self.service.message();
-        let status = self.service.status();
-        let right_panel_mode = self.service.active_right_panel_mode();
-        let terminal_snapshot = self.service.active_terminal_snapshot();
-        let protocol_log = self.service.active_protocol_log();
-        let drafts = self.service.remote_edit_drafts();
-        let current_transfers = self.service.transfer_items();
-        let all_transfers = self.service.all_transfer_items();
-        let editor = self.editor_snapshot();
-        let editor_open = self.editor_open;
-        let folder_sheet_open = self.folder_sheet_open;
-        let show_global_transfers = self.show_global_transfers;
-        let transfer_collapsed = self.transfer_collapsed;
-        let search_input = self.search_input.clone();
-        let terminal_input = self.terminal_input.clone();
-        let new_folder_input = self.new_folder_input.clone();
-        let profile_menu = self.profile_menu.clone();
-        let file_menu = self.file_menu.clone();
-
-        let summaries_by_id = session_summaries
-            .iter()
-            .cloned()
-            .map(|summary| (summary.profile_id, summary))
-            .collect::<HashMap<_, _>>();
-        let selected_id = selected_profile.as_ref().map(|profile| profile.id);
-        let active_summary = selected_id.and_then(|id| summaries_by_id.get(&id).cloned());
-        let selected_protocol = selected_profile
+        let selected_session = self.selected_session();
+        let selected_entry = selected_session
             .as_ref()
-            .map(|profile| profile.protocol)
-            .unwrap_or(RemoteProtocol::Sftp);
-        let supports_files = selected_protocol.supports_file_browser();
-        let can_drop = supports_files
-            && active_summary
-                .as_ref()
-                .is_some_and(|summary| summary.status == ConnectionStatus::Connected);
+            .and_then(|snapshot| self.selected_remote_entry(snapshot));
+        let editable_local_path = selected_session
+            .as_ref()
+            .and_then(|snapshot| self.selected_editable_file(snapshot))
+            .map(|item| item.local_path.display().to_string());
+        let dark = theme_mode::is_dark();
+        let chrome = mac_ui::workspace_chrome_config();
+        let titlebar = titlebar_slot(self.profiles.len(), self.sessions.len()).into_any_element();
+        let terminal_focused = self.focus_handle.is_focused(window);
+        let handle = cx.entity();
+        let terminal_frame = self.terminal_frame.as_ref();
 
-        ui::plugin_surface()
-            .child(div().absolute().inset_0().bg(glass::tint(dark)))
-            .font_family(ui::font_ui())
+        div()
             .relative()
-            .on_key_down({
-                let entity = entity.clone();
-                move |event, window, cx| {
-                    if event.keystroke.key == "escape" {
-                        tracing::info!(
-                            target: "ftp_sftp_ssh.ui",
-                            action = "key_escape",
-                            "ftp/sftp/ssh ui key event"
-                        );
-                        entity.update(cx, |view, _cx| {
-                            view.close_menus();
-                            view.close_editor();
-                            view.close_folder_sheet();
-                        });
-                        window.refresh();
-                    }
-                }
-            })
+            .size_full()
+            .bg(theme::semantic().bg_glass)
+            .rounded(px(12.0))
+            .overflow_hidden()
+            .shadow(glass::shadow())
+            .font_family(ui::font_ui())
+            .text_color(theme::semantic().text_primary)
+            .flex()
+            .flex_col()
             .child(
                 div()
                     .size_full()
-                    .overflow_hidden()
+                    .bg(glass::bg(dark))
+                    .pt(px(chrome.metrics().content_top_padding + 6.0))
+                    .pl(px(6.0))
+                    .pr(px(6.0))
+                    .pb(px(6.0))
+                    .gap_0p5()
                     .flex()
-                    .child(sidebar(
-                        dark,
-                        accent,
-                        profiles,
-                        search_input,
-                        selected_id,
-                        &summaries_by_id,
-                        entity.clone(),
-                    ))
+                    .flex_col()
                     .child(
                         div()
                             .flex_1()
                             .min_h(px(0.0))
-                            .min_w(px(0.0))
                             .flex()
-                            .flex_col()
-                            .child(top_bar(
+                            .gap_1()
+                            .child(left_sidebar(
+                                &self.profiles,
+                                &self.sessions,
+                                self.selected_profile_id,
+                                cx,
                                 dark,
-                                accent,
-                                accent_soft,
-                                selected_profile.as_ref(),
-                                active_summary.as_ref(),
-                                status,
-                                entity.clone(),
                             ))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_h(px(0.0))
-                                    .min_w(px(0.0))
-                                    .flex()
-                                    .child(file_workspace(
-                                        dark,
-                                        accent,
-                                        accent_soft,
-                                        selected_profile.as_ref(),
-                                        active_summary.as_ref(),
-                                        remote_items,
-                                        current_path,
-                                        can_drop,
-                                        entity.clone(),
-                                    ))
-                                    .child(protocol_panel(
-                                        dark,
-                                        selected_profile.as_ref(),
-                                        active_summary.as_ref(),
-                                        right_panel_mode,
-                                        terminal_snapshot,
-                                        protocol_log,
-                                        terminal_input,
-                                        entity.clone(),
-                                    )),
-                            )
-                            .child(transfer_panel(
+                            .child(main_workspace(
+                                selected_session.as_ref(),
+                                terminal_frame,
+                                selected_entry.as_ref(),
+                                editable_local_path.as_deref(),
+                                self.selected_session_id.clone(),
+                                &self.sessions,
+                                terminal_focused,
+                                self.focus_handle.clone(),
+                                Arc::clone(&self.runtime),
+                                Arc::clone(&self.terminal_layout),
+                                window,
+                                cx,
                                 dark,
-                                accent,
-                                drafts,
-                                current_transfers,
-                                all_transfers,
-                                show_global_transfers,
-                                transfer_collapsed,
-                                entity.clone(),
-                            ))
-                            .child(status_bar(dark, accent, message)),
-                    ),
+                            )),
+                    )
+                    .child(transfer_strip(
+                        &self.transfers,
+                        self.notice.clone(),
+                        cx,
+                        dark,
+                    )),
             )
-            .when(editor_open, |root| {
+            .when(self.profile_editor.is_some(), |root| {
                 root.child(profile_editor_overlay(
+                    handle.clone(),
+                    self.profile_editor.as_ref().expect("profile editor"),
+                    cx,
                     dark,
-                    editor,
-                    selected_profile,
-                    entity.clone(),
                 ))
             })
-            .when(folder_sheet_open, |root| {
-                root.child(new_folder_overlay(dark, new_folder_input, entity.clone()))
-            })
-            .when(profile_menu.is_some(), |root| {
-                root.child(profile_menu_overlay(
+            .when(self.remote_action.is_some(), |root| {
+                root.child(remote_action_overlay(
+                    handle.clone(),
+                    self.remote_action.as_ref().expect("remote action"),
+                    cx,
                     dark,
-                    profile_menu,
-                    &summaries_by_id,
-                    entity.clone(),
                 ))
             })
-            .when(file_menu.is_some(), |root| {
-                root.child(file_menu_overlay(dark, file_menu, entity.clone()))
+            .when(self.remote_menu.is_some(), |root| {
+                root.child(remote_menu_overlay(
+                    self.remote_menu.as_ref().expect("remote menu"),
+                    selected_session.as_ref(),
+                    selected_profile.as_ref(),
+                    selected_entry.as_ref(),
+                    editable_local_path.as_deref(),
+                    cx,
+                    dark,
+                ))
             })
+            .child(ui::popup_window_chrome_with_titlebar_slot(
+                chrome,
+                Some(titlebar),
+            ))
     }
 }
 
-fn top_bar(
-    dark: bool,
-    _accent: gpui::Rgba,
-    _accent_soft: gpui::Rgba,
-    selected: Option<&RemoteProfile>,
-    summary: Option<&SessionSummary>,
-    status: ConnectionStatus,
-    panel: Entity<FtpSftpSshView>,
-) -> impl IntoElement {
-    let status_color = match status {
-        ConnectionStatus::Connected => theme::semantic().success,
-        ConnectionStatus::Failed => theme::semantic().danger,
-        ConnectionStatus::Idle => ui::text_tertiary(),
-    };
-    let title = selected
-        .map(|profile| profile.name.clone())
-        .unwrap_or_else(|| String::from("未选择连接"));
-    let detail = selected
-        .map(|profile| profile.endpoint())
-        .unwrap_or_else(|| String::from("SFTP / FTP / FTPS · 未连接"));
-    let is_connected = summary.is_some_and(|summary| summary.status == ConnectionStatus::Connected);
-    let selected_id = selected.map(|profile| profile.id);
-
-    div()
-        .h(px(38.0))
-        .px(px(10.0))
-        .border_b_1()
-        .border_color(glass::divider(dark))
-        .flex()
-        .items_center()
-        .gap(px(6.0))
-        .bg(glass::bg(dark))
-        .shadow(glass::shadow())
-        .child(div().size(px(7.0)).rounded(px(999.0)).bg(status_color))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(6.0))
-                .child(
-                    div()
-                        .text_size(px(11.0))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .line_clamp(1)
-                        .child(title),
-                )
-                .child(
-                    div()
-                        .text_size(px(10.0))
-                        .text_color(ui::text_secondary())
-                        .line_clamp(1)
-                        .child(detail),
-                )
-                .child(
-                    div()
-                        .text_size(px(10.0))
-                        .text_color(ui::text_secondary())
-                        .child("·"),
-                )
-                .child(
-                    div()
-                        .text_size(px(10.0))
-                        .text_color(status_color)
-                        .line_clamp(1)
-                        .child(status.label()),
-                ),
-        )
-        .child(div().flex_1())
-        .child(
-            frost_button(
-                if is_connected { "已连接" } else { "连接" },
-                Some("↗"),
-                if is_connected { "ghost" } else { "primary" },
-                dark,
-                false,
-            )
-            .id("ftp-connect-selected")
-            .when(selected_id.is_none() || is_connected, |button| {
-                button.opacity(0.58)
-            })
-            .on_click({
-                let panel = panel.clone();
-                move |_, window, cx| {
-                    if let Some(profile_id) = selected_id {
-                        cx.update_entity(&panel, |view, _cx| view.connect_profile(profile_id));
-                    }
-                    window.refresh();
-                }
-            }),
-        )
-        .child(
-            frost_button("刷新", Some("⟳"), "ghost", dark, false)
-                .id("ftp-refresh")
-                .when(!is_connected, |button| button.opacity(0.42))
-                .on_click({
-                    let panel = panel.clone();
-                    move |_, window, cx| {
-                        cx.update_entity(&panel, |view, _cx| view.refresh_dir());
-                        window.refresh();
-                    }
-                }),
-        )
-        .child(
-            frost_button("断开", Some("⏻"), "ghost", dark, true)
-                .id("ftp-disconnect-selected")
-                .when(!is_connected, |button| button.opacity(0.42))
-                .on_click({
-                    let panel = panel.clone();
-                    move |_, window, cx| {
-                        if let Some(profile_id) = selected_id {
-                            cx.update_entity(&panel, |view, _cx| {
-                                view.disconnect_profile(profile_id)
-                            });
-                        }
-                        window.refresh();
-                    }
-                }),
-        )
+impl Focusable for FtpSftpSshView {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
 }
 
-fn sidebar(
-    dark: bool,
-    accent: gpui::Rgba,
-    profiles: Vec<RemoteProfile>,
-    search_input: Option<Entity<TextInput>>,
-    selected_id: Option<i64>,
-    summaries_by_id: &HashMap<i64, SessionSummary>,
-    panel: Entity<FtpSftpSshView>,
-) -> impl IntoElement {
-    let open_count = profiles.len();
+fn titlebar_slot(profile_count: usize, session_count: usize) -> impl IntoElement {
     div()
-        .w(px(220.0))
-        .min_h(px(0.0))
-        .border_r_1()
-        .border_color(glass::border(dark))
-        .bg(glass::bg(dark))
-        .shadow(glass::shadow())
         .flex()
-        .flex_col()
+        .items_center()
+        .gap_1()
+        .pl(px(6.0))
         .child(
             div()
-                .px(px(10.0))
-                .pt(px(8.0))
-                .pb(px(6.0))
+                .text_size(px(12.0))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .child("Remote Workspace"),
+        )
+        .child(mac_ui::titlebar_pill(
+            format!("{profile_count} hosts"),
+            false,
+        ))
+        .child(mac_ui::titlebar_pill(
+            format!("{session_count} sessions"),
+            true,
+        ))
+}
+
+fn left_sidebar(
+    profiles: &[Profile],
+    _sessions: &[SessionSummary],
+    selected_profile_id: Option<i64>,
+    cx: &mut Context<FtpSftpSshView>,
+    dark: bool,
+) -> impl IntoElement {
+    glass_panel(px(220.0), dark)
+        .child(side_section_header(
+            "Connections",
+            Some(format!("{}", profiles.len())),
+        ))
+        .child(
+            div()
+                .h(px(24.0))
                 .flex()
-                .flex_col()
-                .gap(px(8.0))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(
-                            div().flex().items_center().gap(px(6.0)).child(
-                                div()
-                                    .text_size(px(12.0))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child("连接管理"),
-                            ),
-                        )
-                        .child(
-                            div()
-                                .size(px(26.0))
-                                .rounded(px(6.0))
-                                .bg(accent)
-                                .text_size(px(16.0))
-                                .text_color(theme::white())
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .hover(move |style| style.cursor_pointer())
-                                .child("+")
-                                .id("ftp-open-new-profile-sidebar")
-                                .on_click({
-                                    let panel = panel.clone();
-                                    move |_, window, cx| {
-                                        cx.update_entity(&panel, |view, _cx| {
-                                            view.begin_new_profile(_cx)
-                                        });
-                                        window.refresh();
-                                    }
-                                }),
-                        ),
-                )
-                .child(search_input_shell(search_input, dark)),
+                .items_center()
+                .gap_1()
+                .child(toolbar_button("new-profile", "New").on_click(cx.listener(
+                    |view, _, _, cx| {
+                        view.open_profile_creator(cx);
+                    },
+                )))
+                .child(toolbar_button("edit-profile", "Edit").on_click(cx.listener(
+                    |view, _, _, cx| {
+                        view.open_profile_editor(cx);
+                    },
+                )))
+                .child(toolbar_button("open-profile", "Open").on_click(cx.listener(
+                    |view, _, _, _cx| {
+                        view.open_selected_profile();
+                    },
+                ))),
         )
         .child(
             div()
-                .flex_1()
                 .min_h(px(0.0))
-                .id("ftp-scroll")
-                .overflow_y_scroll()
-                .px(px(6.0))
-                .py(px(4.0))
+                .max_h(px(220.0))
+                .overflow_y_scrollbar()
                 .flex()
                 .flex_col()
-                .gap(px(3.0))
-                .when(profiles.is_empty(), |list| {
-                    list.child(
-                        div()
-                            .h(px(140.0))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_size(px(11.0))
-                            .text_color(ui::text_secondary())
-                            .child("暂无连接"),
-                    )
-                })
-                .children(profiles.into_iter().map(|profile| {
-                    let summary = summaries_by_id.get(&profile.id).cloned();
-                    let selected = selected_id == Some(profile.id);
-                    connection_card(dark, profile, summary, selected, panel.clone())
+                .gap_1()
+                .children(profiles.iter().map(|profile| {
+                    let selected = selected_profile_id == Some(profile.id);
+                    let profile_id = profile.id;
+                    div()
+                        .id(("remote-profile-row", profile.id as usize))
+                        .rounded(px(7.0))
+                        .bg(if selected {
+                            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.14)
+                        } else {
+                            glass::panel(dark)
+                        })
+                        .border_1()
+                        .border_color(if selected {
+                            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.34)
+                        } else {
+                            glass::divider(dark)
+                        })
+                        .px_2()
+                        .py(px(5.0))
+                        .cursor_pointer()
+                        .hover(move |style| style.bg(glass::hover_bg(dark)))
+                        .on_click(cx.listener(move |view, _, _, _cx| {
+                            view.select_profile(profile_id);
+                        }))
+                        .child(
+                            div().flex().items_start().justify_between().gap_2().child(
+                                div()
+                                    .min_w(px(0.0))
+                                    .flex()
+                                    .flex_col()
+                                    .gap_0p5()
+                                    .child(
+                                        div()
+                                            .text_size(px(10.0))
+                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .line_clamp(1)
+                                            .child(profile.name.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(8.5))
+                                            .line_clamp(1)
+                                            .text_color(theme::semantic().text_secondary)
+                                            .child(profile.endpoint()),
+                                    ),
+                            ),
+                        )
                 })),
         )
         .child(
-            div()
-                .h(px(26.0))
-                .px(px(10.0))
-                .text_size(px(10.0))
-                .text_color(ui::text_tertiary())
-                .flex()
-                .items_center()
-                .child(format!("{open_count} 个连接")),
+            div().min_h(px(0.0)).flex_1().child(
+                div()
+                    .w_full()
+                    .h_full()
+                    .rounded(px(7.0))
+                    .bg(glass::inset(dark))
+                    .border_1()
+                    .border_color(glass::divider(dark)),
+            ),
         )
 }
 
-fn connection_card(
+fn main_workspace(
+    selected_session: Option<&SessionSnapshot>,
+    terminal_frame: Option<&crate::terminal::TerminalFrame>,
+    selected_entry: Option<&RemoteEntry>,
+    editable_local_path: Option<&str>,
+    selected_session_id: Option<SessionId>,
+    sessions: &[SessionSummary],
+    terminal_focused: bool,
+    focus_handle: FocusHandle,
+    runtime: Arc<RemoteRuntime>,
+    terminal_layout: Arc<Mutex<Option<TerminalLayoutSnapshot>>>,
+    window: &Window,
+    cx: &mut Context<FtpSftpSshView>,
     dark: bool,
-    profile: RemoteProfile,
-    summary: Option<SessionSummary>,
-    selected: bool,
-    panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
-    let is_connected = summary
-        .as_ref()
-        .is_some_and(|summary| summary.status == ConnectionStatus::Connected);
-    let profile_id = profile.id;
-
     div()
-        .id(("ftp-profile-row", profile_id as u64))
-        .w_full()
-        .h(px(36.0))
-        .rounded(px(6.0))
-        .bg(theme::rgba_with_alpha(
-            theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan),
-            if selected { 1.0 } else { 0.0 },
-        ))
-        .when(!selected, |row| {
-            row.hover(move |style| style.bg(row_hover_color(dark)).cursor_pointer())
-        })
-        .when(selected, |row| row.hover(|style| style.cursor_pointer()))
-        .on_click({
-            let panel = panel.clone();
-            move |event, window, cx| {
-                cx.update_entity(&panel, |view, _cx| {
-                    view.select_profile(profile_id);
-                    if event.click_count() >= 2 && !event.is_right_click() {
-                        view.connect_profile(profile_id);
-                    }
-                });
-                window.refresh();
-            }
-        })
-        .on_mouse_down(MouseButton::Right, {
-            let panel = panel.clone();
-            let profile = profile.clone();
-            move |event, window, cx| {
-                cx.update_entity(&panel, |view, _cx| {
-                    view.open_profile_menu(profile.clone(), event.position)
-                });
-                cx.stop_propagation();
-                window.refresh();
-            }
-        })
-        .px(px(6.0))
-        .flex()
-        .items_center()
-        .gap(px(6.0))
-        .child(div().size(px(6.0)).rounded(px(999.0)).bg(if is_connected {
-            theme::semantic().success
-        } else {
-            ui::text_tertiary()
-        }))
-        .child(
-            div()
-                .size(px(20.0))
-                .rounded(px(4.0))
-                .bg(if selected {
-                    hsla(0.0, 0.0, 1.0, 0.18)
-                } else if dark {
-                    hsla(0.0, 0.0, 1.0, 0.05)
-                } else {
-                    hsla(0.56, 0.80, 0.88, 0.22)
-                })
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(px(11.0))
-                .text_color(if selected {
-                    theme::white()
-                } else {
-                    theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan)
-                })
-                .child("▣"),
-        )
-        .child(
-            div()
-                .flex_1()
-                .min_w(px(0.0))
-                .flex()
-                .flex_col()
-                .gap(px(2.0))
-                .child(
-                    div()
-                        .text_size(px(11.0))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(if selected {
-                            theme::white()
-                        } else {
-                            theme::semantic().text_primary
-                        })
-                        .line_clamp(1)
-                        .child(profile.name.clone()),
-                )
-                .child(
-                    div()
-                        .text_size(px(9.0))
-                        .text_color(if selected {
-                            hsla(0.0, 0.0, 1.0, 0.78).into()
-                        } else {
-                            ui::text_secondary()
-                        })
-                        .line_clamp(1)
-                        .child(profile.endpoint()),
-                ),
-        )
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(4.0))
-                .child(
-                    div()
-                        .h(px(16.0))
-                        .px(px(5.0))
-                        .rounded(px(4.0))
-                        .bg(if selected {
-                            theme::rgba_with_alpha(theme::white(), 0.18)
-                        } else {
-                            theme::rgba_with_alpha(theme::semantic().bg_surface, 1.0)
-                        })
-                        .text_size(px(8.0))
-                        .text_color(if selected {
-                            theme::white()
-                        } else {
-                            theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan)
-                        })
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(profile.protocol.label()),
-                )
-                .when(profile.pinned, |row| {
-                    row.child(
-                        div()
-                            .text_size(px(10.0))
-                            .text_color(if selected {
-                                theme::white()
-                            } else {
-                                theme::semantic().warning
-                            })
-                            .child("★"),
-                    )
-                })
-                .child(
-                    div()
-                        .id("ftp-profile-menu-trigger")
-                        .text_size(px(10.0))
-                        .text_color(if selected {
-                            theme::white()
-                        } else {
-                            ui::text_tertiary()
-                        })
-                        .hover(move |style| style.cursor_pointer())
-                        .child("⋯")
-                        .on_click({
-                            let panel = panel.clone();
-                            let profile = profile.clone();
-                            move |event, window, cx| {
-                                cx.stop_propagation();
-                                cx.update_entity(&panel, |view, _cx| {
-                                    view.open_profile_menu(profile.clone(), event.position())
-                                });
-                                window.refresh();
-                            }
-                        }),
-                ),
-        )
-}
-
-fn file_workspace(
-    dark: bool,
-    accent: gpui::Rgba,
-    _accent_soft: gpui::Rgba,
-    selected: Option<&RemoteProfile>,
-    summary: Option<&SessionSummary>,
-    remote_items: Vec<RemoteFileItem>,
-    current_path: String,
-    can_drop: bool,
-    panel: Entity<FtpSftpSshView>,
-) -> impl IntoElement {
-    let supports_files = selected.is_some_and(|profile| profile.protocol.supports_file_browser());
-    let path_text = if current_path.is_empty() {
-        selected
-            .map(|profile| profile.remote_dir.clone())
-            .unwrap_or_else(|| String::from("/"))
-    } else {
-        current_path
-    };
-    let upload_hint = if can_drop {
-        format!("拖拽文件或目录上传到 {path_text}")
-    } else if selected.is_none() {
-        String::from("先从左侧选择一个连接")
-    } else if !supports_files {
-        String::from("当前协议没有文件浏览能力")
-    } else {
-        String::from("连接后才能拖拽上传")
-    };
-    let connected = summary.is_some_and(|summary| summary.status == ConnectionStatus::Connected);
-    let item_count = remote_items
-        .iter()
-        .filter(|item| !item.path.is_empty())
-        .count();
-
-    div()
-        .w(px(440.0))
-        .min_w(px(300.0))
+        .flex_1()
         .min_h(px(0.0))
-        .border_r_1()
-        .border_color(ui::border_light())
-        .bg(theme::semantic().bg_surface)
         .flex()
         .flex_col()
-        .child(
-            div()
-                .h(px(38.0))
-                .px(px(10.0))
-                .border_b_1()
-                .border_color(ui::border_light())
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(7.0))
-                        .child(
-                            div()
-                                .text_size(px(14.0))
-                                .text_color(theme::accent_color(
-                                    qingqi_plugin::plugin_spec::PluginAccent::Cyan,
-                                ))
-                                .child(Icon::new(IconName::FolderClosed).xsmall().text_color(
-                                    theme::accent_color(
-                                        qingqi_plugin::plugin_spec::PluginAccent::Cyan,
-                                    ),
-                                )),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(11.0))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child("远程目录"),
-                        ),
-                )
-                .child(
-                    div()
-                        .text_size(px(11.0))
-                        .text_color(ui::text_secondary())
-                        .child(format!("{item_count} 项")),
-                ),
-        )
-        .child(
-            div()
-                .h(px(32.0))
-                .px(px(10.0))
-                .border_b_1()
-                .border_color(ui::border_light())
-                .flex()
-                .items_center()
-                .gap(px(6.0))
-                .child(
-                    small_icon_action(IconName::ArrowUp, dark)
-                        .id("ftp-navigate-up")
-                        .when(!connected || !supports_files, |button| button.opacity(0.42))
-                        .on_click({
-                            let panel = panel.clone();
-                            move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| view.navigate_up());
-                                window.refresh();
-                            }
-                        }),
-                )
-                .child(
-                    small_icon_action(IconName::FolderOpen, dark)
-                        .id("ftp-home-dir")
-                        .when(!connected || !supports_files, |button| button.opacity(0.42))
-                        .on_click({
-                            let panel = panel.clone();
-                            let home_path = selected.map(|profile| profile.remote_dir.clone());
-                            move |_, window, cx| {
-                                if let Some(path) = home_path.as_ref() {
-                                    cx.update_entity(&panel, |view, _cx| view.navigate_dir(path));
-                                }
-                                window.refresh();
-                            }
-                        }),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w(px(0.0))
-                        .font_family("SF Mono")
-                        .text_size(px(11.0))
-                        .line_clamp(1)
-                        .child(path_text.clone()),
-                )
-                .child(
-                    small_icon_action(IconName::Redo2, dark)
-                        .id("ftp-refresh-inline")
-                        .when(!connected || !supports_files, |button| button.opacity(0.42))
-                        .on_click({
-                            let panel = panel.clone();
-                            move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| view.refresh_dir());
-                                window.refresh();
-                            }
-                        }),
-                )
-                .child(
-                    small_icon_action(IconName::ArrowUp, dark)
-                        .id("ftp-upload-files")
-                        .when(!connected || !supports_files, |button| button.opacity(0.42))
-                        .on_click({
-                            let panel = panel.clone();
-                            move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| view.upload_files());
-                                window.refresh();
-                            }
-                        }),
-                )
-                .child(
-                    small_icon_action(IconName::FolderClosed, dark)
-                        .id("ftp-upload-folder")
-                        .when(!connected || !supports_files, |button| button.opacity(0.42))
-                        .on_click({
-                            let panel = panel.clone();
-                            move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| view.upload_folder());
-                                window.refresh();
-                            }
-                        }),
-                )
-                .child(
-                    small_icon_action(IconName::Plus, dark)
-                        .id("ftp-create-folder")
-                        .when(!connected || !supports_files, |button| button.opacity(0.42))
-                        .on_click({
-                            let panel = panel.clone();
-                            move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| view.open_folder_sheet(_cx));
-                                window.refresh();
-                            }
-                        }),
-                ),
-        )
-        .child(
-            div()
-                .h(px(26.0))
-                .px(px(10.0))
-                .border_b_1()
-                .border_color(ui::border_light())
-                .bg(ui::bg_keycap())
-                .flex()
-                .items_center()
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w(px(0.0))
-                        .text_size(px(10.0))
-                        .text_color(ui::text_secondary())
-                        .child("名称"),
-                )
-                .child(
-                    div()
-                        .w(px(64.0))
-                        .text_size(px(10.0))
-                        .text_color(ui::text_secondary())
-                        .child("大小"),
-                ),
-        )
+        .gap_0p5()
+        .child(session_tabs(sessions, selected_session_id, cx, dark))
         .child(
             div()
                 .flex_1()
                 .min_h(px(0.0))
-                .id("ftp-remote-file-zone")
-                .can_drop(move |_, _, _| can_drop)
-                .drag_over::<ExternalPaths>(move |style, _, _, _| {
-                    style.bg(theme::rgba_with_alpha(
-                        theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan),
-                        if dark { 0.14 } else { 0.10 },
-                    ))
-                })
-                .on_drop({
-                    let panel = panel.clone();
-                    move |paths: &ExternalPaths, window, cx| {
-                        let raw = paths
-                            .paths()
-                            .iter()
-                            .map(|path| path.to_string_lossy().into_owned())
-                            .collect::<Vec<_>>();
-                        let svc = Arc::clone(&panel.read(cx).service);
-                        if let Err(e) = svc.upload_paths(raw) {
-                            tracing::error!(%e, "upload_paths failed");
-                        }
-                        window.refresh();
-                    }
-                })
-                .id("ftp-scroll")
-                .overflow_y_scroll()
                 .flex()
-                .flex_col()
-                .when(remote_items.is_empty(), |list| {
-                    list.child(
-                        div()
-                            .flex_1()
-                            .min_h(px(180.0))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_size(px(11.0))
-                            .text_color(ui::text_secondary())
-                            .child(upload_hint.clone()),
-                    )
-                })
-                .children(
-                    remote_items
-                        .into_iter()
-                        .map(|item| remote_entry_row(dark, item, panel.clone())),
-                ),
-        )
-        .child(
-            div()
-                .h(px(22.0))
-                .px(px(10.0))
-                .border_t_1()
-                .border_color(ui::border_light())
-                .text_size(px(10.0))
-                .text_color(if can_drop {
-                    accent
-                } else {
-                    ui::text_secondary()
-                })
-                .flex()
-                .items_center()
-                .line_clamp(1)
-                .child(upload_hint),
+                .gap_0p5()
+                .child(file_pane(
+                    selected_session,
+                    selected_entry,
+                    editable_local_path,
+                    cx,
+                    dark,
+                ))
+                .child(terminal_pane(
+                    selected_session,
+                    terminal_frame,
+                    terminal_focused,
+                    focus_handle,
+                    runtime,
+                    terminal_layout,
+                    window,
+                    cx,
+                    dark,
+                )),
         )
 }
 
-fn remote_entry_row(
+fn session_tabs(
+    sessions: &[SessionSummary],
+    selected_session_id: Option<SessionId>,
+    cx: &mut Context<FtpSftpSshView>,
     dark: bool,
-    item: RemoteFileItem,
-    panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
-    let is_text_file = !item.is_dir && looks_like_text_file_name(&item.name);
-    let primary_label = if item.is_dir { "进入" } else { "下载" };
-    let item_for_primary = item.clone();
-    let item_for_text = item.clone();
-    let item_for_menu = item.clone();
-
     div()
-        .id(SharedString::from(format!(
-            "ftp-item-{}",
-            item.name.replace('/', "_")
-        )))
-        .h(px(30.0))
-        .border_b_1()
-        .border_color(ui::border_light())
-        .bg(if item.path.is_empty() {
-            theme::rgba_with_alpha(ui::row_hover(), 1.0)
-        } else if item.selected {
-            if dark {
-                theme::rgba_with_alpha(
-                    theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan),
-                    0.24,
-                )
-            } else {
-                theme::rgba_with_alpha(
-                    theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan),
-                    0.16,
-                )
-            }
-        } else {
-            theme::rgba_with_alpha(theme::semantic().bg_surface, 1.0)
-        })
-        .hover(move |style| style.bg(row_hover_color(dark)).cursor_pointer())
-        .on_mouse_down(MouseButton::Right, {
-            let panel = panel.clone();
-            let item = item.clone();
-            move |event, window, cx| {
-                cx.update_entity(&panel, |view, _cx| {
-                    view.open_file_menu(item.clone(), event.position)
-                });
-                cx.stop_propagation();
-                window.refresh();
-            }
-        })
-        .px(px(10.0))
+        .h(px(28.0))
+        .rounded(px(8.0))
+        .bg(glass::bar(dark))
+        .border_1()
+        .border_color(glass::border(dark))
+        .px_1()
+        .py(px(2.0))
         .flex()
         .items_center()
-        .gap(px(6.0))
-        .child(
+        .gap_1()
+        .overflow_x_scrollbar()
+        .children(sessions.iter().enumerate().map(|(index, session)| {
+            let selected = selected_session_id
+                .as_ref()
+                .is_some_and(|current| current == &session.session_id);
+            let session_id = session.session_id.clone();
+            let close_id = session.session_id.clone();
             div()
-                .w(px(16.0))
-                .flex()
+                .id(("remote-session-tab", index))
+                .h(px(22.0))
+                .rounded(px(6.0))
+                .bg(if selected {
+                    glass::panel(dark)
+                } else {
+                    hsla(0.0, 0.0, 0.0, 0.0)
+                })
+                .border_1()
+                .border_color(if selected {
+                    theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.36)
+                } else {
+                    hsla(0.0, 0.0, 0.0, 0.0)
+                })
+                .px_2()
                 .flex()
                 .items_center()
-                .justify_center()
-                .text_size(px(12.0))
-                .text_color(if item.is_dir {
-                    theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan)
-                } else {
-                    ui::text_secondary()
-                })
+                .gap_1()
+                .cursor_pointer()
+                .hover(move |style| style.bg(glass::hover_bg(dark)))
+                .on_click(cx.listener(move |view, _, _, _cx| {
+                    view.select_session(session_id.clone());
+                }))
                 .child(
-                    Icon::new(if item.is_dir {
-                        IconName::FolderClosed
-                    } else {
-                        IconName::File
-                    })
-                    .xsmall()
-                    .text_color(if item.is_dir {
-                        theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan)
-                    } else {
-                        ui::text_secondary()
-                    }),
+                    div()
+                        .max_w(px(240.0))
+                        .line_clamp(1)
+                        .text_size(px(9.5))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .child(session.title.clone()),
+                )
+                .child(
+                    div()
+                        .text_size(px(8.5))
+                        .text_color(theme::semantic().text_secondary)
+                        .child(session.protocol.label()),
+                )
+                .child(
+                    div()
+                        .id(("remote-session-close", index))
+                        .rounded(px(4.0))
+                        .px(px(4.0))
+                        .text_size(px(9.0))
+                        .text_color(theme::semantic().danger)
+                        .cursor_pointer()
+                        .hover(move |style| style.bg(glass::hover_bg(dark)))
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            cx.stop_propagation();
+                            view.close_session(close_id.clone());
+                        }))
+                        .child("x"),
+                )
+        }))
+}
+
+fn file_pane(
+    selected_session: Option<&SessionSnapshot>,
+    selected_entry: Option<&RemoteEntry>,
+    editable_local_path: Option<&str>,
+    cx: &mut Context<FtpSftpSshView>,
+    dark: bool,
+) -> impl IntoElement {
+    glass_panel(px(372.0), dark)
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap_2()
+                .child(panel_header("Files", None))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .child(toolbar_button("remote-up", "Up").on_click(cx.listener(
+                            |view, _, _, _cx| {
+                                view.go_to_parent_directory();
+                            },
+                        )))
+                        .child(
+                            toolbar_button("remote-refresh", "Refresh").on_click(cx.listener(
+                                |view, _, _, _cx| {
+                                    view.refresh_remote_entries();
+                                },
+                            )),
+                        ),
                 ),
         )
         .child(
-            div().flex_1().min_w(px(0.0)).flex().items_center().child(
+            div()
+                .h(px(28.0))
+                .rounded(px(7.0))
+                .bg(glass::inset(dark))
+                .border_1()
+                .border_color(glass::divider(dark))
+                .px_2()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap_2()
+                .child(
+                    div()
+                        .min_w(px(0.0))
+                        .text_size(px(9.0))
+                        .line_clamp(1)
+                        .font_family(ui::font_mono())
+                        .child(
+                            selected_session
+                                .map(|snapshot| snapshot.remote_root.clone())
+                                .unwrap_or_else(|| String::from("No session")),
+                        ),
+                )
+                .child(
+                    div()
+                        .text_size(px(8.5))
+                        .text_color(theme::semantic().text_secondary)
+                        .child(
+                            selected_entry
+                                .map(|entry| {
+                                    if entry.is_dir {
+                                        String::from("Directory")
+                                    } else if editable_local_path.is_some() {
+                                        String::from("Editable")
+                                    } else {
+                                        String::from("File")
+                                    }
+                                })
+                                .unwrap_or_else(|| String::from("Idle")),
+                        ),
+                ),
+        )
+        .when(selected_session.is_some(), |col| {
+            let snapshot = selected_session.expect("selected session");
+            let entries = Arc::new(snapshot.remote_entries.clone());
+            let selected_path = selected_entry.map(|entry| entry.path.clone());
+            col.child(
                 div()
-                    .text_size(px(11.0))
+                    .min_h(px(0.0))
+                    .flex_1()
+                    .rounded(px(8.0))
+                    .bg(glass::inset(dark))
+                    .border_1()
+                    .border_color(glass::divider(dark))
+                    .overflow_hidden()
+                    .drag_over::<ExternalPaths>(move |style, _, _, _| {
+                        style
+                            .bg(theme::rgba_with_alpha(
+                                ui::accent_color(PluginAccent::Cyan),
+                                0.10,
+                            ))
+                            .border_color(theme::rgba_with_alpha(
+                                ui::accent_color(PluginAccent::Cyan),
+                                0.52,
+                            ))
+                    })
+                    .on_drop(cx.listener(|view, paths: &ExternalPaths, _, cx| {
+                        view.upload_paths_into_current_directory(paths.paths().to_vec());
+                        cx.stop_propagation();
+                    }))
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener(|view, event: &MouseDownEvent, _, cx| {
+                            view.open_remote_menu(
+                                event.position.x.into(),
+                                event.position.y.into(),
+                                None,
+                            );
+                            cx.stop_propagation();
+                        }),
+                    )
+                    .child(remote_entry_list(entries, selected_path, cx, dark)),
+            )
+        })
+        .when(selected_session.is_none(), |col| {
+            col.child(empty_state("打开 session 后显示远端文件列表"))
+        })
+}
+
+fn remote_entry_list(
+    entries: Arc<Vec<RemoteEntry>>,
+    selected_path: Option<String>,
+    cx: &mut Context<FtpSftpSshView>,
+    dark: bool,
+) -> impl IntoElement {
+    let item_count = entries.len();
+    div()
+        .min_h(px(0.0))
+        .size_full()
+        .p(px(4.0))
+        .when(item_count == 0, |list| {
+            list.child(empty_state("当前目录为空"))
+        })
+        .when(item_count > 0, |list| {
+            let entries = entries.clone();
+            let selected_path = selected_path.clone();
+            list.child(
+                uniform_list(
+                    "remote-entry-list",
+                    item_count,
+                    cx.processor(move |_view, range: Range<usize>, _window, cx| {
+                        range
+                            .map(|index| {
+                                let entry = entries[index].clone();
+                                remote_entry_row(entry, index, selected_path.as_deref(), cx, dark)
+                            })
+                            .collect::<Vec<_>>()
+                    }),
+                )
+                .size_full(),
+            )
+        })
+}
+
+fn remote_entry_row(
+    entry: RemoteEntry,
+    index: usize,
+    selected_path: Option<&str>,
+    cx: &mut Context<FtpSftpSshView>,
+    dark: bool,
+) -> gpui::Stateful<gpui::Div> {
+    let selected = selected_path == Some(entry.path.as_str());
+    let remote_path = entry.path.clone();
+    let row_path = entry.path.clone();
+    div()
+        .id(("remote-entry-row", index))
+        .w_full()
+        .h(px(28.0))
+        .rounded(px(6.0))
+        .bg(if selected {
+            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.14)
+        } else {
+            glass::panel(dark)
+        })
+        .border_1()
+        .border_color(if selected {
+            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.34)
+        } else {
+            hsla(0.0, 0.0, 0.0, 0.0)
+        })
+        .px_2()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap_2()
+        .cursor_pointer()
+        .hover(move |style| style.bg(glass::hover_bg(dark)))
+        .on_click(cx.listener(move |view, event: &gpui::ClickEvent, _, _cx| {
+            view.select_remote_entry(remote_path.clone());
+            if event.click_count() >= 2 {
+                view.open_remote_entry_by_path(&remote_path);
+            }
+        }))
+        .on_mouse_down(
+            MouseButton::Right,
+            cx.listener(move |view, event: &MouseDownEvent, _, cx| {
+                view.select_remote_entry(row_path.clone());
+                view.open_remote_menu(
+                    event.position.x.into(),
+                    event.position.y.into(),
+                    Some(row_path.clone()),
+                );
+                cx.stop_propagation();
+            }),
+        )
+        .child(
+            div().min_w(px(0.0)).flex().items_center().gap_1().child(
+                div()
+                    .text_size(px(9.5))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
                     .line_clamp(1)
-                    .child(item.name.clone()),
+                    .child(if entry.is_dir {
+                        format!("{}/", entry.name)
+                    } else {
+                        entry.name.clone()
+                    }),
             ),
         )
         .child(
             div()
-                .w(px(64.0))
-                .text_size(px(10.0))
-                .text_color(ui::text_secondary())
-                .items_center()
-                .child(if item.is_dir {
-                    String::new()
+                .flex_none()
+                .text_size(px(8.5))
+                .text_color(theme::semantic().text_secondary)
+                .child(if entry.is_dir {
+                    String::from("dir")
                 } else {
-                    item.meta.clone()
-                }),
-        )
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(4.0))
-                .when(!item.path.is_empty(), |row| {
-                    row.child(
-                        small_action(primary_label, dark)
-                            .id("ftp-remote-primary-action")
-                            .on_click({
-                                let panel = panel.clone();
-                                move |_, window, cx| {
-                                    if item_for_primary.is_dir {
-                                        cx.update_entity(&panel, |view, _cx| {
-                                            view.navigate_dir(&item_for_primary.path)
-                                        });
-                                    } else {
-                                        cx.update_entity(&panel, |view, _cx| {
-                                            view.download_file(&item_for_primary)
-                                        });
-                                    }
-                                    window.refresh();
-                                }
-                            }),
-                    )
-                })
-                .when(is_text_file, |row| {
-                    row.child(
-                        small_action("文本", dark)
-                            .id("ftp-remote-open-text")
-                            .on_click({
-                                let panel = panel.clone();
-                                move |_, window, cx| {
-                                    cx.update_entity(&panel, |view, _cx| {
-                                        view.open_text_file(&item_for_text)
-                                    });
-                                    window.refresh();
-                                }
-                            }),
-                    )
-                })
-                .when(!item.path.is_empty(), |row| {
-                    row.child(
-                        small_icon_action(IconName::Ellipsis, dark)
-                            .id("ftp-remote-menu")
-                            .on_click({
-                                let panel = panel.clone();
-                                move |event, window, cx| {
-                                    cx.update_entity(&panel, |view, _cx| {
-                                        view.open_file_menu(item_for_menu.clone(), event.position())
-                                    });
-                                    window.refresh();
-                                }
-                            }),
-                    )
+                    format!("{} B", entry.size)
                 }),
         )
 }
 
-fn protocol_panel(
+fn terminal_pane(
+    selected_session: Option<&SessionSnapshot>,
+    terminal_frame: Option<&crate::terminal::TerminalFrame>,
+    terminal_focused: bool,
+    focus_handle: FocusHandle,
+    runtime: Arc<RemoteRuntime>,
+    terminal_layout: Arc<Mutex<Option<TerminalLayoutSnapshot>>>,
+    _window: &Window,
+    cx: &mut Context<FtpSftpSshView>,
     dark: bool,
-    selected: Option<&RemoteProfile>,
-    summary: Option<&SessionSummary>,
-    right_panel_mode: RightPanelMode,
-    terminal_snapshot: TerminalSnapshot,
-    protocol_log: Vec<ProtocolLogEntry>,
-    terminal_input: Option<Entity<TextInput>>,
-    panel: Entity<FtpSftpSshView>,
 ) -> impl IntoElement {
-    let title = match right_panel_mode {
-        RightPanelMode::Terminal => "SSH 终端",
-        RightPanelMode::FtpLog => "FTP 命令日志",
-        RightPanelMode::Empty => "协议工作区",
+    let terminal_snapshot = terminal_frame;
+    let session_id = selected_session.map(|snapshot| snapshot.summary.session_id.clone());
+    let border_color = if terminal_focused {
+        theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.48)
+    } else {
+        theme::rgba_with_alpha(theme::semantic().border_strong, 0.40)
     };
-    let protocol = selected.map(|profile| profile.protocol);
 
-    div()
-        .flex_1()
-        .min_w(px(360.0))
-        .min_h(px(0.0))
-        .bg(theme::semantic().bg_surface)
-        .flex()
-        .flex_col()
-        .child(
-            div()
-                .h(px(38.0))
-                .px(px(10.0))
-                .border_b_1()
-                .border_color(ui::border_light())
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div().flex().flex_col().gap(px(1.0)).child(
-                        div()
-                            .text_size(px(11.0))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(title),
-                    ),
+    glass_panel_flex(dark)
+        .child(panel_header(
+            "Terminal",
+            selected_session.map(|snapshot| {
+                format!(
+                    "{} · {}",
+                    snapshot.summary.endpoint, snapshot.connection.message
                 )
-                .child(meta_badge(
-                    summary
-                        .map(|summary| summary.status.label().to_string())
-                        .unwrap_or_else(|| String::from("未连接")),
-                    ui::text_secondary(),
-                    dark,
-                )),
-        )
-        .child(match right_panel_mode {
-            RightPanelMode::Terminal => terminal_workspace(
-                dark,
-                protocol,
-                summary,
-                terminal_snapshot,
-                terminal_input,
-                panel.clone(),
-            )
-            .into_any_element(),
-            RightPanelMode::FtpLog => {
-                ftp_log_workspace(dark, protocol_log, summary, panel.clone()).into_any_element()
-            }
-            RightPanelMode::Empty => empty_protocol_workspace(dark, protocol).into_any_element(),
-        })
-}
-
-fn terminal_workspace(
-    dark: bool,
-    protocol: Option<RemoteProtocol>,
-    summary: Option<&SessionSummary>,
-    terminal_snapshot: TerminalSnapshot,
-    terminal_input: Option<Entity<TextInput>>,
-    panel: Entity<FtpSftpSshView>,
-) -> impl IntoElement {
-    let connected = summary.is_some_and(|summary| summary.status == ConnectionStatus::Connected);
-    let terminal_bg = theme::terminal_bg();
-    let terminal_fg = theme::terminal_fg();
-    let terminal_muted = theme::terminal_muted();
-    div()
-        .flex_1()
-        .min_h(px(0.0))
-        .flex()
-        .flex_col()
-        .child(
-            div()
-                .px(px(10.0))
-                .h(px(30.0))
-                .border_b_1()
-                .border_color(ui::border_light())
-                .flex()
-                .items_center()
-                .gap(px(6.0))
-                .child(
-                    Icon::new(IconName::SquareTerminal)
-                        .xsmall()
-                        .text_color(if connected {
-                            theme::semantic().info
-                        } else {
-                            ui::text_secondary()
-                        }),
-                )
-                .child(status_pill(
-                    terminal_snapshot.status.label().to_string(),
-                    if connected {
-                        theme::semantic().info
-                    } else {
-                        ui::text_tertiary()
-                    },
-                    dark,
-                ))
-                .when(!terminal_snapshot.cwd_hint.is_empty(), |row| {
-                    row.child(
-                        div()
-                            .rounded(px(999.0))
-                            .bg(ui::bg_keycap())
-                            .px(px(6.0))
-                            .py(px(3.0))
-                            .font_family("SF Mono")
-                            .text_size(px(9.0))
-                            .text_color(ui::text_secondary())
-                            .line_clamp(1)
-                            .child(terminal_snapshot.cwd_hint.clone()),
-                    )
-                })
-                .child(div().flex_1())
-                .child(
-                    frost_button("打开终端", None, "ghost", dark, false)
-                        .id("ftp-open-terminal")
-                        .when(!connected, |button| button.opacity(0.42))
-                        .on_click({
-                            let panel = panel.clone();
-                            move |_, window, cx| {
-                                if let Err(e) = panel.read(cx).service.open_terminal() {
-                                    tracing::error!(%e, "open_terminal failed");
-                                }
-                                window.refresh();
-                            }
-                        }),
-                )
-                .child(
-                    frost_button("同步目录", None, "ghost", dark, false)
-                        .id("ftp-sync-terminal-dir")
-                        .when(
-                            !connected || protocol != Some(RemoteProtocol::Sftp),
-                            |button| button.opacity(0.42),
-                        )
-                        .on_click({
-                            let panel = panel.clone();
-                            move |_, window, cx| {
-                                let _ = panel.read(cx).service.sync_terminal_to_current_dir();
-                                window.refresh();
-                            }
-                        }),
-                )
-                .child(
-                    frost_button("关闭", None, "ghost", dark, false)
-                        .id("ftp-close-terminal")
-                        .when(!connected, |button| button.opacity(0.42))
-                        .on_click({
-                            let panel = panel.clone();
-                            move |_, window, cx| {
-                                panel.read(cx).service.close_terminal();
-                                window.refresh();
-                            }
-                        }),
-                ),
-        )
+            }),
+        ))
         .child(
             div()
                 .flex_1()
                 .min_h(px(0.0))
-                .p(px(6.0))
-                .bg(theme::semantic().bg_subtle_2)
-                .child(
-                    div()
-                        .id("ftp-scroll")
-                        .size_full()
-                        .overflow_y_scroll()
-                        .rounded(px(6.0))
-                        .border_1()
-                        .border_color(theme::terminal_border())
-                        .bg(terminal_bg)
-                        .px(px(8.0))
-                        .py(px(6.0))
-                        .font_family("SF Mono")
-                        .text_size(px(11.0))
-                        .line_height(px(15.0))
-                        .text_color(terminal_fg)
-                        .when(terminal_snapshot.lines.is_empty(), |list| {
-                            list.child(
-                                div()
-                                    .text_size(px(10.0))
-                                    .line_height(px(15.0))
-                                    .text_color(terminal_muted)
-                                    .child("terminal ready; output will appear here"),
-                            )
-                        })
-                        .children(terminal_snapshot.lines.into_iter().map(|line| {
-                            div()
-                                .min_w(px(0.0))
-                                .text_color(terminal_fg)
-                                .child(line.replace('\t', "    "))
-                        })),
-                ),
-        )
-        .child(
-            div()
-                .px(px(6.0))
-                .py(px(4.0))
-                .border_t_1()
-                .border_color(ui::border_light())
-                .flex()
-                .items_center()
-                .gap(px(4.0))
-                .bg(theme::semantic().bg_surface)
-                .child(
-                    div()
-                        .font_family("SF Mono")
-                        .text_size(px(11.0))
-                        .text_color(ui::text_secondary())
-                        .child("$"),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .rounded(px(5.0))
-                        .border_1()
-                        .border_color(ui::border_light())
-                        .bg(ui::bg_keycap())
-                        .child(
-                            terminal_input
-                                .map(|i| i.into_any_element())
-                                .unwrap_or_else(|| {
-                                    tracing::error!("terminal input should be initialized");
-                                    div().child("终端输入未初始化").into_any_element()
-                                }),
-                        ),
-                )
-                .child(
-                    frost_button("发送", Some("↵"), "primary", dark, false)
-                        .id("ftp-send-terminal")
-                        .when(!connected, |button| button.opacity(0.42))
-                        .on_click({
-                            let panel = panel.clone();
-                            move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| view.send_terminal(_cx));
-                                window.refresh();
-                            }
-                        }),
-                ),
-        )
-}
-
-fn ftp_log_workspace(
-    dark: bool,
-    protocol_log: Vec<ProtocolLogEntry>,
-    summary: Option<&SessionSummary>,
-    panel: Entity<FtpSftpSshView>,
-) -> impl IntoElement {
-    let count = protocol_log.len();
-    let profile_id = summary.map(|summary| summary.profile_id);
-    div()
-        .flex_1()
-        .min_h(px(0.0))
-        .flex()
-        .flex_col()
-        .child(
-            div()
-                .px(px(10.0))
-                .h(px(30.0))
-                .border_b_1()
-                .border_color(ui::border_light())
-                .flex()
-                .items_center()
-                .gap(px(6.0))
-                .child(meta_badge(
-                    format!("{count} 条"),
-                    theme::semantic().success,
-                    dark,
-                ))
-                .child(
-                    div()
-                        .text_size(px(9.0))
-                        .text_color(ui::text_secondary())
-                        .child("命令蓝 / 响应绿 / 信息灰 / 错误红"),
-                )
-                .child(div().flex_1())
-                .child(
-                    frost_button("清空", None, "ghost", dark, false)
-                        .id("ftp-clear-log")
-                        .when(profile_id.is_none(), |button| button.opacity(0.42))
-                        .on_click({
-                            let panel = panel.clone();
-                            move |_, window, cx| {
-                                if let Some(profile_id) = profile_id {
-                                    panel.read(cx).service.clear_protocol_log(profile_id);
-                                }
-                                window.refresh();
-                            }
-                        }),
-                ),
-        )
-        .child(
-            div()
-                .flex_1()
-                .min_h(px(0.0))
-                .id("ftp-scroll")
-                .overflow_y_scroll()
-                .px(px(10.0))
-                .py(px(8.0))
-                .flex()
-                .flex_col()
-                .gap(px(4.0))
-                .when(protocol_log.is_empty(), |list| {
-                    list.child(empty_state_card(
-                        dark,
-                        "当前没有 FTP 日志",
-                        "FTP / FTPS session 会把命令和响应写到这里，方便排障",
-                    ))
-                })
-                .children(
-                    protocol_log
-                        .into_iter()
-                        .map(|entry| protocol_log_row(dark, entry)),
-                ),
-        )
-}
-
-fn empty_protocol_workspace(dark: bool, protocol: Option<RemoteProtocol>) -> impl IntoElement {
-    let message = match protocol {
-        Some(RemoteProtocol::Ftp) | Some(RemoteProtocol::Ftps) => "连接后这里会显示 FTP 命令日志",
-        Some(RemoteProtocol::Sftp) | Some(RemoteProtocol::Ssh) => "连接后这里会显示 SSH 终端",
-        None => "选择一个连接后，这里会按协议显示终端或日志",
-    };
-    div()
-        .flex_1()
-        .min_h(px(0.0))
-        .p(px(10.0))
-        .child(empty_state_card(dark, "协议工作区未激活", message))
-}
-
-fn protocol_log_row(_dark: bool, entry: ProtocolLogEntry) -> impl IntoElement {
-    let color = match entry.kind {
-        ProtocolLogKind::Command => theme::semantic().info,
-        ProtocolLogKind::Response => theme::semantic().success,
-        ProtocolLogKind::Info => ui::text_secondary(),
-        ProtocolLogKind::Error => theme::semantic().danger,
-    };
-
-    div()
-        .rounded(px(6.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .bg(ui::bg_keycap())
-        .px(px(8.0))
-        .py(px(6.0))
-        .font_family("SF Mono")
-        .text_size(px(10.0))
-        .line_height(px(15.0))
-        .child(div().text_color(color).child(entry.display_text()))
-}
-
-fn row_hover_color(dark: bool) -> gpui::Hsla {
-    theme::rgba_with_alpha(theme::semantic().bg_hover, if dark { 0.86 } else { 0.72 })
-}
-
-fn transfer_panel(
-    dark: bool,
-    accent: gpui::Rgba,
-    drafts: Vec<RemoteEditDraft>,
-    current_transfers: Vec<TransferItem>,
-    all_transfers: Vec<SessionTransferItem>,
-    show_global_transfers: bool,
-    collapsed: bool,
-    panel: Entity<FtpSftpSshView>,
-) -> impl IntoElement {
-    let transfer_scope_items = if show_global_transfers {
-        None
-    } else {
-        Some(current_transfers.clone())
-    };
-    let transfer_counts_snapshot = if let Some(items) = transfer_scope_items.as_ref() {
-        transfer_counts(items)
-    } else {
-        let all = all_transfers
-            .iter()
-            .map(|session_item| session_item.item.clone())
-            .collect::<Vec<_>>();
-        transfer_counts(&all)
-    };
-    let has_content =
-        !drafts.is_empty() || !current_transfers.is_empty() || !all_transfers.is_empty();
-
-    div()
-        .border_t_1()
-        .border_color(ui::border_light())
-        .h(if collapsed { px(28.0) } else { px(150.0) })
-        .bg(theme::semantic().bg_surface)
-        .flex()
-        .flex_col()
-        .child(
-            div()
-                .h(px(28.0))
-                .px(px(10.0))
-                .border_b_1()
-                .border_color(ui::border_light())
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(4.0))
-                        .child(
-                            small_icon_action(
-                                if collapsed {
-                                    IconName::ChevronUp
-                                } else {
-                                    IconName::ChevronDown
-                                },
-                                dark,
-                            )
-                            .id("ftp-toggle-transfer-panel")
-                            .on_click({
-                                let panel = panel.clone();
-                                move |_, window, cx| {
-                                    cx.update_entity(&panel, |view, _cx| {
-                                        view.set_transfer_collapsed(!collapsed)
-                                    });
-                                    window.refresh();
-                                }
-                            }),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(10.0))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child("传输记录"),
-                        )
-                        .child(transfer_count_chip(
-                            "总数",
-                            transfer_counts_snapshot.total,
-                            accent,
-                            dark,
-                            transfer_counts_snapshot.total > 0,
-                        ))
-                        .when(transfer_counts_snapshot.active > 0, |row| {
-                            row.child(transfer_count_chip(
-                                "活跃",
-                                transfer_counts_snapshot.active,
-                                theme::semantic().info,
-                                dark,
-                                true,
-                            ))
-                        })
-                        .when(collapsed && !has_content, |row| {
-                            row.child(
-                                div()
-                                    .text_size(px(10.0))
-                                    .text_color(ui::text_secondary())
-                                    .child("暂无任务"),
-                            )
-                        }),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(4.0))
-                        .when(collapsed, |row| {
-                            row.child(
-                                small_icon_text_action(IconName::ChevronUp, "展开", dark)
-                                    .id("ftp-expand-transfer-panel")
-                                    .on_click({
-                                        let panel = panel.clone();
-                                        move |_, window, cx| {
-                                            cx.update_entity(&panel, |view, _cx| {
-                                                view.set_transfer_collapsed(false)
-                                            });
-                                            window.refresh();
-                                        }
-                                    }),
-                            )
-                        })
-                        .when(!collapsed, |row| {
-                            row.child(
-                                small_icon_text_action(IconName::Close, "关闭", dark)
-                                    .id("ftp-collapse-transfer-panel")
-                                    .on_click({
-                                        let panel = panel.clone();
-                                        move |_, window, cx| {
-                                            cx.update_entity(&panel, |view, _cx| {
-                                                view.set_transfer_collapsed(true)
-                                            });
-                                            window.refresh();
-                                        }
-                                    }),
-                            )
-                        })
-                        .child(
-                            segmented_chip("当前 session", !show_global_transfers, dark)
-                                .id("ftp-scope-current")
-                                .on_click({
-                                    let panel = panel.clone();
-                                    move |_, window, cx| {
-                                        cx.update_entity(&panel, |view, _cx| {
-                                            view.toggle_transfer_scope(false)
-                                        });
-                                        window.refresh();
-                                    }
-                                }),
-                        )
-                        .child(
-                            segmented_chip("全部 session", show_global_transfers, dark)
-                                .id("ftp-scope-all")
-                                .on_click({
-                                    let panel = panel.clone();
-                                    move |_, window, cx| {
-                                        cx.update_entity(&panel, |view, _cx| {
-                                            view.toggle_transfer_scope(true)
-                                        });
-                                        window.refresh();
-                                    }
-                                }),
-                        )
-                        .child(
-                            frost_button("清空已完成", None, "ghost", dark, false)
-                                .id("ftp-clear-finished-transfers")
-                                .when(show_global_transfers, |button| button.opacity(0.42))
-                                .on_click({
-                                    let panel = panel.clone();
-                                    move |_, window, cx| {
-                                        if !show_global_transfers {
-                                            panel.read(cx).service.clear_finished_transfers();
-                                        }
-                                        window.refresh();
-                                    }
-                                }),
-                        ),
-                ),
-        )
-        .when(!collapsed, |panel_root| {
-            panel_root.child(
-                div()
-                    .flex_1()
-                    .min_h(px(0.0))
-                    .id("ftp-scroll")
-                    .overflow_y_scroll()
-                    .px(px(8.0))
-                    .py(px(6.0))
-                    .flex()
-                    .flex_col()
-                    .gap(px(6.0))
-                    .when(!drafts.is_empty(), |list| {
-                        list.child(draft_section(dark, drafts.clone(), panel.clone()))
-                    })
-                    .when(
-                        current_transfers.is_empty()
-                            && all_transfers.is_empty()
-                            && drafts.is_empty(),
-                        |list| {
-                            list.child(empty_state_card(
-                                dark,
-                                "还没有传输或待回传草稿",
-                                "上传、下载或打开文本文件后，这里会显示记录",
-                            ))
-                        },
-                    )
-                    .when(!show_global_transfers, |list| {
-                        list.children(
-                            current_transfers
-                                .iter()
-                                .map(|item| transfer_card(dark, item, None, panel.clone())),
-                        )
-                    })
-                    .when(show_global_transfers, |list| {
-                        list.children(all_transfers.iter().map(|item| {
-                            transfer_card(
-                                dark,
-                                &item.item,
-                                Some(item.session_name.clone()),
-                                panel.clone(),
-                            )
-                        }))
-                    }),
-            )
-        })
-}
-
-fn draft_section(
-    dark: bool,
-    drafts: Vec<RemoteEditDraft>,
-    panel: Entity<FtpSftpSshView>,
-) -> impl IntoElement {
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(6.0))
-        .child(
-            div()
-                .text_size(px(10.0))
-                .font_weight(FontWeight::SEMIBOLD)
-                .child("待回传文本草稿"),
-        )
-        .children(drafts.into_iter().map(|draft| {
-            let state_color = match draft.state {
-                RemoteEditState::Synced => theme::semantic().success,
-                RemoteEditState::ModifiedLocal => theme::semantic().warning,
-                RemoteEditState::UploadingBack => theme::semantic().info,
-                RemoteEditState::ConflictRisk => theme::semantic().danger,
-                RemoteEditState::UploadFailed => theme::semantic().danger,
-            };
-            let draft_for_open = draft.clone();
-            let draft_for_upload = draft.clone();
-            div()
                 .rounded(px(8.0))
+                .bg(rgb(0x111317))
                 .border_1()
-                .border_color(ui::border_light())
-                .bg(ui::bg_keycap())
-                .p(px(8.0))
+                .border_color(border_color)
+                .p_2()
+                .font_family(ui::font_mono())
+                .text_size(px(11.0))
+                .text_color(theme::white())
+                .track_focus(&focus_handle)
+                .on_key_down(cx.listener(FtpSftpSshView::handle_terminal_key))
+                .on_children_prepainted({
+                    let runtime = runtime.clone();
+                    let terminal_layout = terminal_layout.clone();
+                    let session_id = session_id.clone();
+                    let terminal_snapshot = terminal_snapshot.cloned();
+                    move |child_bounds, _, _cx| {
+                        let layout = child_bounds.first().map(|bounds| TerminalLayoutSnapshot {
+                            origin_x: bounds.origin.x.into(),
+                            origin_y: bounds.origin.y.into(),
+                            width: bounds.size.width.into(),
+                            height: bounds.size.height.into(),
+                        });
+
+                        if let Ok(mut stored_layout) = terminal_layout.lock() {
+                            *stored_layout = layout;
+                        }
+
+                        if let (Some(session_id), Some(terminal), Some(layout)) =
+                            (session_id.as_ref(), terminal_snapshot.as_ref(), layout)
+                        {
+                            sync_terminal_size(
+                                runtime.as_ref(),
+                                session_id,
+                                terminal.columns,
+                                terminal.screen_lines,
+                                layout,
+                            );
+                        }
+                    }
+                })
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(FtpSftpSshView::handle_terminal_mouse_down),
+                )
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(FtpSftpSshView::handle_terminal_mouse_down),
+                )
+                .on_mouse_down(
+                    MouseButton::Middle,
+                    cx.listener(FtpSftpSshView::handle_terminal_mouse_down),
+                )
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(FtpSftpSshView::handle_terminal_mouse_up),
+                )
+                .on_mouse_up(
+                    MouseButton::Right,
+                    cx.listener(FtpSftpSshView::handle_terminal_mouse_up),
+                )
+                .on_mouse_up(
+                    MouseButton::Middle,
+                    cx.listener(FtpSftpSshView::handle_terminal_mouse_up),
+                )
+                .on_mouse_move(cx.listener(FtpSftpSshView::handle_terminal_mouse_move))
+                .on_scroll_wheel(cx.listener(FtpSftpSshView::handle_terminal_scroll))
+                .overflow_y_scrollbar()
                 .flex()
                 .flex_col()
-                .gap(px(6.0))
+                .child(
+                    div().size_full().flex().flex_col().gap_0().children(
+                        terminal_snapshot
+                            .map(render_terminal_rows)
+                            .unwrap_or_else(|| {
+                                vec![
+                                    div()
+                                        .text_size(px(10.5))
+                                        .text_color(theme::rgba_with_alpha(theme::white(), 0.62))
+                                        .child(
+                                            if selected_session.is_some_and(|snapshot| {
+                                                !snapshot.summary.has_terminal
+                                            }) {
+                                                "当前协议没有终端"
+                                            } else {
+                                                "No active terminal"
+                                            },
+                                        ),
+                                ]
+                            }),
+                    ),
+                ),
+        )
+}
+
+fn transfer_strip(
+    transfers: &[TransferSnapshot],
+    notice: String,
+    cx: &mut Context<FtpSftpSshView>,
+    dark: bool,
+) -> impl IntoElement {
+    let height = if transfers.is_empty() {
+        px(56.0)
+    } else {
+        px(88.0)
+    };
+    div()
+        .h(height)
+        .rounded(px(8.0))
+        .bg(glass::bar(dark))
+        .border_1()
+        .border_color(glass::border(dark))
+        .p_2()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap_2()
                 .child(
                     div()
+                        .text_size(px(9.5))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .child("Transfers"),
+                )
+                .child(
+                    div()
+                        .min_w(px(0.0))
+                        .max_w(px(420.0))
+                        .line_clamp(1)
+                        .text_size(px(8.5))
+                        .text_color(theme::semantic().text_secondary)
+                        .child(if notice.is_empty() {
+                            format!("{} items", transfers.len())
+                        } else {
+                            notice
+                        }),
+                ),
+        )
+        .child(
+            div()
+                .min_h(px(0.0))
+                .flex_1()
+                .overflow_y_scrollbar()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .when(transfers.is_empty(), |col| {
+                    col.child(
+                        div()
+                            .flex_1()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_size(px(9.0))
+                            .text_color(theme::semantic().text_secondary)
+                            .child("当前没有传输任务"),
+                    )
+                })
+                .children(transfers.iter().map(|item| {
+                    div()
+                        .rounded(px(7.0))
+                        .bg(glass::panel(dark))
+                        .border_1()
+                        .border_color(glass::divider(dark))
+                        .px_2()
+                        .py(px(6.0))
                         .flex()
                         .items_center()
                         .justify_between()
+                        .gap_2()
                         .child(
                             div()
+                                .min_w(px(0.0))
                                 .flex()
                                 .flex_col()
-                                .gap(px(1.0))
+                                .gap_0p5()
                                 .child(
                                     div()
-                                        .text_size(px(10.0))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .child(draft.file_name.clone()),
+                                        .text_size(px(9.5))
+                                        .line_clamp(1)
+                                        .child(item.remote_path.clone()),
                                 )
                                 .child(
                                     div()
                                         .text_size(px(9.0))
-                                        .text_color(ui::text_secondary())
+                                        .text_color(theme::semantic().text_secondary)
                                         .line_clamp(1)
-                                        .child(draft.remote_path.clone()),
+                                        .child(item.local_path.clone()),
                                 ),
                         )
-                        .child(status_pill(
-                            draft.state.label().to_string(),
-                            state_color,
-                            dark,
-                        )),
-                )
-                .child(
-                    div()
-                        .text_size(px(9.0))
-                        .text_color(ui::text_secondary())
-                        .line_clamp(1)
-                        .child(format!("本地缓存: {}", draft.local_cache_path)),
-                )
-                .child(
-                    div()
-                        .text_size(px(9.0))
-                        .text_color(state_color)
-                        .child(draft.message.clone()),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(6.0))
-                        .child(
-                            small_action("打开本地文件", dark)
-                                .id("ftp-draft-open-local")
-                                .on_click({
-                                    let panel = panel.clone();
-                                    move |_, window, cx| {
-                                        cx.update_entity(&panel, |view, _cx| {
-                                            view.reopen_local_draft(&draft_for_open)
-                                        });
-                                        window.refresh();
-                                    }
-                                }),
-                        )
-                        .when(draft.state != RemoteEditState::Synced, |row| {
-                            let force = draft_for_upload.state == RemoteEditState::ConflictRisk;
-                            row.child(
-                                small_action(
-                                    if force {
-                                        "确认覆盖回传"
-                                    } else {
-                                        "回传"
-                                    },
-                                    dark,
-                                )
-                                .id("ftp-draft-upload")
-                                .on_click({
-                                    let panel = panel.clone();
-                                    let draft_id = draft_for_upload.id.clone();
-                                    move |_, window, cx| {
-                                        cx.update_entity(&panel, |view, _cx| {
-                                            view.upload_draft(&draft_id, force)
-                                        });
-                                        window.refresh();
-                                    }
-                                }),
-                            )
-                        }),
-                )
-        }))
-}
-
-fn transfer_card(
-    dark: bool,
-    item: &TransferItem,
-    session_name: Option<String>,
-    panel: Entity<FtpSftpSshView>,
-) -> impl IntoElement {
-    let progress = item.progress_percent() as f32 / 100.0;
-    let fill_width = (280.0 * progress.clamp(0.0, 1.0)).max(if progress > 0.0 { 2.0 } else { 0.0 });
-    let status_color = match item.status {
-        TransferStatus::Queued => ui::text_secondary(),
-        TransferStatus::Running => theme::semantic().info,
-        TransferStatus::Completed => theme::semantic().success,
-        TransferStatus::Failed => theme::semantic().danger,
-        TransferStatus::Cancelled => ui::text_tertiary(),
-    };
-    let transfer_id = item.id.clone();
-
-    div()
-        .rounded(px(8.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .bg(ui::bg_keycap())
-        .px(px(10.0))
-        .py(px(8.0))
-        .flex()
-        .flex_col()
-        .gap(px(6.0))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(6.0))
                         .child(
                             div()
-                                .size(px(20.0))
-                                .rounded(px(4.0))
-                                .bg(if dark {
-                                    hsla(0.0, 0.0, 1.0, 0.05)
-                                } else {
-                                    hsla(0.56, 0.80, 0.88, 0.24)
-                                })
                                 .flex()
                                 .items_center()
-                                .justify_center()
-                                .text_size(px(10.0))
-                                .text_color(status_color)
-                                .child(item.direction.arrow()),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(1.0))
+                                .gap_2()
                                 .child(
                                     div()
-                                        .text_size(px(10.0))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .line_clamp(1)
-                                        .child(item.name.clone()),
+                                        .text_size(px(9.0))
+                                        .text_color(theme::semantic().text_secondary)
+                                        .child(format!("{}%", item.progress_percent())),
                                 )
-                                .when(session_name.is_some(), |col| {
-                                    col.child(
-                                        div()
-                                            .text_size(px(9.0))
-                                            .text_color(ui::text_secondary())
-                                            .line_clamp(1)
-                                            .child(session_name.unwrap_or_default()),
-                                    )
-                                }),
-                        ),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(6.0))
-                        .child(
-                            div()
-                                .text_size(px(9.0))
-                                .text_color(status_color)
-                                .child(item.status_line()),
+                                .child(
+                                    div()
+                                        .text_size(px(9.0))
+                                        .text_color(match item.status {
+                                            TransferStatus::Completed => theme::semantic().success,
+                                            TransferStatus::Failed => theme::semantic().danger,
+                                            TransferStatus::Cancelled => theme::semantic().warning,
+                                            _ => theme::semantic().info,
+                                        })
+                                        .child(match item.status {
+                                            TransferStatus::Queued => "Queued",
+                                            TransferStatus::Running => "Running",
+                                            TransferStatus::Completed => "Done",
+                                            TransferStatus::Failed => "Failed",
+                                            TransferStatus::Cancelled => "Cancelled",
+                                        }),
+                                )
+                                .when(
+                                    matches!(
+                                        item.status,
+                                        TransferStatus::Queued | TransferStatus::Running
+                                    ),
+                                    |row| {
+                                        let transfer_id = item.id.clone();
+                                        row.child(
+                                            toolbar_button("transfer-cancel", "Cancel").on_click(
+                                                cx.listener(move |view, _, _, _cx| {
+                                                    view.cancel_transfer(transfer_id.clone());
+                                                }),
+                                            ),
+                                        )
+                                    },
+                                ),
                         )
-                        .when(item.is_active(), |row| {
-                            row.child(
-                                small_action("取消", dark)
-                                    .id("ftp-transfer-cancel")
-                                    .on_click({
-                                        let panel = panel.clone();
-                                        move |_, window, cx| {
-                                            panel.read(cx).service.cancel_transfer(&transfer_id);
-                                            window.refresh();
-                                        }
-                                    }),
-                            )
-                        }),
-                ),
+                })),
+        )
+}
+
+fn remote_menu_overlay(
+    menu: &RemoteMenuState,
+    selected_session: Option<&SessionSnapshot>,
+    _selected_profile: Option<&Profile>,
+    selected_entry: Option<&RemoteEntry>,
+    editable_local_path: Option<&str>,
+    cx: &mut Context<FtpSftpSshView>,
+    dark: bool,
+) -> impl IntoElement {
+    let target_entry = selected_session.and_then(|snapshot| {
+        menu.target_path.as_ref().and_then(|path| {
+            snapshot
+                .remote_entries
+                .iter()
+                .find(|entry| &entry.path == path)
+        })
+    });
+    let target_path = target_entry
+        .map(|entry| entry.path.clone())
+        .or_else(|| menu.target_path.clone());
+    let target_is_dir = target_entry.is_some_and(|entry| entry.is_dir);
+    let target_editable =
+        if let (Some(snapshot), Some(path)) = (selected_session, target_path.as_ref()) {
+            snapshot
+                .editable_files
+                .iter()
+                .any(|item| &item.remote_path == path)
+        } else {
+            editable_local_path.is_some()
+        };
+
+    div()
+        .size_full()
+        .absolute()
+        .top_0()
+        .left_0()
+        .child(
+            div()
+                .size_full()
+                .absolute()
+                .top_0()
+                .left_0()
+                .bg(hsla(0.0, 0.0, 0.0, 0.001))
+                .id("remote-menu-backdrop")
+                .on_click(cx.listener(|view, _, _, _cx| {
+                    view.close_remote_menu();
+                })),
         )
         .child(
             div()
-                .h(px(4.0))
-                .rounded(px(999.0))
-                .bg(if dark {
-                    hsla(0.0, 0.0, 1.0, 0.06)
-                } else {
-                    hsla(0.0, 0.0, 0.5, 0.10)
-                })
-                .child(
+                .absolute()
+                .top(px(menu.y))
+                .left(px(menu.x))
+                .w(px(168.0))
+                .rounded(px(7.0))
+                .border_1()
+                .border_color(glass::border(dark))
+                .bg(glass::panel(dark))
+                .shadow(glass::shadow())
+                .p_1()
+                .flex()
+                .flex_col()
+                .gap_0p5()
+                .children({
+                    let mut items: Vec<AnyElement> = Vec::new();
+
+                    if let Some(path) = target_path.clone() {
+                        if target_is_dir {
+                            let open_path = path.clone();
+                            items.push(
+                                menu_item("Open")
+                                    .on_click(cx.listener(move |view, _, _, _cx| {
+                                        view.close_remote_menu();
+                                        view.open_remote_entry_by_path(&open_path);
+                                    }))
+                                    .into_any_element(),
+                            );
+                            items.push(
+                                menu_item("New Folder")
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.close_remote_menu();
+                                        view.open_create_directory_prompt(cx);
+                                    }))
+                                    .into_any_element(),
+                            );
+                        } else {
+                            let edit_path = path.clone();
+                            items.push(
+                                menu_item("Edit")
+                                    .on_click(cx.listener(move |view, _, _, _cx| {
+                                        view.close_remote_menu();
+                                        view.open_remote_entry_by_path(&edit_path);
+                                    }))
+                                    .into_any_element(),
+                            );
+                            let download_path = path.clone();
+                            items.push(
+                                menu_item("Download")
+                                    .on_click(cx.listener(move |view, _, _, _cx| {
+                                        view.close_remote_menu();
+                                        view.select_remote_entry(download_path.clone());
+                                        view.download_selected_entry();
+                                    }))
+                                    .into_any_element(),
+                            );
+                            if target_editable {
+                                let upload_back_path = path.clone();
+                                items.push(
+                                    menu_item("Upload Back")
+                                        .on_click(cx.listener(move |view, _, _, _cx| {
+                                            view.close_remote_menu();
+                                            view.upload_back_for_path(&upload_back_path);
+                                        }))
+                                        .into_any_element(),
+                                );
+                            }
+                        }
+
+                        let rename_path = path.clone();
+                        items.push(
+                            menu_item("Rename")
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.close_remote_menu();
+                                    view.open_rename_prompt_for_path(&rename_path, cx);
+                                }))
+                                .into_any_element(),
+                        );
+
+                        let delete_path = path.clone();
+                        items.push(
+                            danger_menu_item("Delete")
+                                .on_click(cx.listener(move |view, _, _, _cx| {
+                                    view.close_remote_menu();
+                                    view.open_delete_prompt_for_path(&delete_path);
+                                }))
+                                .into_any_element(),
+                        );
+                    } else {
+                        items.push(
+                            menu_item("New Folder")
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.close_remote_menu();
+                                    view.open_create_directory_prompt(cx);
+                                }))
+                                .into_any_element(),
+                        );
+                        items.push(
+                            menu_item("Upload")
+                                .on_click(cx.listener(|view, _, _, _cx| {
+                                    view.close_remote_menu();
+                                    view.upload_into_current_directory();
+                                }))
+                                .into_any_element(),
+                        );
+                        items.push(
+                            menu_item("Refresh")
+                                .on_click(cx.listener(|view, _, _, _cx| {
+                                    view.close_remote_menu();
+                                    view.refresh_remote_entries();
+                                }))
+                                .into_any_element(),
+                        );
+                        items.push(
+                            menu_item("Up")
+                                .on_click(cx.listener(|view, _, _, _cx| {
+                                    view.close_remote_menu();
+                                    view.go_to_parent_directory();
+                                }))
+                                .into_any_element(),
+                        );
+                    }
+
+                    if selected_entry.is_some() && items.is_empty() {
+                        items.push(menu_item("No Actions").into_any_element());
+                    }
+
+                    items
+                }),
+        )
+}
+
+fn remote_action_overlay(
+    handle: Entity<FtpSftpSshView>,
+    action: &RemoteActionState,
+    cx: &mut Context<FtpSftpSshView>,
+    dark: bool,
+) -> impl IntoElement {
+    ui::components::overlay_host(
+        dark,
+        "remote-action-backdrop",
+        move |_, _, app| {
+            let _ = app.update_entity(&handle, |view, _cx| {
+                view.close_remote_action();
+            });
+        },
+        div()
+            .w(px(420.0))
+            .rounded(px(10.0))
+            .bg(glass::panel(dark))
+            .border_1()
+            .border_color(glass::border(dark))
+            .shadow(glass::shadow())
+            .p_3()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .text_size(px(13.0))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .child(match action.kind {
+                        RemoteActionKind::CreateDirectory => "New Folder",
+                        RemoteActionKind::Rename => "Rename",
+                        RemoteActionKind::Delete => "Delete",
+                    }),
+            )
+            .child(
+                div()
+                    .text_size(px(10.0))
+                    .line_height(px(16.0))
+                    .text_color(theme::semantic().text_secondary)
+                    .child(match action.kind {
+                        RemoteActionKind::CreateDirectory => "在当前目录创建新文件夹",
+                        RemoteActionKind::Rename => "输入新的名称，目录和文件都支持重命名",
+                        RemoteActionKind::Delete => "删除后不可恢复，请确认目标路径",
+                    }),
+            )
+            .when(action.input.is_some(), |col| {
+                col.child(labeled_input(
+                    "Name",
+                    action.input.clone().expect("remote action input"),
+                    dark,
+                ))
+            })
+            .when(action.kind == RemoteActionKind::Delete, |col| {
+                col.child(
                     div()
-                        .h(px(4.0))
-                        .w(px(fill_width))
-                        .rounded(px(999.0))
-                        .bg(status_color),
-                ),
-        )
-        .child(
-            div()
-                .text_size(px(9.0))
-                .text_color(ui::text_secondary())
-                .line_clamp(1)
-                .child(format!("{} · {}", item.local_path, item.remote_path)),
-        )
+                        .rounded(px(7.0))
+                        .bg(theme::rgba_with_alpha(theme::semantic().warning, 0.10))
+                        .border_1()
+                        .border_color(theme::rgba_with_alpha(theme::semantic().warning, 0.26))
+                        .p_2()
+                        .text_size(px(10.0))
+                        .child(action.target_name.clone()),
+                )
+            })
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_end()
+                    .gap_1()
+                    .child(
+                        toolbar_button("remote-action-cancel", "Cancel").on_click(cx.listener(
+                            |view, _, _, _cx| {
+                                view.close_remote_action();
+                            },
+                        )),
+                    )
+                    .child(toolbar_button("remote-action-confirm", "Confirm").on_click(
+                        cx.listener(|view, _, _, cx| {
+                            view.confirm_remote_action(cx);
+                        }),
+                    )),
+            ),
+    )
 }
 
 fn profile_editor_overlay(
+    handle: Entity<FtpSftpSshView>,
+    editor: &ProfileEditorState,
+    cx: &mut Context<FtpSftpSshView>,
     dark: bool,
-    editor: Option<ProfileEditorSnapshot>,
-    _selected: Option<RemoteProfile>,
-    panel: Entity<FtpSftpSshView>,
-) -> gpui::AnyElement {
-    let Some(editor) = editor else {
-        return overlay_shell(
-            dark,
-            "ftp-editor-overlay",
-            panel.clone(),
-            empty_state_card(dark, "配置编辑器初始化中", "请稍候").into_any_element(),
-        )
-        .into_any_element();
-    };
-    let inputs = editor.inputs.clone();
-    let protocol = editor.protocol;
+) -> impl IntoElement {
+    let protocol = editor.draft.protocol;
+    let auth_method = editor.draft.auth.method;
+    let is_ssh_family = matches!(protocol, RemoteProtocol::Ssh | RemoteProtocol::Sftp);
+    let is_tls_family = matches!(
+        protocol,
+        RemoteProtocol::FtpsExplicit | RemoteProtocol::FtpsImplicit
+    );
 
-    overlay_shell(
+    ui::components::overlay_host(
         dark,
-        "ftp-editor-overlay",
-        panel.clone(),
+        "profile-editor-backdrop",
+        move |_, _, app| {
+            let _ = app.update_entity(&handle, |view, _cx| {
+                view.close_profile_editor();
+            });
+        },
         div()
-            .w(px(660.0))
-            .max_h(px(620.0))
-            .rounded(px(8.0))
+            .w(px(700.0))
+            .h(px(680.0))
+            .rounded(px(10.0))
+            .bg(glass::panel(dark))
             .border_1()
-            .border_color(ui::border_light())
-            .bg(theme::semantic().bg_surface)
+            .border_color(glass::border(dark))
+            .shadow(glass::shadow())
+            .p_3()
             .flex()
             .flex_col()
+            .gap_2()
             .child(
                 div()
-                    .px(px(14.0))
-                    .py(px(10.0))
-                    .flex()
-                    .flex_col()
-                    .gap(px(3.0))
-                    .child(
-                        div()
-                            .text_size(px(20.0))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(match editor.mode {
-                                ProfileEditorMode::Existing(_) => "编辑连接",
-                                ProfileEditorMode::New => "新建连接",
-                            }),
-                    ),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_h(px(0.0))
-                    .id("ftp-scroll")
-                    .overflow_y_scroll()
-                    .px(px(14.0))
-                    .pb(px(10.0))
-                    .flex()
-                    .flex_col()
-                    .gap(px(7.0))
-                    .child(editor_notice(editor.notice, dark))
-                    .child(profile_form_section(
-                        "通用",
-                        dark,
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(7.0))
-                            .child(profile_inline_field("名称", inputs.name.clone(), dark))
-                            .child(profile_label_value_row(
-                                "协议",
-                                div().flex().gap(px(6.0)).children(
-                                    [
-                                        RemoteProtocol::Sftp,
-                                        RemoteProtocol::Ftp,
-                                        RemoteProtocol::Ftps,
-                                        RemoteProtocol::Ssh,
-                                    ]
-                                    .into_iter()
-                                    .map(|protocol_item| {
-                                        segmented_chip(
-                                            protocol_item.label(),
-                                            protocol_item == protocol,
-                                            dark,
-                                        )
-                                        .id(("ftp-editor-protocol", protocol_index(protocol_item)))
-                                        .on_click({
-                                            let panel = panel.clone();
-                                            move |_, window, cx| {
-                                                cx.update_entity(&panel, |view, _cx| {
-                                                    view.set_editor_protocol(protocol_item, _cx)
-                                                });
-                                                window.refresh();
-                                            }
-                                        })
-                                    }),
-                                ),
-                                dark,
-                            )),
-                    ))
-                    .child(profile_form_section(
-                        "服务器",
-                        dark,
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(7.0))
-                            .child(profile_inline_field("主机", inputs.host.clone(), dark))
-                            .child(profile_inline_field("端口", inputs.port.clone(), dark))
-                            .child(profile_inline_field(
-                                "用户名",
-                                inputs.username.clone(),
-                                dark,
-                            )),
-                    ))
-                    .child(profile_form_section(
-                        "身份认证",
-                        dark,
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(7.0))
-                            .child(profile_label_value_row(
-                                "方式",
-                                div().flex().gap(px(6.0)).children(
-                                    [
-                                        AuthMethod::Password,
-                                        AuthMethod::PrivateKey,
-                                        AuthMethod::Agent,
-                                    ]
-                                    .into_iter()
-                                    .map(|auth_method| {
-                                        segmented_chip(
-                                            auth_method.label(),
-                                            auth_method == editor.auth_method,
-                                            dark,
-                                        )
-                                        .id(("ftp-editor-auth", auth_method_index(auth_method)))
-                                        .on_click({
-                                            let panel = panel.clone();
-                                            move |_, window, cx| {
-                                                cx.update_entity(&panel, |view, _cx| {
-                                                    view.set_editor_auth_method(auth_method)
-                                                });
-                                                window.refresh();
-                                            }
-                                        })
-                                    }),
-                                ),
-                                dark,
-                            ))
-                            .when(editor.auth_method == AuthMethod::Password, |col| {
-                                col.child(profile_inline_field(
-                                    "密码",
-                                    inputs.password.clone(),
-                                    dark,
-                                ))
-                            })
-                            .when(editor.auth_method == AuthMethod::PrivateKey, |col| {
-                                col.child(profile_inline_field(
-                                    "私钥路径",
-                                    inputs.private_key_path.clone(),
-                                    dark,
-                                ))
-                                .child(profile_inline_field(
-                                    "私钥口令",
-                                    inputs.private_key_passphrase.clone(),
-                                    dark,
-                                ))
-                            }),
-                    ))
-                    .child(
-                        div()
-                            .rounded(px(8.0))
-                            .border_1()
-                            .border_color(ui::border_light())
-                            .bg(theme::semantic().bg_surface)
-                            .px(px(10.0))
-                            .py(px(8.0))
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(6.0))
-                                    .child(editor_section_title("高级选项", dark))
-                                    .child(
-                                        div()
-                                            .text_size(px(10.0))
-                                            .text_color(ui::text_tertiary())
-                                            .child("默认目录 · 编码 · 超时 · 跳板机"),
-                                    ),
-                            )
-                            .child(
-                                small_action(
-                                    if editor.show_advanced {
-                                        "收起"
-                                    } else {
-                                        "展开"
-                                    },
-                                    dark,
-                                )
-                                .id("ftp-editor-toggle-advanced")
-                                .on_click({
-                                    let panel = panel.clone();
-                                    move |_, window, cx| {
-                                        cx.update_entity(&panel, |view, _cx| {
-                                            view.toggle_editor_show_advanced()
-                                        });
-                                        window.refresh();
-                                    }
-                                }),
-                            ),
-                    )
-                    .when(editor.show_advanced, |col| {
-                        col.child(profile_form_section(
-                            "高级配置",
-                            dark,
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(7.0))
-                                .child(profile_inline_field(
-                                    "连接超时(秒)",
-                                    inputs.connect_timeout_secs.clone(),
-                                    dark,
-                                ))
-                                .child(profile_inline_field("编码", inputs.encoding.clone(), dark))
-                                .when(protocol != RemoteProtocol::Ssh, |advanced| {
-                                    advanced.child(profile_inline_field(
-                                        "默认远程目录",
-                                        inputs.remote_dir.clone(),
-                                        dark,
-                                    ))
-                                })
-                                .child(profile_inline_field(
-                                    "本地默认目录",
-                                    inputs.local_dir.clone(),
-                                    dark,
-                                ))
-                                .child(
-                                    div()
-                                        .flex()
-                                        .gap(px(6.0))
-                                        .child(
-                                            segmented_chip(
-                                                "FTP 被动模式",
-                                                editor.passive_mode,
-                                                dark,
-                                            )
-                                            .id("ftp-editor-passive")
-                                            .on_click(
-                                                {
-                                                    let panel = panel.clone();
-                                                    move |_, window, cx| {
-                                                        cx.update_entity(&panel, |view, _cx| {
-                                                            view.toggle_editor_passive_mode()
-                                                        });
-                                                        window.refresh();
-                                                    }
-                                                },
-                                            ),
-                                        )
-                                        .child(
-                                            segmented_chip("使用跳板机", editor.jump_enabled, dark)
-                                                .id("ftp-editor-jump")
-                                                .on_click({
-                                                    let panel = panel.clone();
-                                                    move |_, window, cx| {
-                                                        cx.update_entity(&panel, |view, _cx| {
-                                                            view.toggle_editor_jump_enabled()
-                                                        });
-                                                        window.refresh();
-                                                    }
-                                                }),
-                                        )
-                                        .child(
-                                            segmented_chip("固定到顶部", editor.pinned, dark)
-                                                .id("ftp-editor-pinned")
-                                                .on_click({
-                                                    let panel = panel.clone();
-                                                    move |_, window, cx| {
-                                                        cx.update_entity(&panel, |view, _cx| {
-                                                            view.toggle_editor_pinned()
-                                                        });
-                                                        window.refresh();
-                                                    }
-                                                }),
-                                        ),
-                                )
-                                .when(editor.jump_enabled, |jump| {
-                                    jump.child(profile_inline_field(
-                                        "跳板机主机",
-                                        inputs.jump_host.clone(),
-                                        dark,
-                                    ))
-                                    .child(profile_inline_field(
-                                        "跳板机端口",
-                                        inputs.jump_port.clone(),
-                                        dark,
-                                    ))
-                                    .child(profile_inline_field(
-                                        "跳板机用户",
-                                        inputs.jump_username.clone(),
-                                        dark,
-                                    ))
-                                    .child(profile_inline_field(
-                                        "跳板机密码",
-                                        inputs.jump_password.clone(),
-                                        dark,
-                                    ))
-                                    .child(profile_inline_field(
-                                        "跳板机私钥路径",
-                                        inputs.jump_private_key_path.clone(),
-                                        dark,
-                                    ))
-                                    .child(
-                                        profile_inline_field(
-                                            "跳板机私钥口令",
-                                            inputs.jump_private_key_passphrase.clone(),
-                                            dark,
-                                        ),
-                                    )
-                                })
-                                .child(profile_inline_field("备注", inputs.notes.clone(), dark)),
-                        ))
-                    })
-                    .child(protocol_hint_card(
-                        dark,
-                        protocol,
-                        editor.passive_mode,
-                        editor.jump_enabled,
-                        editor.pinned,
-                    )),
-            )
-            .child(
-                div()
-                    .px(px(14.0))
-                    .py(px(8.0))
-                    .border_t_1()
-                    .border_color(ui::border_light())
                     .flex()
                     .items_center()
                     .justify_between()
+                    .gap_2()
                     .child(
                         div()
-                            .text_size(px(10.0))
-                            .text_color(ui::text_tertiary())
-                            .child("敏感信息以明文方式保存到本地数据库。"),
+                            .flex()
+                            .flex_col()
+                            .gap_0p5()
+                            .child(
+                                div()
+                                    .text_size(px(13.0))
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .child(match editor.mode {
+                                        ProfileEditorMode::Create => "New Connection",
+                                        ProfileEditorMode::Edit(_) => "Edit Connection",
+                                    }),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(10.0))
+                                    .text_color(theme::semantic().text_secondary)
+                                    .child("SSH / SFTP / FTP / FTPS"),
+                            ),
                     )
                     .child(
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(7.0))
+                            .gap_1()
+                            .child(toolbar_button("profile-save", "Save").on_click(cx.listener(
+                                |view, _, _, cx| {
+                                    view.save_profile_editor(cx);
+                                },
+                            )))
                             .child(
-                                frost_button("取消", None, "ghost", dark, false)
-                                    .id("ftp-close-editor")
-                                    .on_click({
-                                        let panel = panel.clone();
-                                        move |_, window, cx| {
-                                            cx.update_entity(&panel, |view, _cx| {
-                                                view.close_editor()
-                                            });
-                                            window.refresh();
-                                        }
-                                    }),
-                            )
-                            .child(
-                                frost_button("保存", None, "primary", dark, false)
-                                    .id("ftp-save-editor")
-                                    .on_click({
-                                        let panel = panel.clone();
-                                        move |_, window, cx| {
-                                            cx.update_entity(&panel, |view, _cx| {
-                                                view.save_editor(_cx)
-                                            });
-                                            window.refresh();
-                                        }
-                                    }),
+                                toolbar_button("profile-close", "Close").on_click(cx.listener(
+                                    |view, _, _, _cx| {
+                                        view.close_profile_editor();
+                                    },
+                                )),
                             ),
                     ),
+            )
+            .child(
+                div()
+                    .min_h(px(0.0))
+                    .flex_1()
+                    .overflow_y_scrollbar()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .child(labeled_input("Name", editor.name_input.clone(), dark))
+                    .child(protocol_selector(protocol, cx))
+                    .child(two_col_row(
+                        labeled_input("Host", editor.host_input.clone(), dark),
+                        labeled_input("Port", editor.port_input.clone(), dark),
+                    ))
+                    .child(two_col_row(
+                        labeled_input("Username", editor.username_input.clone(), dark),
+                        auth_method_selector(auth_method, cx),
+                    ))
+                    .when(auth_method == AuthMethod::Password, |col| {
+                        col.child(labeled_input(
+                            "Password",
+                            editor.password_input.clone(),
+                            dark,
+                        ))
+                    })
+                    .when(auth_method == AuthMethod::PrivateKey, |col| {
+                        col.child(labeled_input(
+                            "Private Key",
+                            editor.private_key_path_input.clone(),
+                            dark,
+                        ))
+                        .child(
+                            div()
+                                .h(px(24.0))
+                                .flex()
+                                .items_center()
+                                .gap_1()
+                                .child(toolbar_button("profile-key", "Choose Key").on_click(
+                                    cx.listener(|view, _, _, cx| {
+                                        view.choose_private_key_path(cx);
+                                    }),
+                                ))
+                                .child(div().flex_1().child(labeled_input(
+                                    "Passphrase",
+                                    editor.private_key_passphrase_input.clone(),
+                                    dark,
+                                ))),
+                        )
+                    })
+                    .child(two_col_row(
+                        labeled_input("Remote Root", editor.remote_root_input.clone(), dark),
+                        labeled_input("Local Root", editor.local_root_input.clone(), dark),
+                    ))
+                    .child(div().h(px(24.0)).flex().items_center().justify_end().child(
+                        toolbar_button("profile-local-root", "Choose Folder").on_click(
+                            cx.listener(|view, _, _, cx| {
+                                view.choose_local_root(cx);
+                            }),
+                        ),
+                    ))
+                    .child(two_col_row(
+                        labeled_input(
+                            "Connect Timeout",
+                            editor.connect_timeout_input.clone(),
+                            dark,
+                        ),
+                        labeled_input(
+                            "Transfer Concurrency",
+                            editor.transfer_concurrency_input.clone(),
+                            dark,
+                        ),
+                    ))
+                    .child(toggle_row(
+                        "FTP Passive Mode",
+                        editor.draft.limits.passive_mode,
+                        "对 FTP / FTPS 生效",
+                        "Passive",
+                        cx,
+                    ))
+                    .when(is_ssh_family, |col| {
+                        col.child(ssh_policy_selector(editor.draft.security.ssh_host_key, cx))
+                            .when(
+                                editor.draft.security.ssh_host_key
+                                    == SshHostKeyPolicy::StrictPinned,
+                                |sub| {
+                                    sub.child(labeled_input(
+                                        "Pinned Host Key",
+                                        editor.pinned_host_key_input.clone(),
+                                        dark,
+                                    ))
+                                },
+                            )
+                            .when(
+                                editor.draft.security.ssh_host_key
+                                    == SshHostKeyPolicy::InsecureAcceptAny,
+                                |sub| sub.child(risk_notice("当前 SSH 配置会接受任意 host key")),
+                            )
+                    })
+                    .when(is_tls_family, |col| {
+                        col.child(tls_policy_selector(editor.draft.security.tls_verify, cx))
+                            .when(
+                                editor.draft.security.tls_verify == TlsVerifyPolicy::PinnedSha256,
+                                |sub| {
+                                    sub.child(labeled_input(
+                                        "TLS sha256",
+                                        editor.pinned_tls_sha256_input.clone(),
+                                        dark,
+                                    ))
+                                },
+                            )
+                            .when(
+                                editor.draft.security.tls_verify
+                                    == TlsVerifyPolicy::InsecureAcceptAny,
+                                |sub| sub.child(risk_notice("当前 FTPS 配置会跳过证书校验")),
+                            )
+                    })
+                    .child(labeled_multiline("Notes", editor.notes_input.clone(), dark))
+                    .when(matches!(editor.mode, ProfileEditorMode::Edit(_)), |col| {
+                        col.child(div().h(px(24.0)).flex().items_center().justify_end().child(
+                            danger_menu_item("Delete Profile").on_click(cx.listener(
+                                |view, _, _, _cx| {
+                                    view.delete_selected_profile();
+                                },
+                            )),
+                        ))
+                    }),
             ),
     )
-    .into_any_element()
 }
 
-fn profile_form_section(title: &'static str, _dark: bool, body: gpui::Div) -> gpui::Div {
+fn side_section_header(title: &'static str, count: Option<String>) -> impl IntoElement {
     div()
-        .rounded(px(6.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .bg(theme::semantic().bg_surface)
-        .px(px(10.0))
-        .py(px(8.0))
-        .flex()
-        .flex_col()
-        .gap(px(6.0))
-        .child(
-            div()
-                .text_size(px(11.0))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(theme::semantic().text_primary)
-                .child(title),
-        )
-        .child(body)
-}
-
-fn profile_label_value_row(label: &'static str, content: gpui::Div, _dark: bool) -> gpui::Div {
-    div()
-        .border_b_1()
-        .border_color(ui::border_light())
-        .h(px(36.0))
-        .px(px(2.0))
+        .h(px(20.0))
         .flex()
         .items_center()
-        .gap(px(7.0))
+        .justify_between()
+        .gap_2()
         .child(
             div()
-                .w(px(60.0))
-                .text_size(px(10.0))
-                .text_color(theme::semantic().text_primary)
-                .child(label),
+                .text_size(px(9.5))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme::semantic().text_secondary)
+                .child(title),
         )
-        .child(
+        .children(count.map(|count| {
             div()
-                .flex_1()
-                .h(px(30.0))
-                .rounded(px(6.0))
-                .border_1()
-                .border_color(ui::border_light())
-                .bg(theme::semantic().bg_elevated)
-                .px(px(8.0))
-                .flex()
-                .items_center()
-                .child(content),
-        )
-}
-
-fn profile_inline_field(label: &'static str, input: Entity<TextInput>, dark: bool) -> gpui::Div {
-    profile_label_value_row(label, div().w_full().child(input), dark)
-}
-
-fn new_folder_overlay(
-    dark: bool,
-    input: Option<Entity<TextInput>>,
-    panel: Entity<FtpSftpSshView>,
-) -> impl IntoElement {
-    overlay_shell(
-        dark,
-        "ftp-folder-overlay",
-        panel.clone(),
-        div()
-            .w(px(380.0))
-            .rounded(px(8.0))
-            .border_1()
-            .border_color(ui::border_light())
-            .bg(theme::semantic().bg_elevated)
-            .p(px(14.0))
-            .flex()
-            .flex_col()
-            .gap(px(8.0))
-            .child(
-                div()
-                    .text_size(px(12.0))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child("新建远程目录"),
-            )
-            .child(
-                div()
-                    .rounded(px(6.0))
-                    .border_1()
-                    .border_color(ui::border_light())
-                    .bg(ui::bg_keycap())
-                    .child(input.map(|i| i.into_any_element()).unwrap_or_else(|| {
-                        tracing::error!("new folder input should exist");
-                        div().child("新建目录输入未初始化").into_any_element()
-                    })),
-            )
-            .child(
-                div()
-                    .flex()
-                    .justify_end()
-                    .gap(px(6.0))
-                    .child(
-                        frost_button("取消", None, "ghost", dark, false)
-                            .id("ftp-cancel-folder")
-                            .on_click({
-                                let panel = panel.clone();
-                                move |_, window, cx| {
-                                    cx.update_entity(&panel, |view, _cx| view.close_folder_sheet());
-                                    window.refresh();
-                                }
-                            }),
-                    )
-                    .child(
-                        frost_button("创建", Some("+"), "primary", dark, false)
-                            .id("ftp-confirm-folder")
-                            .on_click({
-                                let panel = panel.clone();
-                                move |_, window, cx| {
-                                    cx.update_entity(&panel, |view, _cx| {
-                                        view.create_new_folder(_cx)
-                                    });
-                                    window.refresh();
-                                }
-                            }),
-                    ),
-            ),
-    )
-}
-
-fn profile_menu_overlay(
-    dark: bool,
-    menu: Option<ProfileMenuState>,
-    summaries_by_id: &HashMap<i64, SessionSummary>,
-    panel: Entity<FtpSftpSshView>,
-) -> gpui::AnyElement {
-    let Some(menu) = menu else {
-        return div().into_any_element();
-    };
-    let summary = summaries_by_id.get(&menu.profile.id).cloned();
-    div()
-        .size_full()
-        .absolute()
-        .top_0()
-        .left_0()
-        .child(
-            div()
-                .size_full()
-                .absolute()
-                .top_0()
-                .left_0()
-                .bg(hsla(0.0, 0.0, 0.0, 0.001))
-                .id("ftp-profile-menu-backdrop")
-                .on_click({
-                    let panel = panel.clone();
-                    move |_, window, cx| {
-                        cx.update_entity(&panel, |view, _cx| view.close_menus());
-                        window.refresh();
-                    }
-                }),
-        )
-        .child(
-            div()
-                .absolute()
-                .top(menu.position.y)
-                .left(menu.position.x)
-                .w(px(196.0))
-                .rounded(px(8.0))
-                .border_1()
-                .border_color(ui::border_light())
-                .bg(theme::semantic().bg_elevated)
-                .p(px(4.0))
-                .flex()
-                .flex_col()
-                .gap(px(3.0))
-                .child(
-                    menu_item("连接 / 切换", dark)
-                        .id("ftp-menu-connect")
-                        .on_click({
-                            let panel = panel.clone();
-                            let profile_id = menu.profile.id;
-                            move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| {
-                                    view.connect_profile(profile_id)
-                                });
-                                window.refresh();
-                            }
-                        }),
-                )
-                .when(summary.is_some(), |menu_el| {
-                    let panel = panel.clone();
-                    let profile_id = menu.profile.id;
-                    menu_el.child(
-                        menu_item("断开该 session", dark)
-                            .id("ftp-menu-disconnect")
-                            .on_click(move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| {
-                                    view.disconnect_profile(profile_id)
-                                });
-                                window.refresh();
-                            }),
-                    )
-                })
-                .child(menu_item("编辑配置", dark).id("ftp-menu-edit").on_click({
-                    let panel = panel.clone();
-                    let profile_id = menu.profile.id;
-                    move |_, window, cx| {
-                        cx.update_entity(&panel, |view, _cx| {
-                            view.open_profile_editor(profile_id, _cx)
-                        });
-                        window.refresh();
-                    }
-                }))
-                .child(
-                    menu_item("复制配置", dark)
-                        .id("ftp-menu-duplicate")
-                        .on_click({
-                            let panel = panel.clone();
-                            let profile = menu.profile.clone();
-                            move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| {
-                                    view.duplicate_profile(&profile, _cx)
-                                });
-                                window.refresh();
-                            }
-                        }),
-                )
-                .child(menu_item("删除配置", dark).id("ftp-menu-delete").on_click({
-                    let panel = panel.clone();
-                    let profile_id = menu.profile.id;
-                    move |_, window, cx| {
-                        if let Err(e) = panel.read(cx).service.delete_profile(profile_id) {
-                            tracing::error!(%e, "delete_profile failed");
-                        }
-                        cx.update_entity(&panel, |view, _cx| view.close_menus());
-                        window.refresh();
-                    }
-                })),
-        )
-        .into_any_element()
-}
-
-fn file_menu_overlay(
-    dark: bool,
-    menu: Option<FileMenuState>,
-    panel: Entity<FtpSftpSshView>,
-) -> gpui::AnyElement {
-    let Some(menu) = menu else {
-        return div().into_any_element();
-    };
-    let can_open_text = !menu.item.is_dir && looks_like_text_file_name(&menu.item.name);
-    div()
-        .size_full()
-        .absolute()
-        .top_0()
-        .left_0()
-        .child(
-            div()
-                .size_full()
-                .absolute()
-                .top_0()
-                .left_0()
-                .bg(hsla(0.0, 0.0, 0.0, 0.001))
-                .id("ftp-file-menu-backdrop")
-                .on_click({
-                    let panel = panel.clone();
-                    move |_, window, cx| {
-                        cx.update_entity(&panel, |view, _cx| view.close_menus());
-                        window.refresh();
-                    }
-                }),
-        )
-        .child(
-            div()
-                .absolute()
-                .top(menu.position.y)
-                .left(menu.position.x)
-                .w(px(196.0))
-                .rounded(px(8.0))
-                .border_1()
-                .border_color(ui::border_light())
-                .bg(theme::semantic().bg_elevated)
-                .p(px(4.0))
-                .flex()
-                .flex_col()
-                .gap(px(3.0))
-                .when(menu.item.is_dir, |menu_el| {
-                    let panel = panel.clone();
-                    let item = menu.item.clone();
-                    menu_el.child(
-                        menu_item("进入目录", dark)
-                            .id("ftp-file-menu-enter")
-                            .on_click(move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| view.navigate_dir(&item.path));
-                                window.refresh();
-                            }),
-                    )
-                })
-                .when(!menu.item.is_dir, |menu_el| {
-                    let panel = panel.clone();
-                    let item = menu.item.clone();
-                    menu_el.child(
-                        menu_item("下载到本地", dark)
-                            .id("ftp-file-menu-download")
-                            .on_click(move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| view.download_file(&item));
-                                window.refresh();
-                            }),
-                    )
-                })
-                .when(can_open_text, |menu_el| {
-                    let panel = panel.clone();
-                    let item = menu.item.clone();
-                    menu_el.child(
-                        menu_item("打开文本文件", dark)
-                            .id("ftp-file-menu-text")
-                            .on_click(move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| view.open_text_file(&item));
-                                window.refresh();
-                            }),
-                    )
-                })
-                .child(
-                    menu_item("删除", dark)
-                        .id("ftp-file-menu-delete")
-                        .on_click({
-                            let panel = panel.clone();
-                            let item = menu.item.clone();
-                            move |_, window, cx| {
-                                cx.update_entity(&panel, |view, _cx| {
-                                    view.delete_remote_item(&item)
-                                });
-                                window.refresh();
-                            }
-                        }),
-                ),
-        )
-        .into_any_element()
-}
-
-fn overlay_shell(
-    dark: bool,
-    backdrop_id: &'static str,
-    panel: Entity<FtpSftpSshView>,
-    content: impl IntoElement,
-) -> impl IntoElement {
-    div()
-        .size_full()
-        .absolute()
-        .top_0()
-        .left_0()
-        .child(
-            div()
-                .size_full()
-                .absolute()
-                .top_0()
-                .left_0()
-                .bg(hsla(0.0, 0.0, 0.0, if dark { 0.42 } else { 0.24 }))
-                .id(backdrop_id)
-                .on_click(move |_, window, cx| {
-                    cx.update_entity(&panel, |view, _cx| {
-                        view.close_menus();
-                        view.close_editor();
-                        view.close_folder_sheet();
-                    });
-                    window.refresh();
-                }),
-        )
-        .child(
-            div()
-                .size_full()
-                .absolute()
-                .top_0()
-                .left_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(content),
-        )
-}
-
-fn search_input_shell(input: Option<Entity<TextInput>>, _dark: bool) -> impl IntoElement {
-    div()
-        .rounded(px(6.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .bg(theme::semantic().bg_surface)
-        .child(input.map(|i| i.into_any_element()).unwrap_or_else(|| {
-            tracing::error!("search input should be initialized");
-            div().child("搜索输入未初始化").into_any_element()
+                .text_size(px(9.0))
+                .text_color(theme::semantic().text_secondary)
+                .child(count)
         }))
 }
 
-fn protocol_hint_card(
-    _dark: bool,
-    protocol: RemoteProtocol,
-    passive_mode: bool,
-    jump_enabled: bool,
-    pinned: bool,
-) -> impl IntoElement {
-    let hint = match protocol {
-        RemoteProtocol::Ftp => format!(
-            "FTP 会显示文件区和命令日志。当前{}，{}。",
-            if passive_mode {
-                "使用被动模式"
-            } else {
-                "使用主动模式"
-            },
-            if pinned { "已固定" } else { "未固定" }
-        ),
-        RemoteProtocol::Ftps => String::from("FTPS 保留兼容入口，会按当前后端真实支持能力校验。"),
-        RemoteProtocol::Sftp => format!(
-            "SFTP 连接会显示远程文件区和 SSH 终端。{}。",
-            if jump_enabled {
-                "已启用跳板机字段"
-            } else {
-                "未启用跳板机"
-            }
-        ),
-        RemoteProtocol::Ssh => String::from("SSH 连接只提供终端，不伪装成可浏览文件的页面。"),
-    };
-
+fn toolbar_button(id: &'static str, label: &'static str) -> gpui::Stateful<gpui::Div> {
     div()
-        .rounded(px(8.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .bg(ui::bg_keycap())
-        .px(px(10.0))
-        .py(px(8.0))
-        .text_size(px(9.0))
-        .line_height(px(14.0))
-        .text_color(ui::text_secondary())
-        .child(hint)
-}
-
-fn editor_notice(notice: String, _dark: bool) -> impl IntoElement {
-    div()
-        .text_size(px(10.0))
-        .line_height(px(15.0))
-        .text_color(ui::text_secondary())
-        .child(notice)
-}
-
-fn editor_section_title(label: &'static str, _dark: bool) -> impl IntoElement {
-    div()
-        .text_size(px(9.0))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(ui::text_tertiary())
-        .child(label)
-}
-
-fn segmented_chip(label: &'static str, active: bool, dark: bool) -> gpui::Div {
-    div()
+        .id(id)
         .h(px(22.0))
-        .px(px(7.0))
         .rounded(px(6.0))
-        .bg(if active {
-            if dark {
-                hsla(0.54, 0.78, 0.56, 0.18)
-            } else {
-                hsla(0.54, 0.70, 0.78, 0.14)
-            }
-        } else {
-            ui::bg_keycap()
-        })
+        .bg(glass::panel(theme_mode::is_dark()))
         .border_1()
-        .border_color(if active {
-            theme::rgba_with_alpha(
-                theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan),
-                0.34,
-            )
-        } else {
-            ui::border_light()
-        })
-        .hover(move |style| style.cursor_pointer())
+        .border_color(glass::divider(theme_mode::is_dark()))
+        .px_2()
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(9.0))
-        .text_color(if active {
-            theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Cyan)
-        } else {
-            ui::text_secondary()
-        })
+        .text_size(px(9.5))
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .cursor_pointer()
+        .hover(|style| style.bg(glass::hover_bg(theme_mode::is_dark())))
         .child(label)
 }
 
-fn status_pill(label: String, color: gpui::Rgba, _dark: bool) -> impl IntoElement {
+fn menu_item(label: &'static str) -> gpui::Stateful<gpui::Div> {
     div()
-        .h(px(20.0))
-        .px(px(6.0))
-        .rounded(px(999.0))
-        .bg(ui::bg_keycap())
-        .border_1()
-        .border_color(ui::border_light())
-        .flex()
-        .items_center()
-        .gap(px(4.0))
-        .child(div().size(px(5.0)).rounded(px(999.0)).bg(color))
-        .child(
-            div()
-                .text_size(px(8.0))
-                .text_color(theme::semantic().text_primary)
-                .child(label),
-        )
-}
-
-fn meta_badge(label: String, color: gpui::Rgba, dark: bool) -> impl IntoElement {
-    div()
-        .rounded(px(999.0))
-        .bg(theme::rgba_with_alpha(
-            color,
-            if dark { 0.18 } else { 0.10 },
-        ))
-        .px(px(6.0))
-        .py(px(3.0))
-        .text_size(px(8.0))
-        .text_color(if dark { color } else { color })
-        .child(label)
-}
-
-fn small_action(label: &'static str, dark: bool) -> gpui::Div {
-    div()
-        .h(px(20.0))
-        .px(px(5.0))
-        .rounded(px(4.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .bg(ui::bg_keycap())
-        .hover(move |style| style.bg(row_hover_color(dark)).cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(9.0))
-        .text_color(theme::semantic().text_primary)
-        .child(label)
-}
-
-fn small_icon_action(icon: IconName, dark: bool) -> gpui::Div {
-    div()
-        .size(px(22.0))
-        .rounded(px(4.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .bg(ui::bg_keycap())
-        .hover(move |style| style.bg(row_hover_color(dark)).cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_color(theme::semantic().text_primary)
-        .child(Icon::new(icon).with_size(px(12.0)))
-}
-
-fn small_icon_text_action(icon: IconName, label: &'static str, dark: bool) -> gpui::Div {
-    div()
-        .h(px(22.0))
-        .px(px(5.0))
-        .rounded(px(4.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .bg(ui::bg_keycap())
-        .hover(move |style| style.bg(row_hover_color(dark)).cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .gap(px(3.0))
-        .text_size(px(9.0))
-        .text_color(theme::semantic().text_primary)
-        .child(Icon::new(icon).with_size(px(11.0)))
-        .child(label)
-}
-
-fn menu_item(label: &'static str, dark: bool) -> gpui::Div {
-    div()
+        .id(label)
         .h(px(26.0))
         .rounded(px(6.0))
-        .px(px(8.0))
-        .hover(move |style| style.bg(row_hover_color(dark)).cursor_pointer())
+        .px_2()
         .flex()
         .items_center()
-        .text_size(px(9.0))
-        .text_color(theme::semantic().text_primary)
+        .text_size(px(9.5))
+        .cursor_pointer()
+        .hover(|style| style.bg(glass::hover_bg(theme_mode::is_dark())))
         .child(label)
 }
 
-fn transfer_count_chip(
-    label: &'static str,
-    count: usize,
-    color: gpui::Rgba,
-    dark: bool,
-    emphasize: bool,
-) -> impl IntoElement {
+fn danger_menu_item(label: &'static str) -> gpui::Stateful<gpui::Div> {
     div()
-        .h(px(16.0))
-        .px(px(5.0))
-        .rounded(px(999.0))
-        .bg(if emphasize {
-            theme::rgba_with_alpha(color, if dark { 0.20 } else { 0.12 })
-        } else {
-            ui::bg_keycap()
-        })
-        .text_size(px(8.0))
-        .text_color(if emphasize {
-            color
-        } else {
-            ui::text_secondary()
-        })
+        .id(label)
+        .h(px(26.0))
+        .rounded(px(6.0))
+        .px_2()
         .flex()
         .items_center()
-        .justify_center()
-        .child(format!("{label} {count}"))
+        .text_size(px(9.5))
+        .text_color(theme::semantic().danger)
+        .cursor_pointer()
+        .hover(|style| style.bg(theme::rgba_with_alpha(theme::semantic().danger, 0.08)))
+        .child(label)
 }
 
-fn empty_state_card(_dark: bool, title: &'static str, body: &str) -> impl IntoElement {
+fn labeled_input(label: &'static str, input: Entity<TextInput>, dark: bool) -> impl IntoElement {
     div()
-        .rounded(px(8.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .bg(ui::bg_keycap())
-        .p(px(12.0))
         .flex()
         .flex_col()
-        .gap(px(4.0))
+        .gap_0p5()
         .child(
             div()
-                .text_size(px(11.0))
-                .font_weight(FontWeight::SEMIBOLD)
+                .text_size(px(9.0))
+                .text_color(theme::semantic().text_secondary)
+                .child(label),
+        )
+        .child(input_shell(input, px(32.0), dark))
+}
+
+fn labeled_multiline(
+    label: &'static str,
+    input: Entity<TextInput>,
+    dark: bool,
+) -> impl IntoElement {
+    div()
+        .flex()
+        .flex_col()
+        .gap_0p5()
+        .child(
+            div()
+                .text_size(px(9.0))
+                .text_color(theme::semantic().text_secondary)
+                .child(label),
+        )
+        .child(input_shell(input, px(92.0), dark))
+}
+
+fn input_shell(input: Entity<TextInput>, height: gpui::Pixels, dark: bool) -> impl IntoElement {
+    div()
+        .h(height)
+        .rounded(px(6.0))
+        .border_1()
+        .border_color(glass::divider(dark))
+        .bg(glass::inset(dark))
+        .overflow_hidden()
+        .child(input.into_any_element())
+}
+
+fn two_col_row(left: impl IntoElement, right: impl IntoElement) -> impl IntoElement {
+    div()
+        .flex()
+        .items_start()
+        .gap_1()
+        .child(div().flex_1().child(left))
+        .child(div().w(px(138.0)).child(right))
+}
+
+fn selector_group(title: &'static str, items: Vec<AnyElement>) -> impl IntoElement {
+    div()
+        .flex()
+        .flex_col()
+        .gap_0p5()
+        .child(
+            div()
+                .text_size(px(9.0))
+                .text_color(theme::semantic().text_secondary)
                 .child(title),
         )
+        .child(div().flex().flex_wrap().gap_1().children(items))
+}
+
+fn protocol_selector(
+    selected: RemoteProtocol,
+    cx: &mut Context<FtpSftpSshView>,
+) -> impl IntoElement {
+    selector_group(
+        "Protocol",
+        [
+            RemoteProtocol::Ssh,
+            RemoteProtocol::Sftp,
+            RemoteProtocol::Ftp,
+            RemoteProtocol::FtpsExplicit,
+            RemoteProtocol::FtpsImplicit,
+        ]
+        .into_iter()
+        .map(|protocol| {
+            profile_toggle(protocol.as_str(), protocol.label(), selected == protocol)
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    view.set_editor_protocol(protocol, cx);
+                }))
+                .into_any_element()
+        })
+        .collect(),
+    )
+}
+
+fn auth_method_selector(
+    selected: AuthMethod,
+    cx: &mut Context<FtpSftpSshView>,
+) -> impl IntoElement {
+    selector_group(
+        "Auth",
+        [
+            AuthMethod::Password,
+            AuthMethod::PrivateKey,
+            AuthMethod::Agent,
+        ]
+        .into_iter()
+        .map(|method| {
+            profile_toggle(method.as_str(), method.label(), selected == method)
+                .on_click(cx.listener(move |view, _, _, _cx| {
+                    view.set_editor_auth_method(method);
+                }))
+                .into_any_element()
+        })
+        .collect(),
+    )
+}
+
+fn ssh_policy_selector(
+    selected: SshHostKeyPolicy,
+    cx: &mut Context<FtpSftpSshView>,
+) -> impl IntoElement {
+    selector_group(
+        "SSH Security",
+        [
+            SshHostKeyPolicy::TrustOnFirstUse,
+            SshHostKeyPolicy::StrictPinned,
+            SshHostKeyPolicy::InsecureAcceptAny,
+        ]
+        .into_iter()
+        .map(|policy| {
+            profile_toggle(policy.as_str(), policy.label(), selected == policy)
+                .on_click(cx.listener(move |view, _, _, _cx| {
+                    view.set_editor_ssh_policy(policy);
+                }))
+                .into_any_element()
+        })
+        .collect(),
+    )
+}
+
+fn tls_policy_selector(
+    selected: TlsVerifyPolicy,
+    cx: &mut Context<FtpSftpSshView>,
+) -> impl IntoElement {
+    selector_group(
+        "TLS Verify",
+        [
+            TlsVerifyPolicy::SystemRoots,
+            TlsVerifyPolicy::PinnedSha256,
+            TlsVerifyPolicy::InsecureAcceptAny,
+        ]
+        .into_iter()
+        .map(|policy| {
+            profile_toggle(policy.as_str(), policy.label(), selected == policy)
+                .on_click(cx.listener(move |view, _, _, _cx| {
+                    view.set_editor_tls_policy(policy);
+                }))
+                .into_any_element()
+        })
+        .collect(),
+    )
+}
+
+fn toggle_row(
+    label: &'static str,
+    enabled: bool,
+    hint: &'static str,
+    action_label: &'static str,
+    cx: &mut Context<FtpSftpSshView>,
+) -> impl IntoElement {
+    div()
+        .rounded(px(7.0))
+        .bg(glass::inset(theme_mode::is_dark()))
+        .border_1()
+        .border_color(glass::divider(theme_mode::is_dark()))
+        .px_2()
+        .py(px(6.0))
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap_2()
         .child(
             div()
-                .text_size(px(8.0))
-                .line_height(px(14.0))
-                .text_color(ui::text_secondary())
-                .child(body.to_string()),
+                .min_w(px(0.0))
+                .flex()
+                .flex_col()
+                .gap_0p5()
+                .child(
+                    div()
+                        .text_size(px(9.5))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .child(label),
+                )
+                .child(
+                    div()
+                        .text_size(px(9.0))
+                        .text_color(theme::semantic().text_secondary)
+                        .child(hint),
+                ),
+        )
+        .child(
+            profile_toggle("toggle-passive", action_label, enabled).on_click(cx.listener(
+                |view, _, _, _cx| {
+                    view.toggle_editor_passive_mode();
+                },
+            )),
         )
 }
 
-fn status_bar(dark: bool, accent: gpui::Rgba, message: String) -> impl IntoElement {
+fn risk_notice(text: &'static str) -> impl IntoElement {
     div()
-        .h(px(26.0))
-        .px(px(10.0))
-        .border_t_1()
-        .border_color(ui::border_light())
-        .flex()
-        .items_center()
-        .child(ui::status_bar(
-            message,
-            if dark {
-                accent
-            } else {
-                theme::semantic().text_body
-            },
-        ))
+        .rounded(px(7.0))
+        .bg(theme::rgba_with_alpha(theme::semantic().warning, 0.12))
+        .border_1()
+        .border_color(theme::rgba_with_alpha(theme::semantic().warning, 0.32))
+        .px_2()
+        .py(px(6.0))
+        .text_size(px(9.0))
+        .text_color(theme::semantic().warning)
+        .child(text)
 }
 
-fn profile_input(
-    cx: &mut App,
-    placeholder: &str,
+fn profile_toggle(
+    id: &'static str,
+    label: &'static str,
+    selected: bool,
+) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .h(px(22.0))
+        .rounded(px(6.0))
+        .bg(if selected {
+            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.16)
+        } else {
+            glass::panel(theme_mode::is_dark())
+        })
+        .border_1()
+        .border_color(if selected {
+            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.36)
+        } else {
+            glass::divider(theme_mode::is_dark())
+        })
+        .px_2()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(9.5))
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(if selected {
+            ui::accent_color(PluginAccent::Cyan)
+        } else {
+            theme::semantic().text_primary
+        })
+        .cursor_pointer()
+        .hover(|style| style.bg(glass::hover_bg(theme_mode::is_dark())))
+        .child(label)
+}
+
+fn render_terminal_rows(terminal: &crate::terminal::TerminalFrame) -> Vec<gpui::Div> {
+    terminal
+        .styled_rows
+        .iter()
+        .enumerate()
+        .map(|(row_index, row)| render_terminal_row(row, row_index, &terminal.cursor))
+        .collect()
+}
+
+/// 按「连续同 style 段（run）」合并渲染一行：相邻且样式相同的 cell 合并成一个文本元素，
+/// 光标所在 cell 单独成段（反色）并打断 run。div 数从 O(列数) 降到 O(每行 run 数)。
+fn render_terminal_row(
+    row: &crate::terminal::TerminalStyledRow,
+    row_index: usize,
+    cursor: &crate::terminal::TerminalCursor,
+) -> gpui::Div {
+    let mut line = div()
+        .flex()
+        .items_center()
+        .gap_0()
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .line_height(px(14.0));
+    let cursor_in_row = cursor.visible && cursor.row == row_index;
+    let mut index = 0;
+    while index < row.cells.len() {
+        if cursor_in_row && cursor.column == index {
+            let cell = &row.cells[index];
+            line = line.child(render_terminal_run(&cell.text, cell.style, true));
+            index += 1;
+            continue;
+        }
+        let style = row.cells[index].style;
+        let mut text = String::new();
+        while index < row.cells.len()
+            && !(cursor_in_row && cursor.column == index)
+            && row.cells[index].style == style
+        {
+            text.push_str(&row.cells[index].text);
+            index += 1;
+        }
+        line = line.child(render_terminal_run(&text, style, false));
+    }
+    line
+}
+
+fn render_terminal_run(text: &str, style: TerminalCellStyle, cursor_here: bool) -> gpui::Div {
+    let fg = rgb(style.fg);
+    let bg = rgb(style.bg);
+    let mut run = div()
+        .flex_none()
+        .flex_shrink_0()
+        .whitespace_nowrap()
+        .text_color(if cursor_here { rgb(0x111317) } else { fg })
+        .text_bg(if cursor_here { theme::white() } else { bg })
+        .child(text.to_string());
+
+    if style.bold {
+        run = run.font_weight(gpui::FontWeight::BOLD);
+    }
+    if style.italic {
+        run = run.italic();
+    }
+    if style.underline {
+        run = run.underline();
+    }
+    if style.strike {
+        run = run.line_through();
+    }
+
+    run
+}
+
+fn sync_terminal_size(
+    runtime: &RemoteRuntime,
+    session_id: &SessionId,
+    current_columns: usize,
+    current_rows: usize,
+    layout: TerminalLayoutSnapshot,
+) {
+    const TERMINAL_CELL_WIDTH_PX: f32 = 7.3;
+    const TERMINAL_CELL_HEIGHT_PX: f32 = 14.0;
+
+    let estimated_columns = (layout.width / TERMINAL_CELL_WIDTH_PX).floor().max(40.0) as u32;
+    let estimated_rows = (layout.height / TERMINAL_CELL_HEIGHT_PX).floor().max(12.0) as u32;
+    if estimated_columns as usize == current_columns && estimated_rows as usize == current_rows {
+        return;
+    }
+    let _ = runtime.resize_terminal(session_id, estimated_columns, estimated_rows);
+}
+
+fn glass_panel(width: gpui::Pixels, dark: bool) -> gpui::Div {
+    div()
+        .w(width)
+        .min_h(px(0.0))
+        .rounded(px(8.0))
+        .bg(glass::panel(dark))
+        .border_1()
+        .border_color(glass::border(dark))
+        .p_2()
+        .flex()
+        .flex_col()
+        .gap_1()
+}
+
+fn glass_panel_flex(dark: bool) -> gpui::Div {
+    div()
+        .flex_1()
+        .min_h(px(0.0))
+        .rounded(px(8.0))
+        .bg(glass::panel(dark))
+        .border_1()
+        .border_color(glass::border(dark))
+        .p_2()
+        .flex()
+        .flex_col()
+        .gap_1()
+}
+
+fn panel_header(title: &'static str, subtitle: Option<String>) -> impl IntoElement {
+    div()
+        .flex_none()
+        .pb(px(2.0))
+        .flex()
+        .flex_col()
+        .gap_0p5()
+        .child(
+            div()
+                .text_size(px(10.0))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .child(title),
+        )
+        .children(subtitle.map(|subtitle| {
+            div()
+                .text_size(px(9.0))
+                .line_clamp(1)
+                .text_color(theme::semantic().text_secondary)
+                .child(subtitle)
+        }))
+}
+
+fn empty_state(text: &'static str) -> impl IntoElement {
+    div()
+        .flex_1()
+        .min_h(px(0.0))
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(10.0))
+        .text_color(theme::semantic().text_secondary)
+        .child(text)
+}
+
+fn build_profile_editor_state(
+    mode: ProfileEditorMode,
+    draft: ProfileDraft,
+    cx: &mut Context<FtpSftpSshView>,
+) -> ProfileEditorState {
+    let draft = draft.normalize();
+    let remote_root_placeholder = draft.protocol.default_remote_root();
+    ProfileEditorState {
+        mode,
+        name_input: compact_input(cx, &draft.name, "连接名称", false),
+        host_input: compact_input(cx, &draft.host, "example.com", false),
+        port_input: compact_input(cx, &draft.port.to_string(), "22", false),
+        username_input: compact_input(cx, &draft.auth.username, "用户名", false),
+        password_input: compact_input(cx, &draft.auth.password, "密码", false),
+        private_key_path_input: compact_input(
+            cx,
+            &draft.auth.private_key_path,
+            "~/.ssh/id_ed25519",
+            false,
+        ),
+        private_key_passphrase_input: compact_input(
+            cx,
+            &draft.auth.private_key_passphrase,
+            "私钥口令",
+            false,
+        ),
+        remote_root_input: compact_input(
+            cx,
+            &draft.paths.remote_root,
+            remote_root_placeholder,
+            false,
+        ),
+        local_root_input: compact_input(cx, &draft.paths.local_root, "~/Downloads", false),
+        connect_timeout_input: compact_input(
+            cx,
+            &draft.limits.connect_timeout_secs.to_string(),
+            "15",
+            false,
+        ),
+        transfer_concurrency_input: compact_input(
+            cx,
+            &draft.limits.transfer_concurrency.to_string(),
+            "3",
+            false,
+        ),
+        pinned_host_key_input: compact_input(
+            cx,
+            &draft.security.pinned_host_key,
+            "ssh-ed25519 AAAA...",
+            false,
+        ),
+        pinned_tls_sha256_input: compact_input(
+            cx,
+            &draft.security.pinned_tls_sha256,
+            "sha256:abcd...",
+            false,
+        ),
+        notes_input: compact_input(cx, &draft.notes, "备注 / 环境说明", true),
+        draft,
+    }
+}
+
+fn compact_input(
+    cx: &mut Context<FtpSftpSshView>,
     value: &str,
-    monospace: bool,
-    height: f32,
+    placeholder: &str,
+    multiline: bool,
 ) -> Entity<TextInput> {
-    let placeholder = placeholder.to_string();
     let value = value.to_string();
-    cx.new(move |cx| {
+    let placeholder = placeholder.to_string();
+    cx.new(|cx| {
         let mut input = TextInput::new(cx, placeholder.clone(), value.clone());
         input.set_chrome(false, cx);
-        input.set_monospace(monospace, cx);
-        if height > 42.0 {
-            input.set_multiline(true, cx);
-        }
+        input.set_monospace(true, cx);
         input.set_style(
             TextInputStyle {
-                height,
-                font_size: 11.0,
-                padding: 6.0,
+                height: if multiline { 92.0 } else { 32.0 },
+                font_size: 10.5,
+                padding: 8.0,
             },
             cx,
         );
+        if multiline {
+            input.set_multiline(true, cx);
+        }
         input
     })
 }
 
-fn set_input_text(input: &Entity<TextInput>, text: String, cx: &mut impl AppContext) {
-    input.update(cx, |input, input_cx| input.set_text(text, input_cx));
-}
-
-fn parse_u16_or_default(value: &str, fallback: u16) -> u16 {
-    value
-        .trim()
-        .parse::<u16>()
-        .ok()
-        .filter(|value| *value > 0)
-        .unwrap_or(fallback)
-}
-
-fn protocol_index(protocol: RemoteProtocol) -> usize {
-    match protocol {
-        RemoteProtocol::Sftp => 0,
-        RemoteProtocol::Ftp => 1,
-        RemoteProtocol::Ftps => 2,
-        RemoteProtocol::Ssh => 3,
+fn join_remote_path(parent: &str, child: &str) -> String {
+    let trimmed_child = child.trim_matches('/');
+    if parent == "/" {
+        format!("/{trimmed_child}")
+    } else if parent == "~" {
+        format!("~/{trimmed_child}")
+    } else {
+        format!("{}/{}", parent.trim_end_matches('/'), trimmed_child)
     }
 }
 
-fn auth_method_index(auth_method: AuthMethod) -> usize {
-    match auth_method {
-        AuthMethod::Password => 0,
-        AuthMethod::PrivateKey => 1,
-        AuthMethod::Agent => 2,
+fn remote_parent_path(path: &str) -> String {
+    let trimmed = path.trim_end_matches('/');
+    if trimmed.is_empty() || trimmed == "/" || trimmed == "~" {
+        return trimmed.to_string().if_empty("/");
+    }
+    if trimmed.starts_with("~/") {
+        let mut parts: Vec<&str> = trimmed.split('/').collect();
+        let _ = parts.pop();
+        if parts.len() <= 1 {
+            String::from("~")
+        } else {
+            parts.join("/")
+        }
+    } else {
+        let mut parts: Vec<&str> = trimmed.split('/').filter(|part| !part.is_empty()).collect();
+        let _ = parts.pop();
+        if parts.is_empty() {
+            String::from("/")
+        } else {
+            format!("/{}", parts.join("/"))
+        }
     }
 }
 
-fn frost_button(
-    label: &'static str,
-    icon: Option<&'static str>,
-    variant: &'static str,
-    dark: bool,
-    danger: bool,
-) -> gpui::Div {
-    let icon = icon.map(SharedString::from);
-    ui::ui_button(label, variant, dark, icon, danger).hover(move |style| style.cursor_pointer())
+trait StringEmptyExt {
+    fn if_empty(self, fallback: &str) -> String;
+}
+
+impl StringEmptyExt for String {
+    fn if_empty(self, fallback: &str) -> String {
+        if self.is_empty() {
+            fallback.to_string()
+        } else {
+            self
+        }
+    }
+}
+
+fn terminal_input_for_event(
+    event: &KeyDownEvent,
+    cx: &mut Context<FtpSftpSshView>,
+) -> Option<TerminalInput> {
+    let key = event.keystroke.key.as_str();
+    let modifiers = event.keystroke.modifiers;
+    let primary = modifiers.platform || modifiers.control;
+
+    let named = match key {
+        "enter" => Some(TerminalInput::Enter),
+        "tab" if modifiers.shift => Some(TerminalInput::ShiftTab),
+        "tab" => Some(TerminalInput::Tab),
+        "backspace" => Some(TerminalInput::Backspace),
+        "delete" => Some(TerminalInput::Delete),
+        "insert" => Some(TerminalInput::Insert),
+        "escape" => Some(TerminalInput::Escape),
+        "home" => Some(TerminalInput::Home),
+        "end" => Some(TerminalInput::End),
+        "pageup" => Some(TerminalInput::PageUp),
+        "pagedown" => Some(TerminalInput::PageDown),
+        "up" => Some(TerminalInput::ArrowUp),
+        "down" => Some(TerminalInput::ArrowDown),
+        "left" => Some(TerminalInput::ArrowLeft),
+        "right" => Some(TerminalInput::ArrowRight),
+        _ => key
+            .strip_prefix('f')
+            .and_then(|value| value.parse::<u8>().ok())
+            .map(TerminalInput::Function),
+    };
+    if named.is_some() {
+        return named;
+    }
+
+    if primary && key == "v" {
+        return cx
+            .read_from_clipboard()
+            .and_then(|item| item.text())
+            .map(TerminalInput::Paste);
+    }
+
+    let key_char = event.keystroke.key_char.as_deref();
+    if primary && modifiers.alt {
+        return terminal_modified_char(key).map(TerminalInput::CtrlAlt);
+    }
+    if primary {
+        return terminal_modified_char(key).map(TerminalInput::Ctrl);
+    }
+    if modifiers.alt {
+        return terminal_modified_char(key).map(TerminalInput::Alt);
+    }
+    if modifiers.function || modifiers.platform {
+        return None;
+    }
+
+    key_char
+        .or_else(|| terminal_text_for_key(key))
+        .filter(|text| !text.is_empty())
+        .map(|text| TerminalInput::Text(text.to_string()))
+}
+
+fn terminal_text_for_key(key: &str) -> Option<&str> {
+    if key == "space" {
+        Some(" ")
+    } else if key.chars().count() == 1 {
+        Some(key)
+    } else {
+        None
+    }
+}
+
+fn terminal_modified_char(key: &str) -> Option<char> {
+    let mut chars = key.chars();
+    let ch = chars.next()?;
+    if chars.next().is_some() {
+        return None;
+    }
+    Some(ch.to_ascii_lowercase())
+}
+
+fn terminal_mouse_press_input(
+    event: &MouseDownEvent,
+    frame: &crate::terminal::TerminalFrame,
+    layout: TerminalLayoutSnapshot,
+) -> Option<TerminalInput> {
+    let (column, row) = terminal_grid_position(event.position.x, event.position.y, frame, layout)?;
+    Some(TerminalInput::MouseButton {
+        button: map_mouse_button(event.button)?,
+        column,
+        row,
+        kind: TerminalMouseEventKind::Press,
+        modifiers: map_mouse_modifiers(event.modifiers),
+    })
+}
+
+fn terminal_mouse_release_input(
+    event: &MouseUpEvent,
+    frame: &crate::terminal::TerminalFrame,
+    layout: TerminalLayoutSnapshot,
+) -> Option<TerminalInput> {
+    let (column, row) = terminal_grid_position(event.position.x, event.position.y, frame, layout)?;
+    Some(TerminalInput::MouseButton {
+        button: map_mouse_button(event.button)?,
+        column,
+        row,
+        kind: TerminalMouseEventKind::Release,
+        modifiers: map_mouse_modifiers(event.modifiers),
+    })
+}
+
+fn terminal_mouse_move_input(
+    event: &MouseMoveEvent,
+    frame: &crate::terminal::TerminalFrame,
+    layout: TerminalLayoutSnapshot,
+) -> Option<TerminalInput> {
+    let (column, row) = terminal_grid_position(event.position.x, event.position.y, frame, layout)?;
+    Some(TerminalInput::MouseMove {
+        button: event.pressed_button.and_then(map_mouse_button),
+        column,
+        row,
+        modifiers: map_mouse_modifiers(event.modifiers),
+    })
+}
+
+fn terminal_mouse_scroll_input(
+    event: &ScrollWheelEvent,
+    frame: &crate::terminal::TerminalFrame,
+    layout: TerminalLayoutSnapshot,
+) -> Option<TerminalInput> {
+    let (column, row) = terminal_grid_position(event.position.x, event.position.y, frame, layout)?;
+    let delta = match event.delta {
+        ScrollDelta::Pixels(delta) => {
+            let value: f32 = delta.y.into();
+            value
+        }
+        ScrollDelta::Lines(delta) => delta.y,
+    };
+    let direction = if delta < 0.0 {
+        TerminalMouseScrollDirection::Down
+    } else {
+        TerminalMouseScrollDirection::Up
+    };
+    Some(TerminalInput::MouseScroll {
+        direction,
+        column,
+        row,
+        modifiers: map_mouse_modifiers(event.modifiers),
+    })
+}
+
+fn terminal_grid_position(
+    x: gpui::Pixels,
+    y: gpui::Pixels,
+    frame: &crate::terminal::TerminalFrame,
+    layout: TerminalLayoutSnapshot,
+) -> Option<(u16, u16)> {
+    let x_px: f32 = x.into();
+    let y_px: f32 = y.into();
+    if x_px < layout.origin_x
+        || y_px < layout.origin_y
+        || x_px > layout.origin_x + layout.width
+        || y_px > layout.origin_y + layout.height
+    {
+        return None;
+    }
+    let local_x = (x_px - layout.origin_x).max(0.0);
+    let local_y = (y_px - layout.origin_y).max(0.0);
+    let cell_width = (layout.width / frame.columns.max(1) as f32).max(1.0);
+    let cell_height = (layout.height / frame.screen_lines.max(1) as f32).max(1.0);
+    let column = ((local_x / cell_width).floor() as usize).min(frame.columns.saturating_sub(1)) + 1;
+    let row =
+        ((local_y / cell_height).floor() as usize).min(frame.screen_lines.saturating_sub(1)) + 1;
+    Some((column as u16, row as u16))
+}
+
+fn map_mouse_button(button: MouseButton) -> Option<TerminalMouseButton> {
+    match button {
+        MouseButton::Left => Some(TerminalMouseButton::Left),
+        MouseButton::Right => Some(TerminalMouseButton::Right),
+        MouseButton::Middle => Some(TerminalMouseButton::Middle),
+        _ => None,
+    }
+}
+
+fn map_mouse_modifiers(modifiers: gpui::Modifiers) -> TerminalMouseModifiers {
+    TerminalMouseModifiers {
+        shift: modifiers.shift,
+        alt: modifiers.alt,
+        ctrl: modifiers.control,
+    }
+}
+
+#[allow(dead_code)]
+fn _into_pathbuf(value: &str) -> PathBuf {
+    PathBuf::from(value)
 }

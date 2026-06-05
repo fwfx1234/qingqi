@@ -1,7 +1,6 @@
 use std::{
     collections::HashSet,
     sync::{Arc, Mutex, RwLock},
-    time::Duration,
 };
 
 use global_hotkey::HotKeyState;
@@ -15,7 +14,10 @@ use crate::{
     core::shortcut::{self, ShortcutGlobal},
 };
 use qingqi_core::lock_or_recover;
-use qingqi_platform::power::PowerManager;
+use qingqi_platform::{
+    power::{PowerChangeListener, PowerManager},
+    theme::ThemeChangeListener,
+};
 
 #[derive(Default)]
 pub struct BackgroundSupervisor {
@@ -166,17 +168,28 @@ impl BackgroundSupervisor {
         self.tasks.push(task);
     }
 
-    pub fn start_theme_poll(&mut self, theme_store: Arc<RwLock<ThemeStore>>, cx: &mut App) {
-        if !self.mark_started("theme-poll") {
+    /// 通过 `NSDistributedNotificationCenter` 监听系统主题变化，
+    /// 替代轮询 `defaults read -g AppleInterfaceStyle`。
+    pub fn start_theme_listener(&mut self, theme_store: Arc<RwLock<ThemeStore>>, cx: &mut App) {
+        if !self.mark_started("theme-listener") {
             return;
         }
 
+        let listener = ThemeChangeListener::new();
+        let rx = listener.receiver();
+
         let task = cx.spawn(async move |async_cx| {
+            // 保持 listener 存活
+            let _listener = listener;
             loop {
-                async_cx
+                let rx = Arc::clone(&rx);
+                let recv_result = async_cx
                     .background_executor()
-                    .timer(Duration::from_secs(30))
+                    .spawn(async move { rx.lock().ok()?.recv().ok() })
                     .await;
+                if recv_result.is_none() {
+                    break;
+                }
                 let store = Arc::clone(&theme_store);
                 let _ = async_cx.update(move |_cx| {
                     if let Ok(mut ts) = store.write() {
@@ -188,18 +201,26 @@ impl BackgroundSupervisor {
         self.tasks.push(task);
     }
 
-    /// Poll power state every 5 s to handle WhenPluggedIn mode transitions.
-    pub fn start_power_poll(&mut self, power_manager: Arc<Mutex<PowerManager>>, cx: &mut App) {
-        if !self.mark_started("power-poll") {
+    /// 通过 `IOPSNotificationCreateRunLoopSource` 监听电源变化，替代轮询。
+    pub fn start_power_listener(&mut self, power_manager: Arc<Mutex<PowerManager>>, cx: &mut App) {
+        if !self.mark_started("power-listener") {
             return;
         }
 
+        let listener = PowerChangeListener::new();
+        let rx = listener.receiver();
+
         let task = cx.spawn(async move |async_cx| {
+            let _listener = listener;
             loop {
-                async_cx
+                let rx = Arc::clone(&rx);
+                let recv_result = async_cx
                     .background_executor()
-                    .timer(Duration::from_secs(15))
+                    .spawn(async move { rx.lock().ok()?.recv().ok() })
                     .await;
+                if recv_result.is_none() {
+                    break;
+                }
                 let pm = Arc::clone(&power_manager);
                 let _ = async_cx.update(move |_cx| {
                     lock_or_recover(&pm, "power-manager").update();

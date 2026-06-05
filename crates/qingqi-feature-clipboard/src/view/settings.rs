@@ -41,7 +41,7 @@ pub(super) fn settings_titlebar_slot(
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme::semantic().text_primary)
-                .child("设置"),
+                .child("剪贴板设置"),
         )
 }
 
@@ -53,6 +53,8 @@ pub(super) fn settings_page(
     dark: bool,
     chrome_metrics: ui::WindowChromeMetrics,
 ) -> impl IntoElement {
+    let back_handle = handle.clone();
+
     div()
         .size_full()
         .pt(px(chrome_metrics.content_top_padding))
@@ -61,12 +63,50 @@ pub(super) fn settings_page(
         .overflow_hidden()
         .child(
             div()
+                .flex_none()
+                .px(px(8.0))
+                .pt(px(8.0))
+                .child(settings_back_button(back_handle)),
+        )
+        .child(
+            div()
                 .flex_1()
                 .min_h(px(0.0))
                 .overflow_y_scrollbar()
                 .p(px(8.0))
                 .child(settings_panel(handle, config, inputs, dark)),
         )
+}
+
+fn settings_back_button(handle: Entity<ClipboardView>) -> impl IntoElement {
+    div()
+        .id("clipboard-settings-content-back")
+        .h(px(28.0))
+        .px(px(8.0))
+        .rounded(px(5.0))
+        .border_1()
+        .border_color(ui::border_light())
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.55))
+        .flex()
+        .items_center()
+        .gap(px(4.0))
+        .text_size(px(10.0))
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .text_color(theme::semantic().text_secondary)
+        .hover(|style| style.bg(theme::semantic().bg_hover).cursor_pointer())
+        .child(
+            Icon::new(IconName::ChevronLeft)
+                .with_size(ComponentSize::Small)
+                .text_color(theme::semantic().text_secondary),
+        )
+        .child("返回剪贴板")
+        .on_click(move |_, _, cx| {
+            cx.stop_propagation();
+            let _ = cx.update_entity(&handle, |panel, cx| {
+                panel.set_tab(ClipboardTab::History);
+                cx.notify();
+            });
+        })
 }
 
 fn settings_panel(

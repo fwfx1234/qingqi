@@ -15,7 +15,7 @@ use qingqi_core::lock_or_recover;
 use qingqi_core::plugin::{PluginManager, WindowView};
 use qingqi_plugin::command::{Action, Activation, CommandInvocation};
 use qingqi_plugin::events::AppEventBus;
-use qingqi_plugin::plugin_spec::WindowSize;
+use qingqi_plugin::plugin_spec::{WindowBackgroundSpec, WindowSize};
 use qingqi_ui::{text_input::TextInput, ui};
 
 pub type WindowControllerHandle = Arc<Mutex<WindowController>>;
@@ -133,17 +133,17 @@ impl WindowController {
             { lock_or_recover(&controller, "window_controller").launcher_window };
         if let Some(window_handle) = stored_window_handle {
             if let Some(handle) = window_handle.downcast::<Launcher>() {
-                cx.activate(true);
                 match handle.update(cx, |launcher, window, cx| {
+                    cx.activate(true);
                     window.activate_window();
-                    launcher.focus_query_input(window, cx);
+                    launcher.refresh_on_show(cx);
                 }) {
                     Ok(_) => {
+                        // 在独立的 update 中设置焦点，确保 refresh_on_show
+                        // 触发的重渲染完成后再请求焦点
                         let _ = handle.update(cx, |launcher, window, cx| {
-                            launcher.refresh_on_show(cx);
                             launcher.focus_query_input(window, cx);
                         });
-                        cx.activate(true);
                         return;
                     }
                     Err(error) => {
@@ -220,8 +220,8 @@ impl WindowController {
             Ok(handle) => {
                 lock_or_recover(&controller, "window_controller").launcher_window =
                     Some(handle.into());
-                cx.activate(true);
                 let _ = handle.update(cx, |launcher, window, cx| {
+                    cx.activate(true);
                     window.activate_window();
                     launcher.focus_query_input(window, cx);
                 });
@@ -290,7 +290,9 @@ impl WindowController {
         let title = view.title().to_string();
         let (display, bounds) = plugin_bounds(manifest.as_ref(), cx);
         let options = plugin_window_options(&title, manifest.as_ref(), display, bounds);
-        let client_drawn = manifest.as_ref().is_some_and(|m| m.window.always_on_top);
+        let client_drawn = manifest.as_ref().is_some_and(|m| {
+            m.window.always_on_top || m.window.background == WindowBackgroundSpec::Blurred
+        });
         let plugin_id_for_window = plugin_id.clone();
         let controller_for_window = Arc::clone(&controller);
         let window_started = Instant::now();
@@ -578,14 +580,18 @@ fn plugin_window_options(
     display: Option<std::rc::Rc<dyn gpui::PlatformDisplay>>,
     bounds: Bounds<gpui::Pixels>,
 ) -> WindowOptions {
-    // Two flavours of independent plugin window:
-    //   • always_on_top = false → an ordinary OS-decorated window with a
-    //     native titlebar + close button (full tools that needn't float).
-    //   • always_on_top = true  → a client-decorated `PopUp` that floats above
+    // Three flavours of independent plugin window:
+    //   • always_on_top = true   → a client-decorated `PopUp` that floats above
     //     other windows (clipboard, anti-peeping). macOS keeps native traffic
     //     lights on the transparent titlebar; other platforms get an overlaid
     //     `ui::window_close_button`.
+    //   • background = Blurred    → a Normal window with Blurred background and
+    //     client decorations so the titlebar appears transparent and the blur
+    //     extends edge-to-edge (SSH client, other glass-style tools).
+    //   • otherwise               → an ordinary OS-decorated window with a
+    //     native titlebar + close button (full tools that needn't float).
     let always_on_top = manifest.is_some_and(|m| m.window.always_on_top);
+    let blurred = manifest.is_some_and(|m| m.window.background == WindowBackgroundSpec::Blurred);
 
     if always_on_top {
         WindowOptions {
@@ -599,6 +605,23 @@ fn plugin_window_options(
             kind: WindowKind::PopUp,
             is_movable: true,
             is_resizable: false,
+            is_minimizable: true,
+            window_background: WindowBackgroundAppearance::Blurred,
+            window_min_size: Some(bounds.size),
+            window_decorations: Some(WindowDecorations::Client),
+            ..Default::default()
+        }
+    } else if blurred {
+        WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            display_id: display.map(|display| display.id()),
+            titlebar: Some(TitlebarOptions {
+                title: Some(title.to_string().into()),
+                appears_transparent: true,
+                ..Default::default()
+            }),
+            kind: WindowKind::Normal,
+            is_resizable: true,
             is_minimizable: true,
             window_background: WindowBackgroundAppearance::Blurred,
             window_min_size: Some(bounds.size),

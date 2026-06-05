@@ -36,6 +36,7 @@ const PREVIEW_TEXT_MAX_VISIBLE_LINES: usize = 80;
 fn clipboard_window_chrome_config() -> ui::WindowChromeConfig {
     ui::WindowChromeConfig::new()
         .title("剪贴板")
+        .titlebar_slot_alignment(ui::WindowChromeTitlebarSlotAlignment::Leading)
         .transparent(true)
 }
 

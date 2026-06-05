@@ -31,6 +31,119 @@ impl HttpMethod {
             Self::Delete => 0x994444,
         }
     }
+
+    pub fn all() -> [Self; 5] {
+        [Self::Get, Self::Post, Self::Put, Self::Patch, Self::Delete]
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum BodyMode {
+    #[default]
+    None,
+    Json,
+    Text,
+    Xml,
+    FormUrlEncoded,
+    FormData,
+    Binary,
+}
+
+impl BodyMode {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::None => "None",
+            Self::Json => "JSON",
+            Self::Text => "Text",
+            Self::Xml => "XML",
+            Self::FormUrlEncoded => "x-www-form",
+            Self::FormData => "Form Data",
+            Self::Binary => "Binary",
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Json => "json",
+            Self::Text => "text",
+            Self::Xml => "xml",
+            Self::FormUrlEncoded => "urlencoded",
+            Self::FormData => "formdata",
+            Self::Binary => "binary",
+        }
+    }
+
+    pub fn from_db(s: &str) -> Self {
+        match s {
+            "json" => Self::Json,
+            "text" => Self::Text,
+            "xml" => Self::Xml,
+            "urlencoded" | "form-url-encoded" => Self::FormUrlEncoded,
+            "formdata" | "form-data" => Self::FormData,
+            "binary" => Self::Binary,
+            _ => Self::None,
+        }
+    }
+
+    pub fn all() -> [BodyMode; 7] {
+        [
+            Self::None,
+            Self::Json,
+            Self::Text,
+            Self::Xml,
+            Self::FormUrlEncoded,
+            Self::FormData,
+            Self::Binary,
+        ]
+    }
+}
+
+impl std::fmt::Display for BodyMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AuthType {
+    None,
+    BearerToken,
+    BasicAuth,
+    ApiKey,
+}
+
+impl AuthType {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::None => "None",
+            Self::BearerToken => "Bearer",
+            Self::BasicAuth => "Basic",
+            Self::ApiKey => "API Key",
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::BearerToken => "bearer",
+            Self::BasicAuth => "basic",
+            Self::ApiKey => "apikey",
+        }
+    }
+
+    pub fn from_db(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "bearer" => Self::BearerToken,
+            "basic" => Self::BasicAuth,
+            "apikey" => Self::ApiKey,
+            _ => Self::None,
+        }
+    }
+
+    pub fn all() -> [AuthType; 4] {
+        [Self::None, Self::BearerToken, Self::BasicAuth, Self::ApiKey]
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -121,6 +234,7 @@ pub struct Script {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ApiRequest {
+    pub node_id: String,
     pub title: String,
     pub method: HttpMethod,
     pub path: String,
@@ -137,6 +251,7 @@ pub struct ApiRequest {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ApiGroup {
+    pub id: Option<String>,
     pub name: String,
     pub requests: Vec<ApiRequest>,
 }
@@ -373,5 +488,21 @@ mod tests {
         assert_eq!(restored.method, "POST");
         assert_eq!(restored.url, "/api/test");
         assert_eq!(restored.body_text, r#"{"key": "value"}"#);
+    }
+
+    #[test]
+    fn body_mode_roundtrip() {
+        for mode in BodyMode::all() {
+            let s = mode.as_str();
+            assert_eq!(BodyMode::from_db(s), mode);
+        }
+    }
+
+    #[test]
+    fn auth_type_roundtrip() {
+        for auth in AuthType::all() {
+            let s = auth.as_str();
+            assert_eq!(AuthType::from_db(s), auth);
+        }
     }
 }

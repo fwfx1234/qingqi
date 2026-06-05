@@ -78,10 +78,22 @@ pub enum WindowSize {
     Auto,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WindowBackgroundSpec {
+    /// 标准不透明窗口 — 原生 OS 标题栏，无透明效果。
+    #[default]
+    Opaque,
+    /// 毛玻璃模糊窗口。使用客户端装饰使标题栏透明，模糊效果边缘到边缘。
+    /// macOS 保留原生交通灯按钮；其他平台叠加关闭按钮。
+    Blurred,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WindowSpec {
     pub size: WindowSize,
     pub always_on_top: bool,
+    #[serde(default)]
+    pub background: WindowBackgroundSpec,
 }
 
 // ── Compatibility aliases for ongoing Manifest → Manifest migration ──
@@ -131,6 +143,7 @@ impl WindowSpec {
         Self {
             size: WindowSize::Fixed { width, height },
             always_on_top: false,
+            background: WindowBackgroundSpec::Opaque,
         }
     }
 
@@ -140,6 +153,7 @@ impl WindowSpec {
         Self {
             size: WindowSize::Fixed { width, height },
             always_on_top: true,
+            background: WindowBackgroundSpec::Opaque,
         }
     }
 
@@ -147,6 +161,16 @@ impl WindowSpec {
         Self {
             size: WindowSize::Ratio { width, height },
             always_on_top: false,
+            background: WindowBackgroundSpec::Opaque,
+        }
+    }
+
+    /// 毛玻璃窗口（比例尺寸）。模糊背景 + 客户端标题栏装饰。
+    pub const fn ratio_blurred(width: f32, height: f32) -> Self {
+        Self {
+            size: WindowSize::Ratio { width, height },
+            always_on_top: false,
+            background: WindowBackgroundSpec::Blurred,
         }
     }
 
@@ -154,6 +178,7 @@ impl WindowSpec {
         Self {
             size: WindowSize::Auto,
             always_on_top: false,
+            background: WindowBackgroundSpec::Opaque,
         }
     }
 
@@ -161,6 +186,7 @@ impl WindowSpec {
         Self {
             size,
             always_on_top: false,
+            background: WindowBackgroundSpec::Opaque,
         }
     }
 }

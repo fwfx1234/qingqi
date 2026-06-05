@@ -47,6 +47,10 @@ impl Plugin for ImageCompressPlugin {
     fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let service = ImageCompressService::new(self.paths.clone())?;
         let panel = cx.app.new(|_cx| view::ImageCompressView::new(service));
+        // 设置自身 Entity 引用，供事件驱动的 drain task 使用
+        panel.update(cx.app, |view, _cx| {
+            view.set_entity(panel.clone());
+        });
         Ok(PluginView::Inline(Box::new(ImageCompressInlineView {
             panel,
         })))

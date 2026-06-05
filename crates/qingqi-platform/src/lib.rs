@@ -9,4 +9,5 @@ pub mod macos;
 pub mod power;
 pub mod shell;
 pub mod svg_icon;
+pub mod theme;
 pub mod tray;

@@ -24,7 +24,7 @@ pub fn manifest() -> Manifest {
         window: WindowSpec::ratio(0.86, 0.82),
         category: PluginCategory::Tool,
         status: PluginStatus::Ready,
-        background: true,
+        background: false,
         dynamic_commands: false,
         visual: Some(PluginVisualSpec {
             icon: IconRef::asset("icons/capture.svg"),
@@ -75,9 +75,9 @@ mod tests {
     }
 
     #[test]
-    fn manifest_is_background() {
+    fn manifest_is_not_background() {
         let manifest = manifest();
-        assert!(manifest.background);
+        assert!(!manifest.background);
     }
 
     #[test]

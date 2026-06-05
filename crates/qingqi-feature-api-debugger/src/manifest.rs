@@ -21,7 +21,7 @@ pub fn manifest() -> Manifest {
         icon: IconRef::asset("icons/api.svg"),
         prefixes: vec!["api".into(), "http".into()],
         mode: PluginWindowMode::Window,
-        window: WindowSpec::ratio(0.84, 0.84),
+        window: WindowSpec::ratio_blurred(0.84, 0.84),
         category: PluginCategory::Tool,
         status: PluginStatus::Ready,
         background: false,
@@ -32,7 +32,7 @@ pub fn manifest() -> Manifest {
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Window,
-            window: WindowSpec::ratio(0.84, 0.84),
+            window: WindowSpec::ratio_blurred(0.84, 0.84),
         }),
         stats: Some(PluginStats {
             primary: "HTTP".into(),

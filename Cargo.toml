@@ -10,7 +10,9 @@ description = "A lightweight Rust + GPUI desktop toolbox inspired by Suishou."
 license = "MIT"
 
 [workspace.dependencies]
+alacritty_terminal = "0.26"
 anyhow = "1.0"
+async-trait = "0.1"
 dirs = "6.0"
 global-hotkey = "0.8"
 gpui = { version = "=0.2.2", features = ["runtime_shaders"] }
@@ -27,14 +29,17 @@ rcgen = { version = "0.14", features = ["crypto"] }
 regex = "1.12"
 reqwest = { version = "0.12", features = ["blocking", "stream"] }
 rfd = "0.15"
+russh = "0.54"
+russh-sftp = "2.1"
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 ssh2 = "0.9"
-suppaftp = { version = "6.0", features = ["secure"] }
+suppaftp = { version = "8.0.3", default-features = false, features = ["tokio-rustls-aws-lc-rs", "deprecated"] }
 time = { version = "0.3", features = ["formatting", "local-offset", "macros"] }
 tiny-skia = "0.11"
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
+tokio-rustls = "0.26"
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "std", "registry"] }
@@ -43,6 +48,9 @@ unicode-segmentation = "1.12"
 usvg = "0.45"
 uuid = { version = "1.16", features = ["v4"] }
 resvg = "0.45"
+rustls-native-certs = "0.8"
+sha2 = "0.10"
+webpki-roots = "0.26"
 
 [workspace.dependencies.windows]
 version = "0.61"

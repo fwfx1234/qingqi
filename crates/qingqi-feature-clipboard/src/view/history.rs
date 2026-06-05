@@ -100,12 +100,21 @@ pub(super) fn history_titlebar_slot(
         .h_full()
         .flex()
         .items_center()
-        .gap(px(6.0))
-        .child(search_field(query_input, dark).w(px(280.0)))
+        .gap(px(10.0))
+        .child(
+            div()
+                .flex_none()
+                .text_size(px(12.0))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme::semantic().text_primary)
+                .child("剪贴板"),
+        )
+        .child(search_field(query_input, dark).w(px(280.0)).flex_none())
         .child(
             div()
                 .id("clipboard-open-settings")
                 .size(px(26.0))
+                .flex_none()
                 .rounded(px(5.0))
                 .flex()
                 .items_center()

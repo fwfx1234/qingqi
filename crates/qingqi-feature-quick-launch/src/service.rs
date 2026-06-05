@@ -1,19 +1,16 @@
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
 use std::{
     collections::{HashMap, HashSet},
-    process::{Command as ProcessCommand, Stdio},
+    process::Stdio,
     sync::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
-        mpsc,
     },
-    thread,
     time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result, anyhow, ensure};
 use time::{OffsetDateTime, macros::format_description};
+use tokio::sync::Notify;
 
 use crate::{
     manifest::PLUGIN_ID,
@@ -27,15 +24,21 @@ use crate::{
     },
     store::QuickLaunchStore,
 };
-use qingqi_plugin::{database::DatabaseService, storage::AppPaths};
+use qingqi_plugin::{
+    database::DatabaseService,
+    events::{AppEventBus, AppEventKind},
+    storage::AppPaths,
+};
 
 pub struct QuickLaunchService {
     store: Mutex<QuickLaunchStore>,
     execution: Mutex<ExecutionState>,
     revision: AtomicU64,
-    /// 每次 revision 变化时发送通知，用于唤醒后台 watcher（代替定时轮询）
-    notify_tx: mpsc::SyncSender<()>,
-    notify_rx: Mutex<Option<mpsc::Receiver<()>>>,
+    events: AppEventBus,
+    /// tokio 运行时，用于异步执行脚本动作。
+    runtime: tokio::runtime::Runtime,
+    /// 每个动作一个 Notify，用于异步任务中检测停止请求。
+    stop_notify: Mutex<HashMap<i64, Arc<Notify>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -99,33 +102,39 @@ struct ExecutionState {
 }
 
 impl QuickLaunchService {
-    pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> Result<Self> {
+    pub fn new(
+        database: Arc<DatabaseService>,
+        paths: AppPaths,
+        events: AppEventBus,
+    ) -> Result<Self> {
         let _ = paths;
         let store = QuickLaunchStore::open(
             database,
             &qingqi_plugin::database::feature_database_key(PLUGIN_ID, "actions"),
         )?;
-        let (notify_tx, notify_rx) = mpsc::sync_channel(1);
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_time()
+            .enable_io()
+            .build()
+            .context("创建 tokio 运行时失败")?;
         let service = Self {
             store: Mutex::new(store),
             execution: Mutex::new(ExecutionState::default()),
             revision: AtomicU64::new(0),
-            notify_tx,
-            notify_rx: Mutex::new(Some(notify_rx)),
+            events,
+            runtime,
+            stop_notify: Mutex::new(HashMap::new()),
         };
         service.seed_defaults()?;
         Ok(service)
     }
 
-    /// 取出通知接收器（仅可调用一次），用于事件驱动的后台 watcher
-    pub fn take_notify_receiver(&self) -> Option<mpsc::Receiver<()>> {
-        self.notify_rx.lock().ok()?.take()
-    }
-
-    /// 版本号加一并通过 channel 通知后台 watcher
+    /// 版本号加一，并通知系统命令列表已变更
     fn bump_revision(&self) -> u64 {
         let rev = self.revision.fetch_add(1, Ordering::SeqCst) + 1;
-        let _ = self.notify_tx.send(());
+        self.events
+            .publish(PLUGIN_ID, AppEventKind::CommandsChanged);
         rev
     }
 
@@ -272,10 +281,20 @@ impl QuickLaunchService {
         let start_message = format!("已开始执行 {}", prepared.name);
         self.mark_running(&prepared, start_message.clone())?;
 
+        // 为该动作注册停止通知
+        let stop_notify = Arc::new(Notify::new());
+        {
+            let mut sn = self.stop_notify.lock().expect("stop_notify poisoned");
+            sn.insert(action_id, Arc::clone(&stop_notify));
+        }
+
         let service = Arc::clone(self);
-        thread::spawn(move || {
+        self.runtime.spawn(async move {
             let action_id = prepared.id;
-            match service.execute_prepared_and_record(&prepared) {
+            match service
+                .execute_prepared_and_record_async(&prepared, stop_notify)
+                .await
+            {
                 Ok(run) => service.mark_finished(&prepared, run),
                 Err(error) => service.mark_finished(
                     &prepared,
@@ -293,6 +312,12 @@ impl QuickLaunchService {
                     },
                 ),
             }
+            // 清理停止通知
+            service
+                .stop_notify
+                .lock()
+                .expect("stop_notify poisoned")
+                .remove(&action_id);
         });
 
         Ok(start_message)
@@ -320,7 +345,11 @@ impl QuickLaunchService {
         };
         ensure!(action.enabled, "该动作已停用");
         let prepared = prepare_action(&action, values)?;
-        Ok(self.execute_prepared_and_record(&prepared)?.message)
+        let stop_notify = Arc::new(Notify::new());
+        Ok(self
+            .runtime
+            .block_on(self.execute_prepared_and_record_async(&prepared, stop_notify))?
+            .message)
     }
 
     pub fn list_runs(&self, action_id: i64, limit: usize) -> Result<Vec<QuickRun>> {
@@ -372,7 +401,42 @@ impl QuickLaunchService {
             let _ = signal_process(pid, "TERM");
         }
 
+        // 通知异步任务停止
+        if let Some(notify) = self
+            .stop_notify
+            .lock()
+            .expect("stop_notify poisoned")
+            .get(&action_id)
+        {
+            notify.notify_one();
+        }
+
         Ok(String::from("已请求停止动作"))
+    }
+
+    /// 应用退出时调用：终止所有正在运行的子进程，防止孤儿进程。
+    pub fn shutdown_all(&self) {
+        let pids: Vec<u32> = {
+            let state = self.execution.lock().expect("quick launch state poisoned");
+            state.active_pids.values().copied().collect()
+        };
+
+        if pids.is_empty() {
+            return;
+        }
+
+        // 1. 发送 SIGTERM 给所有子进程组
+        for &pid in &pids {
+            let _ = signal_process(pid, "TERM");
+        }
+
+        // 2. 短暂等待进程优雅退出
+        std::thread::sleep(Duration::from_millis(200));
+
+        // 3. 发送 SIGKILL 给仍存活的进程
+        for &pid in &pids {
+            let _ = signal_process(pid, "KILL");
+        }
     }
 
     fn mark_running(&self, action: &PreparedAction, message: String) -> Result<()> {
@@ -441,15 +505,14 @@ impl QuickLaunchService {
         });
     }
 
-    fn stop_requested(&self, action_id: i64) -> bool {
-        let state = self.execution.lock().expect("quick launch state poisoned");
-        state.stopping_action_ids.contains(&action_id)
-    }
-
-    fn execute_prepared_and_record(&self, action: &PreparedAction) -> Result<QuickRun> {
+    async fn execute_prepared_and_record_async(
+        &self,
+        action: &PreparedAction,
+        stop_notify: Arc<Notify>,
+    ) -> Result<QuickRun> {
         let started_at = now_label();
         let timer = Instant::now();
-        let capture = run_action_capture(self, action);
+        let capture = run_action_capture_async(self, action, stop_notify).await;
         let finished_at = now_label();
         let duration_ms = timer.elapsed().as_millis() as i64;
 
@@ -573,9 +636,13 @@ fn parameter_error(error: MissingParameterError) -> anyhow::Error {
     anyhow!(error.to_string())
 }
 
-fn run_action_capture(service: &QuickLaunchService, action: &PreparedAction) -> RunCapture {
+async fn run_action_capture_async(
+    service: &QuickLaunchService,
+    action: &PreparedAction,
+    stop_notify: Arc<Notify>,
+) -> RunCapture {
     match action.kind {
-        ActionKind::Script => run_script_action(service, action),
+        ActionKind::Script => run_script_action_async(service, action, stop_notify).await,
         ActionKind::OpenPath => {
             if action.path.trim().is_empty() {
                 return RunCapture {
@@ -586,14 +653,12 @@ fn run_action_capture(service: &QuickLaunchService, action: &PreparedAction) -> 
                     message: String::from("执行失败: 路径不能为空"),
                 };
             }
-            let mut command = ProcessCommand::new("open");
-            command.arg(&action.path);
-            command.args(&action.args);
-            match command
-                .output()
-                .with_context(|| format!("打开路径失败: {}", action.path))
-            {
-                Ok(output) => capture_from_output(action, output),
+            let output = std::process::Command::new("open")
+                .arg(&action.path)
+                .args(&action.args)
+                .output();
+            match output {
+                Ok(out) => capture_from_output(action, out),
                 Err(error) => error_capture(&error.to_string()),
             }
         }
@@ -607,28 +672,34 @@ fn run_action_capture(service: &QuickLaunchService, action: &PreparedAction) -> 
                     message: String::from("执行失败: URL 不能为空"),
                 };
             }
-            match ProcessCommand::new("open")
-                .arg(&action.url)
-                .output()
-                .with_context(|| format!("打开 URL 失败: {}", action.url))
-            {
-                Ok(output) => capture_from_output(action, output),
+            let output = std::process::Command::new("open").arg(&action.url).output();
+            match output {
+                Ok(out) => capture_from_output(action, out),
                 Err(error) => error_capture(&error.to_string()),
             }
         }
     }
 }
 
-fn run_script_action(service: &QuickLaunchService, action: &PreparedAction) -> RunCapture {
+/// 使用 tokio 异步执行脚本，`tokio::select!` 三路并发：
+/// 1. 进程正常结束
+/// 2. 超时 → SIGTERM → 250ms → SIGKILL
+/// 3. 停止信号 → SIGTERM → 250ms → SIGKILL
+async fn run_script_action_async(
+    service: &QuickLaunchService,
+    action: &PreparedAction,
+    stop_notify: Arc<Notify>,
+) -> RunCapture {
     let Some((program, arguments)) = build_script_command(action) else {
         return error_capture("脚本配置不完整");
     };
 
-    let mut command = ProcessCommand::new(&program);
+    let mut command = tokio::process::Command::new(&program);
     command
         .args(arguments)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
     #[cfg(unix)]
     {
         command.process_group(0);
@@ -645,80 +716,68 @@ fn run_script_action(service: &QuickLaunchService, action: &PreparedAction) -> R
         );
     }
 
-    let child = match command
-        .spawn()
-        .with_context(|| format!("执行脚本失败: {}", action.name))
-    {
+    let child = match command.spawn() {
         Ok(child) => child,
-        Err(error) => return error_capture(&error.to_string()),
+        Err(error) => return error_capture(&format!("执行脚本失败: {error}")),
     };
 
-    let pid = child.id();
+    let pid = child.id().unwrap_or(0);
     service.set_active_pid(action.id, pid);
 
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let result = child.wait_with_output();
+    // 将 child 交给独立 task 等待，通过 oneshot 返回结果。
+    // 超时/停止时通过 OS 信号 kill 进程。
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    tokio::spawn(async move {
+        let result = child.wait_with_output().await;
         let _ = tx.send(result);
     });
 
-    let started = Instant::now();
-    let mut timed_out = false;
-    let mut stop_sent = false;
-    let mut forced_kill = false;
-    let mut signal_deadline = None;
+    let timeout_sleep: std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> =
+        if action.timeout_sec > 0 {
+            Box::pin(tokio::time::sleep(Duration::from_secs(
+                action.timeout_sec as u64,
+            )))
+        } else {
+            Box::pin(std::future::pending())
+        };
 
-    loop {
-        match rx.try_recv() {
-            Ok(result) => {
-                service.clear_active_pid(action.id);
-                return match result {
-                    Ok(output) => {
-                        let mut capture = capture_from_output(action, output);
-                        let stop_requested = stop_sent || service.stop_requested(action.id);
-                        if timed_out {
-                            capture.status = RunStatus::Timeout;
-                            capture.message = format!("{} 执行超时", action.name);
-                        } else if stop_requested {
-                            capture.status = RunStatus::Stopped;
-                            capture.message = format!("已停止 {}", action.name);
-                        }
-                        capture
-                    }
-                    Err(error) => error_capture(&error.to_string()),
-                };
-            }
-            Err(mpsc::TryRecvError::Empty) => {}
-            Err(mpsc::TryRecvError::Disconnected) => {
-                service.clear_active_pid(action.id);
-                return error_capture("执行线程已断开");
+    let stop_fut = stop_notify.notified();
+
+    tokio::select! {
+        result = rx => {
+            service.clear_active_pid(action.id);
+            match result {
+                Ok(Ok(output)) => capture_from_output(action, output),
+                Ok(Err(error)) => error_capture(&format!("进程异常退出: {error}")),
+                Err(_) => error_capture("执行线程已断开"),
             }
         }
-
-        if !timed_out && action.timeout_sec > 0 {
-            let timeout = Duration::from_secs(action.timeout_sec as u64);
-            if started.elapsed() >= timeout {
-                timed_out = true;
-                let _ = signal_process(pid, "TERM");
-                signal_deadline = Some(Instant::now() + Duration::from_millis(250));
-            }
-        }
-
-        if !stop_sent && service.stop_requested(action.id) {
-            stop_sent = true;
+        _ = timeout_sleep => {
             let _ = signal_process(pid, "TERM");
-            signal_deadline = Some(Instant::now() + Duration::from_millis(250));
-        }
-
-        if !forced_kill
-            && let Some(deadline) = signal_deadline
-            && Instant::now() >= deadline
-        {
-            forced_kill = true;
+            tokio::time::sleep(Duration::from_millis(250)).await;
             let _ = signal_process(pid, "KILL");
+            service.clear_active_pid(action.id);
+            RunCapture {
+                status: RunStatus::Timeout,
+                exit_code: None,
+                stdout: String::new(),
+                stderr: String::new(),
+                message: format!("{} 执行超时", action.name),
+            }
         }
-
-        thread::sleep(Duration::from_millis(25));
+        _ = stop_fut => {
+            let _ = signal_process(pid, "TERM");
+            tokio::time::sleep(Duration::from_millis(250)).await;
+            let _ = signal_process(pid, "KILL");
+            service.clear_active_pid(action.id);
+            RunCapture {
+                status: RunStatus::Stopped,
+                exit_code: None,
+                stdout: String::new(),
+                stderr: String::new(),
+                message: format!("已停止 {}", action.name),
+            }
+        }
     }
 }
 
@@ -1005,7 +1064,6 @@ mod tests {
         fs,
         path::PathBuf,
         sync::Arc,
-        thread,
         time::{Duration, SystemTime, UNIX_EPOCH},
     };
 
@@ -1056,23 +1114,34 @@ mod tests {
         )));
         database
             .register_database(qingqi_plugin::database::DatabaseSpec::path(
-                qingqi_plugin::database::feature_database_key("quick-launch", "actions"),
+                qingqi_plugin::database::feature_database_key(PLUGIN_ID, "actions"),
                 path,
             ))
             .unwrap();
         let store = QuickLaunchStore::open(
             database,
-            &qingqi_plugin::database::feature_database_key("quick-launch", "actions"),
+            &qingqi_plugin::database::feature_database_key(PLUGIN_ID, "actions"),
         )
         .expect("store should open");
-        let (notify_tx, notify_rx) = mpsc::sync_channel(1);
-        Arc::new(QuickLaunchService {
+        let events = AppEventBus::new();
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_time()
+            .enable_io()
+            .build()
+            .expect("tokio runtime should build");
+        let service = QuickLaunchService {
             store: Mutex::new(store),
             execution: Mutex::new(ExecutionState::default()),
             revision: AtomicU64::new(0),
-            notify_tx,
-            notify_rx: Mutex::new(Some(notify_rx)),
-        })
+            events,
+            runtime,
+            stop_notify: Mutex::new(HashMap::new()),
+        };
+        service
+            .seed_defaults()
+            .expect("seed defaults should succeed");
+        Arc::new(service)
     }
 
     #[test]
@@ -1119,18 +1188,19 @@ mod tests {
                 .contains(&action.id)
         );
 
-        let mut completed = false;
-        for _ in 0..40 {
-            if !service
-                .runtime_snapshot()
-                .running_action_ids
-                .contains(&action.id)
-            {
-                completed = true;
-                break;
+        let completed = service.runtime.block_on(async {
+            for _ in 0..40 {
+                if !service
+                    .runtime_snapshot()
+                    .running_action_ids
+                    .contains(&action.id)
+                {
+                    return true;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
             }
-            thread::sleep(Duration::from_millis(20));
-        }
+            false
+        });
         assert!(completed, "background action should finish");
 
         let snapshot = service.runtime_snapshot();
@@ -1162,22 +1232,24 @@ mod tests {
         let _ = service
             .start_action(action.id)
             .expect("action should start");
-        thread::sleep(Duration::from_millis(120));
+        // 等待进程启动后再请求停止
+        std::thread::sleep(Duration::from_millis(120));
         let stopped = service.stop_action(action.id).expect("stop should succeed");
         assert!(stopped.contains("已请求停止"));
 
-        let mut completed = false;
-        for _ in 0..40 {
-            if !service
-                .runtime_snapshot()
-                .running_action_ids
-                .contains(&action.id)
-            {
-                completed = true;
-                break;
+        let completed = service.runtime.block_on(async {
+            for _ in 0..40 {
+                if !service
+                    .runtime_snapshot()
+                    .running_action_ids
+                    .contains(&action.id)
+                {
+                    return true;
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
             }
-            thread::sleep(Duration::from_millis(25));
-        }
+            false
+        });
         assert!(completed, "stopped action should finish");
 
         let runs = service.list_runs(action.id, 5).expect("runs should load");
@@ -1201,18 +1273,19 @@ mod tests {
             .start_action(action.id)
             .expect("action should start");
 
-        let mut completed = false;
-        for _ in 0..80 {
-            if !service
-                .runtime_snapshot()
-                .running_action_ids
-                .contains(&action.id)
-            {
-                completed = true;
-                break;
+        let completed = service.runtime.block_on(async {
+            for _ in 0..80 {
+                if !service
+                    .runtime_snapshot()
+                    .running_action_ids
+                    .contains(&action.id)
+                {
+                    return true;
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
             }
-            thread::sleep(Duration::from_millis(25));
-        }
+            false
+        });
         assert!(completed, "timed out action should finish");
 
         let runs = service.list_runs(action.id, 5).expect("runs should load");

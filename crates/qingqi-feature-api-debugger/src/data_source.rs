@@ -299,6 +299,27 @@ impl ApiDebuggerDataSource {
         Ok(affected > 0)
     }
 
+    pub fn delete_collection_node_recursive(&self, id: &str) -> Result<usize> {
+        let nodes = self.list_collection_nodes()?;
+        let mut to_delete = vec![id.to_string()];
+        let mut queue = vec![id.to_string()];
+        while let Some(current_id) = queue.pop() {
+            for node in &nodes {
+                if node.parent_id.as_deref() == Some(current_id.as_str()) {
+                    to_delete.push(node.id.clone());
+                    queue.push(node.id.clone());
+                }
+            }
+        }
+        let mut total = 0usize;
+        for node_id in &to_delete {
+            if self.delete_collection_node(node_id)? {
+                total += 1;
+            }
+        }
+        Ok(total)
+    }
+
     pub fn set_collection_node_expanded(&self, id: &str, expanded: bool) -> Result<()> {
         let conn = self.connection()?;
         conn.execute(

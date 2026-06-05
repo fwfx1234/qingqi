@@ -1,598 +1,407 @@
-use std::{
-    collections::HashMap,
-    path::Path,
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
-    thread,
-    time::Instant,
-};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::{Condvar, Mutex};
 
-use super::{
-    model::{TransferDirection, TransferItem, TransferStatus},
-    pool::RemoteConnectionPool,
-};
+use crate::model::{SessionId, TransferId};
 
-/// Aggregated counts derived from a snapshot of [`TransferItem`]s.
-///
-/// Surfaces a richer breakdown than total/active alone so the transfer strip can
-/// honestly distinguish completed, failed, and cancelled outcomes without
-/// inferring state from UI-only flags.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct TransferCounts {
-    pub total: usize,
-    pub active: usize,
-    pub completed: usize,
-    pub failed: usize,
-    pub cancelled: usize,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransferDirection {
+    Upload,
+    Download,
 }
 
-impl TransferCounts {
-    pub fn terminal(&self) -> usize {
-        self.completed + self.failed + self.cancelled
-    }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransferStatus {
+    Queued,
+    Running,
+    Completed,
+    Failed,
+    Cancelled,
+}
 
-    pub fn has_terminal(&self) -> bool {
-        self.terminal() > 0
+impl TransferStatus {
+    pub fn is_terminal(self) -> bool {
+        matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
     }
 }
 
-/// Compute a fresh [`TransferCounts`] snapshot from items.
-pub fn transfer_counts(items: &[TransferItem]) -> TransferCounts {
-    let mut counts = TransferCounts {
-        total: items.len(),
-        ..TransferCounts::default()
-    };
-    for item in items {
-        match item.status {
-            TransferStatus::Queued | TransferStatus::Running => counts.active += 1,
-            TransferStatus::Completed => counts.completed += 1,
-            TransferStatus::Failed => counts.failed += 1,
-            TransferStatus::Cancelled => counts.cancelled += 1,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransferSnapshot {
+    pub id: TransferId,
+    pub session_id: SessionId,
+    pub direction: TransferDirection,
+    pub local_path: String,
+    pub remote_path: String,
+    pub transferred_bytes: u64,
+    pub total_bytes: u64,
+    pub status: TransferStatus,
+    pub message: String,
+}
+
+impl TransferSnapshot {
+    pub fn progress_percent(&self) -> u8 {
+        if self.total_bytes == 0 {
+            return 0;
         }
+        ((self.transferred_bytes as f64 / self.total_bytes as f64) * 100.0).clamp(0.0, 100.0) as u8
     }
-    counts
 }
 
-pub struct TransferService {
-    items: Mutex<HashMap<String, TransferItem>>,
-    cancelled: Mutex<std::collections::HashSet<String>>,
-    pool: Arc<RemoteConnectionPool>,
-    revision: Arc<std::sync::atomic::AtomicU64>,
-    shutdown: AtomicBool,
+#[derive(Default)]
+struct TransferState {
+    items: HashMap<TransferId, TransferSnapshot>,
+    queue_order: VecDeque<TransferId>,
+    running_by_session: HashMap<SessionId, usize>,
+    limits_by_session: HashMap<SessionId, usize>,
+    cancelled: HashSet<TransferId>,
 }
 
-impl TransferService {
-    pub fn new(
-        pool: Arc<RemoteConnectionPool>,
-        revision: Arc<std::sync::atomic::AtomicU64>,
-    ) -> Self {
+pub struct TransferQueue {
+    default_concurrency_per_session: usize,
+    state: Mutex<TransferState>,
+    slot_available: Condvar,
+}
+
+impl TransferQueue {
+    pub fn new(concurrency_per_session: usize) -> Self {
         Self {
-            items: Mutex::new(HashMap::new()),
-            cancelled: Mutex::new(std::collections::HashSet::new()),
-            pool,
-            revision,
-            shutdown: AtomicBool::new(false),
+            default_concurrency_per_session: concurrency_per_session.max(1),
+            state: Mutex::new(TransferState::default()),
+            slot_available: Condvar::new(),
         }
     }
 
-    pub fn start_upload(
-        self: &Arc<Self>,
-        profile_id: i64,
-        local_path: String,
-        remote_path: String,
-    ) -> String {
-        let size = std::fs::metadata(&local_path)
-            .map(|m| m.len() as i64)
-            .unwrap_or(0);
-        let item = TransferItem::new(
-            uuid::Uuid::new_v4().to_string(),
-            TransferDirection::Upload,
-            local_path.clone(),
-            remote_path.clone(),
-            size,
-        );
-        let id = item.id.clone();
-
-        if let Ok(mut items) = self.items.lock() {
-            items.insert(id.clone(), item);
+    pub fn set_session_limit(&self, session_id: SessionId, concurrency: usize) {
+        if let Ok(mut state) = self.state.lock() {
+            state
+                .limits_by_session
+                .insert(session_id, concurrency.max(1));
         }
-        self.bump();
-
-        // Spawn background thread for this transfer
-        let svc = Arc::clone(self);
-        let tid = id.clone();
-        thread::spawn(move || {
-            svc.run_transfer(
-                &tid,
-                profile_id,
-                TransferDirection::Upload,
-                &local_path,
-                &remote_path,
-                size,
-            );
-        });
-
-        id
     }
 
-    pub fn start_download(
-        self: &Arc<Self>,
-        profile_id: i64,
-        remote_path: String,
-        local_path: String,
-        size: i64,
-    ) -> String {
-        let item = TransferItem::new(
-            uuid::Uuid::new_v4().to_string(),
-            TransferDirection::Download,
-            local_path.clone(),
-            remote_path.clone(),
-            size,
-        );
-        let id = item.id.clone();
-
-        if let Ok(mut items) = self.items.lock() {
-            items.insert(id.clone(), item);
+    pub fn remove_session_limit(&self, session_id: &SessionId) {
+        if let Ok(mut state) = self.state.lock() {
+            state.limits_by_session.remove(session_id);
+            state.running_by_session.remove(session_id);
         }
-        self.bump();
-
-        let svc = Arc::clone(self);
-        let tid = id.clone();
-        thread::spawn(move || {
-            svc.run_transfer(
-                &tid,
-                profile_id,
-                TransferDirection::Download,
-                &local_path,
-                &remote_path,
-                size,
-            );
-        });
-
-        id
     }
 
-    fn run_transfer(
+    pub fn enqueue(
         &self,
-        transfer_id: &str,
-        profile_id: i64,
+        session_id: SessionId,
         direction: TransferDirection,
-        local_path: &str,
-        remote_path: &str,
-        _size: i64,
-    ) {
-        // Mark as running
-        if let Ok(mut items) = self.items.lock() {
-            if let Some(item) = items.get_mut(transfer_id) {
-                item.status = TransferStatus::Running;
-                item.message = "传输中".into();
+        local_path: String,
+        remote_path: String,
+        total_bytes: u64,
+    ) -> TransferId {
+        let id = TransferId::new();
+        let mut state = self.state.lock().expect("transfer queue lock");
+        state.items.insert(
+            id.clone(),
+            TransferSnapshot {
+                id: id.clone(),
+                session_id,
+                direction,
+                local_path,
+                remote_path,
+                transferred_bytes: 0,
+                total_bytes,
+                status: TransferStatus::Queued,
+                message: String::from("排队中"),
+            },
+        );
+        state.queue_order.push_back(id.clone());
+        id
+    }
+
+    pub fn start_next_for_session(&self, session_id: &SessionId) -> Option<TransferId> {
+        let mut state = self.state.lock().ok()?;
+        let running = state
+            .running_by_session
+            .get(session_id)
+            .copied()
+            .unwrap_or(0);
+        let limit = state
+            .limits_by_session
+            .get(session_id)
+            .copied()
+            .unwrap_or(self.default_concurrency_per_session);
+        if running >= limit {
+            return None;
+        }
+        let next_index = state.queue_order.iter().position(|id| {
+            state.items.get(id).is_some_and(|item| {
+                item.session_id == *session_id && item.status == TransferStatus::Queued
+            })
+        })?;
+        let next_id = state.queue_order.remove(next_index)?;
+        if let Some(item) = state.items.get_mut(&next_id) {
+            item.status = TransferStatus::Running;
+            item.message = String::from("传输中");
+        }
+        *state
+            .running_by_session
+            .entry(session_id.clone())
+            .or_default() += 1;
+        Some(next_id)
+    }
+
+    pub fn try_start(&self, id: &TransferId) -> bool {
+        let Ok(mut state) = self.state.lock() else {
+            return false;
+        };
+        matches!(
+            try_start_locked(&mut state, id, self.default_concurrency_per_session),
+            StartOutcome::Started
+        )
+    }
+
+    /// 阻塞等待该传输拿到一个并发槽位（事件驱动，不轮询）。
+    /// 返回 true 表示已置为 Running；false 表示已被取消/不存在。
+    pub fn wait_and_start(&self, id: &TransferId) -> bool {
+        let mut state = self.state.lock().expect("transfer queue lock");
+        loop {
+            match try_start_locked(&mut state, id, self.default_concurrency_per_session) {
+                StartOutcome::Started => return true,
+                StartOutcome::Cancelled => return false,
+                StartOutcome::WouldBlock => {
+                    state = self
+                        .slot_available
+                        .wait(state)
+                        .expect("transfer queue condvar");
+                }
             }
         }
-        self.bump();
+    }
 
-        let started_at = Instant::now();
-        let tid = transfer_id.to_string();
-        let cancelled = &self.cancelled;
-        let items_mutex = &self.items;
-        let revision = &self.revision;
-
-        // Check cancellation
-        let is_cancelled =
-            || -> bool { cancelled.lock().map(|c| c.contains(&tid)).unwrap_or(false) };
-
-        // Progress callback
-        let progress = |done: usize, total: usize| {
-            if is_cancelled() {
-                return;
+    pub fn mark_progress(&self, id: &TransferId, transferred: u64, total: Option<u64>) {
+        if let Ok(mut state) = self.state.lock()
+            && let Some(item) = state.items.get_mut(id)
+        {
+            item.transferred_bytes = transferred;
+            if let Some(total) = total {
+                item.total_bytes = total;
             }
-            if let Ok(mut items) = items_mutex.lock() {
-                if let Some(item) = items.get_mut(&tid) {
-                    item.transferred = done as i64;
-                    if total > 0 {
-                        item.size = total as i64;
-                    }
-                    let elapsed = started_at.elapsed().as_secs_f64().max(0.1);
-                    let speed = (done as f64 / 1024.0) / elapsed;
-                    item.speed = format!("{speed:.1} KB/s");
-                }
-            }
-            revision.fetch_add(1, Ordering::SeqCst);
-        };
+        }
+    }
 
-        // Execute transfer via pool
-        let result = self
-            .pool
-            .with_backend(profile_id, |backend| match direction {
-                TransferDirection::Upload => {
-                    backend.upload_file(Path::new(local_path), remote_path, &progress)
-                }
-                TransferDirection::Download => {
-                    backend.download_file(remote_path, Path::new(local_path), &progress)
-                }
-            });
+    pub fn finish(&self, id: &TransferId, success: bool, message: String) {
+        if let Ok(mut state) = self.state.lock() {
+            let was_cancelled = state.cancelled.remove(id);
+            let session_id = state.items.get(id).map(|item| item.session_id.clone());
 
-        // Update final status
-        let was_cancelled = is_cancelled();
-        if let Ok(mut items) = self.items.lock() {
-            if let Some(item) = items.get_mut(transfer_id) {
+            if let Some(item) = state.items.get_mut(id) {
                 if was_cancelled {
                     item.status = TransferStatus::Cancelled;
-                    item.message = "已取消".into();
-                } else if let Some(inner_result) = result {
-                    match inner_result {
-                        Ok(()) => {
-                            item.status = TransferStatus::Completed;
-                            item.transferred = item.size;
-                            item.speed = "0 KB/s".into();
-                            item.message = "已完成".into();
-                        }
-                        Err(ref e) => {
-                            item.status = TransferStatus::Failed;
-                            item.speed = "0 KB/s".into();
-                            item.message = format!("{e}");
-                        }
-                    }
                 } else {
-                    item.status = TransferStatus::Failed;
-                    item.message = "连接已断开".into();
+                    item.status = if success {
+                        TransferStatus::Completed
+                    } else {
+                        TransferStatus::Failed
+                    };
                 }
+                item.message = message;
             }
-        }
-        self.bump();
 
-        // Remove from cancelled set
-        if let Ok(mut c) = cancelled.lock() {
-            c.remove(transfer_id);
+            if let Some(session_id) = session_id {
+                let running = state.running_by_session.entry(session_id).or_default();
+                *running = running.saturating_sub(1);
+            }
+            self.slot_available.notify_all();
         }
     }
 
-    pub fn cancel(&self, transfer_id: &str) {
-        if let Ok(mut c) = self.cancelled.lock() {
-            c.insert(transfer_id.to_string());
-        }
-        if let Ok(mut items) = self.items.lock() {
-            if let Some(item) = items.get_mut(transfer_id) {
-                if !item.status.is_terminal() {
-                    item.status = TransferStatus::Cancelled;
-                    item.message = "已取消".into();
-                }
+    pub fn cancel(&self, id: &TransferId) {
+        if let Ok(mut state) = self.state.lock() {
+            state.cancelled.insert(id.clone());
+            state.queue_order.retain(|queued_id| queued_id != id);
+            if let Some(item) = state.items.get_mut(id)
+                && !item.status.is_terminal()
+            {
+                item.status = TransferStatus::Cancelled;
+                item.message = String::from("已取消");
             }
+            self.slot_available.notify_all();
         }
-        self.bump();
     }
 
-    pub fn items(&self) -> Vec<TransferItem> {
-        self.items
+    pub fn snapshot(&self, id: &TransferId) -> Option<TransferSnapshot> {
+        self.state
             .lock()
-            .map(|m| m.values().cloned().collect())
+            .ok()
+            .and_then(|state| state.items.get(id).cloned())
+    }
+
+    pub fn snapshots_for_session(&self, session_id: &SessionId) -> Vec<TransferSnapshot> {
+        self.state
+            .lock()
+            .map(|state| {
+                state
+                    .items
+                    .values()
+                    .filter(|item| &item.session_id == session_id)
+                    .cloned()
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
-    pub fn item(&self, transfer_id: &str) -> Option<TransferItem> {
-        self.items
+    pub fn all_snapshots(&self) -> Vec<TransferSnapshot> {
+        self.state
             .lock()
-            .ok()
-            .and_then(|items| items.get(transfer_id).cloned())
+            .map(|state| state.items.values().cloned().collect())
+            .unwrap_or_default()
     }
+}
 
-    pub fn clear_finished(&self) {
-        if let Ok(mut items) = self.items.lock() {
-            items.retain(|_, item| !item.status.is_terminal());
-        }
-        self.bump();
-    }
+enum StartOutcome {
+    Started,
+    Cancelled,
+    WouldBlock,
+}
 
-    pub fn any_active(&self) -> bool {
-        self.items
-            .lock()
-            .map(|m| m.values().any(|item| item.is_active()))
-            .unwrap_or(false)
+/// 在已持有锁的前提下尝试启动一个传输。抽出供 `try_start`（非阻塞）与
+/// `wait_and_start`（阻塞等槽位）复用，避免重复加锁。
+fn try_start_locked(
+    state: &mut TransferState,
+    id: &TransferId,
+    default_limit: usize,
+) -> StartOutcome {
+    let Some(item) = state.items.get(id).cloned() else {
+        return StartOutcome::Cancelled;
+    };
+    if item.status != TransferStatus::Queued {
+        return if item.status == TransferStatus::Running {
+            StartOutcome::Started
+        } else {
+            StartOutcome::Cancelled
+        };
     }
-
-    pub fn any_terminal(&self) -> bool {
-        self.items
-            .lock()
-            .map(|m| m.values().any(|item| item.status.is_terminal()))
-            .unwrap_or(false)
+    let running = state
+        .running_by_session
+        .get(&item.session_id)
+        .copied()
+        .unwrap_or(0);
+    let limit = state
+        .limits_by_session
+        .get(&item.session_id)
+        .copied()
+        .unwrap_or(default_limit);
+    if running >= limit {
+        return StartOutcome::WouldBlock;
     }
-
-    pub fn shutdown(&self) {
-        self.shutdown.store(true, Ordering::SeqCst);
+    if let Some(index) = state
+        .queue_order
+        .iter()
+        .position(|queued_id| queued_id == id)
+    {
+        state.queue_order.remove(index);
     }
-
-    fn bump(&self) {
-        self.revision.fetch_add(1, Ordering::SeqCst);
+    if let Some(existing) = state.items.get_mut(id) {
+        existing.status = TransferStatus::Running;
+        existing.message = String::from("传输中");
     }
+    *state.running_by_session.entry(item.session_id).or_default() += 1;
+    StartOutcome::Started
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, atomic::AtomicU64};
+    use crate::model::SessionId;
 
-    use super::{
-        super::model::{TransferDirection, TransferItem, TransferStatus},
-        TransferCounts, TransferService, transfer_counts,
-    };
-    use crate::pool::RemoteConnectionPool;
+    use super::{TransferDirection, TransferQueue, TransferStatus};
 
-    fn make_item(
-        id: &str,
-        status: TransferStatus,
-        size: i64,
-        transferred: i64,
-        speed: &str,
-    ) -> TransferItem {
-        let mut item = TransferItem::new(
-            id.into(),
+    #[test]
+    fn respects_per_session_concurrency() {
+        let queue = TransferQueue::new(1);
+        let session = SessionId::new();
+        queue.enqueue(
+            session.clone(),
             TransferDirection::Upload,
-            "/local/test.txt".into(),
-            "/remote/test.txt".into(),
-            size,
+            "a".into(),
+            "b".into(),
+            10,
         );
-        item.status = status;
-        item.transferred = transferred;
-        item.speed = speed.to_string();
-        item
-    }
-
-    fn insert(svc: &Arc<TransferService>, item: TransferItem) {
-        let mut items = svc.items.lock().unwrap();
-        items.insert(item.id.clone(), item);
-    }
-
-    fn make_service() -> Arc<TransferService> {
-        let pool = Arc::new(RemoteConnectionPool::new());
-        let revision = Arc::new(AtomicU64::new(0));
-        Arc::new(TransferService::new(pool, revision))
-    }
-
-    #[test]
-    fn status_line_queued_shows_size() {
-        let item = make_item("t", TransferStatus::Queued, 1024 * 1024, 0, "");
-        let line = item.status_line();
-        assert!(line.contains("排队"), "expected 排队 in {line:?}");
-        assert!(line.contains("1.0 MB"), "expected 1.0 MB in {line:?}");
-    }
-
-    #[test]
-    fn status_line_running_shows_progress_and_speed() {
-        let item = make_item(
-            "t",
-            TransferStatus::Running,
-            1024 * 1024,
-            512 * 1024,
-            "256.0 KB/s",
+        queue.enqueue(
+            session.clone(),
+            TransferDirection::Upload,
+            "c".into(),
+            "d".into(),
+            10,
         );
-        let line = item.status_line();
-        assert!(line.contains("512.0 KB"), "expected 512.0 KB in {line:?}");
-        assert!(line.contains("1.0 MB"), "expected 1.0 MB in {line:?}");
-        assert!(
-            line.contains("256.0 KB/s"),
-            "expected 256.0 KB/s in {line:?}"
-        );
+        assert!(queue.start_next_for_session(&session).is_some());
+        assert!(queue.start_next_for_session(&session).is_none());
     }
 
     #[test]
-    fn status_line_running_without_speed_omits_speed() {
-        let item = make_item("t", TransferStatus::Running, 100, 50, "");
-        let line = item.status_line();
-        assert!(line.contains("50 B"), "expected 50 B in {line:?}");
-        assert!(line.contains("100 B"), "expected 100 B in {line:?}");
-        assert!(
-            !line.contains("KB/s"),
-            "speed segment should be absent: {line:?}"
-        );
-    }
-
-    #[test]
-    fn status_line_completed_shows_size() {
-        let item = make_item("t", TransferStatus::Completed, 2048, 2048, "");
-        let line = item.status_line();
-        assert!(line.contains("已完成"), "expected 已完成 in {line:?}");
-        assert!(line.contains("2.0 KB"), "expected 2.0 KB in {line:?}");
-    }
-
-    #[test]
-    fn status_line_failed_shows_message() {
-        let mut item = make_item("t", TransferStatus::Failed, 100, 0, "");
-        item.message = "连接已断开".into();
-        let line = item.status_line();
-        assert!(line.contains("失败"), "expected 失败 in {line:?}");
-        assert!(
-            line.contains("连接已断开"),
-            "expected 连接已断开 in {line:?}"
-        );
-    }
-
-    #[test]
-    fn status_line_failed_plain() {
-        let item = make_item("t", TransferStatus::Failed, 100, 0, "");
-        let line = item.status_line();
-        assert_eq!(line, "失败");
-    }
-
-    #[test]
-    fn status_line_cancelled() {
-        let item = make_item("t", TransferStatus::Cancelled, 100, 0, "");
-        assert_eq!(item.status_line(), "已取消");
-    }
-
-    #[test]
-    fn is_active_queued_and_running() {
-        assert!(make_item("t", TransferStatus::Queued, 100, 0, "").is_active());
-        assert!(make_item("t", TransferStatus::Running, 100, 50, "").is_active());
-    }
-
-    #[test]
-    fn is_active_false_for_terminal() {
-        assert!(!make_item("t", TransferStatus::Completed, 100, 100, "").is_active());
-        assert!(!make_item("t", TransferStatus::Failed, 100, 0, "").is_active());
-        assert!(!make_item("t", TransferStatus::Cancelled, 100, 0, "").is_active());
-    }
-
-    #[test]
-    fn is_terminal_correct() {
-        assert!(TransferStatus::Completed.is_terminal());
-        assert!(TransferStatus::Failed.is_terminal());
-        assert!(TransferStatus::Cancelled.is_terminal());
-        assert!(!TransferStatus::Queued.is_terminal());
-        assert!(!TransferStatus::Running.is_terminal());
-    }
-
-    #[test]
-    fn progress_percent() {
-        let mut item = TransferItem::new(
-            "pct".into(),
+    fn cancel_marks_transfer_terminal() {
+        let queue = TransferQueue::new(1);
+        let session = SessionId::new();
+        let id = queue.enqueue(
+            session.clone(),
             TransferDirection::Download,
-            "/local/f".into(),
-            "/remote/f".into(),
-            1000,
+            "a".into(),
+            "b".into(),
+            10,
         );
-        item.transferred = 250;
-        assert_eq!(item.progress_percent(), 25);
-        item.transferred = 1000;
-        assert_eq!(item.progress_percent(), 100);
+        queue.cancel(&id);
+        let item = queue
+            .snapshots_for_session(&session)
+            .pop()
+            .expect("snapshot");
+        assert_eq!(item.status, TransferStatus::Cancelled);
     }
 
     #[test]
-    fn progress_percent_zero_size() {
-        let item = TransferItem::new(
-            "pct".into(),
-            TransferDirection::Download,
-            "/local/f".into(),
-            "/remote/f".into(),
-            0,
+    fn respects_session_specific_limit() {
+        let queue = TransferQueue::new(1);
+        let session = SessionId::new();
+        queue.set_session_limit(session.clone(), 2);
+        queue.enqueue(
+            session.clone(),
+            TransferDirection::Upload,
+            "a".into(),
+            "b".into(),
+            10,
         );
-        assert_eq!(item.progress_percent(), 0);
-    }
-
-    #[test]
-    fn cancel_marks_item_cancelled() {
-        let svc = make_service();
-        insert(&svc, make_item("t1", TransferStatus::Running, 100, 50, ""));
-        svc.cancel("t1");
-        let items = svc.items();
-        let t = items.iter().find(|i| i.id == "t1").unwrap();
-        assert_eq!(t.status, TransferStatus::Cancelled);
-        assert_eq!(t.message, "已取消");
-    }
-
-    #[test]
-    fn cancel_is_idempotent() {
-        let svc = make_service();
-        insert(&svc, make_item("t1", TransferStatus::Queued, 100, 0, ""));
-        svc.cancel("t1");
-        svc.cancel("t1"); // second cancel should not panic or flip status
-        let items = svc.items();
-        let t = items.iter().find(|i| i.id == "t1").unwrap();
-        assert_eq!(t.status, TransferStatus::Cancelled);
-    }
-
-    #[test]
-    fn cancel_does_not_overwrite_terminal_status() {
-        let svc = make_service();
-        let mut done = make_item("done", TransferStatus::Completed, 100, 100, "");
-        done.message = "已完成".into();
-        insert(&svc, done);
-        svc.cancel("done");
-        let items = svc.items();
-        let t = items.iter().find(|i| i.id == "done").unwrap();
-        assert_eq!(t.status, TransferStatus::Completed);
-        assert_eq!(t.message, "已完成");
-    }
-
-    #[test]
-    fn cancel_unknown_id_is_noop() {
-        let svc = make_service();
-        svc.cancel("missing");
-        assert!(svc.items().is_empty());
-    }
-
-    #[test]
-    fn clear_finished_removes_terminal_items() {
-        let svc = make_service();
-        insert(
-            &svc,
-            make_item("active", TransferStatus::Running, 100, 50, ""),
+        queue.enqueue(
+            session.clone(),
+            TransferDirection::Upload,
+            "c".into(),
+            "d".into(),
+            10,
         );
-        insert(
-            &svc,
-            make_item("done", TransferStatus::Completed, 100, 100, ""),
+        queue.enqueue(
+            session.clone(),
+            TransferDirection::Upload,
+            "e".into(),
+            "f".into(),
+            10,
         );
-        insert(
-            &svc,
-            make_item("failed", TransferStatus::Failed, 100, 0, ""),
+        assert!(queue.start_next_for_session(&session).is_some());
+        assert!(queue.start_next_for_session(&session).is_some());
+        assert!(queue.start_next_for_session(&session).is_none());
+    }
+
+    #[test]
+    fn preserves_queue_order_within_session() {
+        let queue = TransferQueue::new(1);
+        let session = SessionId::new();
+        let first = queue.enqueue(
+            session.clone(),
+            TransferDirection::Upload,
+            "a".into(),
+            "1".into(),
+            10,
         );
-        svc.clear_finished();
-        let items = svc.items();
-        assert_eq!(items.len(), 1, "only active item should remain");
-        assert!(items.iter().any(|i| i.id == "active"));
-    }
-
-    #[test]
-    fn clear_finished_keeps_queued() {
-        let svc = make_service();
-        insert(&svc, make_item("q", TransferStatus::Queued, 100, 0, ""));
-        svc.clear_finished();
-        let items = svc.items();
-        assert_eq!(items.len(), 1);
-    }
-
-    #[test]
-    fn any_active_and_any_terminal() {
-        let svc = make_service();
-        assert!(!svc.any_active());
-        assert!(!svc.any_terminal());
-        insert(
-            &svc,
-            make_item("active", TransferStatus::Running, 100, 50, ""),
+        let second = queue.enqueue(
+            session.clone(),
+            TransferDirection::Upload,
+            "b".into(),
+            "2".into(),
+            10,
         );
-        insert(
-            &svc,
-            make_item("done", TransferStatus::Completed, 100, 100, ""),
-        );
-        assert!(svc.any_active());
-        assert!(svc.any_terminal());
-    }
-
-    #[test]
-    fn transfer_counts_empty_slice() {
-        let counts = transfer_counts(&[]);
-        assert_eq!(counts, TransferCounts::default());
-        assert_eq!(counts.terminal(), 0);
-        assert!(!counts.has_terminal());
-    }
-
-    #[test]
-    fn transfer_counts_breakdown() {
-        let items = vec![
-            make_item("q", TransferStatus::Queued, 100, 0, ""),
-            make_item("r", TransferStatus::Running, 100, 40, ""),
-            make_item("c1", TransferStatus::Completed, 100, 100, ""),
-            make_item("c2", TransferStatus::Completed, 100, 100, ""),
-            make_item("f", TransferStatus::Failed, 100, 0, ""),
-            make_item("x", TransferStatus::Cancelled, 100, 0, ""),
-        ];
-        let counts = transfer_counts(&items);
-        assert_eq!(counts.total, 6);
-        assert_eq!(counts.active, 2);
-        assert_eq!(counts.completed, 2);
-        assert_eq!(counts.failed, 1);
-        assert_eq!(counts.cancelled, 1);
-        assert_eq!(counts.terminal(), 4);
-        assert!(counts.has_terminal());
-    }
-
-    #[test]
-    fn transfer_counts_only_active() {
-        let items = vec![
-            make_item("q", TransferStatus::Queued, 100, 0, ""),
-            make_item("r", TransferStatus::Running, 100, 40, ""),
-        ];
-        let counts = transfer_counts(&items);
-        assert_eq!(counts.active, 2);
-        assert!(!counts.has_terminal());
+        assert_eq!(queue.start_next_for_session(&session), Some(first.clone()));
+        queue.finish(&first, true, String::from("done"));
+        assert_eq!(queue.start_next_for_session(&session), Some(second));
     }
 }

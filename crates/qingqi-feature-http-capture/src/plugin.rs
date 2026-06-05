@@ -94,17 +94,7 @@ impl Plugin for HttpCapturePlugin {
         Ok(PluginView::Window(Box::new(HttpCaptureView { view })))
     }
 
-    /// 后台启动：初始化 CA 证书，但不自动启动代理。
-    fn start_background(&mut self, _events: AppEventBus, _cx: &mut App) {
-        if let Err(e) = self.engine.ensure_ca() {
-            tracing::warn!("初始化 CA 证书失败: {e}");
-        }
-    }
-
-    fn shutdown(&mut self) {
-        // CaptureEngine 的 Drop 实现会自动停止代理
-    }
-
+    /// 懒加载：CA 证书已在 CaManager::new() 中初始化，无需额外后台任务。
     fn close_idle(&mut self) {}
 }
 

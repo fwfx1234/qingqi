@@ -21,11 +21,18 @@ pub enum WindowChromeMode {
     Immersive,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowChromeTitlebarSlotAlignment {
+    Center,
+    Leading,
+}
+
 #[derive(Clone, Debug)]
 pub struct WindowChromeConfig {
     pub title: Option<SharedString>,
     pub style: WindowChromeStyle,
     pub mode: WindowChromeMode,
+    pub titlebar_slot_alignment: WindowChromeTitlebarSlotAlignment,
     pub transparent: bool,
     pub show_minimize: bool,
     pub show_maximize: bool,
@@ -56,6 +63,7 @@ impl Default for WindowChromeConfig {
             title: None,
             style: WindowChromeStyle::current(),
             mode: WindowChromeMode::Floating,
+            titlebar_slot_alignment: WindowChromeTitlebarSlotAlignment::Center,
             transparent: false,
             show_minimize: true,
             show_maximize: true,
@@ -81,6 +89,11 @@ impl WindowChromeConfig {
 
     pub fn mode(mut self, mode: WindowChromeMode) -> Self {
         self.mode = mode;
+        self
+    }
+
+    pub fn titlebar_slot_alignment(mut self, alignment: WindowChromeTitlebarSlotAlignment) -> Self {
+        self.titlebar_slot_alignment = alignment;
         self
     }
 
@@ -189,6 +202,7 @@ fn windows_window_chrome(
         .child(windows_titlebar_content(
             config.title.clone(),
             titlebar_slot,
+            config.titlebar_slot_alignment,
         ))
         .children(config.show_minimize.then(|| {
             windows_control_button(
@@ -221,38 +235,51 @@ fn windows_window_chrome(
 fn windows_titlebar_content(
     title: Option<SharedString>,
     titlebar_slot: Option<AnyElement>,
+    alignment: WindowChromeTitlebarSlotAlignment,
 ) -> impl IntoElement {
     if let Some(slot) = titlebar_slot {
-        div()
-            .flex_1()
-            .min_w(px(0.0))
-            .h_full()
-            .flex()
-            .items_center()
-            .pl(px(12.0))
-            .pr(px(8.0))
-            .child(
-                div()
-                    .w(px(110.0))
-                    .h_full()
-                    .flex_none()
-                    .window_control_area(WindowControlArea::Drag),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w(px(0.0))
-                    .flex()
-                    .justify_center()
-                    .child(slot),
-            )
-            .child(
-                div()
-                    .w(px(110.0))
-                    .h_full()
-                    .flex_none()
-                    .window_control_area(WindowControlArea::Drag),
-            )
+        match alignment {
+            WindowChromeTitlebarSlotAlignment::Center => div()
+                .flex_1()
+                .min_w(px(0.0))
+                .h_full()
+                .flex()
+                .items_center()
+                .pl(px(12.0))
+                .pr(px(8.0))
+                .child(
+                    div()
+                        .w(px(110.0))
+                        .h_full()
+                        .flex_none()
+                        .window_control_area(WindowControlArea::Drag),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(0.0))
+                        .flex()
+                        .justify_center()
+                        .child(slot),
+                )
+                .child(
+                    div()
+                        .w(px(110.0))
+                        .h_full()
+                        .flex_none()
+                        .window_control_area(WindowControlArea::Drag),
+                ),
+            WindowChromeTitlebarSlotAlignment::Leading => div()
+                .flex_1()
+                .min_w(px(0.0))
+                .h_full()
+                .flex()
+                .items_center()
+                .pl(px(12.0))
+                .pr(px(8.0))
+                .child(div().min_w(px(0.0)).flex().items_center().child(slot))
+                .child(title_drag_region()),
+        }
     } else {
         title_drag_region().pl(px(12.0)).pr(px(8.0)).child(
             div()
@@ -328,43 +355,58 @@ fn macos_window_chrome(
             ui::border_light()
         })
         .child(macos_native_traffic_light_spacer())
-        .child(macos_titlebar_content(config.title.clone(), titlebar_slot))
+        .child(macos_titlebar_content(
+            config.title.clone(),
+            titlebar_slot,
+            config.titlebar_slot_alignment,
+        ))
         .child(title_drag_spacer(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH))
 }
 
 fn macos_titlebar_content(
     title: Option<SharedString>,
     titlebar_slot: Option<AnyElement>,
+    alignment: WindowChromeTitlebarSlotAlignment,
 ) -> impl IntoElement {
     if let Some(slot) = titlebar_slot {
-        div()
-            .flex_1()
-            .min_w(px(0.0))
-            .h_full()
-            .flex()
-            .items_center()
-            .child(
-                div()
-                    .w(px(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH))
-                    .h_full()
-                    .flex_none()
-                    .window_control_area(WindowControlArea::Drag),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w(px(0.0))
-                    .flex()
-                    .justify_center()
-                    .child(slot),
-            )
-            .child(
-                div()
-                    .w(px(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH))
-                    .h_full()
-                    .flex_none()
-                    .window_control_area(WindowControlArea::Drag),
-            )
+        match alignment {
+            WindowChromeTitlebarSlotAlignment::Center => div()
+                .flex_1()
+                .min_w(px(0.0))
+                .h_full()
+                .flex()
+                .items_center()
+                .child(
+                    div()
+                        .w(px(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH))
+                        .h_full()
+                        .flex_none()
+                        .window_control_area(WindowControlArea::Drag),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(0.0))
+                        .flex()
+                        .justify_center()
+                        .child(slot),
+                )
+                .child(
+                    div()
+                        .w(px(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH))
+                        .h_full()
+                        .flex_none()
+                        .window_control_area(WindowControlArea::Drag),
+                ),
+            WindowChromeTitlebarSlotAlignment::Leading => div()
+                .flex_1()
+                .min_w(px(0.0))
+                .h_full()
+                .flex()
+                .items_center()
+                .child(div().min_w(px(0.0)).flex().items_center().child(slot))
+                .child(title_drag_region()),
+        }
     } else {
         title_drag_region().justify_center().child(
             div()

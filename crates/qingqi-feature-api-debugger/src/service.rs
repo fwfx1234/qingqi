@@ -1,10 +1,8 @@
 use std::{
     collections::HashMap,
-    env, fs,
-    process::Command,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     thread,
     time::Instant,
@@ -25,8 +23,8 @@ use qingqi_plugin::{database::DatabaseService, log_error, storage::AppPaths};
 
 // Re-export model types for backward compatibility
 pub use crate::model::{
-    ApiEnvironment, ApiGroup, ApiRequest, ApiScenario, EnvHeader, EnvVariable, EnvironmentFull,
-    HttpMethod, KeyValueRow, ScenarioStatus,
+    ApiEnvironment, ApiGroup, ApiRequest, ApiScenario, AuthType, BodyMode, EnvHeader,
+    EnvVariable, EnvironmentFull, HttpMethod, KeyValueRow, ScenarioStatus,
 };
 
 // ── UI-specific enums (not persisted) ──
@@ -92,6 +90,8 @@ pub enum ResponseTab {
     Request,
     Curl,
     Logs,
+    History,
+    Code,
 }
 
 impl ResponseTab {
@@ -102,6 +102,8 @@ impl ResponseTab {
             Self::Request => "Request",
             Self::Curl => "cURL",
             Self::Logs => "日志",
+            Self::History => "历史",
+            Self::Code => "代码",
         }
     }
 }
@@ -146,6 +148,7 @@ struct ApiServiceState {
 
 pub struct ApiService {
     revision: AtomicU64,
+    cancel_flag: AtomicBool,
     state: Mutex<ApiServiceState>,
     data_source: ApiDebuggerDataSource,
 }
@@ -157,6 +160,7 @@ impl ApiService {
             .expect("无法打开 API 调试器数据库");
         Self {
             revision: AtomicU64::new(0),
+            cancel_flag: AtomicBool::new(false),
             state: Mutex::new(ApiServiceState {
                 in_flight: false,
                 pending_response: None,
@@ -177,6 +181,10 @@ impl ApiService {
             .lock()
             .map(|state| state.in_flight)
             .unwrap_or(false)
+    }
+
+    pub fn cancel_request(&self) {
+        self.cancel_flag.store(true, Ordering::SeqCst);
     }
 
     pub fn take_pending_response(&self) -> Option<ApiResponse> {
@@ -270,6 +278,243 @@ impl ApiService {
         });
     }
 
+    // ── Collection CRUD ──
+
+    pub fn create_endpoint(
+        &self,
+        parent_id: Option<&str>,
+        name: &str,
+        method: &str,
+        url: &str,
+    ) -> Result<CollectionNode> {
+        let id = format!("node-{}", Uuid::new_v4().simple());
+        let snapshot = RequestSnapshot {
+            method: method.to_string(),
+            url: url.to_string(),
+            ..Default::default()
+        };
+        let node = self.data_source.create_collection_node(
+            &id,
+            parent_id,
+            NodeKind::Endpoint,
+            name,
+            method,
+            url,
+            &snapshot,
+        )?;
+        self.revision.fetch_add(1, Ordering::SeqCst);
+        Ok(node)
+    }
+
+    pub fn create_endpoint_async(
+        self: &Arc<Self>,
+        parent_id: Option<String>,
+        name: String,
+        method: String,
+        url: String,
+    ) {
+        let service = Arc::clone(self);
+        thread::spawn(move || match service.create_endpoint(parent_id.as_deref(), &name, &method, &url) {
+            Ok(_) => service.publish_notice(format!("已创建端点 {}", name)),
+            Err(e) => service.publish_notice(format!("创建端点失败: {e}")),
+        });
+    }
+
+    pub fn create_folder(&self, parent_id: Option<&str>, name: &str) -> Result<CollectionNode> {
+        let id = format!("folder-{}", Uuid::new_v4().simple());
+        let node = self.data_source.create_collection_node(
+            &id,
+            parent_id,
+            NodeKind::Folder,
+            name,
+            "",
+            "",
+            &RequestSnapshot::default(),
+        )?;
+        self.revision.fetch_add(1, Ordering::SeqCst);
+        Ok(node)
+    }
+
+    pub fn create_folder_async(self: &Arc<Self>, parent_id: Option<String>, name: String) {
+        let service = Arc::clone(self);
+        thread::spawn(move || match service.create_folder(parent_id.as_deref(), &name) {
+            Ok(_) => service.publish_notice(format!("已创建分组 {}", name)),
+            Err(e) => service.publish_notice(format!("创建分组失败: {e}")),
+        });
+    }
+
+    pub fn delete_collection_item(&self, node_id: &str) -> Result<usize> {
+        let count = self.data_source.delete_collection_node_recursive(node_id)?;
+        self.revision.fetch_add(1, Ordering::SeqCst);
+        Ok(count)
+    }
+
+    pub fn delete_collection_item_async(self: &Arc<Self>, node_id: String) {
+        let service = Arc::clone(self);
+        thread::spawn(move || match service.delete_collection_item(&node_id) {
+            Ok(count) => service.publish_notice(format!("已删除 {} 项", count)),
+            Err(e) => service.publish_notice(format!("删除失败: {e}")),
+        });
+    }
+
+    pub fn rename_collection_item(&self, node_id: &str, new_name: &str) -> Result<()> {
+        let node = self
+            .data_source
+            .get_collection_node(node_id)?
+            .ok_or_else(|| anyhow!("节点不存在"))?;
+        let snapshot = RequestSnapshot::from_json(&node.request_json);
+        self.data_source
+            .update_collection_node(node_id, new_name, &node.method, &node.url, &snapshot)?;
+        self.revision.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    pub fn rename_collection_item_async(self: &Arc<Self>, node_id: String, new_name: String) {
+        let service = Arc::clone(self);
+        thread::spawn(move || match service.rename_collection_item(&node_id, &new_name) {
+            Ok(()) => service.publish_notice(format!("已重命名为 {}", new_name)),
+            Err(e) => service.publish_notice(format!("重命名失败: {e}")),
+        });
+    }
+
+    // ── Import ──
+
+    pub fn import_from_curl(&self, curl_text: &str) -> Result<CollectionNode> {
+        let parsed = crate::curl_parser::parse_curl(curl_text)
+            .map_err(|e| anyhow!("cURL 解析失败: {e}"))?;
+        let id = format!("node-{}", Uuid::new_v4().simple());
+        let snapshot = RequestSnapshot {
+            method: parsed.method.clone(),
+            url: parsed.url.clone(),
+            headers_text: parsed
+                .headers
+                .iter()
+                .map(|h| format!("{}={}", h.key, h.value))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            body_text: parsed.body.clone(),
+            body_mode: parsed.body_mode.as_str().to_string(),
+            auth_type: parsed.auth_type.clone(),
+            auth_value: parsed.auth_value.clone(),
+            ..Default::default()
+        };
+        self.data_source.create_collection_node(
+            &id,
+            None,
+            NodeKind::Endpoint,
+            &parsed.url,
+            &parsed.method,
+            &parsed.url,
+            &snapshot,
+        )
+    }
+
+    pub fn import_from_curl_async(self: &Arc<Self>, curl_text: String) {
+        let service = Arc::clone(self);
+        thread::spawn(move || match service.import_from_curl(&curl_text) {
+            Ok(node) => service.publish_notice(format!("已导入 cURL 请求: {}", node.name)),
+            Err(e) => service.publish_notice(format!("cURL 导入失败: {e}")),
+        });
+    }
+
+    pub fn import_from_openapi(&self, content: &str) -> Result<Vec<CollectionNode>> {
+        let collection = crate::import_openapi::parse_openapi(content)
+            .map_err(|e| anyhow!("OpenAPI 解析失败: {e}"))?;
+        let mut nodes = Vec::new();
+        for endpoint in &collection.endpoints {
+            let id = format!("node-{}", Uuid::new_v4().simple());
+            let parent_id = endpoint.parent_folder.as_deref();
+            let node = self.data_source.create_collection_node(
+                &id,
+                parent_id,
+                NodeKind::Endpoint,
+                &endpoint.name,
+                &endpoint.method,
+                &endpoint.url,
+                &endpoint.snapshot,
+            )?;
+            nodes.push(node);
+        }
+        self.revision.fetch_add(1, Ordering::SeqCst);
+        Ok(nodes)
+    }
+
+    pub fn import_from_postman(&self, content: &str) -> Result<Vec<CollectionNode>> {
+        let collection = crate::import_postman::parse_postman(content)
+            .map_err(|e| anyhow!("Postman 解析失败: {e}"))?;
+        let mut nodes = Vec::new();
+        for endpoint in &collection.endpoints {
+            let id = format!("node-{}", Uuid::new_v4().simple());
+            let parent_id = endpoint.parent_folder.as_deref();
+            let node = self.data_source.create_collection_node(
+                &id,
+                parent_id,
+                NodeKind::Endpoint,
+                &endpoint.name,
+                &endpoint.method,
+                &endpoint.url,
+                &endpoint.snapshot,
+            )?;
+            nodes.push(node);
+        }
+        self.revision.fetch_add(1, Ordering::SeqCst);
+        Ok(nodes)
+    }
+
+    // ── Export ──
+
+    pub fn export_collection_as_openapi(&self) -> Result<String> {
+        let nodes = self.data_source.list_collection_nodes()?;
+        let mut paths = serde_json::Map::new();
+        for node in &nodes {
+            if node.kind != NodeKind::Endpoint {
+                continue;
+            }
+            let snapshot = RequestSnapshot::from_json(&node.request_json);
+            let method = snapshot.method.to_lowercase();
+            let path_key = if snapshot.url.is_empty() {
+                node.url.clone()
+            } else {
+                snapshot.url.clone()
+            };
+            let path_item = serde_json::json!({
+                method: {
+                    "summary": node.name,
+                    "responses": { "200": { "description": "OK" } }
+                }
+            });
+            if let Some(obj) = path_item.as_object() {
+                if let Some(existing) = paths.get_mut(&path_key) {
+                    if let Some(existing_obj) = existing.as_object_mut() {
+                        for (k, v) in obj {
+                            existing_obj.insert(k.clone(), v.clone());
+                        }
+                    }
+                } else {
+                    paths.insert(path_key, path_item);
+                }
+            }
+        }
+        let doc = serde_json::json!({
+            "openapi": "3.0.0",
+            "info": { "title": "API", "version": "1.0.0" },
+            "paths": serde_json::Value::Object(paths),
+        });
+        Ok(serde_json::to_string_pretty(&doc)?)
+    }
+
+    // ── History ──
+
+    pub fn list_history(&self, tab_id: &str, limit: i64) -> Result<Vec<crate::model::HttpHistory>> {
+        self.data_source.list_history(tab_id, limit)
+    }
+
+    // ── Collection node lookup ──
+
+    pub fn get_collection_node(&self, id: &str) -> Result<Option<CollectionNode>> {
+        self.data_source.get_collection_node(id)
+    }
+
     pub fn send_request(
         self: &Arc<Self>,
         environment: ApiEnvironment,
@@ -291,6 +536,7 @@ impl ApiService {
             state.pending_error = None;
             state.last_tab_id = tab_id.to_string();
         }
+        self.cancel_flag.store(false, Ordering::SeqCst);
         self.revision.fetch_add(1, Ordering::SeqCst);
 
         let service = Arc::clone(self);
@@ -298,6 +544,14 @@ impl ApiService {
         let post_ops = post_ops_text.to_string();
         let tid = tab_id.to_string();
         thread::spawn(move || {
+            if service.cancel_flag.load(Ordering::SeqCst) {
+                if let Ok(mut state) = service.state.lock() {
+                    state.in_flight = false;
+                    state.pending_notice = Some(String::from("请求已取消"));
+                }
+                service.revision.fetch_add(1, Ordering::SeqCst);
+                return;
+            }
             let result = perform_request(&environment, &request, &pre_ops);
             if let Ok(mut state) = service.state.lock() {
                 state.in_flight = false;
@@ -734,7 +988,6 @@ fn perform_request(
     request: &ApiRequest,
     pre_ops_text: &str,
 ) -> Result<(ApiResponse, HashMap<String, String>)> {
-    // Apply pre-ops to get temporary variables and draft modifications
     let mut draft = script_service::RequestDraft {
         method: request.method.label().to_string(),
         url: request.path.clone(),
@@ -754,7 +1007,6 @@ fn perform_request(
     };
     let temporary = script_service::apply_pre_ops(&mut draft, pre_ops_text);
 
-    // Build env vars map for variable resolution
     let env_vars: HashMap<String, String> = environment
         .variables
         .iter()
@@ -762,7 +1014,6 @@ fn perform_request(
         .map(|row| (row.key.trim().to_string(), row.value.trim().to_string()))
         .collect();
 
-    // Resolve variables in the draft (URL, params, headers, body)
     let resolved_url = resolve_with_temp(&draft.url, &temporary, &env_vars);
     let resolved_params: Vec<String> = draft
         .params
@@ -776,54 +1027,7 @@ fn perform_request(
             )
         })
         .collect();
-    let resolved_headers: Vec<String> = draft
-        .headers
-        .iter()
-        .filter(|(_, v)| !v.trim().is_empty())
-        .map(|(k, v)| {
-            format!(
-                "{}: {}",
-                resolve_with_temp(k, &temporary, &env_vars),
-                resolve_with_temp(v, &temporary, &env_vars)
-            )
-        })
-        .collect();
 
-    // Also include auth headers from the request
-    let auth_headers: Vec<String> = request
-        .auth
-        .iter()
-        .filter(|r| r.enabled && !r.key.trim().is_empty())
-        .map(|r| {
-            format!(
-                "{}: {}",
-                r.key.trim(),
-                resolve_with_temp(r.value.trim(), &temporary, &env_vars)
-            )
-        })
-        .collect();
-
-    // Also include cookies
-    let cookie_pairs: Vec<String> = request
-        .cookies
-        .iter()
-        .filter(|r| r.enabled && !r.key.trim().is_empty())
-        .map(|r| {
-            format!(
-                "{}={}",
-                r.key.trim(),
-                resolve_with_temp(r.value.trim(), &temporary, &env_vars)
-            )
-        })
-        .collect();
-
-    let body = if matches!(request.method, HttpMethod::Get | HttpMethod::Delete) {
-        String::new()
-    } else {
-        resolve_with_temp(&draft.body, &temporary, &env_vars)
-    };
-
-    // Build final URL with query params
     let base_url = if resolved_url.starts_with("http://") || resolved_url.starts_with("https://") {
         resolved_url.clone()
     } else {
@@ -841,88 +1045,105 @@ fn perform_request(
         format!("{base_url}?{}", resolved_params.join("&"))
     };
 
-    // Build combined headers
-    let mut all_headers = resolved_headers;
-    all_headers.extend(auth_headers);
-    if !cookie_pairs.is_empty() {
-        all_headers.push(format!("Cookie: {}", cookie_pairs.join("; ")));
-    }
+    let body = if matches!(request.method, HttpMethod::Get | HttpMethod::Delete) {
+        String::new()
+    } else {
+        resolve_with_temp(&draft.body, &temporary, &env_vars)
+    };
 
-    let curl_preview = build_curl_preview(&url, request.method, &all_headers, &body);
-    let request_dump = build_request_dump(&url, request.method, &all_headers, &body);
+    let curl_preview = build_curl_preview(&url, request.method, &[], &body);
+    let request_dump = build_request_dump(&url, request.method, &[], &body);
 
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or_default();
-    let header_path = env::temp_dir().join(format!("qingqi-api-{nanos}-headers.txt"));
-    let body_path = env::temp_dir().join(format!("qingqi-api-{nanos}-body.txt"));
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()?;
 
-    let mut command = Command::new("curl");
-    command
-        .arg("-sS")
-        .arg("-X")
-        .arg(request.method.label())
-        .arg("--connect-timeout")
-        .arg("10")
-        .arg("--max-time")
-        .arg("30")
-        .arg("-D")
-        .arg(&header_path)
-        .arg("-o")
-        .arg(&body_path)
-        .arg(&url);
+    let method = reqwest::Method::from_bytes(request.method.label().as_bytes())
+        .unwrap_or(reqwest::Method::GET);
+    let mut req = client.request(method, &url);
 
-    for header in &all_headers {
-        command.arg("-H").arg(header);
-    }
-    if !body.is_empty() {
-        command.arg("--data-raw").arg(&body);
-    }
-
-    let started = Instant::now();
-    let output = command.output()?;
-    let duration_ms = started.elapsed().as_millis();
-
-    let raw_headers = fs::read_to_string(&header_path).unwrap_or_default();
-    let raw_body = fs::read_to_string(&body_path).unwrap_or_default();
-    log_error!(
-        fs::remove_file(&header_path),
-        warn,
-        "删除临时header文件失败"
-    );
-    log_error!(fs::remove_file(&body_path), warn, "删除临时body文件失败");
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        if stderr.is_empty() {
-            bail!("curl 执行失败: {}", output.status);
-        } else {
-            bail!(stderr);
+    // Add headers from draft
+    for (k, v) in &draft.headers {
+        if let Ok(header_name) = reqwest::header::HeaderName::from_bytes(k.as_bytes()) {
+            if let Ok(header_value) = reqwest::header::HeaderValue::from_str(&resolve_with_temp(v, &temporary, &env_vars)) {
+                req = req.header(header_name, header_value);
+            }
         }
     }
 
-    let status_line = raw_headers
-        .lines()
-        .rev()
-        .find(|line| line.starts_with("HTTP/"))
-        .map(str::trim)
-        .unwrap_or("HTTP/1.1 200 OK")
-        .to_string();
-    let status_code = status_line
-        .split_whitespace()
-        .nth(1)
-        .and_then(|value| value.parse::<u16>().ok())
-        .unwrap_or(0);
+    // Add auth headers
+    for r in &request.auth {
+        if !r.enabled || r.key.trim().is_empty() {
+            continue;
+        }
+        let val = resolve_with_temp(r.value.trim(), &temporary, &env_vars);
+        if let Ok(header_name) = reqwest::header::HeaderName::from_bytes(r.key.trim().as_bytes()) {
+            if let Ok(header_value) = reqwest::header::HeaderValue::from_str(&val) {
+                req = req.header(header_name, header_value);
+            }
+        }
+    }
+
+    // Add cookies
+    let cookie_pairs: Vec<String> = request
+        .cookies
+        .iter()
+        .filter(|r| r.enabled && !r.key.trim().is_empty())
+        .map(|r| format!("{}={}", r.key.trim(), resolve_with_temp(r.value.trim(), &temporary, &env_vars)))
+        .collect();
+    if !cookie_pairs.is_empty() {
+        if let Ok(header_value) = reqwest::header::HeaderValue::from_str(&cookie_pairs.join("; ")) {
+            req = req.header(reqwest::header::COOKIE, header_value);
+        }
+    }
+
+    // Add body
+    if !body.is_empty() && !matches!(request.method, HttpMethod::Get | HttpMethod::Delete) {
+        req = req.body(body.clone());
+    }
+
+    // Add environment headers
+    for r in &environment.headers {
+        if !r.enabled || r.key.trim().is_empty() {
+            continue;
+        }
+        let val = resolve_with_temp(&r.value, &temporary, &env_vars);
+        if let Ok(header_name) = reqwest::header::HeaderName::from_bytes(r.key.trim().as_bytes()) {
+            if let Ok(header_value) = reqwest::header::HeaderValue::from_str(&val) {
+                req = req.header(header_name, header_value);
+            }
+        }
+    }
+
+    let started = Instant::now();
+    let resp = req.send()?;
+    let duration_ms = started.elapsed().as_millis();
+
+    let status_code = resp.status().as_u16();
+    let status_line = format!(
+        "HTTP/1.1 {} {}",
+        status_code,
+        resp.status().canonical_reason().unwrap_or("")
+    );
+
+    let mut headers_text = status_line.clone();
+    headers_text.push('\n');
+    for (key, value) in resp.headers() {
+        headers_text.push_str(&format!("{}: {}\n", key, value.to_str().unwrap_or("")));
+    }
+
+    let resp_body = resp.text()?;
+    let size_bytes = resp_body.len();
 
     Ok((
         ApiResponse {
             status_line: status_line.clone(),
             status_code,
             duration_ms,
-            size_bytes: raw_body.len(),
-            body: prettify_body(&raw_body),
-            headers: raw_headers.replace("\r\n", "\n"),
+            size_bytes,
+            body: prettify_body(&resp_body),
+            headers: headers_text,
             request_dump,
             curl: curl_preview,
             logs: vec![
@@ -1151,6 +1372,7 @@ fn build_groups_from_nodes(nodes: &[CollectionNode]) -> Vec<ApiGroup> {
         let endpoints = collect_descendant_endpoints(folder.id.as_str(), nodes);
         let requests: Vec<ApiRequest> = endpoints.iter().map(|ep| node_to_request(ep)).collect();
         groups.push(ApiGroup {
+            id: Some(folder.id.clone()),
             name: folder.name.clone(),
             requests,
         });
@@ -1165,6 +1387,7 @@ fn build_groups_from_nodes(nodes: &[CollectionNode]) -> Vec<ApiGroup> {
         groups.insert(
             0,
             ApiGroup {
+                id: None,
                 name: String::from("默认"),
                 requests: root_endpoints
                     .iter()
@@ -1201,6 +1424,7 @@ fn node_to_request(node: &CollectionNode) -> ApiRequest {
     let snapshot = RequestSnapshot::from_json(&node.request_json);
     let method = HttpMethod::from_label(&node.method);
     ApiRequest {
+        node_id: node.id.clone(),
         title: node.name.clone(),
         method,
         path: if snapshot.url.is_empty() {
@@ -1531,6 +1755,7 @@ mod tests {
     #[test]
     fn snapshot_roundtrip_via_request_to_snapshot() {
         let request = ApiRequest {
+            node_id: String::new(),
             title: String::from("test"),
             method: HttpMethod::Post,
             path: String::from("/api/test"),
@@ -1580,6 +1805,7 @@ mod tests {
             .unwrap();
 
         let request = ApiRequest {
+            node_id: String::new(),
             title: String::from("/api/test"),
             method: HttpMethod::Post,
             path: String::from("/api/test/v2"),
@@ -1807,6 +2033,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
+            cancel_flag: AtomicBool::new(false),
         };
         let env = service
             .create_environment("测试环境", "http://test.api.com")
@@ -1830,6 +2057,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
+            cancel_flag: AtomicBool::new(false),
         };
         // Index 0 is the seeded default environment
         let dup = service.duplicate_environment(0).unwrap();
@@ -1851,6 +2079,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
+            cancel_flag: AtomicBool::new(false),
         };
         // Only one seeded env — cannot delete
         let result = service.delete_environment_by_index(0);
@@ -1871,6 +2100,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
+            cancel_flag: AtomicBool::new(false),
         };
         service
             .create_environment("额外环境", "http://extra.com")
@@ -1892,6 +2122,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
+            cancel_flag: AtomicBool::new(false),
         };
         service
             .save_environment_fields(
@@ -1922,6 +2153,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
+            cancel_flag: AtomicBool::new(false),
         };
         let tab = HttpTab {
             id: "tab-uuid-1".into(),
@@ -1973,6 +2205,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
+            cancel_flag: AtomicBool::new(false),
         };
 
         let tab_a = HttpTab {
@@ -2361,6 +2594,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
+            cancel_flag: AtomicBool::new(false),
         };
         let draft = sample_draft();
         let tab = build_http_tab("tab-uuid-1", "node-1", "Sample", "POST", &draft);
