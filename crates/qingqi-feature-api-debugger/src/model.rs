@@ -1,3 +1,4 @@
+use gpui::SharedString;
 use serde::{Deserialize, Serialize};
 
 // ── Shared service/request types ──
@@ -34,6 +35,18 @@ impl HttpMethod {
 
     pub fn all() -> [Self; 5] {
         [Self::Get, Self::Post, Self::Put, Self::Patch, Self::Delete]
+    }
+}
+
+impl gpui_component::select::SelectItem for HttpMethod {
+    type Value = HttpMethod;
+
+    fn title(&self) -> SharedString {
+        SharedString::from(self.label())
+    }
+
+    fn value(&self) -> &Self::Value {
+        self
     }
 }
 
@@ -176,6 +189,8 @@ pub struct KeyValueRow {
     pub enabled: bool,
     pub key: String,
     pub value: String,
+    #[serde(default)]
+    pub description: String,
 }
 
 impl KeyValueRow {
@@ -184,6 +199,7 @@ impl KeyValueRow {
             enabled: true,
             key: key.into(),
             value: value.into(),
+            description: String::new(),
         }
     }
 }

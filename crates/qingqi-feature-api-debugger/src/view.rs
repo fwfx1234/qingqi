@@ -1,9 +1,15 @@
 use std::sync::Arc;
 
 use gpui::{
-    App, AppContext, BoxShadow, Context, Entity, InteractiveElement, IntoElement, MouseButton,
-    ParentElement, Render, StatefulInteractiveElement, Styled, Window, div, hsla, point,
+    App, AppContext, Context, Entity, InteractiveElement, IntoElement, MouseButton,
+    ParentElement, Render, StatefulInteractiveElement, Styled, Window, div, hsla,
     prelude::FluentBuilder, px, rgb,
+};
+use gpui_component::{
+    IndexPath, Sizable, Size,
+    button::{Button, ButtonVariants},
+    IconName,
+    select::{Select, SelectEvent, SelectState},
 };
 use uuid::Uuid;
 
@@ -20,7 +26,7 @@ use qingqi_ui::{
 
 const STACK_BREAKPOINT_PX: f32 = 980.0;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 enum OpenTab {
     Request {
         index: usize,
@@ -35,6 +41,29 @@ enum OpenTab {
         tab_id: String,
     },
 }
+
+impl PartialEq for OpenTab {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Request { index: a, .. }, Self::Request { index: b, .. }) => a == b,
+            (
+                Self::Scenario {
+                    request_index: a1,
+                    scenario_index: a2,
+                    ..
+                },
+                Self::Scenario {
+                    request_index: b1,
+                    scenario_index: b2,
+                    ..
+                },
+            ) => a1 == b1 && a2 == b2,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for OpenTab {}
 
 impl OpenTab {
     fn tab_id(&self) -> &str {
@@ -95,7 +124,7 @@ pub struct ApiDebuggerView {
     collection_menu_title: String,
     collection_menu_position: Option<(f32, f32)>,
     collection_menu_node_id: String,
-    show_method_popup: bool,
+    method_select_state: Option<Entity<SelectState<Vec<HttpMethod>>>>,
     show_curl_import: bool,
     curl_import_input: Entity<TextInput>,
     path_input: Entity<TextInput>,
@@ -113,6 +142,11 @@ pub struct ApiDebuggerView {
     env_headers_input: Entity<TextInput>,
     response: ApiResponse,
     notice: String,
+    last_revision: u64,
+    kv_key_inputs: Vec<Entity<TextInput>>,
+    kv_value_inputs: Vec<Entity<TextInput>>,
+    kv_enabled: Vec<bool>,
+    kv_row_count: usize,
 }
 
 impl ApiDebuggerView {
@@ -280,6 +314,8 @@ impl ApiDebuggerView {
             )
         };
 
+        let rev = service.revision();
+
         Self {
             service,
             groups,
@@ -300,7 +336,7 @@ impl ApiDebuggerView {
             collection_menu_title: String::from("集合"),
             collection_menu_position: None,
             collection_menu_node_id: String::new(),
-            show_method_popup: false,
+            method_select_state: None,
             show_curl_import: false,
             curl_import_input: multiline_input(cx, "", "粘贴 cURL 命令..."),
             path_input: single_input(cx, &init_path, "/api/v1/user/info"),
@@ -322,10 +358,27 @@ impl ApiDebuggerView {
             env_headers_input: multiline_input(cx, &format_rows(&environment.headers), "KEY=VALUE"),
             response: sample_response(),
             notice,
+            last_revision: rev,
+            kv_key_inputs: (0..20).map(|_| single_input(cx, "", "键")).collect(),
+            kv_value_inputs: (0..20).map(|_| single_input(cx, "", "值")).collect(),
+            kv_enabled: vec![true; 20],
+            kv_row_count: 0,
         }
     }
 
     fn sync_service_updates(&mut self) {
+        let current_revision = self.service.revision();
+        if current_revision != self.last_revision {
+            if let Ok(workspace) = self.service.load_workspace() {
+                self.groups = workspace.groups;
+                self.environments = workspace.environments;
+                self.selected_environment = self
+                    .selected_environment
+                    .min(self.environments.len().saturating_sub(1));
+            }
+            self.last_revision = current_revision;
+        }
+
         if let Some(response) = self.service.take_pending_response() {
             let assertion_summary = if !response.assertion_results.is_empty() {
                 let passed = response
@@ -553,16 +606,19 @@ impl ApiDebuggerView {
         }
         let tab_id = self.open_tabs[tab_index].tab_id().to_string();
         self.service.delete_persisted_tab_async(tab_id);
+
+        let was_active = self.open_tabs[tab_index] == self.active_tab;
         self.open_tabs.remove(tab_index);
+
         if self.open_tabs.is_empty() {
             self.active_tab = OpenTab::new_request(0);
             self.selected_request = 0;
             self.selected_scenario = None;
             self.open_tabs.push(self.active_tab.clone());
             self.reload_request_inputs(cx);
-        } else if tab_index <= self.active_index() {
-            let new_active = self.active_index().min(self.open_tabs.len() - 1);
-            let tab = self.open_tabs[new_active].clone();
+        } else if was_active {
+            let new_index = tab_index.min(self.open_tabs.len() - 1);
+            let tab = self.open_tabs[new_index].clone();
             self.active_tab = tab;
             match &self.active_tab {
                 OpenTab::Request { index, .. } => {
@@ -578,17 +634,7 @@ impl ApiDebuggerView {
                     self.selected_scenario = Some(*scenario_index);
                 }
             }
-            // Try restoring persisted draft for the new active tab
-            let tab_id = self.active_tab.tab_id().to_string();
-            if let Some(persisted) = self.service.load_persisted_tab_by_id(&tab_id) {
-                self.restore_inputs_from_tab(&persisted, cx);
-                let tab_idx = persisted.active_request_tab;
-                if let Some(et) = service::index_to_editor_tab(tab_idx) {
-                    self.editor_tab = et;
-                }
-            } else {
-                self.reload_request_inputs(cx);
-            }
+            self.reload_request_inputs(cx);
         }
     }
 
@@ -673,17 +719,31 @@ impl ApiDebuggerView {
         let request = self.selected_request_mut();
         request.method = method;
         self.notice = format!("请求方法已切换为 {}", request.method.label());
-        self.show_method_popup = false;
         self.persist_workspace();
         self.persist_current_tab_state(cx);
     }
 
-    fn toggle_method_popup(&mut self) {
-        self.show_method_popup = !self.show_method_popup;
-    }
+    fn init_method_select(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.method_select_state.is_some() {
+            return;
+        }
 
-    fn close_method_popup(&mut self) {
-        self.show_method_popup = false;
+        let methods: Vec<HttpMethod> = HttpMethod::all().to_vec();
+        let current = self.selected_request().method;
+        let selected_index = methods
+            .iter()
+            .position(|m| *m == current)
+            .map(|i| IndexPath::default().row(i));
+
+        let state = cx.new(|cx| SelectState::new(methods, selected_index, window, cx));
+        cx.subscribe(&state, move |this: &mut ApiDebuggerView, _, event: &SelectEvent<Vec<HttpMethod>>, cx| {
+            if let SelectEvent::Confirm(Some(method)) = event {
+                this.set_method(*method, cx);
+            }
+        })
+        .detach();
+
+        self.method_select_state = Some(state);
     }
 
     fn send_request(&mut self, cx: &mut App) {
@@ -932,6 +992,7 @@ impl ApiDebuggerView {
 impl Render for ApiDebuggerView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_service_updates();
+        self.init_method_select(window, cx);
 
         let dark = qingqi_ui::theme_mode::is_dark();
         let stacked = window.bounds().size.width < px(STACK_BREAKPOINT_PX);
@@ -952,8 +1013,8 @@ impl Render for ApiDebuggerView {
         let show_env_popup = self.show_env_popup;
         let show_env_manager = self.show_env_manager;
         let show_collection_menu = self.show_collection_menu;
-        let show_method_popup = self.show_method_popup;
         let show_curl_import = self.show_curl_import;
+        let method_select = self.method_select_state.as_ref().expect("init").clone();
         let collection_menu_title = self.collection_menu_title.clone();
         let collection_menu_position = self.collection_menu_position;
         let collection_menu_node_id = self.collection_menu_node_id.clone();
@@ -993,7 +1054,6 @@ impl Render for ApiDebuggerView {
                         view.show_env_popup = false;
                         view.show_env_manager = false;
                         view.show_collection_menu = false;
-                        view.show_method_popup = false;
                         view.show_curl_import = false;
                     });
                 }
@@ -1003,11 +1063,11 @@ impl Render for ApiDebuggerView {
                     .size_full()
                     .relative()
                     .pt(px(chrome.metrics().content_top_padding + 6.0))
-                    .pl(px(6.0))
-                    .pr(px(6.0))
-                    .pb(px(6.0))
+                    .pl(px(8.0))
+                    .pr(px(8.0))
+                    .pb(px(8.0))
                     .flex()
-                    .gap(px(if stacked { 8.0 } else { 10.0 }))
+                    .gap(px(if stacked { 8.0 } else { 8.0 }))
                     .when(stacked, |layout| layout.flex_col())
                     .when(!stacked, |layout| layout.flex_row())
                     .child(collection_tree(
@@ -1023,7 +1083,8 @@ impl Render for ApiDebuggerView {
                             .min_w(px(0.0))
                             .border_1()
                             .border_color(glass::border(dark))
-                            .bg(glass::bg(dark))
+                            .bg(theme::semantic().bg_surface)
+                            .rounded(px(8.0))
                             .overflow_hidden()
                             .flex()
                             .flex_col()
@@ -1042,6 +1103,7 @@ impl Render for ApiDebuggerView {
                                 path_input,
                                 in_flight,
                                 dark,
+                                method_select,
                             ))
                             .when(current_scenario.is_some(), |content| {
                                 content.child(scenario_banner(
@@ -1059,6 +1121,7 @@ impl Render for ApiDebuggerView {
                                         body_mode,
                                         auth_type,
                                         dark,
+                                        cx,
                                     ))
                                     .child(response_panel(
                                         entity.clone(),
@@ -1149,24 +1212,35 @@ impl Render for ApiDebuggerView {
              } else {
                 div().into_any_element()
             })
-            .child(if show_method_popup {
-                overlay_shell(
-                    dark,
-                    "api-method-popup-backdrop",
-                    {
-                        let view = entity.clone();
-                        move |_, cx| {
-                            view.update(cx, |view, _cx| view.close_method_popup());
-                        }
-                    },
-                    method_popup(entity.clone(), current_request.method, dark),
-                )
-                .into_any_element()
-            } else {
-                div().into_any_element()
-            })
-            .child(ui::popup_window_chrome_with_titlebar_slot(chrome, None))
+            .child(ui::popup_window_chrome_with_titlebar_slot(
+                chrome,
+                Some(titlebar_new_button(entity.clone(), dark).into_any_element()),
+            ))
     }
+}
+
+fn titlebar_new_button(
+    view: Entity<ApiDebuggerView>,
+    dark: bool,
+) -> impl IntoElement {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(4.0))
+        .child(
+            Button::new("api-titlebar-new")
+                .ghost()
+                .icon(IconName::Plus)
+                .with_size(Size::XSmall)
+                .on_click({
+                    let view = view.clone();
+                    move |_, _, cx| {
+                        view.update(cx, |view, _cx| {
+                            view.open_collection_menu("新建", None, String::new());
+                        });
+                    }
+                }),
+        )
 }
 
 fn collection_tree(
@@ -1178,45 +1252,16 @@ fn collection_tree(
 ) -> impl IntoElement {
     let mut request_index = 0usize;
     div()
-        .w(px(250.0))
+        .w(px(260.0))
         .min_h(px(220.0))
         .flex_none()
         .border_1()
         .border_color(glass::border(dark))
         .bg(glass::bg(dark))
+        .rounded(px(8.0))
         .overflow_hidden()
         .flex()
         .flex_col()
-        .child(
-            div()
-                .h(px(38.0))
-                .px(px(10.0))
-                .border_b_1()
-                .border_color(glass::divider(dark))
-                .bg(glass::bar(dark))
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .text_size(px(12.0))
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(if dark {
-                            theme::semantic().text_primary
-                        } else {
-                            theme::semantic().text_body
-                        })
-                        .child("集合"),
-                )
-                .child(icon_button("api-tree-add", "+", dark, {
-                    let view = view.clone();
-                    move |_, cx| {
-                        view.update(cx, |view, _cx| {
-                            view.open_collection_menu("集合", Some((418.0, 86.0)), String::new());
-                        });
-                    }
-                })),
-        )
         .child(
             div()
                 .id("api-tree-scroll")
@@ -1251,7 +1296,7 @@ fn group_section(
     let group_name = group.name.clone();
     let group_id = group.id.clone().unwrap_or_default();
     div()
-        .px(px(6.0))
+        .px(px(8.0))
         .py(px(2.0))
         .flex()
         .flex_col()
@@ -1259,9 +1304,9 @@ fn group_section(
         .child(
             div()
                 .id(("api-group-row", request_start))
-                .px(px(4.0))
-                .py(px(3.0))
-                .rounded(px(5.0))
+                .px(px(6.0))
+                .py(px(4.0))
+                .rounded(px(6.0))
                 .hover({
                     move |style| {
                         style
@@ -1274,14 +1319,14 @@ fn group_section(
                 .gap(px(4.0))
                 .child(
                     div()
-                        .text_size(px(9.0))
+                        .text_size(px(10.0))
                         .text_color(ui::text_tertiary())
                         .child("▾"),
                 )
                 .child(
                     div()
                         .flex_1()
-                        .text_size(px(11.0))
+                        .text_size(px(12.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(ui::text_secondary())
                         .truncate()
@@ -1291,7 +1336,7 @@ fn group_section(
                 .child(
                     div()
                         .px(px(3.0))
-                        .text_size(px(10.0))
+                        .text_size(px(11.0))
                         .text_color(ui::text_tertiary())
                         .child("⋯"),
                 )
@@ -1365,9 +1410,9 @@ fn request_tree_block(
         .child(
             div()
                 .id(("api-request-row", request_index))
-                .min_h(px(30.0))
+                .min_h(px(32.0))
                 .px(px(8.0))
-                .py(px(3.0))
+                .py(px(4.0))
                 .rounded(px(6.0))
                 .border_1()
                 .border_color(if request_active {
@@ -1387,13 +1432,13 @@ fn request_tree_block(
                 })
                 .flex()
                 .items_center()
-                .gap(px(4.0))
+                .gap(px(6.0))
                 .child(method_badge(request.method, dark))
                 .child(
                     div()
                         .flex_1()
                         .min_w(px(0.0))
-                        .text_size(px(11.0))
+                        .text_size(px(12.0))
                         .text_color(if request_active {
                             api_accent()
                         } else {
@@ -1435,11 +1480,11 @@ fn request_tree_block(
                     selected_request == request_index && selected_scenario == Some(scenario_index);
                 div()
                     .id(("api-scenario-row", request_index * 100 + scenario_index))
-                    .min_h(px(24.0))
-                    .px(px(7.0))
-                    .py(px(2.0))
-                    .pl(px(24.0))
-                    .rounded(px(5.0))
+                    .min_h(px(26.0))
+                    .px(px(8.0))
+                    .py(px(3.0))
+                    .pl(px(28.0))
+                    .rounded(px(6.0))
                     .border_1()
                     .border_color(if active {
                         theme::rgba_with_alpha(api_accent(), 0.16)
@@ -1464,7 +1509,7 @@ fn request_tree_block(
                         div()
                             .flex_1()
                             .min_w(px(0.0))
-                            .text_size(px(10.0))
+                            .text_size(px(11.0))
                             .text_color(if active {
                                 api_accent()
                             } else {
@@ -1498,14 +1543,14 @@ fn open_tabs_bar(
     let tabs_view = view.clone();
     let env_view = view.clone();
     div()
-        .h(px(32.0))
-        .px(px(8.0))
+        .h(px(36.0))
+        .px(px(10.0))
         .border_b_1()
-        .border_color(glass::divider(dark))
+        .border_color(ui::border_light())
         .flex()
         .items_center()
-        .gap(px(4.0))
-        .bg(glass::bar(dark))
+        .gap(px(6.0))
+        .bg(theme::semantic().bg_surface)
         .child(
             div()
                 .flex_1()
@@ -1520,21 +1565,21 @@ fn open_tabs_bar(
                     let close_view = tabs_view.clone();
                     div()
                         .id(("api-open-tab", index))
-                        .h(px(24.0))
-                        .px(px(8.0))
-                        .rounded(px(4.0))
-                        .border_b_1()
+                        .h(px(28.0))
+                        .px(px(10.0))
+                        .rounded(px(6.0))
+                        .border_b_2()
                         .border_color(if active {
                             api_accent()
                         } else {
                             theme::rgba_with_alpha(theme::semantic().bg_surface, 0.0).into()
                         })
                         .bg(if active {
-                            theme::rgba_with_alpha(api_accent(), 0.08)
+                            theme::rgba_with_alpha(api_accent(), 0.06)
                         } else {
                             transparent_surface()
                         })
-                        .text_size(px(9.0))
+                        .text_size(px(11.0))
                         .font_weight(if active {
                             gpui::FontWeight::SEMIBOLD
                         } else {
@@ -1552,9 +1597,9 @@ fn open_tabs_bar(
                         })
                         .flex()
                         .items_center()
-                        .gap(px(3.0))
+                        .gap(px(4.0))
                         .child(
-                            div().max_w(px(160.0)).truncate().child(
+                            div().max_w(px(180.0)).truncate().child(
                                 titles
                                     .get(index)
                                     .cloned()
@@ -1562,20 +1607,15 @@ fn open_tabs_bar(
                             ),
                         )
                         .child(
-                            div()
-                                .id(("api-tab-close", index))
-                                .text_size(px(9.0))
-                                .text_color(theme::semantic().text_secondary)
-                                .hover(move |style| {
-                                    style.text_color(theme::semantic().danger).cursor_pointer()
-                                })
-                                .child("✕")
+                            Button::new(("api-tab-close", index))
+                                .ghost()
+                                .icon(IconName::Close)
+                                .with_size(Size::XSmall)
                                 .on_click({
                                     let view = close_view.clone();
-                                    move |event, window, cx| {
+                                    move |_event, _window, cx| {
                                         cx.stop_propagation();
                                         view.update(cx, |view, cx| view.close_open_tab(index, cx));
-                                        window.refresh();
                                     }
                                 }),
                         )
@@ -1593,14 +1633,14 @@ fn open_tabs_bar(
         .child(
             div()
                 .id("api-current-env")
-                .h(px(26.0))
+                .h(px(28.0))
                 .px(px(10.0))
                 .rounded(px(999.0))
                 .bg(theme::rgba_with_alpha(
                     theme::semantic().bg_surface,
                     if dark { 0.48 } else { 0.74 },
                 ))
-                .text_size(px(10.0))
+                .text_size(px(11.0))
                 .text_color(ui::text_secondary())
                 .hover(move |style| {
                     style
@@ -1612,14 +1652,14 @@ fn open_tabs_bar(
                 .gap(px(4.0))
                 .child(
                     div()
-                        .size(px(7.0))
+                        .size(px(8.0))
                         .rounded(px(999.0))
                         .bg(rgb(environment.color)),
                 )
                 .child(environment.name.clone())
                 .child(
                     div()
-                        .text_size(px(8.0))
+                        .text_size(px(9.0))
                         .text_color(ui::text_tertiary())
                         .child("▾"),
                 )
@@ -1637,129 +1677,92 @@ fn open_tabs_bar(
 
 fn action_bar(
     view: Entity<ApiDebuggerView>,
-    request: ApiRequest,
+    _request: ApiRequest,
     environment: ApiEnvironment,
     path_input: Entity<TextInput>,
     in_flight: bool,
     dark: bool,
+    method_select: Entity<SelectState<Vec<HttpMethod>>>,
 ) -> impl IntoElement {
     div()
-        .px(px(8.0))
-        .py(px(5.0))
-        .border_b_1()
-        .border_color(glass::divider(dark))
-        .bg(glass::bar(dark))
-        .flex()
-        .items_center()
-        .gap(px(5.0))
-        .child(
-            div()
-                .id("api-method-selector")
-                .h(px(28.0))
-                .px(px(8.0))
-                .rounded(px(6.0))
-                .border_1()
-                .border_color(theme::rgba_with_alpha(rgb(request.method.color()), 0.16))
-                .bg(theme::rgba_with_alpha(rgb(request.method.color()), 0.08))
-                .hover(move |style| {
-                    style
-                        .bg(theme::rgba_with_alpha(rgb(request.method.color()), 0.12))
-                        .cursor_pointer()
-                })
-                .flex()
-                .items_center()
-                .gap(px(2.0))
-                .child(
-                    div()
-                        .font_family("SF Mono")
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_size(px(10.0))
-                        .text_color(rgb(request.method.color()))
-                        .child(request.method.label()),
-                )
-                .child(
-                    div()
-                        .text_size(px(6.0))
-                        .text_color(theme::semantic().text_secondary)
-                        .child("▾"),
-                )
-                .on_click({
-                    let view = view.clone();
-                    move |_, window, cx| {
-                        view.update(cx, |view, _cx| view.toggle_method_popup());
-                        window.refresh();
-                    }
-                }),
-        )
-        .child(
-            div()
-                .flex_1()
-                .h(px(28.0))
-                .rounded(px(6.0))
-                .border_1()
-                .border_color(glass::border(dark))
-                .bg(glass::inset(dark))
-                .px(px(8.0))
-                .flex()
-                .items_center()
-                .gap(px(3.0))
-                .child(
-                    div()
-                        .font_family("SF Mono")
-                        .text_size(px(9.0))
-                        .text_color(ui::text_tertiary())
-                        .child(environment.base_url),
-                )
-                .child(div().flex_1().min_w(px(0.0)).child(path_input)),
-        )
-.child(if in_flight {
-            let cancel_view = view.clone();
-            div()
-                .id("api-cancel-btn")
-                .h(px(32.0))
-                .px(px(14.0))
-                .rounded(px(8.0))
-                .bg(hsla(0.0, 0.7, 0.5, 0.85))
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(px(11.0))
-                .text_color(hsla(0.0, 0.0, 1.0, 1.0))
-                .cursor_pointer()
-                .on_click(move |_, _window, cx| {
-                    cancel_view.update(cx, |view, cx| view.cancel_request(cx));
-                })
-                .child("取消")
-                .into_any_element()
-        } else {
-            primary_button(
-                "api-send",
-                "📤 发送",
-                dark,
-                {
-                    let view = view.clone();
-                    move |_, cx| {
-                        view.update(cx, |view, cx| view.send_request(cx));
-                    }
-                },
-            )
-            .into_any_element()
-        })
-}
-
-fn scenario_banner(scenario: ApiScenario, request: ApiRequest, dark: bool) -> impl IntoElement {
-    div()
         .px(px(10.0))
-        .py(px(7.0))
+        .py(px(6.0))
         .border_b_1()
         .border_color(ui::border_light())
-        .bg(theme::rgba_with_alpha(api_accent(), 0.06))
+        .bg(theme::semantic().bg_subtle)
         .flex()
         .items_center()
         .gap(px(6.0))
         .child(
             div()
-                .text_size(px(11.0))
+                .w(px(100.0))
+                .child(Select::new(&method_select).appearance(false).with_size(Size::Small)),
+        )
+        .child({
+            let url_view = view.clone();
+            div()
+                .flex_1()
+                .h(px(32.0))
+                .rounded(px(6.0))
+                .border_1()
+                .border_color(ui::border_light())
+                .bg(theme::semantic().bg_subtle_2)
+                .px(px(10.0))
+                .flex()
+                .items_center()
+                .gap(px(4.0))
+                .child(
+                    div()
+                        .font_family("SF Mono")
+                        .text_size(px(11.0))
+                        .text_color(ui::text_tertiary())
+                        .child(environment.base_url),
+                )
+                .child(div().flex_1().min_w(px(0.0)).child(path_input))
+                .on_key_down(move |event, _window, cx| {
+                    if event.keystroke.key == "enter" {
+                        url_view.update(cx, |view, cx| view.send_request(cx));
+                    }
+                })
+        })
+        .child(if in_flight {
+            Button::new("api-cancel-btn")
+                .danger()
+                .label("取消")
+                .with_size(Size::Small)
+                .on_click(move |_, _window, cx| {
+                    view.update(cx, |view, cx| view.cancel_request(cx));
+                })
+                .into_any_element()
+        } else {
+            Button::new("api-send-btn")
+                .primary()
+                .icon(IconName::ArrowRight)
+                .label("发送")
+                .with_size(Size::Small)
+                .on_click({
+                    let view = view.clone();
+                    move |_, _window, cx| {
+                        view.update(cx, |view, cx| view.send_request(cx));
+                    }
+                })
+                .into_any_element()
+        })
+}
+
+fn scenario_banner(scenario: ApiScenario, request: ApiRequest, dark: bool) -> impl IntoElement {
+    div()
+        .px(px(12.0))
+        .py(px(8.0))
+        .border_b_1()
+        .border_color(ui::border_light())
+        .bg(theme::rgba_with_alpha(api_accent(), 0.06))
+        .flex()
+        .items_center()
+        .gap(px(8.0))
+        .child(
+            div()
+                .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(api_accent())
                 .child(format!("{}", scenario.name)),
@@ -1768,7 +1771,7 @@ fn scenario_banner(scenario: ApiScenario, request: ApiRequest, dark: bool) -> im
         .child(div().flex_1())
         .child(
             div()
-                .text_size(px(9.0))
+                .text_size(px(10.0))
                 .text_color(theme::semantic().text_secondary)
                 .child(format!("基于 {} {}", request.method.label(), request.title)),
         )
@@ -1781,6 +1784,7 @@ fn editor_panel(
     body_mode: BodyMode,
     auth_type: AuthType,
     dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     let label = editor_tab.label();
     let tabs_view = view.clone();
@@ -1788,10 +1792,9 @@ fn editor_panel(
     let mode_row = match editor_tab {
         EditorTab::Body => {
             let bm_view = subtoolbar_view.clone();
-            let current = body_mode.label();
             let modes = BodyMode::all();
             let mut row = div()
-                .px(px(8.0))
+                .px(px(10.0))
                 .py(px(4.0))
                 .flex()
                 .items_center()
@@ -1804,17 +1807,17 @@ fn editor_panel(
                 row = row.child(
                     div()
                         .id(("api-body-mode-btn", i))
-                        .px(px(6.0))
-                        .py(px(2.0))
+                        .px(px(8.0))
+                        .py(px(3.0))
                         .rounded(px(4.0))
-                        .text_size(px(8.0))
+                        .text_size(px(10.0))
                         .text_color(if is_active {
                             api_accent()
                         } else {
                             ui::text_tertiary()
                         })
                         .bg(if is_active {
-                            theme::rgba_with_alpha(theme::semantic().primary, 0.18)
+                            theme::rgba_with_alpha(theme::semantic().primary, 0.12)
                         } else {
                             hsla(0.0, 0.0, 0.0, 0.0)
                         })
@@ -1835,10 +1838,9 @@ fn editor_panel(
         }
         EditorTab::Auth => {
             let au_view = subtoolbar_view.clone();
-            let current = auth_type.label();
             let types = AuthType::all();
             let mut row = div()
-                .px(px(8.0))
+                .px(px(10.0))
                 .py(px(4.0))
                 .flex()
                 .items_center()
@@ -1851,17 +1853,17 @@ fn editor_panel(
                 row = row.child(
                     div()
                         .id(("api-auth-type-btn", i))
-                        .px(px(6.0))
-                        .py(px(2.0))
+                        .px(px(8.0))
+                        .py(px(3.0))
                         .rounded(px(4.0))
-                        .text_size(px(8.0))
+                        .text_size(px(10.0))
                         .text_color(if is_active {
                             api_accent()
                         } else {
                             ui::text_tertiary()
                         })
                         .bg(if is_active {
-                            theme::rgba_with_alpha(theme::semantic().primary, 0.18)
+                            theme::rgba_with_alpha(theme::semantic().primary, 0.12)
                         } else {
                             hsla(0.0, 0.0, 0.0, 0.0)
                         })
@@ -1882,59 +1884,102 @@ fn editor_panel(
         }
         _ => div().into_any_element(),
     };
+
+    let primary_tabs = [EditorTab::Params, EditorTab::Headers, EditorTab::Body];
+    let more_tabs = [
+        EditorTab::Auth,
+        EditorTab::Cookies,
+        EditorTab::Path,
+        EditorTab::PreOps,
+        EditorTab::PostOps,
+    ];
+    let more_view = view.clone();
+
     div()
         .flex_1()
         .min_w(px(320.0))
         .border_r_1()
-        .border_color(glass::divider(dark))
-        .bg(glass::panel(dark))
+        .border_color(ui::border_light())
+        .bg(theme::semantic().bg_surface)
         .flex()
         .flex_col()
         .child(
             div()
-                .px(px(8.0))
+                .px(px(10.0))
                 .border_b_1()
-                .border_color(glass::divider(dark))
-                .bg(glass::bar(dark))
+                .border_color(ui::border_light())
+                .bg(theme::semantic().bg_subtle)
                 .flex()
                 .items_center()
                 .gap(px(2.0))
-                .children(
-                    editor_tabs()
-                        .into_iter()
-                        .enumerate()
-                        .map(move |(index, tab)| {
-                            let active = tab == editor_tab;
-                            let tab_view = tabs_view.clone();
+                .children(primary_tabs.into_iter().enumerate().map(
+                    move |(index, tab)| {
+                        let active = tab == editor_tab;
+                        let tab_view = tabs_view.clone();
+                        div()
+                            .id(("api-editor-tab", index))
+                            .px(px(10.0))
+                            .py(px(6.0))
+                            .border_b_2()
+                            .border_color(if active {
+                                api_accent()
+                            } else {
+                                theme::rgba_with_alpha(theme::semantic().bg_surface, 0.0).into()
+                            })
+                            .text_size(px(11.0))
+                            .text_color(if active {
+                                api_accent()
+                            } else {
+                                ui::text_tertiary()
+                            })
+                            .hover(move |style| style.text_color(api_accent()).cursor_pointer())
+                            .child(tab.label())
+                            .on_click({
+                                move |_, _window, cx| {
+                                    tab_view.update(cx, |view, cx| {
+                                        view.sync_models(cx);
+                                        view.persist_current_tab_state(cx);
+                                        view.editor_tab = tab;
+                                        view.persist_current_tab_state(cx);
+                                    });
+                                }
+                            })
+                    },
+                ))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(0.0))
+                        .flex()
+                        .justify_end()
+                        .child(
                             div()
-                                .id(("api-editor-tab", index))
-                                .px(px(7.0))
-                                .py(px(4.0))
-                                .border_b_1()
-                                .border_color(if active {
-                                    api_accent()
-                                } else {
-                                    theme::rgba_with_alpha(theme::semantic().bg_surface, 0.0).into()
+                                .id("api-editor-more")
+                                .px(px(8.0))
+                                .py(px(6.0))
+                                .rounded(px(4.0))
+                                .text_size(px(11.0))
+                                .text_color(ui::text_tertiary())
+                                .hover(move |style| {
+                                    style.text_color(api_accent()).cursor_pointer()
                                 })
-                                .text_size(px(8.0))
-                                .text_color(if active {
-                                    api_accent()
-                                } else {
-                                    ui::text_tertiary()
-                                })
-                                .hover(move |style| style.text_color(api_accent()).cursor_pointer())
-                                .child(tab.label())
+                                .flex()
+                                .items_center()
+                                .gap(px(3.0))
+                                .child("更多")
+                                .child("▾")
                                 .on_click({
+                                    let view = more_view.clone();
                                     move |_, _window, cx| {
-                                        tab_view.update(cx, |view, cx| {
+                                        view.update(cx, |view, cx| {
                                             view.sync_models(cx);
                                             view.persist_current_tab_state(cx);
-                                            view.editor_tab = tab;
+                                            view.editor_tab = EditorTab::Auth;
                                             view.persist_current_tab_state(cx);
                                         });
                                     }
-                                })
-                        }),
+                                }),
+                        ),
                 ),
         )
         .child(mode_row)
@@ -1945,23 +1990,46 @@ fn editor_panel(
                 .min_h(px(0.0))
                 .overflow_y_scroll()
                 .scrollbar_width(px(4.0))
-                .p(px(8.0))
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(8.0))
-                        .child(section_micro_label(label, dark))
-                        .child(
-                            div()
-                                .rounded(px(6.0))
-                                .border_1()
-                                .border_color(glass::border(dark))
-                                .bg(glass::inset(dark))
-                                .overflow_hidden()
-                                .child(editor_input),
-                        ),
-                ),
+                .p(px(10.0))
+                .child(match editor_tab {
+                    EditorTab::Params | EditorTab::Headers | EditorTab::Path => {
+                        key_value_table(view.clone(), editor_input, cx, dark).into_any_element()
+                    }
+                    _ => {
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(8.0))
+                            .child(section_micro_label(label, dark))
+                            .child(
+                                div()
+                                    .rounded(px(6.0))
+                                    .border_1()
+                                    .border_color(ui::border_light())
+                                    .bg(theme::semantic().bg_subtle_2)
+                                    .overflow_hidden()
+                                    .child(editor_input),
+                            )
+                            .into_any_element()
+                    }
+                    _ => {
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(8.0))
+                            .child(section_micro_label(label, dark))
+                            .child(
+                                div()
+                                    .rounded(px(6.0))
+                                    .border_1()
+                                    .border_color(ui::border_light())
+                                    .bg(theme::semantic().bg_subtle_2)
+                                    .overflow_hidden()
+                                    .child(editor_input),
+                            )
+                            .into_any_element()
+                    }
+                }),
         )
 }
 
@@ -1974,22 +2042,29 @@ fn response_panel(
     dark: bool,
 ) -> impl IntoElement {
     let tabs_view = view.clone();
+    let primary_response_tabs = [
+        ResponseTab::Body,
+        ResponseTab::Headers,
+        ResponseTab::Request,
+        ResponseTab::Code,
+    ];
+
     div()
         .flex_1()
         .min_w(px(320.0))
-        .bg(glass::panel(dark))
+        .bg(theme::semantic().bg_surface)
         .flex()
         .flex_col()
         .child(
             div()
-                .px(px(10.0))
-                .py(px(7.0))
+                .px(px(12.0))
+                .py(px(8.0))
                 .border_b_1()
-                .border_color(glass::divider(dark))
-                .bg(glass::bar(dark))
+                .border_color(ui::border_light())
+                .bg(theme::semantic().bg_subtle)
                 .flex()
                 .items_center()
-                .gap(px(6.0))
+                .gap(px(8.0))
                 .child(status_badge(&response, dark))
                 .child(div().flex_1())
                 .child(response_metric(
@@ -2000,16 +2075,16 @@ fn response_panel(
         )
         .child(
             div()
-                .px(px(8.0))
+                .px(px(10.0))
                 .py(px(4.0))
                 .border_b_1()
-                .border_color(glass::divider(dark))
-                .bg(glass::bar(dark))
+                .border_color(ui::border_light())
+                .bg(theme::semantic().bg_subtle)
                 .flex()
                 .items_center()
-                .gap(px(3.0))
+                .gap(px(4.0))
                 .children(
-                    response_tabs()
+                    primary_response_tabs
                         .into_iter()
                         .enumerate()
                         .map(move |(index, tab)| {
@@ -2017,15 +2092,15 @@ fn response_panel(
                             let tab_view = tabs_view.clone();
                             div()
                                 .id(("api-response-tab", index))
-                                .px(px(8.0))
-                                .py(px(3.0))
+                                .px(px(10.0))
+                                .py(px(5.0))
                                 .rounded(px(4.0))
                                 .bg(if active {
                                     theme::rgba_with_alpha(api_accent(), 0.08)
                                 } else {
                                     theme::rgba_with_alpha(theme::semantic().bg_surface, 0.0)
                                 })
-                                .text_size(px(9.0))
+                                .text_size(px(11.0))
                                 .text_color(if active {
                                     api_accent()
                                 } else {
@@ -2055,24 +2130,24 @@ fn response_panel(
                 .min_h(px(0.0))
                 .overflow_y_scroll()
                 .scrollbar_width(px(4.0))
-                .p(px(8.0))
-                .bg(glass::inset(dark))
+                .p(px(10.0))
+                .bg(theme::semantic().bg_subtle_2)
                 .child(
                     div()
                         .font_family("SF Mono")
-                        .text_size(px(10.0))
-                        .line_height(px(16.0))
+                        .text_size(px(12.0))
+                        .line_height(px(18.0))
                         .text_color(theme::semantic().text_body)
                         .child(response_text),
                 ),
         )
         .child(
             div()
-                .px(px(10.0))
-                .py(px(5.0))
+                .px(px(12.0))
+                .py(px(6.0))
                 .border_t_1()
                 .border_color(ui::border_light())
-                .text_size(px(10.0))
+                .text_size(px(11.0))
                 .text_color(ui::text_secondary())
                 .child(notice),
         )
@@ -2085,10 +2160,11 @@ fn env_popup(
     dark: bool,
 ) -> impl IntoElement {
     div()
-        .w(px(318.0))
+        .w(px(340.0))
         .border_1()
         .border_color(glass::border(dark))
         .bg(glass::bg(dark))
+        .rounded(px(8.0))
         .overflow_hidden()
         .flex()
         .flex_col()
@@ -2102,10 +2178,10 @@ fn env_popup(
                         .id(("api-env-popup-row", index))
                         .min_h(px(64.0))
                         .px(px(14.0))
-                        .py(px(8.0))
+                        .py(px(10.0))
                         .flex()
                         .items_center()
-                        .gap(px(8.0))
+                        .gap(px(10.0))
                         .bg(if active {
                             theme::rgba_with_alpha(api_accent(), 0.06)
                         } else {
@@ -2116,17 +2192,17 @@ fn env_popup(
                                 .bg(theme::rgba_with_alpha(api_accent(), 0.04))
                                 .cursor_pointer()
                         })
-                        .child(circle_badge(&environment.badge, environment.color, 34.0))
+                        .child(circle_badge(&environment.badge, environment.color, 36.0))
                         .child(
                             div()
                                 .flex_1()
                                 .min_w(px(0.0))
                                 .flex()
                                 .flex_col()
-                                .gap(px(3.0))
+                                .gap(px(4.0))
                                 .child(
                                     div()
-                                        .text_size(px(12.0))
+                                        .text_size(px(13.0))
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                         .text_color(theme::semantic().text_primary)
                                         .truncate()
@@ -2135,7 +2211,7 @@ fn env_popup(
                                 .child(
                                     div()
                                         .font_family("SF Mono")
-                                        .text_size(px(10.0))
+                                        .text_size(px(11.0))
                                         .text_color(ui::text_tertiary())
                                         .truncate()
                                         .child(environment.base_url.clone()),
@@ -2144,7 +2220,7 @@ fn env_popup(
                         .when(active, |row| {
                             row.child(
                                 div()
-                                    .text_size(px(12.0))
+                                    .text_size(px(14.0))
                                     .font_weight(gpui::FontWeight::BOLD)
                                     .text_color(api_accent())
                                     .child("✓"),
@@ -2228,7 +2304,7 @@ fn env_manager_dialog(
         .child(
             div()
                 .h(px(52.0))
-                .px(px(18.0))
+                .px(px(20.0))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
@@ -2242,28 +2318,34 @@ fn env_manager_dialog(
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(8.0))
+                        .gap(px(10.0))
                         .child(div().text_size(px(18.0)).child("🌐"))
                         .child(
                             div()
-                                .text_size(px(14.0))
+                                .text_size(px(15.0))
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .text_color(theme::semantic().text_primary)
                                 .child("环境管理"),
                         )
                         .child(
                             div()
-                                .text_size(px(11.0))
+                                .text_size(px(12.0))
                                 .text_color(ui::text_secondary())
                                 .child(format!("{} 个环境", environments.len())),
                         ),
                 )
-                .child(soft_button("api-env-close", "关闭", dark, {
-                    let view = view.clone();
-                    move |_, cx| {
-                        view.update(cx, |view, _cx| view.show_env_manager = false);
-                    }
-                })),
+                .child(
+                    Button::new("api-env-close")
+                        .ghost()
+                        .label("关闭")
+                        .with_size(Size::Small)
+                        .on_click({
+                            let view = view.clone();
+                            move |_, _, cx| {
+                                view.update(cx, |view, _cx| view.show_env_manager = false);
+                            }
+                        }),
+                ),
         )
         .child(
             div()
@@ -2288,14 +2370,21 @@ fn env_manager_dialog(
                                 .items_center()
                                 .justify_between()
                                 .child(section_micro_label("环境", dark))
-                                .child(soft_button("api-env-add", "+ 新建", dark, {
-                                    let view = view.clone();
-                                    move |_, cx| {
-                                        view.update(cx, |view, _cx| {
-                                            view.create_new_environment();
-                                        });
-                                    }
-                                })),
+                                .child(
+                                    Button::new("api-env-add")
+                                        .ghost()
+                                        .icon(IconName::Plus)
+                                        .label("新建")
+                                        .with_size(Size::XSmall)
+                                        .on_click({
+                                            let view = view.clone();
+                                            move |_, _, cx| {
+                                                view.update(cx, |view, _cx| {
+                                                    view.create_new_environment();
+                                                });
+                                            }
+                                        }),
+                                )
                         )
                         .child(
                             div()
@@ -2369,8 +2458,8 @@ fn env_manager_dialog(
                                             .on_click({
                                                 let view = view.clone();
                                                 move |_, window, cx| {
-                                                    view.update(cx, |view, cx| {
-                                                        view.select_environment(index, cx);
+                                                    view.update(cx, |view, _cx| {
+                                                        view.select_environment(index, _cx);
                                                     });
                                                     view.update(cx, |view, _cx| {
                                                         view.show_env_manager = true;
@@ -2399,18 +2488,18 @@ fn env_manager_dialog(
                                     div()
                                         .flex()
                                         .flex_col()
-                                        .gap(px(4.0))
+                                        .gap(px(6.0))
                                         .child(
                                             div()
-                                                .text_size(px(14.0))
+                                                .text_size(px(16.0))
                                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                                 .text_color(theme::semantic().text_primary)
                                                 .child(current_environment.name.clone()),
                                         )
                                         .child(
                                             div()
-                                                .h(px(24.0))
-                                                .px(px(8.0))
+                                                .h(px(28.0))
+                                                .px(px(10.0))
                                                 .rounded(px(999.0))
                                                 .border_1()
                                                 .border_color(ui::border_light())
@@ -2419,33 +2508,45 @@ fn env_manager_dialog(
                                                     if dark { 0.32 } else { 0.52 },
                                                 ))
                                                 .font_family("SF Mono")
-                                                .text_size(px(11.0))
+                                                .text_size(px(12.0))
                                                 .text_color(ui::text_secondary())
                                                 .flex()
                                                 .items_center()
                                                 .child(current_environment.base_url.clone()),
-                                        ),
-                                )
-                                .child(
+                ),
+        )
+        )
+        .child(
                                     div()
                                         .flex()
                                         .gap(px(6.0))
-                                        .child(soft_button("api-env-dup", "复制", dark, {
-                                            let view = view.clone();
-                                            move |_, cx| {
-                                                view.update(cx, |view, cx| {
-                                                    view.duplicate_current_environment(cx);
-                                                });
-                                            }
-                                        }))
-                                        .child(soft_button("api-env-del", "删除", dark, {
-                                            let view = view.clone();
-                                            move |_, cx| {
-                                                view.update(cx, |view, cx| {
-                                                    view.delete_current_environment(cx);
-                                                });
-                                            }
-                                        })),
+                                        .child(
+                                            Button::new("api-env-dup")
+                                                .ghost()
+                                                .label("复制")
+                                                .with_size(Size::Small)
+                                                .on_click({
+                                                    let view = view.clone();
+                                                    move |_, _, cx| {
+                                                        view.update(cx, |view, cx| {
+                                                            view.duplicate_current_environment(cx);
+                                                        });
+                                                    }
+                                                }),
+                                        )
+                                        .child(
+                                            Button::new("api-env-del")
+                                                .ghost()
+                                                .label("删除")
+                                                .with_size(Size::Small)
+                                                .on_click({
+                                                    let view = view.clone();
+                                                    move |_, _, cx| {
+                                                        view.update(cx, |view, cx| {
+                                                            view.delete_current_environment(cx);
+                                                        });
+                                                    }
+                                                }),
                                 ),
                         )
                         .child(labeled_field("名称", env_name_input, dark))
@@ -2464,8 +2565,8 @@ fn env_manager_dialog(
                                             let tab_view = env_tabs_view.clone();
                                             div()
                                                 .id(("api-env-detail-tab", index))
-                                                .px(px(10.0))
-                                                .py(px(5.0))
+                                                .px(px(12.0))
+                                                .py(px(6.0))
                                                 .rounded(px(6.0))
                                                 .border_1()
                                                 .border_color(if active {
@@ -2511,39 +2612,46 @@ fn env_manager_dialog(
                                                 })
                                         }),
                                 )
-                                .child(soft_button("api-env-add-row", "+ 新增变量", dark, {
-                                    let view = view.clone();
-                                    move |_, cx| {
-                                        view.update(cx, |view, cx| {
-                                            let current =
-                                                if view.env_detail_tab == EnvDetailTab::Variables {
-                                                    view.env_variables_input.read(cx).text()
-                                                } else {
-                                                    view.env_headers_input.read(cx).text()
-                                                };
-                                            let appended = if current.trim().is_empty() {
-                                                String::from("KEY=VALUE")
-                                            } else {
-                                                format!("{current}\nKEY=VALUE")
-                                            };
-                                            if view.env_detail_tab == EnvDetailTab::Variables {
-                                                view.env_variables_input.update(
-                                                    cx,
-                                                    |input, input_cx| {
-                                                        input.set_text(appended.clone(), input_cx)
-                                                    },
-                                                );
-                                            } else {
-                                                view.env_headers_input.update(
-                                                    cx,
-                                                    |input, input_cx| {
-                                                        input.set_text(appended.clone(), input_cx)
-                                                    },
-                                                );
+                                .child(
+                                    Button::new("api-env-add-row")
+                                        .ghost()
+                                        .icon(IconName::Plus)
+                                        .label("新增")
+                                        .with_size(Size::XSmall)
+                                        .on_click({
+                                            let view = view.clone();
+                                            move |_, _, cx| {
+                                                view.update(cx, |view, cx| {
+                                                    let current =
+                                                        if view.env_detail_tab == EnvDetailTab::Variables {
+                                                            view.env_variables_input.read(cx).text()
+                                                        } else {
+                                                            view.env_headers_input.read(cx).text()
+                                                        };
+                                                    let appended = if current.trim().is_empty() {
+                                                        String::from("KEY=VALUE")
+                                                    } else {
+                                                        format!("{current}\nKEY=VALUE")
+                                                    };
+                                                    if view.env_detail_tab == EnvDetailTab::Variables {
+                                                        view.env_variables_input.update(
+                                                            cx,
+                                                            |input, input_cx| {
+                                                                input.set_text(appended.clone(), input_cx)
+                                                            },
+                                                        );
+                                                    } else {
+                                                        view.env_headers_input.update(
+                                                            cx,
+                                                            |input, input_cx| {
+                                                                input.set_text(appended.clone(), input_cx)
+                                                            },
+                                                        );
+                                                    }
+                                                });
                                             }
-                                        });
-                                    }
-                                })),
+                                        }),
+                                )
                         )
                         .child(
                             div()
@@ -2563,7 +2671,7 @@ fn env_manager_dialog(
         .child(
             div()
                 .h(px(48.0))
-                .px(px(18.0))
+                .px(px(20.0))
                 .border_t_1()
                 .border_color(ui::border_light())
                 .bg(theme::rgba_with_alpha(
@@ -2572,53 +2680,76 @@ fn env_manager_dialog(
                 ))
                 .flex()
                 .items_center()
-                .gap(px(12.0))
-                .child(action_link("api-env-save", "💾 保存更改", true, {
-                    let view = view.clone();
-                    move |_, cx| {
-                        view.update(cx, |view, cx| {
-                            view.save_environment_changes(cx);
-                        });
-                    }
-                }))
-                .child(action_link("api-env-reset", "↩ 重置", false, {
-                    let view = view.clone();
-                    move |_, cx| {
-                        view.update(cx, |view, cx| {
-                            view.reset_environment_changes(cx);
-                        });
-                    }
-                }))
-                .child(div().flex_1())
-                .child(action_link("api-env-export", "📤 导出", false, {
-                    let view = view.clone();
-                    move |_, cx| {
-                        view.update(cx, |view, _cx| {
-                            view.notice = String::from("环境导出入口已预留");
-                        });
-                    }
-                }))
-                .child(action_link("api-env-import", "📥 导入", false, {
-                    let view = view.clone();
-                    move |_, cx| {
-                        view.update(cx, |view, _cx| {
-                            view.notice = String::from("环境导入入口已预留");
-                        });
-                    }
-                }))
+                .gap(px(10.0))
                 .child(
-                    {
-                        let view = view.clone();
-                        div()
-                            .text_size(px(11.0))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(theme::semantic().danger)
-                            .hover(move |style| style.cursor_pointer())
-                            .on_click(move |_, _window, cx| {
+                    Button::new("api-env-save")
+                        .primary()
+                        .label("保存更改")
+                        .with_size(Size::Small)
+                        .on_click({
+                            let view = view.clone();
+                            move |_, _, cx| {
+                                view.update(cx, |view, cx| {
+                                    view.save_environment_changes(cx);
+                                });
+                            }
+                        }),
+                )
+                .child(
+                    Button::new("api-env-reset")
+                        .ghost()
+                        .label("重置")
+                        .with_size(Size::Small)
+                        .on_click({
+                            let view = view.clone();
+                            move |_, _, cx| {
+                                view.update(cx, |view, cx| {
+                                    view.reset_environment_changes(cx);
+                                });
+                            }
+                        }),
+                )
+                .child(div().flex_1())
+                .child(
+                    Button::new("api-env-export")
+                        .ghost()
+                        .label("导出")
+                        .with_size(Size::Small)
+                        .on_click({
+                            let view = view.clone();
+                            move |_, _, cx| {
+                                view.update(cx, |view, _cx| {
+                                    view.notice = String::from("环境导出功能开发中");
+                                });
+                            }
+                        }),
+                )
+                .child(
+                    Button::new("api-env-import")
+                        .ghost()
+                        .label("导入")
+                        .with_size(Size::Small)
+                        .on_click({
+                            let view = view.clone();
+                            move |_, _, cx| {
+                                view.update(cx, |view, _cx| {
+                                    view.notice = String::from("环境导入功能开发中");
+                                });
+                            }
+                        }),
+                )
+                .child(
+                    context_menu_item(
+                        "api-env-delete",
+                        "删除此环境",
+                        "",
+                        {
+                            let view = view.clone();
+                            move |_, cx| {
                                 view.update(cx, |view, cx| view.delete_current_environment(cx));
-                            })
-                            .child("删除此环境")
-                    }
+                            }
+                        },
+                    )
                 ),
         )
 }
@@ -2742,88 +2873,6 @@ fn curl_import_dialog(
         )
 }
 
-fn method_popup(
-    view: Entity<ApiDebuggerView>,
-    current_method: HttpMethod,
-    dark: bool,
-) -> impl IntoElement {
-    div()
-        .w(px(120.0))
-        .rounded(px(10.0))
-        .border_1()
-        .border_color(glass::border(dark))
-        .bg(glass::bg(dark))
-        .overflow_hidden()
-        .flex()
-        .flex_col()
-        .child(
-            div()
-                .px(px(10.0))
-                .py(px(6.0))
-                .border_b_1()
-                .border_color(glass::divider(dark))
-                .text_size(px(11.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic().text_primary)
-                .child("选择方法"),
-        )
-        .children(
-            HttpMethod::all()
-                .into_iter()
-                .enumerate()
-                .map(move |(index, method)| {
-                    let label = method.label();
-                    let is_active = method == current_method;
-                    let method_view = view.clone();
-                    div()
-                        .id(("api-method-option", index))
-                        .px(px(10.0))
-                        .py(px(7.0))
-                        .flex()
-                        .items_center()
-                        .gap(px(6.0))
-                        .bg(if is_active {
-                            theme::rgba_with_alpha(theme::semantic().primary, 0.12)
-                        } else {
-                            hsla(0.0, 0.0, 0.0, 0.0)
-                        })
-                        .hover(move |style| {
-                            style
-                                .bg(glass::hover_bg(dark))
-                                .cursor_pointer()
-                        })
-                        .child(
-                            div()
-                                .w(px(8.0))
-                                .h(px(8.0))
-                                .rounded_full()
-                                .bg(rgb(method.color())),
-                        )
-                        .child(
-                            div()
-                                .font_family("SF Mono")
-                                .text_size(px(11.0))
-                                .font_weight(if is_active {
-                                    gpui::FontWeight::SEMIBOLD
-                                } else {
-                                    gpui::FontWeight::NORMAL
-                                })
-                                .text_color(if is_active {
-                                    api_accent()
-                                } else {
-                                    ui::text_primary()
-                                })
-                                .child(label),
-                        )
-                        .on_click(move |_, _window, cx| {
-                            method_view.update(cx, |view, cx| {
-                                view.set_method(method, cx);
-                            });
-                        })
-                }),
-        )
-}
-
 fn overlay_shell(
     dark: bool,
     backdrop_id: &'static str,
@@ -2894,8 +2943,10 @@ fn context_menu_overlay(
                 .left(px(x))
                 .w(px(230.0))
                 .border_1()
-.border_color(glass::border(dark))
-        .bg(glass::bg(dark))
+                .border_color(ui::border_light())
+                .bg(theme::semantic().bg_surface)
+                .rounded(px(8.0))
+                .shadow_md()
                 .overflow_hidden()
                 .flex()
                 .flex_col()
@@ -2963,18 +3014,30 @@ fn context_menu_overlay(
                     "",
                     {
                         let view = view.clone();
-let node_id = node_id.clone();
-                    move |_, cx| {
-                        view.update(cx, |view, _cx| {
-                            if !node_id.is_empty() {
-                                if let Ok(Some(node)) = view.service.get_collection_node(&node_id) {
-                                        view.notice = format!("已复制: {}", node.url);
-                                    } else {
-                                        view.notice = String::from("节点未找到");
-                                    }
+                        let node_id = node_id.clone();
+                        move |_, cx| {
+                            let url = if !node_id.is_empty() {
+                                let api_view = view.read(cx);
+                                if let Ok(Some(node)) = api_view.service.get_collection_node(&node_id) {
+                                    Some(node.url.clone())
+                                } else {
+                                    None
                                 }
-                                view.close_collection_menu();
-                            });
+                            } else {
+                                None
+                            };
+                            if let Some(url) = url {
+                                cx.write_to_clipboard(gpui::ClipboardItem::new_string(url.clone()));
+                                view.update(cx, |view, _cx| {
+                                    view.notice = format!("已复制: {}", url);
+                                    view.close_collection_menu();
+                                });
+                            } else {
+                                view.update(cx, |view, _cx| {
+                                    view.notice = String::from("节点未找到");
+                                    view.close_collection_menu();
+                                });
+                            }
                         }
                     },
                 ))
@@ -3046,61 +3109,31 @@ fn content_split(stacked: bool) -> gpui::Div {
         .when(!stacked, |layout| layout.flex_row())
 }
 
-fn icon_button(
-    id: &'static str,
-    label: &'static str,
-    dark: bool,
-    on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
-) -> impl IntoElement {
-    div()
-        .id(id)
-        .size(px(24.0))
-        .rounded(px(5.0))
-        .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::rgba_with_alpha(
-            theme::semantic().bg_surface,
-            if dark { 0.52 } else { 0.78 },
-        ))
-        .hover(move |style| {
-            style
-                .bg(theme::rgba_with_alpha(api_accent(), 0.08))
-                .cursor_pointer()
-        })
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(12.0))
-        .text_color(api_accent())
-        .child(label)
-        .on_click(move |event, _window, cx| on_click(event, cx))
-}
-
 fn group_count(count: usize) -> impl IntoElement {
     div()
-        .min_w(px(20.0))
-        .h(px(18.0))
-        .px(px(5.0))
+        .min_w(px(22.0))
+        .h(px(20.0))
+        .px(px(6.0))
         .rounded(px(999.0))
         .bg(theme::rgba_with_alpha(api_accent(), 0.08))
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(9.0))
+        .text_size(px(10.0))
         .text_color(api_accent())
         .child(count.to_string())
 }
 
 fn scenario_count_badge(count: usize, _dark: bool) -> impl IntoElement {
     div()
-        .h(px(18.0))
-        .px(px(5.0))
+        .h(px(20.0))
+        .px(px(6.0))
         .rounded(px(999.0))
         .bg(theme::rgba_with_alpha(
             theme::semantic().text_secondary,
             0.08,
         ))
-        .text_size(px(8.0))
+        .text_size(px(10.0))
         .text_color(theme::semantic().text_secondary)
         .child(count.to_string())
 }
@@ -3114,22 +3147,22 @@ fn status_dot(status: ScenarioStatus, dark: bool) -> impl IntoElement {
 
 fn scenario_status_pill(status: ScenarioStatus, dark: bool) -> impl IntoElement {
     div()
-        .h(px(16.0))
-        .px(px(5.0))
+        .h(px(18.0))
+        .px(px(6.0))
         .rounded(px(999.0))
         .bg(theme::rgba_with_alpha(status_color(status, dark), 0.1))
-        .text_size(px(8.0))
+        .text_size(px(10.0))
         .text_color(status_color(status, dark))
         .child(status.label())
 }
 
 fn scenario_status_label(status: ScenarioStatus, dark: bool) -> impl IntoElement {
     div()
-        .h(px(20.0))
-        .px(px(6.0))
+        .h(px(22.0))
+        .px(px(8.0))
         .rounded(px(999.0))
         .bg(theme::rgba_with_alpha(status_color(status, dark), 0.1))
-        .text_size(px(9.0))
+        .text_size(px(10.0))
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(status_color(status, dark))
         .flex()
@@ -3139,7 +3172,7 @@ fn scenario_status_label(status: ScenarioStatus, dark: bool) -> impl IntoElement
 
 fn section_micro_label(label: impl Into<String>, _dark: bool) -> impl IntoElement {
     div()
-        .text_size(px(9.0))
+        .text_size(px(11.0))
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(ui::text_tertiary())
         .child(label.into())
@@ -3147,8 +3180,8 @@ fn section_micro_label(label: impl Into<String>, _dark: bool) -> impl IntoElemen
 
 fn response_metric(text: String, _dark: bool) -> impl IntoElement {
     div()
-        .h(px(20.0))
-        .px(px(6.0))
+        .h(px(22.0))
+        .px(px(8.0))
         .rounded(px(999.0))
         .bg(theme::rgba_with_alpha(
             theme::semantic().text_secondary,
@@ -3156,85 +3189,15 @@ fn response_metric(text: String, _dark: bool) -> impl IntoElement {
         ))
         .flex()
         .items_center()
-        .text_size(px(9.0))
+        .text_size(px(10.0))
         .font_family("SF Mono")
         .text_color(theme::semantic().text_secondary)
         .child(text)
 }
 
-fn soft_button(
-    id: &'static str,
-    label: &'static str,
-    dark: bool,
-    on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
-) -> impl IntoElement {
-    div()
-        .id(id)
-        .h(px(26.0))
-        .px(px(10.0))
-        .rounded(px(5.0))
-        .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::rgba_with_alpha(
-            theme::semantic().bg_surface,
-            if dark { 0.42 } else { 0.72 },
-        ))
-        .hover(move |style| {
-            style
-                .bg(theme::rgba_with_alpha(api_accent(), 0.08))
-                .cursor_pointer()
-        })
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(10.0))
-        .text_color(theme::semantic().text_secondary)
-        .child(label)
-        .on_click(move |event, _window, cx| on_click(event, cx))
-}
-
-fn primary_button(
-    id: &'static str,
-    label: &'static str,
-    dark: bool,
-    on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
-) -> impl IntoElement {
-    div()
-        .id(id)
-        .h(px(32.0))
-        .px(px(16.0))
-        .rounded(px(8.0))
-        .bg(theme::rgba_with_alpha(
-            api_accent(),
-            if dark { 0.22 } else { 0.12 },
-        ))
-        .border_1()
-        .border_color(theme::rgba_with_alpha(api_accent(), 0.18))
-        .text_color(api_accent())
-        .hover(move |style| {
-            style
-                .bg(theme::rgba_with_alpha(
-                    api_accent(),
-                    if dark { 0.30 } else { 0.18 },
-                ))
-                .cursor_pointer()
-        })
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .font_weight(gpui::FontWeight::SEMIBOLD)
-        .child(label)
-        .on_click(move |event, _window, cx| on_click(event, cx))
-}
-
 fn method_badge(method: HttpMethod, _dark: bool) -> impl IntoElement {
     div()
-        .px(px(4.0))
-        .py(px(2.0))
-        .rounded(px(5.0))
-        .bg(theme::rgba_with_alpha(rgb(method.color()), 0.1))
-        .text_size(px(9.0))
+        .text_size(px(11.0))
         .font_family("SF Mono")
         .font_weight(gpui::FontWeight::BOLD)
         .text_color(rgb(method.color()))
@@ -3264,47 +3227,15 @@ fn status_badge(response: &ApiResponse, _dark: bool) -> impl IntoElement {
         theme::semantic().danger
     };
     div()
-        .px(px(8.0))
-        .py(px(3.0))
+        .px(px(10.0))
+        .py(px(4.0))
         .rounded(px(6.0))
         .bg(theme::rgba_with_alpha(color, 0.10))
-        .text_size(px(11.0))
+        .text_size(px(12.0))
         .font_family("SF Mono")
         .font_weight(gpui::FontWeight::BOLD)
         .text_color(color)
         .child(response.status_line.clone())
-}
-
-fn action_link(
-    id: &'static str,
-    label: &'static str,
-    primary: bool,
-    on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
-) -> impl IntoElement {
-    div()
-        .id(id)
-        .text_size(px(11.0))
-        .font_weight(if primary {
-            gpui::FontWeight::SEMIBOLD
-        } else {
-            gpui::FontWeight::NORMAL
-        })
-        .text_color(if primary {
-            api_accent()
-        } else {
-            ui::text_secondary()
-        })
-        .hover(move |style| {
-            style
-                .text_color(if primary {
-                    api_accent()
-                } else {
-                    theme::semantic().text_primary
-                })
-                .cursor_pointer()
-        })
-        .child(label)
-        .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
 fn status_color(status: ScenarioStatus, _dark: bool) -> gpui::Rgba {
@@ -3403,6 +3334,7 @@ fn parse_rows(text: &str) -> Vec<KeyValueRow> {
                 enabled: true,
                 key: key.to_string(),
                 value: value.to_string(),
+                description: String::new(),
             }
         })
         .collect()
@@ -3456,29 +3388,169 @@ fn detect_auth_type_str(auth_text: &str) -> String {
     "none".to_string()
 }
 
-fn editor_tabs() -> [EditorTab; 8] {
-    [
-        EditorTab::Params,
-        EditorTab::Path,
-        EditorTab::Body,
-        EditorTab::Headers,
-        EditorTab::Cookies,
-        EditorTab::Auth,
-        EditorTab::PreOps,
-        EditorTab::PostOps,
-    ]
-}
+fn key_value_table(
+    view: Entity<ApiDebuggerView>,
+    source_input: Entity<TextInput>,
+    cx: &App,
+    dark: bool,
+) -> impl IntoElement {
+    let rows_text = source_input.read(cx).text();
+    let rows = parse_rows(&rows_text);
+    let add_view = view.clone();
+    let add_input = source_input.clone();
 
-fn response_tabs() -> [ResponseTab; 7] {
-    [
-        ResponseTab::Body,
-        ResponseTab::Headers,
-        ResponseTab::Request,
-        ResponseTab::Curl,
-        ResponseTab::Logs,
-        ResponseTab::History,
-        ResponseTab::Code,
-    ]
+    div()
+        .flex()
+        .flex_col()
+        .bg(theme::semantic().bg_surface)
+        .child(
+            div()
+                .id("kv-table-header")
+                .h(px(26.0))
+                .px(px(8.0))
+                .border_b_1()
+                .border_color(ui::border_light())
+                .bg(theme::semantic().bg_subtle)
+                .flex()
+                .items_center()
+                .text_size(px(10.0))
+                .text_color(ui::text_tertiary())
+                .child(div().w(px(32.0)).child("启用"))
+                .child(div().flex_1().child("键"))
+                .child(div().flex_1().child("值"))
+                .child(div().w(px(28.0))),
+        )
+        .children(rows.iter().enumerate().map(move |(i, row)| {
+            let key = row.key.clone();
+            let val = row.value.clone();
+            let enabled = row.enabled;
+            let toggle_view = view.clone();
+            let toggle_input = source_input.clone();
+            let delete_view = view.clone();
+            let delete_input = source_input.clone();
+
+            div()
+                .id(("kv-row", i))
+                .min_h(px(28.0))
+                .px(px(8.0))
+                .border_b_1()
+                .border_color(ui::border_light())
+                .hover(|s| s.bg(theme::rgba_with_alpha(theme::semantic().bg_subtle, 0.5)))
+                .flex()
+                .items_center()
+                .child(
+                    div()
+                        .w(px(32.0))
+                        .flex()
+                        .justify_center()
+                        .child(
+                            div()
+                                .id(("kv-checkbox", i))
+                                .w(px(14.0))
+                                .h(px(14.0))
+                                .rounded(px(3.0))
+                                .border_1()
+                                .border_color(if enabled {
+                                    theme::semantic().primary.into()
+                                } else {
+                                    ui::border_light()
+                                })
+                                .bg(if enabled {
+                                    theme::rgba_with_alpha(theme::semantic().primary, 0.14)
+                                } else {
+                                    theme::semantic().bg_surface.into()
+                                })
+                                .text_size(px(9.0))
+                                .text_color(if enabled {
+                                    theme::semantic().primary.into()
+                                } else {
+                                    hsla(0.0, 0.0, 0.0, 0.0)
+                                })
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .cursor_pointer()
+                                .child(if enabled { "✓" } else { "" })
+                                .on_click(move |_, _, cx| {
+                                    let current = toggle_input.read(cx).text();
+                                    let lines: Vec<String> = current.lines().enumerate().map(|(idx, l)| {
+                                        if idx == i {
+                                            if l.trim_start().starts_with('#') {
+                                                l.trim_start().trim_start_matches('#').trim().to_string()
+                                            } else {
+                                                format!("# {}", l.trim())
+                                            }
+                                        } else {
+                                            l.to_string()
+                                        }
+                                    }).collect();
+                                    toggle_input.update(cx, |input, cx| input.set_text(lines.join("\n"), cx));
+                                    toggle_view.update(cx, |_v, _cx| {});
+                                }),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .px(px(4.0))
+                        .font_family("SF Mono")
+                        .text_size(px(11.0))
+                        .text_color(theme::semantic().text_primary)
+                        .truncate()
+                        .child(key.clone()),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .px(px(4.0))
+                        .font_family("SF Mono")
+                        .text_size(px(11.0))
+                        .text_color(ui::text_secondary())
+                        .truncate()
+                        .child(val.clone()),
+                )
+                .child(
+                    Button::new(("kv-del", i))
+                        .ghost()
+                        .icon(IconName::Close)
+                        .with_size(Size::XSmall)
+                        .on_click(move |_, _, cx| {
+                            let current = delete_input.read(cx).text();
+                            let lines: Vec<String> = current
+                                .lines()
+                                .enumerate()
+                                .filter(|(idx, _)| *idx != i)
+                                .map(|(_, l)| l.to_string())
+                                .collect();
+                            delete_input.update(cx, |input, cx| {
+                                input.set_text(lines.join("\n"), cx)
+                            });
+                            delete_view.update(cx, |v, cx| v.sync_models(cx));
+                        }),
+                )
+        }))
+        .child(
+            div()
+                .px(px(8.0))
+                .py(px(4.0))
+                .child(
+                    Button::new("kv-add-row")
+                        .ghost()
+                        .icon(IconName::Plus)
+                        .label("新增")
+                        .with_size(Size::XSmall)
+                        .on_click(move |_, _, cx| {
+                            let current = add_input.read(cx).text();
+                            let appended = if current.trim().is_empty() {
+                                String::from("KEY=VALUE")
+                            } else {
+                                format!("{current}\nKEY=VALUE")
+                            };
+                            add_input.update(cx, |input, cx| input.set_text(appended, cx));
+                            add_view.update(cx, |v, cx| v.sync_models(cx));
+                        }),
+                ),
+        )
 }
 
 fn sample_response() -> ApiResponse {

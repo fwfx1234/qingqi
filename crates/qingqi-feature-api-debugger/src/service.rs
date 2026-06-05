@@ -756,6 +756,7 @@ impl ApiService {
                     enabled: v.enabled,
                     key: v.var_key.clone(),
                     value: v.var_value.clone(),
+                    description: String::new(),
                 })
                 .collect(),
             headers: source
@@ -765,6 +766,7 @@ impl ApiService {
                     enabled: h.enabled,
                     key: h.header_key.clone(),
                     value: h.header_value.clone(),
+                    description: String::new(),
                 })
                 .collect(),
         })
@@ -1308,7 +1310,8 @@ fn env_full_to_ui(full: &EnvironmentFull) -> ApiEnvironment {
                 enabled: v.enabled,
                 key: v.var_key.clone(),
                 value: v.var_value.clone(),
-            })
+                    description: String::new(),
+                })
             .collect(),
         headers: full
             .headers
@@ -1317,7 +1320,8 @@ fn env_full_to_ui(full: &EnvironmentFull) -> ApiEnvironment {
                 enabled: h.enabled,
                 key: h.header_key.clone(),
                 value: h.header_value.clone(),
-            })
+                    description: String::new(),
+                })
             .collect(),
     }
 }
@@ -1475,6 +1479,7 @@ fn parse_kv_text(text: &str) -> Vec<KeyValueRow> {
                 enabled: true,
                 key: key.to_string(),
                 value: value.to_string(),
+                description: String::new(),
             }
         })
         .collect()
@@ -2002,16 +2007,19 @@ mod tests {
                 enabled: true,
                 key: "valid".into(),
                 value: "yes".into(),
+                description: String::new(),
             },
             KeyValueRow {
                 enabled: true,
                 key: String::new(),
                 value: "no-key".into(),
+                description: String::new(),
             },
             KeyValueRow {
                 enabled: true,
                 key: "also".into(),
                 value: "ok".into(),
+                description: String::new(),
             },
         ];
         let formatted = format_kv_rows(&rows);

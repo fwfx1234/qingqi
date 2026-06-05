@@ -5784,6 +5784,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "gpui",
+ "gpui-component",
  "qingqi-plugin",
  "qingqi-ui",
  "regex",
