@@ -82,7 +82,11 @@ fn gen_curl(req: &CodeGenRequest) -> String {
 
     for h in &req.headers {
         if h.enabled {
-            parts.push(format!("-H \"{}: {}\"", escape_quote(&h.key), escape_quote(&h.value)));
+            parts.push(format!(
+                "-H \"{}: {}\"",
+                escape_quote(&h.key),
+                escape_quote(&h.value)
+            ));
         }
     }
 
@@ -90,17 +94,26 @@ fn gen_curl(req: &CodeGenRequest) -> String {
         BodyMode::FormData => {
             for f in &req.form_data {
                 if f.enabled {
-                    parts.push(format!("-F \"{}={}\"", escape_quote(&f.key), escape_quote(&f.value)));
+                    parts.push(format!(
+                        "-F \"{}={}\"",
+                        escape_quote(&f.key),
+                        escape_quote(&f.value)
+                    ));
                 }
             }
         }
         BodyMode::FormUrlEncoded => {
-            let encoded: Vec<String> = req.form_data.iter()
+            let encoded: Vec<String> = req
+                .form_data
+                .iter()
                 .filter(|f| f.enabled)
                 .map(|f| format!("{}={}", f.key, f.value))
                 .collect();
             if !encoded.is_empty() {
-                parts.push(format!("--data-raw \"{}\"", escape_quote(&encoded.join("&"))));
+                parts.push(format!(
+                    "--data-raw \"{}\"",
+                    escape_quote(&encoded.join("&"))
+                ));
             }
         }
         BodyMode::Binary => {
@@ -164,7 +177,9 @@ fn gen_python(req: &CodeGenRequest) -> String {
             }
         }
         BodyMode::FormData => {
-            let files: Vec<_> = req.form_data.iter()
+            let files: Vec<_> = req
+                .form_data
+                .iter()
                 .filter(|f| f.enabled)
                 .map(|f| {
                     if f.value.starts_with('@') {
@@ -180,11 +195,21 @@ fn gen_python(req: &CodeGenRequest) -> String {
                 lines.push("}".to_string());
                 lines.push(String::new());
             }
-            let arg = if has_headers { "url, headers=headers, files=files" } else { "url, files=files" };
-            lines.push(format!("response = requests.{}({})", req.method.to_lowercase(), arg));
+            let arg = if has_headers {
+                "url, headers=headers, files=files"
+            } else {
+                "url, files=files"
+            };
+            lines.push(format!(
+                "response = requests.{}({})",
+                req.method.to_lowercase(),
+                arg
+            ));
         }
         BodyMode::FormUrlEncoded => {
-            let data_entries: Vec<_> = req.form_data.iter()
+            let data_entries: Vec<_> = req
+                .form_data
+                .iter()
                 .filter(|f| f.enabled)
                 .map(|f| format!("    \"{}\": \"{}\",", f.key, f.value))
                 .collect();
@@ -194,8 +219,16 @@ fn gen_python(req: &CodeGenRequest) -> String {
                 lines.push("}".to_string());
                 lines.push(String::new());
             }
-            let arg = if has_headers { "url, headers=headers, data=data" } else { "url, data=data" };
-            lines.push(format!("response = requests.{}({})", req.method.to_lowercase(), arg));
+            let arg = if has_headers {
+                "url, headers=headers, data=data"
+            } else {
+                "url, data=data"
+            };
+            lines.push(format!(
+                "response = requests.{}({})",
+                req.method.to_lowercase(),
+                arg
+            ));
         }
         _ => {
             if !req.body.is_empty() {
@@ -203,9 +236,17 @@ fn gen_python(req: &CodeGenRequest) -> String {
                 lines.push(String::new());
             }
             let mut args = vec!["url"];
-            if has_headers { args.push("headers=headers"); }
-            if !req.body.is_empty() { args.push("data=data"); }
-            lines.push(format!("response = requests.{}({})", req.method.to_lowercase(), args.join(", ")));
+            if has_headers {
+                args.push("headers=headers");
+            }
+            if !req.body.is_empty() {
+                args.push("data=data");
+            }
+            lines.push(format!(
+                "response = requests.{}({})",
+                req.method.to_lowercase(),
+                args.join(", ")
+            ));
         }
     }
 
@@ -226,9 +267,17 @@ fn gen_javascript(req: &CodeGenRequest) -> String {
     options.push(format!("  method: '{}',", req.method));
 
     if !req.headers.is_empty() {
-        let hdr_lines: Vec<String> = req.headers.iter()
+        let hdr_lines: Vec<String> = req
+            .headers
+            .iter()
             .filter(|h| h.enabled)
-            .map(|h| format!("    '{}': '{}',", escape_quote(&h.key), escape_quote(&h.value)))
+            .map(|h| {
+                format!(
+                    "    '{}': '{}',",
+                    escape_quote(&h.key),
+                    escape_quote(&h.value)
+                )
+            })
             .collect();
         options.push(format!("  headers: {{\n{}\n  }},", hdr_lines.join("\n")));
     }
@@ -236,7 +285,9 @@ fn gen_javascript(req: &CodeGenRequest) -> String {
     if req.body_mode == BodyMode::Json && !req.body.is_empty() {
         options.push(format!("  body: JSON.stringify({}),", req.body.trim()));
     } else if req.body_mode == BodyMode::FormData {
-        let fd_lines: Vec<_> = req.form_data.iter()
+        let fd_lines: Vec<_> = req
+            .form_data
+            .iter()
             .filter(|f| f.enabled)
             .map(|f| format!("formData.append('{}', '{}');", f.key, f.value))
             .collect();
@@ -268,9 +319,17 @@ fn gen_node_axios(req: &CodeGenRequest) -> String {
     config_lines.push(format!("  url: '{}',", escape_quote(&req.url)));
 
     if !req.headers.is_empty() {
-        let hdr_lines: Vec<String> = req.headers.iter()
+        let hdr_lines: Vec<String> = req
+            .headers
+            .iter()
             .filter(|h| h.enabled)
-            .map(|h| format!("    '{}': '{}',", escape_quote(&h.key), escape_quote(&h.value)))
+            .map(|h| {
+                format!(
+                    "    '{}': '{}',",
+                    escape_quote(&h.key),
+                    escape_quote(&h.value)
+                )
+            })
             .collect();
         config_lines.push(format!("  headers: {{\n{}\n  }},", hdr_lines.join("\n")));
     }
@@ -287,7 +346,8 @@ fn gen_node_axios(req: &CodeGenRequest) -> String {
                     if f.value.starts_with('@') {
                         lines.push(format!(
                             "form.append('{}', require('fs').createReadStream('{}'));",
-                            f.key, &f.value[1..]
+                            f.key,
+                            &f.value[1..]
                         ));
                     } else {
                         lines.push(format!("form.append('{}', '{}');", f.key, f.value));
@@ -331,7 +391,11 @@ fn gen_rust(req: &CodeGenRequest) -> String {
 
     // form-data has special handling
     if req.body_mode == BodyMode::FormData && !req.form_data.is_empty() {
-        lines.push(format!("    let response = client.{}(\"{}\")", method_lower, escape_quote(&req.url)));
+        lines.push(format!(
+            "    let response = client.{}(\"{}\")",
+            method_lower,
+            escape_quote(&req.url)
+        ));
         for f in &req.form_data {
             if f.enabled {
                 if f.value.starts_with('@') {
@@ -356,7 +420,11 @@ fn gen_rust(req: &CodeGenRequest) -> String {
         lines.push("        ])".to_string());
         lines.push("        .send()".to_string());
     } else {
-        lines.push(format!("    let response = client.{}(\"{}\")", method_lower, escape_quote(&req.url)));
+        lines.push(format!(
+            "    let response = client.{}(\"{}\")",
+            method_lower,
+            escape_quote(&req.url)
+        ));
 
         for h in &req.headers {
             if h.enabled {
@@ -370,16 +438,19 @@ fn gen_rust(req: &CodeGenRequest) -> String {
 
         match req.body_mode {
             BodyMode::Json if !req.body.is_empty() => {
-                lines.push(format!("        .json(&serde_json::json!({}))", req.body.trim()));
+                lines.push(format!(
+                    "        .json(&serde_json::json!({}))",
+                    req.body.trim()
+                ));
             }
             BodyMode::Binary => {
-                lines.push(format!("        .body(std::fs::read(\"{}\")?)", escape_quote(&req.body)));
-            }
-            _ if !req.body.is_empty() => {
                 lines.push(format!(
-                    "        .body(\"{}\")",
+                    "        .body(std::fs::read(\"{}\")?)",
                     escape_quote(&req.body)
                 ));
+            }
+            _ if !req.body.is_empty() => {
+                lines.push(format!("        .body(\"{}\")", escape_quote(&req.body)));
             }
             _ => {}
         }
@@ -449,7 +520,9 @@ fn gen_go(req: &CodeGenRequest) -> String {
             lines.push("    resp, err := http.DefaultClient.Do(req)".to_string());
         }
         BodyMode::FormUrlEncoded if !req.form_data.is_empty() => {
-            let pairs: Vec<_> = req.form_data.iter()
+            let pairs: Vec<_> = req
+                .form_data
+                .iter()
                 .filter(|f| f.enabled)
                 .map(|f| format!("{}={}", f.key, f.value))
                 .collect();
@@ -530,7 +603,9 @@ fn gen_java(req: &CodeGenRequest) -> String {
             ));
         }
         BodyMode::FormData => {
-            lines.push("        MultipartBody.Builder builder = new MultipartBody.Builder()".to_string());
+            lines.push(
+                "        MultipartBody.Builder builder = new MultipartBody.Builder()".to_string(),
+            );
             lines.push("            .setType(MultipartBody.FORM);".to_string());
             for f in &req.form_data {
                 if f.enabled {
@@ -570,7 +645,10 @@ fn gen_java(req: &CodeGenRequest) -> String {
     lines.push(format!("            .url(\"{}\")", escape_quote(&req.url)));
 
     if has_body {
-        lines.push(format!("            .{}(body)", method_to_okhttp(&req.method)));
+        lines.push(format!(
+            "            .{}(body)",
+            method_to_okhttp(&req.method)
+        ));
     } else {
         lines.push(format!("            .{}()", method_to_okhttp(&req.method)));
     }
@@ -592,7 +670,10 @@ fn gen_java(req: &CodeGenRequest) -> String {
 }
 
 fn escape_java_string_literal(s: &str) -> String {
-    let escaped = s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
+    let escaped = s
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
     format!("\"{}\"", escaped)
 }
 

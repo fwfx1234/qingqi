@@ -67,12 +67,78 @@ pub enum ProxyState {
     Running { port: u16 },
 }
 
+impl ProxyState {
+    pub fn is_running(&self) -> bool {
+        matches!(self, Self::Running { .. })
+    }
+
+    pub fn port(&self) -> Option<u16> {
+        match self {
+            Self::Running { port } => Some(*port),
+            Self::Stopped => None,
+        }
+    }
+}
+
 /// HTTPS certificate status.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CertificateStatus {
     NotGenerated,
     Generated,
     Installed,
+}
+
+impl CertificateStatus {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::NotGenerated => "未生成",
+            Self::Generated => "已生成",
+            Self::Installed => "已信任",
+        }
+    }
+
+    pub fn ready_for_https(self) -> bool {
+        !matches!(self, Self::NotGenerated)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CaptureEndpoint {
+    pub ip: String,
+    pub port: u16,
+}
+
+impl CaptureEndpoint {
+    pub fn proxy_url(&self) -> String {
+        format!("{}:{}", self.ip, self.port)
+    }
+
+    pub fn http_proxy_url(&self) -> String {
+        format!("http://{}", self.proxy_url())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CaptureSetupInfo {
+    pub proxy_state: ProxyState,
+    pub certificate_status: CertificateStatus,
+    pub local_endpoint: CaptureEndpoint,
+    pub lan_endpoint: CaptureEndpoint,
+    pub cert_path: String,
+    pub mobile_cert_path: String,
+    pub cert_download_url: String,
+    pub ca_dir: String,
+    pub install_command: Option<String>,
+}
+
+impl CaptureSetupInfo {
+    pub fn is_running(&self) -> bool {
+        self.proxy_state.is_running()
+    }
+
+    pub fn port(&self) -> u16 {
+        self.proxy_state.port().unwrap_or(self.local_endpoint.port)
+    }
 }
 
 /// Detail inspector tab.
@@ -84,8 +150,6 @@ pub enum DetailTab {
     ResponseHeaders,
     ResponseBody,
     Timing,
-    /// Mock 规则管理
-    Mock,
 }
 
 impl DetailTab {
@@ -97,18 +161,16 @@ impl DetailTab {
             Self::ResponseHeaders => "响应头",
             Self::ResponseBody => "响应体",
             Self::Timing => "计时",
-            Self::Mock => "Mock",
         }
     }
 
-    pub const ALL: [DetailTab; 7] = [
+    pub const ALL: [DetailTab; 6] = [
         DetailTab::Overview,
         DetailTab::RequestHeaders,
         DetailTab::RequestBody,
         DetailTab::ResponseHeaders,
         DetailTab::ResponseBody,
         DetailTab::Timing,
-        DetailTab::Mock,
     ];
 }
 
@@ -529,11 +591,10 @@ mod tests {
     }
 
     #[test]
-    fn detail_tab_all_has_seven_variants() {
-        assert_eq!(DetailTab::ALL.len(), 7);
+    fn detail_tab_all_has_six_variants() {
+        assert_eq!(DetailTab::ALL.len(), 6);
         assert_eq!(DetailTab::ALL[0], DetailTab::Overview);
         assert_eq!(DetailTab::ALL[5], DetailTab::Timing);
-        assert_eq!(DetailTab::ALL[6], DetailTab::Mock);
     }
 
     #[test]

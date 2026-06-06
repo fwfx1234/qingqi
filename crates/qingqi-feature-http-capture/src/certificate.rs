@@ -1,6 +1,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use anyhow::Context;
@@ -14,8 +15,10 @@ use qingqi_plugin::storage::AppPaths;
 /// 负责生成/加载/导出用于 HTTPS 中间人解密的根 CA 证书。
 /// 证书和私钥持久化到 `feature_dir("http-capture")/ca/` 目录下。
 pub struct CaManager {
+    ca_dir: PathBuf,
     cert_path: PathBuf,
     key_path: PathBuf,
+    mobile_cert_path: PathBuf,
     status: CertificateStatus,
     /// 已加载的 CA 密钥对
     ca_key: Option<KeyPair>,
@@ -31,10 +34,13 @@ impl CaManager {
 
         let cert_path = ca_dir.join("qingqi-ca-cert.pem");
         let key_path = ca_dir.join("qingqi-ca-key.pem");
+        let mobile_cert_path = ca_dir.join("qingqi-ca-cert.crt");
 
         let mut manager = Self {
+            ca_dir,
             cert_path,
             key_path,
+            mobile_cert_path,
             status: CertificateStatus::NotGenerated,
             ca_key: None,
             ca_params: None,
@@ -51,9 +57,11 @@ impl CaManager {
     pub fn ensure_ca(&mut self) -> anyhow::Result<()> {
         if self.cert_path.exists() && self.key_path.exists() {
             // 从文件加载
+            let cert_pem = fs::read_to_string(&self.cert_path).context("读取 CA 证书文件失败")?;
             let key_pem = fs::read_to_string(&self.key_path).context("读取 CA 私钥文件失败")?;
 
             let key = KeyPair::from_pem(&key_pem).context("解析 CA 私钥 PEM 失败")?;
+            self.ensure_mobile_cert_export_from_pem(&cert_pem)?;
 
             // 重建 CertificateParams（生成时使用的 CA 参数）
             let mut params = CertificateParams::default();
@@ -103,6 +111,7 @@ impl CaManager {
         // 持久化到文件
         fs::write(&self.cert_path, ca.pem()).context("写入 CA 证书文件失败")?;
         fs::write(&self.key_path, key.serialize_pem()).context("写入 CA 私钥文件失败")?;
+        fs::write(&self.mobile_cert_path, ca.pem()).context("写入 CA 证书 CRT 文件失败")?;
 
         self.ca_params = Some(params);
         self.ca_key = Some(key);
@@ -119,6 +128,16 @@ impl CaManager {
     /// 证书文件路径。
     pub fn cert_file_path(&self) -> &Path {
         &self.cert_path
+    }
+
+    /// 移动端更容易识别的证书文件路径（PEM 编码 .crt）。
+    pub fn mobile_cert_file_path(&self) -> &Path {
+        &self.mobile_cert_path
+    }
+
+    /// 证书目录路径。
+    pub fn ca_dir(&self) -> &Path {
+        &self.ca_dir
     }
 
     /// 私钥文件路径。
@@ -152,7 +171,6 @@ impl CaManager {
     pub fn check_installed(&self) -> bool {
         #[cfg(target_os = "macos")]
         {
-            use std::process::Command;
             match Command::new("security")
                 .args([
                     "find-certificate",
@@ -185,14 +203,23 @@ impl CaManager {
             }
         }
 
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
         {
-            // Windows/Linux: 无法简单检测，返回 false
+            Command::new("certutil")
+                .args(["-store", "Root", "Qingqi HTTPS Capture CA"])
+                .output()
+                .map(|output| output.status.success())
+                .unwrap_or(false)
+        }
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            // Linux: 桌面发行版信任库差异较大，保守返回 false。
             false
         }
     }
 
-    /// 获取安装引导命令（macOS）。
+    /// 获取安装引导命令。
     pub fn install_command(&self) -> Option<String> {
         #[cfg(target_os = "macos")]
         {
@@ -202,7 +229,15 @@ impl CaManager {
             ))
         }
 
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        {
+            Some(format!(
+                "certutil -addstore -f Root \"{}\"",
+                self.mobile_cert_file_path().display()
+            ))
+        }
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
             None
         }
@@ -232,6 +267,15 @@ impl CaManager {
         let key_pem = fs::read_to_string(&self.key_path).context("读取 CA 私钥文件失败")?;
         KeyPair::from_pem(&key_pem).context("解析 CA 私钥 PEM 失败")
     }
+
+    fn ensure_mobile_cert_export_from_pem(&self, cert_pem: &str) -> anyhow::Result<()> {
+        if self.mobile_cert_path.exists() {
+            return Ok(());
+        }
+
+        fs::write(&self.mobile_cert_path, cert_pem).context("写入 CA 证书 CRT 文件失败")?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -256,6 +300,7 @@ mod tests {
         let mgr = CaManager::new(paths).unwrap();
 
         assert!(mgr.cert_file_path().exists());
+        assert!(mgr.mobile_cert_file_path().exists());
         assert!(mgr.key_file_path().exists());
         assert_eq!(mgr.status(), CertificateStatus::Generated);
 

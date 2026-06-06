@@ -16,20 +16,8 @@ impl AppCatalog {
     }
 
     pub fn search(&self, query: &str, limit: usize) -> Vec<Command> {
-        let snapshot = self.service.snapshot();
-        if snapshot.apps.is_empty() && !snapshot.scan_completed_once {
-            self.service.request_scan();
-        } else {
-            self.service.request_probe_scan();
-        }
-
         let limit = if limit == 0 { APP_SEARCH_LIMIT } else { limit };
-        let query = query.trim();
-        let apps = if query.is_empty() {
-            self.service.top_apps(limit)
-        } else {
-            self.service.search(query, limit)
-        };
+        let apps = self.service.search_database(query.trim(), limit);
         apps.into_iter().map(app_command).collect()
     }
 

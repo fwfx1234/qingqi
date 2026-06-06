@@ -23,9 +23,15 @@ use qingqi_plugin::{database::DatabaseService, log_error, storage::AppPaths};
 
 // Re-export model types for backward compatibility
 pub use crate::model::{
-    ApiEnvironment, ApiGroup, ApiRequest, ApiScenario, AuthType, BodyMode, EnvHeader,
-    EnvVariable, EnvironmentFull, HttpHistory, HttpMethod, KeyValueRow, ScenarioStatus,
+    ApiEnvironment, ApiGroup, ApiRequest, ApiScenario, AuthType, BodyMode, EnvHeader, EnvVariable,
+    EnvironmentFull, HttpHistory, HttpMethod, KeyValueRow, ScenarioStatus,
 };
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub struct EnvironmentExport {
+    pub version: u8,
+    pub environments: Vec<ApiEnvironment>,
+}
 
 // ── UI-specific enums (not persisted) ──
 
@@ -261,6 +267,37 @@ impl ApiService {
         }
     }
 
+    pub fn export_environments_json(&self) -> Result<String> {
+        let export = EnvironmentExport {
+            version: 1,
+            environments: self.list_environments_ui(),
+        };
+        Ok(serde_json::to_string_pretty(&export)?)
+    }
+
+    pub fn import_environments_json(&self, content: &str) -> Result<usize> {
+        let environments: Vec<ApiEnvironment> =
+            if let Ok(export) = serde_json::from_str::<EnvironmentExport>(content) {
+                export.environments
+            } else {
+                serde_json::from_str(content)?
+            };
+        if environments.is_empty() {
+            bail!("导入文件中没有环境");
+        }
+        let envs_full = environments
+            .iter()
+            .enumerate()
+            .map(|(index, env)| {
+                let suffix = Uuid::new_v4().simple();
+                env_ui_to_full(env, &format!("env-import-{index}-{suffix}"))
+            })
+            .collect::<Vec<_>>();
+        self.data_source.save_environments_full(&envs_full)?;
+        self.revision.fetch_add(1, Ordering::SeqCst);
+        Ok(environments.len())
+    }
+
     pub fn persist_endpoint_snapshot(
         &self,
         title: &str,
@@ -273,8 +310,13 @@ impl ApiService {
         // each other; fall back to title matching only for legacy requests that
         // have not been assigned a node_id yet.
         if !request.node_id.is_empty() {
-            self.data_source
-                .update_collection_node(&request.node_id, title, method, url, &snapshot)?;
+            self.data_source.update_collection_node(
+                &request.node_id,
+                title,
+                method,
+                url,
+                &snapshot,
+            )?;
             return Ok(());
         }
         let nodes = self.data_source.list_collection_nodes()?;
@@ -353,24 +395,34 @@ impl ApiService {
         url: String,
     ) {
         let service = Arc::clone(self);
-        thread::spawn(move || match service.create_endpoint(parent_id.as_deref(), &name, &method, &url) {
-            Ok(_) => service.publish_notice(format!("已创建端点 {}", name)),
-            Err(e) => service.publish_notice(format!("创建端点失败: {e}")),
+        thread::spawn(move || {
+            match service.create_endpoint(parent_id.as_deref(), &name, &method, &url) {
+                Ok(_) => service.publish_notice(format!("已创建端点 {}", name)),
+                Err(e) => service.publish_notice(format!("创建端点失败: {e}")),
+            }
         });
     }
 
     /// Create a test case as a child of an endpoint. Cases surface as scenarios
     /// under their parent request in the collection tree.
     pub fn create_case(&self, parent_id: &str, name: &str) -> Result<CollectionNode> {
+        let parent = self
+            .data_source
+            .get_collection_node(parent_id)?
+            .ok_or_else(|| anyhow!("父端点不存在"))?;
+        if parent.kind != NodeKind::Endpoint {
+            bail!("用例只能创建在端点下");
+        }
+        let parent_snapshot = RequestSnapshot::from_json(&parent.request_json);
         let id = format!("case-{}", Uuid::new_v4().simple());
         let node = self.data_source.create_collection_node(
             &id,
             Some(parent_id),
             NodeKind::Case,
             name,
-            "",
-            "",
-            &RequestSnapshot::default(),
+            &parent.method,
+            &parent.url,
+            &parent_snapshot,
         )?;
         self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(node)
@@ -401,10 +453,12 @@ impl ApiService {
 
     pub fn create_folder_async(self: &Arc<Self>, parent_id: Option<String>, name: String) {
         let service = Arc::clone(self);
-        thread::spawn(move || match service.create_folder(parent_id.as_deref(), &name) {
-            Ok(_) => service.publish_notice(format!("已创建分组 {}", name)),
-            Err(e) => service.publish_notice(format!("创建分组失败: {e}")),
-        });
+        thread::spawn(
+            move || match service.create_folder(parent_id.as_deref(), &name) {
+                Ok(_) => service.publish_notice(format!("已创建分组 {}", name)),
+                Err(e) => service.publish_notice(format!("创建分组失败: {e}")),
+            },
+        );
     }
 
     pub fn delete_collection_item(&self, node_id: &str) -> Result<usize> {
@@ -427,25 +481,32 @@ impl ApiService {
             .get_collection_node(node_id)?
             .ok_or_else(|| anyhow!("节点不存在"))?;
         let snapshot = RequestSnapshot::from_json(&node.request_json);
-        self.data_source
-            .update_collection_node(node_id, new_name, &node.method, &node.url, &snapshot)?;
+        self.data_source.update_collection_node(
+            node_id,
+            new_name,
+            &node.method,
+            &node.url,
+            &snapshot,
+        )?;
         self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 
     pub fn rename_collection_item_async(self: &Arc<Self>, node_id: String, new_name: String) {
         let service = Arc::clone(self);
-        thread::spawn(move || match service.rename_collection_item(&node_id, &new_name) {
-            Ok(()) => service.publish_notice(format!("已重命名为 {}", new_name)),
-            Err(e) => service.publish_notice(format!("重命名失败: {e}")),
-        });
+        thread::spawn(
+            move || match service.rename_collection_item(&node_id, &new_name) {
+                Ok(()) => service.publish_notice(format!("已重命名为 {}", new_name)),
+                Err(e) => service.publish_notice(format!("重命名失败: {e}")),
+            },
+        );
     }
 
     // ── Import ──
 
     pub fn import_from_curl(&self, curl_text: &str) -> Result<CollectionNode> {
-        let parsed = crate::curl_parser::parse_curl(curl_text)
-            .map_err(|e| anyhow!("cURL 解析失败: {e}"))?;
+        let parsed =
+            crate::curl_parser::parse_curl(curl_text).map_err(|e| anyhow!("cURL 解析失败: {e}"))?;
         let id = format!("node-{}", Uuid::new_v4().simple());
         let snapshot = RequestSnapshot {
             method: parsed.method.clone(),
@@ -895,6 +956,7 @@ impl ApiService {
                     enabled: v.enabled,
                     key: v.var_key.clone(),
                     value: v.var_value.clone(),
+                    value_type: String::new(),
                     description: String::new(),
                 })
                 .collect(),
@@ -905,6 +967,7 @@ impl ApiService {
                     enabled: h.enabled,
                     key: h.header_key.clone(),
                     value: h.header_value.clone(),
+                    value_type: String::new(),
                     description: String::new(),
                 })
                 .collect(),
@@ -986,6 +1049,14 @@ impl ApiService {
                 Ok(()) => service.publish_notice(format!("已保存环境 {}", name)),
                 Err(error) => service.publish_notice(format!("保存环境失败: {error}")),
             }
+        });
+    }
+
+    pub fn import_environments_json_async(self: &Arc<Self>, content: String) {
+        let service = Arc::clone(self);
+        thread::spawn(move || match service.import_environments_json(&content) {
+            Ok(count) => service.publish_notice(format!("已导入 {count} 个环境")),
+            Err(error) => service.publish_notice(format!("环境导入失败: {error}")),
         });
     }
 
@@ -1132,9 +1203,10 @@ fn perform_request(
     module_store: &[ApiVariable],
     global_store: &[ApiVariable],
 ) -> Result<ApiResponse> {
+    let request_path = request_path_with_segments(request, |value| value.to_string());
     let mut draft = script_service::RequestDraft {
         method: request.method.label().to_string(),
-        url: request.path.clone(),
+        url: request_path,
         params: request
             .params
             .iter()
@@ -1280,9 +1352,21 @@ fn perform_request(
             .map_err(|e| anyhow!("读取二进制文件失败 ({}): {e}", raw_body.trim()))?
     } else if request.body_mode == BodyMode::FormData {
         build_multipart_body(&raw_body, MULTIPART_BOUNDARY)?
+    } else if request.body_mode == BodyMode::FormUrlEncoded {
+        build_form_urlencoded_body(&raw_body).into_bytes()
     } else {
         raw_body.clone().into_bytes()
     };
+
+    // Build cURL preview and request dump from the same resolved headers/body.
+    let body_preview = match request.body_mode {
+        BodyMode::Binary if !raw_body.is_empty() => format!("<二进制文件: {}>", raw_body.trim()),
+        BodyMode::FormUrlEncoded => String::from_utf8_lossy(&body_bytes).into_owned(),
+        _ => raw_body.clone(),
+    };
+    let header_lines: Vec<String> = headers.iter().map(|(k, v)| format!("{k}: {v}")).collect();
+    let curl_preview = build_curl_preview(&url, request.method, &header_lines, &body_preview);
+    let request_dump = build_request_dump(&url, request.method, &header_lines, &body_preview);
 
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
@@ -1304,16 +1388,6 @@ fn perform_request(
     if !body_bytes.is_empty() {
         req = req.body(body_bytes);
     }
-
-    // Build cURL preview and request dump from the same resolved headers/body.
-    let header_lines: Vec<String> = headers.iter().map(|(k, v)| format!("{k}: {v}")).collect();
-    let body_preview = if request.body_mode == BodyMode::Binary && !raw_body.is_empty() {
-        format!("<二进制文件: {}>", raw_body.trim())
-    } else {
-        raw_body.clone()
-    };
-    let curl_preview = build_curl_preview(&url, request.method, &header_lines, &body_preview);
-    let request_dump = build_request_dump(&url, request.method, &header_lines, &body_preview);
 
     let started = Instant::now();
     let resp = req.send()?;
@@ -1434,7 +1508,9 @@ pub fn code_snippet(
 
 fn build_final_url(environment: &ApiEnvironment, request: &ApiRequest) -> String {
     let base_url = substitute_vars(environment.base_url.trim(), environment);
-    let path = substitute_vars(request.path.trim(), environment);
+    let request_path =
+        request_path_with_segments(request, |value| substitute_vars(value, environment));
+    let path = substitute_vars(request_path.trim(), environment);
     let path = if path.starts_with("http://") || path.starts_with("https://") {
         path
     } else {
@@ -1445,18 +1521,6 @@ fn build_final_url(environment: &ApiEnvironment, request: &ApiRequest) -> String
             format!("/{path}")
         };
         format!("{base}{route}")
-    };
-
-    let extra_path = request
-        .path_rows
-        .iter()
-        .filter(|row| row.enabled && !row.value.trim().is_empty())
-        .map(|row| substitute_vars(row.value.trim(), environment))
-        .collect::<Vec<_>>();
-    let path = if extra_path.is_empty() {
-        path
-    } else {
-        format!("{}/{}", path.trim_end_matches('/'), extra_path.join("/"))
     };
 
     let query = request
@@ -1475,6 +1539,29 @@ fn build_final_url(environment: &ApiEnvironment, request: &ApiRequest) -> String
         path
     } else {
         format!("{path}?{}", query.join("&"))
+    }
+}
+
+fn request_path_with_segments<F>(request: &ApiRequest, resolve: F) -> String
+where
+    F: Fn(&str) -> String,
+{
+    let base_path = resolve(request.path.trim());
+    let extra_path = request
+        .path_rows
+        .iter()
+        .filter(|row| row.enabled && !row.value.trim().is_empty())
+        .map(|row| resolve(row.value.trim()).trim_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    if extra_path.is_empty() {
+        base_path
+    } else {
+        format!(
+            "{}/{}",
+            base_path.trim_end_matches('/'),
+            extra_path.join("/")
+        )
     }
 }
 
@@ -1503,6 +1590,15 @@ fn build_curl_preview(url: &str, method: HttpMethod, headers: &[String], body: &
         ));
     }
     preview
+}
+
+fn build_form_urlencoded_body(raw_body: &str) -> String {
+    parse_kv_lines(raw_body)
+        .into_iter()
+        .filter(|(enabled, key, _)| *enabled && !key.trim().is_empty())
+        .map(|(_, key, value)| format!("{}={}", key.trim(), value.trim()))
+        .collect::<Vec<_>>()
+        .join("&")
 }
 
 fn default_content_type(mode: BodyMode) -> Option<&'static str> {
@@ -1539,8 +1635,8 @@ fn build_multipart_body(raw_body: &str, boundary: &str) -> Result<Vec<u8>> {
         out.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
         if let Some(path) = value.strip_prefix('@') {
             let path = path.trim();
-            let bytes = std::fs::read(path)
-                .map_err(|e| anyhow!("读取表单文件失败 ({path}): {e}"))?;
+            let bytes =
+                std::fs::read(path).map_err(|e| anyhow!("读取表单文件失败 ({path}): {e}"))?;
             let filename = std::path::Path::new(path)
                 .file_name()
                 .and_then(|s| s.to_str())
@@ -1645,8 +1741,9 @@ fn env_full_to_ui(full: &EnvironmentFull) -> ApiEnvironment {
                 enabled: v.enabled,
                 key: v.var_key.clone(),
                 value: v.var_value.clone(),
-                    description: String::new(),
-                })
+                value_type: String::new(),
+                description: String::new(),
+            })
             .collect(),
         headers: full
             .headers
@@ -1655,8 +1752,9 @@ fn env_full_to_ui(full: &EnvironmentFull) -> ApiEnvironment {
                 enabled: h.enabled,
                 key: h.header_key.clone(),
                 value: h.header_value.clone(),
-                    description: String::new(),
-                })
+                value_type: String::new(),
+                description: String::new(),
+            })
             .collect(),
     }
 }
@@ -1709,7 +1807,10 @@ fn build_groups_from_nodes(nodes: &[CollectionNode]) -> Vec<ApiGroup> {
 
     for folder in &top_folders {
         let endpoints = collect_descendant_endpoints(folder.id.as_str(), nodes);
-        let requests: Vec<ApiRequest> = endpoints.iter().map(|ep| node_to_request(ep, nodes)).collect();
+        let requests: Vec<ApiRequest> = endpoints
+            .iter()
+            .map(|ep| node_to_request(ep, nodes))
+            .collect();
         groups.push(ApiGroup {
             id: Some(folder.id.clone()),
             name: folder.name.clone(),
@@ -1780,26 +1881,72 @@ fn node_to_request(node: &CollectionNode, nodes: &[CollectionNode]) -> ApiReques
         auth: parse_kv_text(&format_auth(&snapshot.auth_type, &snapshot.auth_value)),
         pre_ops: snapshot.pre_ops_text,
         post_ops: snapshot.post_ops_text,
-        scenarios: node_scenarios(&node.id, nodes),
+        scenarios: node_scenarios(node, nodes),
     }
 }
 
 /// Collect the `Case` child nodes of an endpoint as scenarios, ordered by
 /// `sort_order`. Cases are not executed on load, so each is reported as
 /// `Pending` until a run flips it.
-fn node_scenarios(endpoint_id: &str, nodes: &[CollectionNode]) -> Vec<ApiScenario> {
+fn node_scenarios(endpoint: &CollectionNode, nodes: &[CollectionNode]) -> Vec<ApiScenario> {
     let mut cases: Vec<&CollectionNode> = nodes
         .iter()
-        .filter(|n| n.kind == NodeKind::Case && n.parent_id.as_deref() == Some(endpoint_id))
+        .filter(|n| {
+            n.kind == NodeKind::Case && n.parent_id.as_deref() == Some(endpoint.id.as_str())
+        })
         .collect();
     cases.sort_by_key(|n| n.sort_order);
     cases
         .iter()
         .map(|c| ApiScenario {
+            node_id: c.id.clone(),
             name: c.name.clone(),
             status: ScenarioStatus::Pending,
+            request: Some(Box::new(case_node_to_request(c, endpoint))),
         })
         .collect()
+}
+
+fn case_node_to_request(case: &CollectionNode, endpoint: &CollectionNode) -> ApiRequest {
+    let snapshot = if case.request_json.trim().is_empty() || case.request_json.trim() == "{}" {
+        RequestSnapshot::from_json(&endpoint.request_json)
+    } else {
+        RequestSnapshot::from_json(&case.request_json)
+    };
+    let method_label = if snapshot.method.is_empty() {
+        if case.method.is_empty() {
+            endpoint.method.as_str()
+        } else {
+            case.method.as_str()
+        }
+    } else {
+        snapshot.method.as_str()
+    };
+    let url = if snapshot.url.is_empty() {
+        if case.url.is_empty() {
+            endpoint.url.clone()
+        } else {
+            case.url.clone()
+        }
+    } else {
+        snapshot.url.clone()
+    };
+    ApiRequest {
+        node_id: case.id.clone(),
+        title: case.name.clone(),
+        method: HttpMethod::from_label(method_label),
+        path: url,
+        params: parse_kv_text(&snapshot.params_text),
+        path_rows: parse_kv_text(&snapshot.path_params_text),
+        body: snapshot.body_text,
+        body_mode: BodyMode::from_db(&snapshot.body_mode),
+        headers: parse_kv_text(&snapshot.headers_text),
+        cookies: parse_kv_text(&snapshot.cookies_text),
+        auth: parse_kv_text(&format_auth(&snapshot.auth_type, &snapshot.auth_value)),
+        pre_ops: snapshot.pre_ops_text,
+        post_ops: snapshot.post_ops_text,
+        scenarios: Vec::new(),
+    }
 }
 
 fn request_to_snapshot(method: &str, url: &str, request: &ApiRequest) -> RequestSnapshot {
@@ -1829,16 +1976,21 @@ fn parse_kv_text(text: &str) -> Vec<KeyValueRow> {
                 Some(rest) => (false, rest.trim()),
                 None => (true, line),
             };
-            let (key, value) = content
+            let mut parts = content.splitn(3, '\t');
+            let pair = parts.next().unwrap_or_default().trim();
+            let value_type = parts.next().unwrap_or_default().trim();
+            let description = parts.next().unwrap_or_default().trim();
+            let (key, value) = pair
                 .split_once('=')
-                .or_else(|| content.split_once(':'))
+                .or_else(|| pair.split_once(':'))
                 .map(|(k, v)| (k.trim(), v.trim()))
-                .unwrap_or((content, ""));
+                .unwrap_or((pair, ""));
             KeyValueRow {
                 enabled,
                 key: key.to_string(),
                 value: value.to_string(),
-                description: String::new(),
+                value_type: value_type.to_string(),
+                description: description.to_string(),
             }
         })
         .collect()
@@ -1849,11 +2001,16 @@ fn parse_kv_lines(text: &str) -> Vec<(bool, String, String)> {
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .map(|line| {
-            let (key, value) = line
+            let (enabled, content) = match line.strip_prefix('#') {
+                Some(rest) => (false, rest.trim()),
+                None => (true, line),
+            };
+            let pair = content.split('\t').next().unwrap_or_default().trim();
+            let (key, value) = pair
                 .split_once('=')
                 .map(|(k, v)| (k.trim(), v.trim()))
-                .unwrap_or((line, ""));
-            (true, key.to_string(), value.to_string())
+                .unwrap_or((pair, ""));
+            (enabled, key.to_string(), value.to_string())
         })
         .collect()
 }
@@ -1862,15 +2019,23 @@ fn format_kv_rows(rows: &[KeyValueRow]) -> String {
     rows.iter()
         .filter(|r| !r.key.is_empty())
         .map(|r| {
-            let body = format!("{}={}", r.key, r.value);
-            if r.enabled {
-                body
-            } else {
-                format!("# {body}")
+            let mut body = format!("{}={}", r.key, r.value);
+            let value_type = sanitize_kv_metadata(&r.value_type);
+            let description = sanitize_kv_metadata(&r.description);
+            if !value_type.is_empty() || !description.is_empty() {
+                body.push('\t');
+                body.push_str(&value_type);
+                body.push('\t');
+                body.push_str(&description);
             }
+            if r.enabled { body } else { format!("# {body}") }
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn sanitize_kv_metadata(value: &str) -> String {
+    value.replace(['\t', '\n', '\r'], " ").trim().to_string()
 }
 
 fn format_auth(auth_type: &str, auth_value: &str) -> String {
@@ -2040,6 +2205,21 @@ mod tests {
         ApiDebuggerDataSource::open(database, "api_debugger/main").unwrap()
     }
 
+    fn service_with_store(store: ApiDebuggerDataSource) -> ApiService {
+        ApiService {
+            revision: AtomicU64::new(0),
+            state: Mutex::new(ApiServiceState {
+                in_flight: false,
+                pending_response: None,
+                pending_error: None,
+                pending_notice: None,
+                last_tab_id: String::new(),
+            }),
+            data_source: store,
+            generation: AtomicU64::new(0),
+        }
+    }
+
     #[test]
     fn build_groups_empty_store() {
         let store = temp_store();
@@ -2193,12 +2373,70 @@ mod tests {
         let names: Vec<&str> = request.scenarios.iter().map(|s| s.name.as_str()).collect();
         assert!(names.contains(&"正常下单"));
         assert!(names.contains(&"库存不足"));
+        assert_eq!(request.scenarios[0].node_id, "case-1");
+        let scenario_request = request.scenarios[0]
+            .request
+            .as_deref()
+            .expect("scenario carries request variant");
+        assert_eq!(scenario_request.node_id, "case-1");
+        assert_eq!(scenario_request.title, "正常下单");
+        assert_eq!(scenario_request.path, "/orders");
         assert!(
             request
                 .scenarios
                 .iter()
                 .all(|s| s.status == ScenarioStatus::Pending)
         );
+    }
+
+    #[test]
+    fn create_case_copies_parent_request_snapshot() {
+        let service = service_with_store(temp_store());
+        let parent = service
+            .create_endpoint(None, "登录", "POST", "/login")
+            .expect("endpoint");
+        let mut request = ApiRequest {
+            node_id: parent.id.clone(),
+            title: "登录".into(),
+            method: HttpMethod::Post,
+            path: "/login".into(),
+            params: vec![KeyValueRow::new("debug", "1")],
+            path_rows: Vec::new(),
+            body: r#"{"account":"demo"}"#.into(),
+            body_mode: BodyMode::Json,
+            headers: vec![KeyValueRow::new("X-App", "qingqi")],
+            cookies: Vec::new(),
+            auth: Vec::new(),
+            pre_ops: "set token=abc".into(),
+            post_ops: "status == 200".into(),
+            scenarios: Vec::new(),
+        };
+        service
+            .persist_endpoint_snapshot("登录", "POST", "/login", &request)
+            .expect("persist endpoint");
+
+        let case = service.create_case(&parent.id, "错误密码").expect("case");
+        let snapshot = RequestSnapshot::from_json(&case.request_json);
+        assert_eq!(case.parent_id.as_deref(), Some(parent.id.as_str()));
+        assert_eq!(case.method, "POST");
+        assert_eq!(case.url, "/login");
+        assert_eq!(snapshot.body_text, r#"{"account":"demo"}"#);
+        assert_eq!(snapshot.pre_ops_text, "set token=abc");
+        assert_eq!(snapshot.post_ops_text, "status == 200");
+
+        request.node_id = case.id.clone();
+        request.title = "错误密码".into();
+        request.body = r#"{"account":"wrong"}"#.into();
+        service
+            .persist_endpoint_snapshot("错误密码", "POST", "/login", &request)
+            .expect("persist case variant");
+        let updated_case = service
+            .get_collection_node(&case.id)
+            .unwrap()
+            .expect("case node");
+        let updated_snapshot = RequestSnapshot::from_json(&updated_case.request_json);
+        assert_eq!(updated_case.name, "错误密码");
+        assert_eq!(updated_snapshot.body_text, r#"{"account":"wrong"}"#);
     }
 
     #[test]
@@ -2316,12 +2554,77 @@ mod tests {
         };
 
         let curl = code_snippet(&environment, &request, crate::code_gen::CodeLanguage::Curl);
-        assert!(curl.contains("https://api.example.com/users"), "url: {curl}");
+        assert!(
+            curl.contains("https://api.example.com/users"),
+            "url: {curl}"
+        );
         assert!(curl.contains("page=2"), "params: {curl}");
         assert!(curl.contains("api_key=secret"), "query auth: {curl}");
         assert!(curl.contains("Accept: application/json"), "header: {curl}");
         assert!(curl.contains("X-Env: envval"), "env header: {curl}");
         assert!(curl.contains("Cookie: sid=abc"), "cookie: {curl}");
+    }
+
+    #[test]
+    fn code_snippet_includes_enabled_path_rows() {
+        let environment = ApiEnvironment {
+            name: "Test".into(),
+            badge: "T".into(),
+            color: 0,
+            base_url: "https://api.example.com".into(),
+            variables: vec![KeyValueRow::new("USER_ID", "42")],
+            headers: Vec::new(),
+        };
+        let mut disabled = KeyValueRow::new("ignored", "disabled");
+        disabled.enabled = false;
+        let request = ApiRequest {
+            node_id: String::new(),
+            title: "t".into(),
+            method: HttpMethod::Get,
+            path: "/users".into(),
+            params: Vec::new(),
+            path_rows: vec![KeyValueRow::new("id", "{{USER_ID}}"), disabled],
+            body: String::new(),
+            body_mode: BodyMode::None,
+            headers: Vec::new(),
+            cookies: Vec::new(),
+            auth: Vec::new(),
+            pre_ops: String::new(),
+            post_ops: String::new(),
+            scenarios: Vec::new(),
+        };
+
+        let curl = code_snippet(&environment, &request, crate::code_gen::CodeLanguage::Curl);
+        assert!(
+            curl.contains("https://api.example.com/users/42"),
+            "url: {curl}"
+        );
+        assert!(!curl.contains("disabled"), "url: {curl}");
+    }
+
+    #[test]
+    fn request_path_with_segments_appends_enabled_rows() {
+        let mut disabled = KeyValueRow::new("disabled", "off");
+        disabled.enabled = false;
+        let request = ApiRequest {
+            node_id: String::new(),
+            title: "t".into(),
+            method: HttpMethod::Get,
+            path: "/api".into(),
+            params: Vec::new(),
+            path_rows: vec![KeyValueRow::new("version", "/v1/"), disabled],
+            body: String::new(),
+            body_mode: BodyMode::None,
+            headers: Vec::new(),
+            cookies: Vec::new(),
+            auth: Vec::new(),
+            pre_ops: String::new(),
+            post_ops: String::new(),
+            scenarios: Vec::new(),
+        };
+
+        let path = request_path_with_segments(&request, |value| value.to_string());
+        assert_eq!(path, "/api/v1");
     }
 
     #[test]
@@ -2354,6 +2657,12 @@ mod tests {
         let curl = code_snippet(&environment, &request, crate::code_gen::CodeLanguage::Curl);
         assert!(curl.contains("--data-raw"), "data flag: {curl}");
         assert!(curl.contains("a=1&b=2"), "form body: {curl}");
+    }
+
+    #[test]
+    fn build_form_urlencoded_body_uses_enabled_kv_lines() {
+        let body = build_form_urlencoded_body("a=1\n# disabled=x\nb=2");
+        assert_eq!(body, "a=1&b=2");
     }
 
     #[test]
@@ -2453,7 +2762,10 @@ mod tests {
 
     #[test]
     fn default_content_type_maps_body_modes() {
-        assert_eq!(default_content_type(BodyMode::Json), Some("application/json"));
+        assert_eq!(
+            default_content_type(BodyMode::Json),
+            Some("application/json")
+        );
         assert_eq!(default_content_type(BodyMode::Xml), Some("application/xml"));
         assert_eq!(
             default_content_type(BodyMode::FormUrlEncoded),
@@ -2648,18 +2960,21 @@ mod tests {
                 enabled: true,
                 key: "valid".into(),
                 value: "yes".into(),
+                value_type: String::new(),
                 description: String::new(),
             },
             KeyValueRow {
                 enabled: true,
                 key: String::new(),
                 value: "no-key".into(),
+                value_type: String::new(),
                 description: String::new(),
             },
             KeyValueRow {
                 enabled: true,
                 key: "also".into(),
                 value: "ok".into(),
+                value_type: String::new(),
                 description: String::new(),
             },
         ];
@@ -2676,12 +2991,14 @@ mod tests {
                 enabled: true,
                 key: "Accept".into(),
                 value: "application/json".into(),
+                value_type: String::new(),
                 description: String::new(),
             },
             KeyValueRow {
                 enabled: false,
                 key: "X-Debug".into(),
                 value: "1".into(),
+                value_type: String::new(),
                 description: String::new(),
             },
         ];
@@ -2695,6 +3012,24 @@ mod tests {
         assert!(!restored[1].enabled);
         assert_eq!(restored[1].key, "X-Debug");
         assert_eq!(restored[1].value, "1");
+    }
+
+    #[test]
+    fn kv_text_roundtrip_preserves_type_and_description() {
+        let rows = vec![KeyValueRow {
+            enabled: true,
+            key: "page".into(),
+            value: "1".into(),
+            value_type: "number".into(),
+            description: "页码".into(),
+        }];
+        let text = format_kv_rows(&rows);
+        assert_eq!(text, "page=1\tnumber\t页码");
+
+        let restored = parse_kv_text(&text);
+        assert_eq!(restored.len(), 1);
+        assert_eq!(restored[0].value_type, "number");
+        assert_eq!(restored[0].description, "页码");
     }
 
     #[test]
@@ -2840,6 +3175,36 @@ mod tests {
     }
 
     #[test]
+    fn environment_export_import_json_roundtrip() {
+        let service = service_with_store(temp_store());
+        service
+            .save_environment_fields(
+                0,
+                "本地",
+                "http://localhost:3000",
+                "TOKEN=abc\n# DISABLED=no",
+                "Accept=application/json",
+            )
+            .unwrap();
+
+        let json = service.export_environments_json().unwrap();
+        assert!(json.contains("\"version\""));
+        assert!(json.contains("localhost:3000"));
+
+        let imported = service_with_store(temp_store());
+        let count = imported.import_environments_json(&json).unwrap();
+        assert_eq!(count, 1);
+
+        let envs = imported.list_environments_ui();
+        assert_eq!(envs.len(), 1);
+        assert_eq!(envs[0].name, "本地");
+        assert_eq!(envs[0].base_url, "http://localhost:3000");
+        assert_eq!(envs[0].variables[0].key, "TOKEN");
+        assert!(!envs[0].variables[1].enabled);
+        assert_eq!(envs[0].headers[0].key, "Accept");
+    }
+
+    #[test]
     fn service_tab_persistence_lifecycle() {
         let store = temp_store();
         let service = ApiService {
@@ -2884,11 +3249,13 @@ mod tests {
 
     #[test]
     fn parse_kv_lines_parses_and_filters() {
-        let result = parse_kv_lines("KEY1=val1\n\nKEY2=val2");
+        let result = parse_kv_lines("KEY1=val1\n\n# KEY2=val2");
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].1, "KEY1");
         assert_eq!(result[0].2, "val1");
         assert!(result[0].0); // enabled
+        assert_eq!(result[1].1, "KEY2");
+        assert!(!result[1].0);
     }
 
     #[test]

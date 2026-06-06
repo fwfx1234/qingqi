@@ -25,6 +25,8 @@ pub struct ProxyHttpHandler {
     store: Arc<Mutex<CaptureStore>>,
     mock_engine: Arc<MockEngine>,
     events: AppEventBus,
+    ca_cert: Arc<Vec<u8>>,
+    pending: Option<CaptureContext>,
 }
 
 impl ProxyHttpHandler {
@@ -32,11 +34,14 @@ impl ProxyHttpHandler {
         store: Arc<Mutex<CaptureStore>>,
         mock_engine: Arc<MockEngine>,
         events: AppEventBus,
+        ca_cert: Arc<Vec<u8>>,
     ) -> Self {
         Self {
             store,
             mock_engine,
             events,
+            ca_cert,
+            pending: None,
         }
     }
 
@@ -111,6 +116,43 @@ impl ProxyHttpHandler {
     fn extract_host(uri: &hyper::Uri) -> String {
         uri.host().unwrap_or("unknown").to_string()
     }
+
+    fn is_cert_download_request(req: &Request<Body>) -> bool {
+        let host = req
+            .uri()
+            .host()
+            .map(str::to_string)
+            .or_else(|| {
+                req.headers()
+                    .get(hyper::header::HOST)
+                    .and_then(|value| value.to_str().ok())
+                    .map(|value| value.split(':').next().unwrap_or(value).to_string())
+            })
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+
+        if host != "qingqi.cert" {
+            return false;
+        }
+
+        matches!(
+            req.uri().path(),
+            "/" | "/qingqi-ca-cert.crt" | "/qingqi-ca-cert.pem"
+        )
+    }
+
+    fn cert_download_response(&self) -> Response<Body> {
+        Response::builder()
+            .status(hyper::StatusCode::OK)
+            .header(hyper::header::CONTENT_TYPE, "application/x-x509-ca-cert")
+            .header(
+                hyper::header::CONTENT_DISPOSITION,
+                "attachment; filename=\"qingqi-ca-cert.crt\"",
+            )
+            .header(hyper::header::CACHE_CONTROL, "no-store")
+            .body(Body::from((*self.ca_cert).clone()))
+            .unwrap_or_else(|_| Response::new(Body::empty()))
+    }
 }
 
 impl HttpHandler for ProxyHttpHandler {
@@ -120,6 +162,10 @@ impl HttpHandler for ProxyHttpHandler {
         req: Request<Body>,
     ) -> RequestOrResponse {
         let start = Instant::now();
+
+        if Self::is_cert_download_request(&req) {
+            return RequestOrResponse::Response(self.cert_download_response());
+        }
 
         let method = req.method().to_string();
         let url = req.uri().to_string();
@@ -200,16 +246,9 @@ impl HttpHandler for ProxyHttpHandler {
         let request_size = body_bytes.len() as i64;
         let request_body = Self::truncate_body(&body_bytes);
 
-        // 存储开始时间到 parts.extensions 中（通过 ctx 或自定义方式传递）
-        // hudsucker 的 HttpContext 不直接支持携带自定义数据，
-        // 我们使用 URL 作为关联键 + 时间戳记录的方式
-        // 为简化实现，这里将请求信息存到局部变量，在 handle_response 中通过 URL 关联
-
         // 重建 Request 并返回
-        let mut new_req = Request::from_parts(parts, Body::from(body_bytes));
-
-        // 将捕获信息存入 extensions（供 handle_response 使用）
-        new_req.extensions_mut().insert(CaptureContext {
+        let new_req = Request::from_parts(parts, Body::from(body_bytes));
+        self.pending = Some(CaptureContext {
             method: method.clone(),
             url: url.clone(),
             host: host.clone(),
@@ -240,10 +279,9 @@ impl HttpHandler for ProxyHttpHandler {
         let response_headers_json = Self::headers_to_json(&parts.headers);
         let status = parts.status.as_u16() as i64;
 
-        // 尝试从 extensions 中提取捕获上下文
-        let capture_ctx = parts.extensions.get::<CaptureContext>();
+        let capture_ctx = self.pending.take();
 
-        match capture_ctx {
+        match capture_ctx.as_ref() {
             Some(ctx) => {
                 let duration_ms = ctx.start.elapsed().as_millis() as i64;
 
@@ -270,10 +308,7 @@ impl HttpHandler for ProxyHttpHandler {
         }
 
         // 重建 Response
-        let mut new_res = Response::from_parts(parts, Body::from(body_bytes));
-        // 移除我们注入的 extension
-        new_res.extensions_mut().remove::<CaptureContext>();
-        new_res
+        Response::from_parts(parts, Body::from(body_bytes))
     }
 }
 
@@ -289,4 +324,104 @@ struct CaptureContext {
     request_size: i64,
     request_body: String,
     req_headers_json: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{mock_engine::MockEngine, mock_store::MockStore};
+    use qingqi_plugin::{
+        database::{DatabaseService, DatabaseSpec},
+        storage::AppPaths,
+    };
+    use std::{
+        fs,
+        sync::{Arc, Mutex},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temp_dir(label: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or_default();
+        let dir = std::env::temp_dir().join(format!("qingqi-proxy-handler-{label}-{nanos}"));
+        let _ = fs::create_dir_all(&dir);
+        dir
+    }
+
+    fn handler_with_cert(cert: &[u8]) -> ProxyHttpHandler {
+        let dir = temp_dir("cert");
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(dir.clone())));
+        let capture_key = qingqi_plugin::database::feature_database_key("http-capture", "capture");
+        let mock_key = qingqi_plugin::database::feature_database_key("http-capture", "mock");
+        database
+            .register_database(DatabaseSpec::path(
+                capture_key.clone(),
+                dir.join("capture.db"),
+            ))
+            .unwrap();
+        database
+            .register_database(DatabaseSpec::path(mock_key.clone(), dir.join("mock.db")))
+            .unwrap();
+
+        let store = Arc::new(Mutex::new(
+            CaptureStore::open(Arc::clone(&database), &capture_key).unwrap(),
+        ));
+        let mock_store = Arc::new(Mutex::new(
+            MockStore::open(Arc::clone(&database), &mock_key).unwrap(),
+        ));
+        let mock_engine = Arc::new(MockEngine::new(mock_store));
+        ProxyHttpHandler::new(
+            store,
+            mock_engine,
+            AppEventBus::new(),
+            Arc::new(cert.to_vec()),
+        )
+    }
+
+    #[test]
+    fn qingqi_cert_host_is_handled_locally() {
+        let req = Request::builder()
+            .uri("http://qingqi.cert/qingqi-ca-cert.crt")
+            .body(Body::empty())
+            .unwrap();
+
+        assert!(ProxyHttpHandler::is_cert_download_request(&req));
+    }
+
+    #[test]
+    fn qingqi_cert_host_can_be_detected_from_host_header() {
+        let req = Request::builder()
+            .uri("/qingqi-ca-cert.pem")
+            .header(hyper::header::HOST, "qingqi.cert:8899")
+            .body(Body::empty())
+            .unwrap();
+
+        assert!(ProxyHttpHandler::is_cert_download_request(&req));
+    }
+
+    #[test]
+    fn non_cert_hosts_are_forwarded_normally() {
+        let req = Request::builder()
+            .uri("http://example.com/qingqi-ca-cert.crt")
+            .body(Body::empty())
+            .unwrap();
+
+        assert!(!ProxyHttpHandler::is_cert_download_request(&req));
+    }
+
+    #[tokio::test]
+    async fn cert_download_response_returns_ca_bytes() {
+        let handler = handler_with_cert(b"test-ca");
+        let response = handler.cert_download_response();
+
+        assert_eq!(response.status(), hyper::StatusCode::OK);
+        assert_eq!(
+            response.headers().get(hyper::header::CONTENT_TYPE).unwrap(),
+            "application/x-x509-ca-cert"
+        );
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&body[..], b"test-ca");
+    }
 }

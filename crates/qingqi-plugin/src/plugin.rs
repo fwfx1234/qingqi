@@ -92,6 +92,7 @@ pub trait WindowView {
     fn title(&self) -> Arc<str>;
     fn render(&mut self, window: &mut Window, cx: &mut App) -> gpui::AnyElement;
     fn on_reopen(&mut self, _window: &mut Window, _cx: &mut App) {}
+    fn on_input_changed(&mut self, _text: &str, _cx: &mut App) {}
     fn on_close(&mut self) {}
 }
 

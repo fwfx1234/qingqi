@@ -19,7 +19,6 @@ pub struct HttpCapturePlugin {
     engine: Arc<CaptureEngine>,
     store: Arc<Mutex<CaptureStore>>,
     mock_store: Arc<Mutex<MockStore>>,
-    mock_engine: Arc<MockEngine>,
     ca_manager: Arc<Mutex<CaManager>>,
     events: AppEventBus,
 }
@@ -54,7 +53,6 @@ impl HttpCapturePlugin {
             engine,
             store,
             mock_store,
-            mock_engine,
             ca_manager,
             events,
         })
@@ -88,6 +86,7 @@ impl Plugin for HttpCapturePlugin {
                 Arc::clone(&self.engine),
                 Arc::clone(&self.mock_store),
                 Arc::clone(&self.ca_manager),
+                self.events.clone(),
                 cx,
             )
         });

@@ -13,7 +13,7 @@ pub struct CurlParsed {
     pub body: String,
     pub body_mode: BodyMode,
     pub form_data: Vec<KeyValueRow>,
-    pub auth_type: String,  // "basic" / "bearer"
+    pub auth_type: String, // "basic" / "bearer"
     pub auth_value: String,
     pub cookies: Vec<KeyValueRow>,
 }
@@ -131,10 +131,9 @@ pub fn parse_curl(input: &str) -> Result<CurlParsed, String> {
                     for part in cookie_str.split(';') {
                         let part = part.trim();
                         if let Some((k, v)) = part.split_once('=') {
-                            result.cookies.push(KeyValueRow::new(
-                                k.trim().to_string(),
-                                v.trim().to_string(),
-                            ));
+                            result
+                                .cookies
+                                .push(KeyValueRow::new(k.trim().to_string(), v.trim().to_string()));
                         }
                     }
                     i += 2;
@@ -348,14 +347,18 @@ mod tests {
 
     #[test]
     fn test_parse_binary() {
-        let result = parse_curl("curl --data-binary @/tmp/image.png https://api.example.com/upload").unwrap();
+        let result =
+            parse_curl("curl --data-binary @/tmp/image.png https://api.example.com/upload")
+                .unwrap();
         assert_eq!(result.body, "/tmp/image.png");
         assert_eq!(result.body_mode, BodyMode::Binary);
     }
 
     #[test]
     fn test_parse_cookies() {
-        let result = parse_curl(r#"curl -b "session=abc123; token=xyz" https://api.example.com/me"#).unwrap();
+        let result =
+            parse_curl(r#"curl -b "session=abc123; token=xyz" https://api.example.com/me"#)
+                .unwrap();
         assert_eq!(result.cookies.len(), 2);
         assert_eq!(result.cookies[0].key, "session");
         assert_eq!(result.cookies[1].key, "token");
@@ -376,7 +379,8 @@ mod tests {
     #[test]
     fn test_auto_detect_post_from_body() {
         // 没有显式 -X 但有 -d，应自动推断为 POST
-        let result = parse_curl(r#"curl https://api.example.com/users -d '{"name":"test"}'"#).unwrap();
+        let result =
+            parse_curl(r#"curl https://api.example.com/users -d '{"name":"test"}'"#).unwrap();
         assert_eq!(result.method, "POST");
     }
 }

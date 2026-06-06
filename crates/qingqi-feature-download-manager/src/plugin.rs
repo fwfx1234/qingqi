@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 
 use qingqi_plugin::{
-    command::{Command, ContextKind, ContextMatcher},
+    command::{ClipboardPayload, Command, ContextKind, ContextMatcher},
     database::DatabaseService,
     plugin::{Manifest, Plugin, PluginCx, PluginId, PluginView, WindowView},
     storage::AppPaths,
@@ -45,6 +45,7 @@ impl Plugin for DownloadManagerPlugin {
     fn manifest(&self) -> Manifest {
         manifest::manifest()
     }
+
     fn commands(&self, _query: &str) -> Vec<Command> {
         let manifest = self.manifest();
         vec![
@@ -61,6 +62,25 @@ impl Plugin for DownloadManagerPlugin {
                 ContextMatcher::new(ContextKind::Url, 60),
             ]),
         ]
+    }
+
+    fn clipboard_boost(&self, payload: &ClipboardPayload) -> Option<i32> {
+        let text_has_url = payload
+            .text
+            .as_deref()
+            .is_some_and(|text| !super::model::extract_urls_from_text(text).is_empty());
+        if text_has_url {
+            return Some(160);
+        }
+
+        let file_list_has_url = payload.file_paths.as_ref().is_some_and(|paths| {
+            paths.iter().any(|path| {
+                path.starts_with("http://")
+                    || path.starts_with("https://")
+                    || !super::model::extract_urls_from_text(path).is_empty()
+            })
+        });
+        file_list_has_url.then_some(120)
     }
 
     fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
@@ -95,6 +115,11 @@ impl WindowView for DownloadManagerView {
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
         self.panel.clone().into_any_element()
+    }
+
+    fn on_input_changed(&mut self, text: &str, cx: &mut App) {
+        self.panel
+            .update(cx, |panel, cx| panel.import_launch_input(text, cx));
     }
 
     fn on_close(&mut self) {}

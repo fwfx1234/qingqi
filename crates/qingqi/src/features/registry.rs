@@ -119,5 +119,6 @@ pub fn register_builtin_plugins(host: &mut AppHost) -> Result<()> {
     );
 
     registry.build_all(&host.build_cx, &mut host.plugins)?;
+    host.plugins.rebuild_command_catalog()?;
     Ok(())
 }

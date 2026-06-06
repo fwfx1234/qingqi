@@ -8,12 +8,14 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+gpui-component.workspace = true
 gpui.workspace = true
 http-body-util = "0.1"
 hudsucker = { workspace = true }
 hyper = { version = "1", features = ["server", "client", "http1"] }
 hyper-util = { version = "0.1", features = ["server-auto", "client-legacy", "tokio", "http1"] }
 qingqi-plugin = { path = "../qingqi-plugin" }
+qingqi-platform = { path = "../qingqi-platform" }
 qingqi-ui = { path = "../qingqi-ui" }
 rcgen = { workspace = true }
 rusqlite.workspace = true

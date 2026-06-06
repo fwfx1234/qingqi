@@ -5,8 +5,9 @@ use std::{
 
 use anyhow::Result;
 use gpui::{
-    App, AppContext, Context, Entity, InteractiveElement, IntoElement, ObjectFit, ParentElement,
-    Render, StatefulInteractiveElement, Styled, StyledImage, Window, div, hsla, img, px,
+    App, AppContext, Context, Entity, InteractiveElement, IntoElement, KeyDownEvent, ObjectFit,
+    ParentElement, Render, StatefulInteractiveElement, Styled, StyledImage, Subscription, Window,
+    div, hsla, img, px,
 };
 
 use crate::service::QrCodeService;
@@ -32,11 +33,17 @@ pub struct QrView {
     message: String,
     tone: StatusTone,
     scanned_image_path: Option<PathBuf>,
-    pending_action: Arc<Mutex<Option<QrBackgroundResult>>>,
+    pending_action: Arc<Mutex<Vec<QrBackgroundResult>>>,
+    input_snapshot: String,
+    preview_generation: u64,
+    subscriptions: Vec<Subscription>,
 }
 
 enum QrBackgroundResult {
-    Preview(std::result::Result<crate::service::QrMatrix, String>),
+    Preview {
+        generation: u64,
+        result: std::result::Result<crate::service::QrMatrix, String>,
+    },
     Save {
         result: std::result::Result<PathBuf, String>,
     },
@@ -58,7 +65,10 @@ impl QrView {
             message: String::from("输入文本后点击生成"),
             tone: StatusTone::Neutral,
             scanned_image_path: None,
-            pending_action: Arc::new(Mutex::new(None)),
+            pending_action: Arc::new(Mutex::new(Vec::new())),
+            input_snapshot: String::new(),
+            preview_generation: 0,
+            subscriptions: Vec::new(),
         })
     }
 
@@ -79,6 +89,20 @@ impl QrView {
                 input
             }));
         }
+        self.observe_input(cx);
+    }
+
+    fn observe_input(&mut self, cx: &mut Context<Self>) {
+        if !self.subscriptions.is_empty() {
+            return;
+        }
+        let Some(input) = self.input.clone() else {
+            return;
+        };
+        let subscription = cx.observe(&input, |this, _, cx| {
+            this.sync_from_input(cx);
+        });
+        self.subscriptions.push(subscription);
     }
 
     fn input_text(&self, cx: &App) -> String {
@@ -90,9 +114,32 @@ impl QrView {
 
     pub fn set_input_text(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
         self.ensure_inputs(cx);
+        let text = text.into();
+        self.input_snapshot = text.clone();
         if let Some(input) = self.input.as_ref() {
-            input.update(cx, |input, cx| input.set_text(text.into(), cx));
+            input.update(cx, |input, cx| input.set_text(text, cx));
         }
+    }
+
+    fn sync_from_input(&mut self, cx: &mut Context<Self>) {
+        let text = self.input_text(cx);
+        if text == self.input_snapshot {
+            return;
+        }
+
+        self.input_snapshot = text.clone();
+        self.scanned_image_path = None;
+        if text.trim().is_empty() {
+            self.invalidate_preview();
+            self.qr_matrix.clear();
+            self.qr_size = 0;
+            self.message = "输入文本后生成二维码".into();
+            self.tone = StatusTone::Neutral;
+            cx.notify();
+            return;
+        }
+
+        self.generate_from_text(&text, cx);
     }
 
     pub fn set_launch_input(&mut self, text: &str, cx: &mut Context<Self>) {
@@ -103,10 +150,16 @@ impl QrView {
     }
 
     pub fn generate_from_text(&mut self, text: &str, cx: &mut Context<Self>) {
+        self.input_snapshot = text.to_string();
+        let generation = self.next_preview_generation();
         let trimmed = text.trim();
         if trimmed.is_empty() {
+            self.qr_matrix.clear();
+            self.qr_size = 0;
+            self.scanned_image_path = None;
             self.message = "请先输入文本".into();
             self.tone = StatusTone::Error;
+            cx.notify();
             return;
         }
         self.scanned_image_path = None;
@@ -121,11 +174,15 @@ impl QrView {
                 .spawn(async move { service.preview(&text).map_err(|e| e.to_string()) })
                 .await;
             if let Ok(mut s) = pending.lock() {
-                *s = Some(QrBackgroundResult::Preview(r));
+                s.push(QrBackgroundResult::Preview {
+                    generation,
+                    result: r,
+                });
             }
             let _ = this.update(cx, |_, cx| cx.notify());
         })
         .detach();
+        cx.notify();
     }
 
     pub fn save_current(&mut self, cx: &mut Context<Self>) {
@@ -162,7 +219,7 @@ impl QrView {
                 })
                 .await;
             if let Ok(mut s) = pending.lock() {
-                *s = Some(QrBackgroundResult::Save { result: r });
+                s.push(QrBackgroundResult::Save { result: r });
             }
             let _ = this.update(cx, |_, cx| cx.notify());
         })
@@ -183,32 +240,11 @@ impl QrView {
     }
 
     pub fn fill_from_clipboard(&mut self, cx: &mut Context<Self>) {
-        // Try image first
         if let Some(image) = qingqi_platform::clipboard::read_image(cx) {
-            let service = self.service.clone();
-            let pending = Arc::clone(&self.pending_action);
-            self.message = "正在识别...".into();
-            self.tone = StatusTone::Neutral;
-            cx.spawn(async move |this, cx| {
-                let r = cx
-                    .background_executor()
-                    .spawn(async move {
-                        let tmp =
-                            std::env::temp_dir().join(format!("qr_{}.png", std::process::id()));
-                        std::fs::write(&tmp, &image.bytes).map_err(|e| format!("{e}"))?;
-                        let text = service.scan_image(&tmp).map_err(|e| format!("{e}"))?;
-                        Ok((text, tmp))
-                    })
-                    .await;
-                if let Ok(mut s) = pending.lock() {
-                    *s = Some(QrBackgroundResult::Scan(r));
-                }
-                let _ = this.update(cx, |_, cx| cx.notify());
-            })
-            .detach();
+            self.scan_clipboard_image(image, cx);
             return;
         }
-        // Fall back to text
+
         let text = qingqi_platform::clipboard::read_text(cx).unwrap_or_default();
         if text.trim().is_empty() {
             self.message = "剪贴板无可用内容".into();
@@ -219,7 +255,42 @@ impl QrView {
         self.generate_from_text(&text, cx);
     }
 
+    fn scan_clipboard_image(
+        &mut self,
+        image: qingqi_platform::clipboard::ClipboardImage,
+        cx: &mut Context<Self>,
+    ) {
+        self.invalidate_preview();
+        let service = self.service.clone();
+        let pending = Arc::clone(&self.pending_action);
+        self.message = "正在识别...".into();
+        self.tone = StatusTone::Neutral;
+        cx.spawn(async move |this, cx| {
+            let r = cx
+                .background_executor()
+                .spawn(async move {
+                    let tmp = std::env::temp_dir().join(format!(
+                        "qr_{}_{}.{}",
+                        std::process::id(),
+                        image.id,
+                        qingqi_platform::clipboard::image_format_extension(image.format)
+                    ));
+                    std::fs::write(&tmp, &image.bytes).map_err(|e| format!("{e}"))?;
+                    let text = service.scan_image(&tmp).map_err(|e| format!("{e}"))?;
+                    Ok((text, tmp))
+                })
+                .await;
+            if let Ok(mut s) = pending.lock() {
+                s.push(QrBackgroundResult::Scan(r));
+            }
+            let _ = this.update(cx, |_, cx| cx.notify());
+        })
+        .detach();
+        cx.notify();
+    }
+
     pub fn choose_scan_image(&mut self, cx: &mut Context<Self>) {
+        self.invalidate_preview();
         let service = self.service.clone();
         let pending = Arc::clone(&self.pending_action);
         self.message = "正在识别...".into();
@@ -239,7 +310,7 @@ impl QrView {
                 })
                 .await;
             if let Ok(mut s) = pending.lock() {
-                *s = Some(QrBackgroundResult::Scan(r));
+                s.push(QrBackgroundResult::Scan(r));
             }
             let _ = this.update(cx, |_, cx| cx.notify());
         })
@@ -248,9 +319,11 @@ impl QrView {
 
     pub fn clear_input(&mut self, cx: &mut Context<Self>) {
         self.ensure_inputs(cx);
+        self.input_snapshot.clear();
         if let Some(i) = self.input.as_ref() {
             i.update(cx, |i, cx| i.clear(cx));
         }
+        self.invalidate_preview();
         self.qr_matrix.clear();
         self.qr_size = 0;
         self.scanned_image_path = None;
@@ -272,7 +345,7 @@ impl QrView {
                 })
                 .await;
             if let Ok(mut s) = pending.lock() {
-                *s = Some(QrBackgroundResult::RecordCopy {
+                s.push(QrBackgroundResult::RecordCopy {
                     success_message: "已复制".into(),
                     result: r,
                 });
@@ -283,68 +356,104 @@ impl QrView {
     }
 
     fn collect_pending(&mut self, cx: &mut Context<Self>) {
-        let action = self.pending_action.lock().ok().and_then(|mut s| s.take());
-        let Some(a) = action else {
-            return;
-        };
-        match a {
-            QrBackgroundResult::Preview(r) => match r {
-                Ok(m) => {
-                    self.qr_size = m.size;
-                    self.qr_matrix = m.cells;
-                    self.message = format!("已生成 ({}x{})", m.size, m.size);
-                    self.tone = StatusTone::Success;
-                }
-                Err(e) => {
-                    self.qr_matrix.clear();
-                    self.qr_size = 0;
-                    self.message = e;
-                    self.tone = StatusTone::Error;
-                }
-            },
-            QrBackgroundResult::Save { result } => match result {
-                Ok(p) => {
-                    self.message = format!("已保存: {}", p.display());
-                    self.tone = StatusTone::Success;
-                }
-                Err(e) => {
-                    self.message = e;
-                    self.tone = StatusTone::Error;
-                }
-            },
-            QrBackgroundResult::Scan(r) => match r {
-                Ok((text, path)) => {
-                    if let Some(i) = self.input.as_ref() {
-                        i.update(cx, |i, cx| i.set_text(text, cx));
+        let actions = self
+            .pending_action
+            .lock()
+            .map(|mut s| std::mem::take(&mut *s))
+            .unwrap_or_default();
+
+        for action in actions {
+            match action {
+                QrBackgroundResult::Preview { generation, result } => {
+                    if generation != self.preview_generation {
+                        continue;
                     }
-                    self.scanned_image_path = Some(path);
-                    self.qr_matrix.clear();
-                    self.qr_size = 0;
-                    self.message = "已识别".into();
-                    self.tone = StatusTone::Success;
+                    match result {
+                        Ok(m) => {
+                            self.qr_size = m.size;
+                            self.qr_matrix = m.cells;
+                            self.message = format!("已生成 ({}x{})", m.size, m.size);
+                            self.tone = StatusTone::Success;
+                        }
+                        Err(e) => {
+                            self.qr_matrix.clear();
+                            self.qr_size = 0;
+                            self.message = e;
+                            self.tone = StatusTone::Error;
+                        }
+                    }
                 }
-                Err(e) => {
-                    self.message = e;
-                    self.tone = StatusTone::Error;
-                }
-            },
-            QrBackgroundResult::RecordCopy {
-                success_message,
-                result,
-            } => match result {
-                Ok(()) => {
-                    self.message = success_message;
-                    self.tone = StatusTone::Success;
-                }
-                Err(e) => {
-                    self.message = e;
-                    self.tone = StatusTone::Error;
-                }
-            },
+                QrBackgroundResult::Save { result } => match result {
+                    Ok(p) => {
+                        self.message = format!("已保存: {}", p.display());
+                        self.tone = StatusTone::Success;
+                    }
+                    Err(e) => {
+                        self.message = e;
+                        self.tone = StatusTone::Error;
+                    }
+                },
+                QrBackgroundResult::Scan(r) => match r {
+                    Ok((text, path)) => {
+                        self.set_input_text(text, cx);
+                        self.scanned_image_path = Some(path);
+                        self.qr_matrix.clear();
+                        self.qr_size = 0;
+                        self.message = "已识别".into();
+                        self.tone = StatusTone::Success;
+                    }
+                    Err(e) => {
+                        self.message = e;
+                        self.tone = StatusTone::Error;
+                    }
+                },
+                QrBackgroundResult::RecordCopy {
+                    success_message,
+                    result,
+                } => match result {
+                    Ok(()) => {
+                        self.message = success_message;
+                        self.tone = StatusTone::Success;
+                    }
+                    Err(e) => {
+                        self.message = e;
+                        self.tone = StatusTone::Error;
+                    }
+                },
+            }
+        }
+    }
+
+    fn next_preview_generation(&mut self) -> u64 {
+        self.preview_generation = self.preview_generation.wrapping_add(1);
+        self.preview_generation
+    }
+
+    fn invalidate_preview(&mut self) {
+        self.preview_generation = self.preview_generation.wrapping_add(1);
+    }
+
+    fn handle_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let modifiers = event.keystroke.modifiers;
+        let primary = modifiers.platform || modifiers.control;
+        if !primary || !event.keystroke.key.eq_ignore_ascii_case("v") {
+            return;
+        }
+
+        if let Some(image) = qingqi_platform::clipboard::read_image(cx) {
+            self.scan_clipboard_image(image, cx);
+            cx.stop_propagation();
         }
     }
 
     pub fn clear_view_state(&mut self) {
+        self.input_snapshot.clear();
+        self.invalidate_preview();
         self.qr_matrix.clear();
         self.qr_size = 0;
         self.scanned_image_path = None;
@@ -369,6 +478,7 @@ impl Render for QrView {
 
         ui::plugin_surface().child(
             ui::plugin_scroll_content()
+                .capture_key_down(cx.listener(Self::handle_key_down))
                 .flex()
                 .flex_col()
                 .gap_2()

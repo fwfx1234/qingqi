@@ -166,12 +166,9 @@ impl WindowController {
         let events = lock_or_recover(&controller, "window_controller")
             .events
             .clone();
-        let initial_results = lock_or_recover(&plugin_manager, "window_controller")
-            .commands_with_clipboard(&HashMap::new())
-            .len();
         let window_size = size(
             px(Launcher::window_width()),
-            px(Launcher::window_height_for_results(initial_results)),
+            px(Launcher::default_window_height()),
         );
         let window_min_size = size(
             px(Launcher::window_width()),
@@ -461,7 +458,7 @@ impl WindowController {
         activation: Activation,
         cx: &mut App,
     ) -> Option<String> {
-        Self::run_command_with_trace(controller, activation, cx, None)
+        Self::run_command_with_input_with_trace(controller, activation, cx, None, None)
     }
 
     pub fn run_command_with_trace(
@@ -470,9 +467,34 @@ impl WindowController {
         cx: &mut App,
         trace: Option<PluginOpenTrace>,
     ) -> Option<String> {
+        Self::run_command_with_input_with_trace(controller, activation, cx, trace, None)
+    }
+
+    pub fn run_command_with_input(
+        controller: WindowControllerHandle,
+        activation: Activation,
+        cx: &mut App,
+        launch_input: Option<String>,
+    ) -> Option<String> {
+        Self::run_command_with_input_with_trace(controller, activation, cx, None, launch_input)
+    }
+
+    pub fn run_command_with_input_with_trace(
+        controller: WindowControllerHandle,
+        activation: Activation,
+        cx: &mut App,
+        trace: Option<PluginOpenTrace>,
+        launch_input: Option<String>,
+    ) -> Option<String> {
         match activation {
             Activation::Open { plugin_id } => {
-                Self::open_plugin_with_trace(controller, plugin_id, cx, trace);
+                Self::open_plugin_with_input_with_trace(
+                    controller,
+                    plugin_id,
+                    cx,
+                    trace,
+                    launch_input,
+                );
                 None
             }
             Activation::Run(Action::LaunchApp { path }) => {
@@ -501,6 +523,182 @@ impl WindowController {
                 }
             }
         }
+    }
+
+    fn open_plugin_with_input_with_trace(
+        controller: WindowControllerHandle,
+        plugin_id: impl AsRef<str>,
+        cx: &mut App,
+        trace: Option<PluginOpenTrace>,
+        launch_input: Option<String>,
+    ) {
+        let plugin_id = plugin_id.as_ref().to_string();
+        let started = Instant::now();
+        let plugin_manager = lock_or_recover(&controller, "window_controller").plugin_manager();
+        let manifest = lock_or_recover(&plugin_manager, "window_controller")
+            .manifests()
+            .into_iter()
+            .find(|manifest| manifest.id.as_ref() == plugin_id);
+
+        if plugin_reopens_in_active_space(manifest.as_ref()) {
+            let close_started = Instant::now();
+            Self::close_existing_plugin_window(Arc::clone(&controller), &plugin_id, cx);
+            log_plugin_window_step(
+                &plugin_id,
+                "close existing plugin window",
+                close_started,
+                trace,
+            );
+        } else if Self::activate_existing_plugin_with_input(
+            Arc::clone(&controller),
+            &plugin_id,
+            cx,
+            launch_input.as_deref(),
+        ) {
+            log_plugin_window_step(&plugin_id, "activate existing plugin", started, trace);
+            log_plugin_open_total(
+                &plugin_id,
+                trace.unwrap_or(PluginOpenTrace { id: 0, started }),
+            );
+            return;
+        }
+
+        let view_started = Instant::now();
+        let view = match lock_or_recover(&plugin_manager, "window_controller")
+            .open_window_view(&plugin_id, cx)
+        {
+            Ok(mut view) => {
+                if let Some(input) = launch_input.as_deref()
+                    && !input.trim().is_empty()
+                {
+                    view.on_input_changed(input, cx);
+                }
+                view
+            }
+            Err(error) => {
+                tracing::warn!(
+                    plugin_id,
+                    trace_id = trace.map(|trace| trace.id),
+                    error = %error,
+                    "open plugin failed"
+                );
+                return;
+            }
+        };
+        log_plugin_window_step(&plugin_id, "open plugin view", view_started, trace);
+
+        let title = view.title().to_string();
+        let (display, bounds) = plugin_bounds(manifest.as_ref(), cx);
+        let options = plugin_window_options(&title, manifest.as_ref(), display, bounds);
+        let client_drawn = manifest.as_ref().is_some_and(|m| {
+            m.window.always_on_top || m.window.background == WindowBackgroundSpec::Blurred
+        });
+        let plugin_id_for_window = plugin_id.clone();
+        let controller_for_window = Arc::clone(&controller);
+        let window_started = Instant::now();
+        match cx.open_window(options, move |window, cx| {
+            window.set_window_title(&title);
+            cx.new(|_| PluginWindow::new(Arc::clone(&controller_for_window), view, client_drawn))
+        }) {
+            Ok(handle) => {
+                log_plugin_window_step(&plugin_id, "open plugin window", window_started, trace);
+                let _ = handle.update(cx, |_, window, cx| {
+                    cx.activate(true);
+                    window.activate_window();
+                });
+                lock_or_recover(&controller, "window_controller")
+                    .set_plugin_window(plugin_id_for_window, handle.into());
+            }
+            Err(error) => tracing::warn!(
+                plugin_id,
+                trace_id = trace.map(|trace| trace.id),
+                error = %error,
+                "open plugin window failed"
+            ),
+        }
+        log_plugin_window_step(&plugin_id, "open plugin local total", started, trace);
+        log_plugin_open_total(
+            &plugin_id,
+            trace.unwrap_or(PluginOpenTrace { id: 0, started }),
+        );
+    }
+
+    fn activate_existing_plugin_with_input(
+        controller: WindowControllerHandle,
+        plugin_id: &str,
+        cx: &mut App,
+        launch_input: Option<&str>,
+    ) -> bool {
+        let stored_window_handle = {
+            lock_or_recover(&controller, "window_controller")
+                .plugin_windows
+                .get(plugin_id)
+                .copied()
+        };
+        if let Some(window_handle) = stored_window_handle {
+            if let Some(handle) = window_handle.downcast::<PluginWindow>() {
+                match handle.update(cx, |plugin_window, window, cx| {
+                    cx.activate(true);
+                    plugin_window.reopen(window, cx);
+                    if let Some(input) = launch_input
+                        && !input.trim().is_empty()
+                    {
+                        plugin_window.input_changed(input, cx);
+                    }
+                    window.activate_window();
+                }) {
+                    Ok(_) => {
+                        cx.activate(true);
+                        return true;
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            plugin_id,
+                            error = %error,
+                            "activate existing plugin window failed"
+                        );
+                        lock_or_recover(&controller, "window_controller")
+                            .clear_plugin_window(plugin_id);
+                    }
+                }
+            } else {
+                tracing::warn!(
+                    plugin_id,
+                    "stored plugin window handle had unexpected root type"
+                );
+                lock_or_recover(&controller, "window_controller").clear_plugin_window(plugin_id);
+            }
+        }
+
+        for window_handle in cx.windows() {
+            let Some(handle) = window_handle.downcast::<PluginWindow>() else {
+                continue;
+            };
+            let is_same_plugin = handle
+                .read(cx)
+                .map(|plugin_window| plugin_window.plugin_id == plugin_id)
+                .unwrap_or(false);
+            if !is_same_plugin {
+                continue;
+            }
+
+            let _ = handle.update(cx, |plugin_window, window, cx| {
+                cx.activate(true);
+                plugin_window.reopen(window, cx);
+                if let Some(input) = launch_input
+                    && !input.trim().is_empty()
+                {
+                    plugin_window.input_changed(input, cx);
+                }
+                window.activate_window();
+            });
+            lock_or_recover(&controller, "window_controller")
+                .set_plugin_window(plugin_id.to_string(), window_handle);
+            cx.activate(true);
+            return true;
+        }
+
+        false
     }
 
     fn set_plugin_window(&mut self, plugin_id: impl Into<String>, handle: AnyWindowHandle) {
@@ -722,6 +920,12 @@ impl PluginWindow {
     fn reopen(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(view) = self.view.as_mut() {
             view.on_reopen(window, cx);
+        }
+    }
+
+    fn input_changed(&mut self, text: &str, cx: &mut Context<Self>) {
+        if let Some(view) = self.view.as_mut() {
+            view.on_input_changed(text, cx);
         }
     }
 }

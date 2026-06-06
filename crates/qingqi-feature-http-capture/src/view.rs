@@ -1,18 +1,29 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket},
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 use crate::{
     certificate::CaManager,
     engine::CaptureEngine,
-    mock_model::MockRule,
+    manifest,
     mock_store::MockStore,
-    model::{BodyDisplay, CapturedExchange, DetailTab, FilterState},
+    model::{
+        BodyDisplay, CaptureEndpoint, CaptureSetupInfo, CapturedExchange, CertificateStatus,
+        DetailTab, FilterState,
+    },
     store::CaptureStore,
 };
 use gpui::{
-    AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
-    SharedString, StatefulInteractiveElement, Styled, Subscription, Task, Window, div, px,
+    AppContext, ClipboardItem, Context, Entity, InteractiveElement, IntoElement, ParentElement,
+    Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task, Window, div, px,
 };
-use qingqi_plugin::plugin_spec::PluginAccent;
+use gpui_component::scroll::ScrollableElement;
+use qingqi_plugin::{
+    events::{AppEventBus, AppEventKind},
+    plugin_spec::PluginAccent,
+};
 use qingqi_ui::{
     text_input::{TextInput, TextInputStyle},
     theme,
@@ -20,11 +31,11 @@ use qingqi_ui::{
 };
 
 const PAGE_SIZE: i64 = 50;
+const DEFAULT_PROXY_PORT: u16 = 8899;
 
 pub struct CaptureView {
     store: Arc<Mutex<CaptureStore>>,
     engine: Arc<CaptureEngine>,
-    mock_store: Arc<Mutex<MockStore>>,
     ca_manager: Arc<Mutex<CaManager>>,
     search_input: Entity<TextInput>,
     host_input: Entity<TextInput>,
@@ -37,30 +48,23 @@ pub struct CaptureView {
     offset: i64,
     engine_running: bool,
     engine_port: u16,
+    setup_info: CaptureSetupInfo,
     notice: Option<String>,
     loading: bool,
     load_generation: u64,
     reload_task: Option<Task<()>>,
     detail_task: Option<Task<()>>,
+    event_task: Option<Task<()>>,
     subscriptions: Vec<Subscription>,
-    /// Mock 规则列表缓存
-    mock_rules: Vec<MockRule>,
-    /// 是否显示 Mock 规则面板
-    show_mock_panel: bool,
-    /// Mock 编辑文本
-    mock_edit_name: String,
-    mock_edit_url_pattern: String,
-    mock_edit_method: String,
-    mock_edit_status: String,
-    mock_edit_body: String,
 }
 
 impl CaptureView {
     pub fn new(
         store: Arc<Mutex<CaptureStore>>,
         engine: Arc<CaptureEngine>,
-        mock_store: Arc<Mutex<MockStore>>,
+        _mock_store: Arc<Mutex<MockStore>>,
         ca_manager: Arc<Mutex<CaManager>>,
+        events: AppEventBus,
         cx: &mut Context<Self>,
     ) -> Self {
         let search_input = cx.new(|cx| {
@@ -90,10 +94,10 @@ impl CaptureView {
             input
         });
 
+        let setup_info = build_setup_info(&engine, &ca_manager, DEFAULT_PROXY_PORT);
         let mut this = Self {
             store,
             engine,
-            mock_store,
             ca_manager,
             search_input,
             host_input,
@@ -104,23 +108,19 @@ impl CaptureView {
             selected_detail: None,
             detail_tab: DetailTab::Overview,
             offset: 0,
-            engine_running: false,
-            engine_port: 0,
+            engine_running: setup_info.is_running(),
+            engine_port: setup_info.port(),
+            setup_info,
             notice: None,
             loading: false,
             load_generation: 0,
             reload_task: None,
             detail_task: None,
+            event_task: None,
             subscriptions: Vec::new(),
-            mock_rules: Vec::new(),
-            show_mock_panel: false,
-            mock_edit_name: String::new(),
-            mock_edit_url_pattern: String::new(),
-            mock_edit_method: String::new(),
-            mock_edit_status: String::new(),
-            mock_edit_body: String::new(),
         };
         this.observe_inputs(cx);
+        this.start_event_watch(events, cx);
         this.refresh_from_store(cx);
         this
     }
@@ -141,6 +141,162 @@ impl CaptureView {
             panel.refresh_from_store(cx);
         });
         self.subscriptions.push(sub);
+    }
+
+    fn start_event_watch(&mut self, events: AppEventBus, cx: &mut Context<Self>) {
+        if self.event_task.is_some() {
+            return;
+        }
+
+        self.event_task = Some(cx.spawn(async move |panel, async_cx| {
+            let receiver = Arc::new(Mutex::new(events.subscribe()));
+            loop {
+                let rx = Arc::clone(&receiver);
+                let events = async_cx
+                    .background_executor()
+                    .spawn(async move {
+                        let mut events = Vec::new();
+                        let receiver = rx.lock().ok()?;
+                        let first = receiver.recv().ok()?;
+                        events.push(first);
+                        let drain_until = Instant::now() + Duration::from_millis(80);
+                        while events.len() < 128 {
+                            let remaining = drain_until.saturating_duration_since(Instant::now());
+                            if remaining.is_zero() {
+                                break;
+                            }
+                            match receiver.recv_timeout(remaining) {
+                                Ok(event) => events.push(event),
+                                Err(_) => break,
+                            }
+                        }
+                        Some(events)
+                    })
+                    .await;
+                let Some(events) = events else {
+                    break;
+                };
+                let should_refresh = events.iter().any(|event| {
+                    event.kind == AppEventKind::FeatureChanged
+                        && event.source.as_ref() == manifest::PLUGIN_ID
+                });
+                if should_refresh {
+                    if panel
+                        .update(async_cx, |panel, cx| {
+                            panel.sync_engine_state();
+                            panel.refresh_from_store(cx);
+                            cx.notify();
+                        })
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            }
+        }));
+    }
+
+    fn sync_engine_state(&mut self) {
+        self.setup_info = build_setup_info(&self.engine, &self.ca_manager, self.engine_port);
+        self.engine_running = self.setup_info.is_running();
+        self.engine_port = self.setup_info.port();
+    }
+
+    fn start_proxy(&mut self, cx: &mut Context<Self>) {
+        let port = if self.engine_port == 0 {
+            DEFAULT_PROXY_PORT
+        } else {
+            self.engine_port
+        };
+
+        match self.engine.start(port) {
+            Ok(()) => {
+                self.notice = Some(format!(
+                    "代理已启动: {}",
+                    CaptureEndpoint {
+                        ip: "127.0.0.1".to_string(),
+                        port
+                    }
+                    .http_proxy_url()
+                ));
+            }
+            Err(error) => {
+                self.notice = Some(format!("启动代理失败: {error}"));
+            }
+        }
+        self.sync_engine_state();
+        cx.notify();
+    }
+
+    fn stop_proxy(&mut self, cx: &mut Context<Self>) {
+        self.engine.stop();
+        self.notice = Some(String::from("代理已停止"));
+        self.sync_engine_state();
+        cx.notify();
+    }
+
+    fn refresh_certificate_status(&mut self, cx: &mut Context<Self>) {
+        match self.ca_manager.lock() {
+            Ok(mut ca) => {
+                ca.refresh_status();
+                self.notice = Some(format!("证书状态: {}", ca.status().label()));
+            }
+            Err(error) => {
+                self.notice = Some(format!("刷新证书状态失败: {error}"));
+            }
+        }
+        self.sync_engine_state();
+        cx.notify();
+    }
+
+    fn copy_text(&mut self, text: String, message: impl Into<String>, cx: &mut Context<Self>) {
+        cx.write_to_clipboard(ClipboardItem::new_string(text));
+        self.notice = Some(message.into());
+        cx.notify();
+    }
+
+    fn copy_lan_proxy(&mut self, cx: &mut Context<Self>) {
+        let proxy = self.setup_info.lan_endpoint.http_proxy_url();
+        self.copy_text(proxy, "已复制移动端代理地址", cx);
+    }
+
+    fn copy_local_proxy(&mut self, cx: &mut Context<Self>) {
+        let proxy = self.setup_info.local_endpoint.http_proxy_url();
+        self.copy_text(proxy, "已复制本机代理地址", cx);
+    }
+
+    fn copy_cert_path(&mut self, cx: &mut Context<Self>) {
+        self.copy_text(
+            self.setup_info.mobile_cert_path.clone(),
+            "已复制移动端证书路径",
+            cx,
+        );
+    }
+
+    fn copy_cert_download_url(&mut self, cx: &mut Context<Self>) {
+        self.copy_text(
+            self.setup_info.cert_download_url.clone(),
+            "已复制手机证书下载地址",
+            cx,
+        );
+    }
+
+    fn copy_install_command(&mut self, cx: &mut Context<Self>) {
+        if let Some(command) = self.setup_info.install_command.clone() {
+            self.copy_text(command, "已复制系统信任安装命令", cx);
+        } else {
+            self.notice = Some(String::from("当前平台暂无自动安装命令，请手动导入证书"));
+            cx.notify();
+        }
+    }
+
+    fn open_certificate_dir(&mut self, cx: &mut Context<Self>) {
+        let path = std::path::Path::new(&self.setup_info.ca_dir);
+        match qingqi_platform::shell::open_directory(path) {
+            Ok(()) => self.notice = Some(String::from("已打开证书目录")),
+            Err(error) => self.notice = Some(format!("打开证书目录失败: {error}")),
+        }
+        cx.notify();
     }
 
     fn refresh_from_store(&mut self, cx: &mut Context<Self>) {
@@ -355,6 +511,208 @@ impl CaptureView {
     }
 }
 
+fn build_setup_info(
+    engine: &Arc<CaptureEngine>,
+    ca_manager: &Arc<Mutex<CaManager>>,
+    fallback_port: u16,
+) -> CaptureSetupInfo {
+    let proxy_state = engine.proxy_state();
+    let port = proxy_state.port().unwrap_or(fallback_port);
+    let lan_ip = detect_lan_ip().unwrap_or_else(|| "127.0.0.1".to_string());
+
+    let (certificate_status, cert_path, mobile_cert_path, ca_dir, install_command) =
+        match ca_manager.lock() {
+            Ok(mut ca) => {
+                ca.refresh_status();
+                (
+                    ca.status(),
+                    ca.cert_file_path().display().to_string(),
+                    ca.mobile_cert_file_path().display().to_string(),
+                    ca.ca_dir().display().to_string(),
+                    ca.install_command(),
+                )
+            }
+            Err(_) => (
+                CertificateStatus::NotGenerated,
+                String::new(),
+                String::new(),
+                String::new(),
+                None,
+            ),
+        };
+
+    CaptureSetupInfo {
+        proxy_state,
+        certificate_status,
+        local_endpoint: CaptureEndpoint {
+            ip: "127.0.0.1".to_string(),
+            port,
+        },
+        lan_endpoint: CaptureEndpoint { ip: lan_ip, port },
+        cert_path,
+        mobile_cert_path,
+        cert_download_url: "http://qingqi.cert/qingqi-ca-cert.crt".to_string(),
+        ca_dir,
+        install_command,
+    }
+}
+
+fn detect_lan_ip() -> Option<String> {
+    let socket = UdpSocket::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0))).ok()?;
+    socket.connect(SocketAddr::from(([8, 8, 8, 8], 80))).ok()?;
+    match socket.local_addr().ok()?.ip() {
+        IpAddr::V4(ip) if !ip.is_loopback() => Some(ip.to_string()),
+        _ => None,
+    }
+}
+
+fn status_badge(label: &str, color: gpui::Rgba) -> gpui::AnyElement {
+    div()
+        .h(px(24.0))
+        .px_2()
+        .rounded(theme::radius_sm())
+        .bg(theme::rgba_with_alpha(color, 0.12))
+        .border_1()
+        .border_color(theme::rgba_with_alpha(color, 0.35))
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(11.0))
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(color)
+        .child(label.to_string())
+        .into_any_element()
+}
+
+fn section_label(label: &str) -> gpui::AnyElement {
+    div()
+        .text_size(px(11.0))
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(theme::semantic().text_secondary)
+        .child(label.to_string())
+        .into_any_element()
+}
+
+fn proxy_value_row(
+    label: &str,
+    value: String,
+    action: gpui::Stateful<gpui::Div>,
+) -> gpui::AnyElement {
+    div()
+        .rounded(theme::radius_md())
+        .bg(theme::semantic().bg_subtle)
+        .border_1()
+        .border_color(theme::semantic().border_default)
+        .p_2()
+        .flex()
+        .items_center()
+        .gap_2()
+        .child(
+            div()
+                .w(px(44.0))
+                .text_size(px(11.0))
+                .text_color(theme::semantic().text_secondary)
+                .child(label.to_string()),
+        )
+        .child(
+            div()
+                .flex_1()
+                .font_family(ui::font_mono())
+                .text_size(px(11.0))
+                .text_color(theme::semantic().text_primary)
+                .overflow_hidden()
+                .text_ellipsis()
+                .child(value),
+        )
+        .child(action)
+        .into_any_element()
+}
+
+fn small_action(id: &'static str, label: &str) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .h(px(24.0))
+        .px_2()
+        .rounded(theme::radius_sm())
+        .bg(theme::semantic().bg_surface)
+        .border_1()
+        .border_color(theme::semantic().border_default)
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(11.0))
+        .text_color(theme::semantic().text_primary)
+        .cursor_pointer()
+        .hover(|s| s.bg(theme::semantic().bg_hover))
+        .child(label.to_string())
+}
+
+fn guide_step(index: &str, text: &str) -> gpui::AnyElement {
+    div()
+        .flex()
+        .items_start()
+        .gap_2()
+        .child(
+            div()
+                .w(px(18.0))
+                .h(px(18.0))
+                .rounded(theme::radius_sm())
+                .bg(theme::semantic().primary_soft)
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_size(px(10.0))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme::semantic().primary_active)
+                .child(index.to_string()),
+        )
+        .child(
+            div()
+                .flex_1()
+                .text_size(px(11.0))
+                .line_height(px(16.0))
+                .text_color(theme::semantic().text_secondary)
+                .child(text.to_string()),
+        )
+        .into_any_element()
+}
+
+fn value_line(label: &str, value: String, value_color: gpui::Rgba) -> gpui::AnyElement {
+    div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .text_size(px(11.0))
+        .child(
+            div()
+                .w(px(56.0))
+                .text_color(theme::semantic().text_secondary)
+                .child(label.to_string()),
+        )
+        .child(
+            div()
+                .flex_1()
+                .font_family(ui::font_mono())
+                .text_color(value_color)
+                .overflow_hidden()
+                .text_ellipsis()
+                .child(value),
+        )
+        .into_any_element()
+}
+
+fn short_path(path: &str) -> String {
+    let path = path.trim();
+    if path.is_empty() {
+        return String::from("-");
+    }
+    std::path::Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| format!(".../{name}"))
+        .unwrap_or_else(|| path.to_string())
+}
+
 impl Render for CaptureView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let dark = qingqi_ui::theme_mode::is_dark();
@@ -372,6 +730,12 @@ impl Render for CaptureView {
         let filter_hide_static = self.filter.hide_static;
         let detail_tab = self.detail_tab;
         let notice = self.notice.clone();
+        let setup_info = self.setup_info.clone();
+        let certificate_status = setup_info.certificate_status;
+        let local_proxy = setup_info.local_endpoint.http_proxy_url();
+        let lan_proxy = setup_info.lan_endpoint.http_proxy_url();
+        let mobile_cert_path = setup_info.mobile_cert_path.clone();
+        let cert_download_url = setup_info.cert_download_url.clone();
         let has_active_filter = !self.filter.search.trim().is_empty()
             || !self.filter.host.trim().is_empty()
             || !self.filter.method.is_empty()
@@ -427,7 +791,15 @@ impl Render for CaptureView {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .child(ui::icon_element("antenna.svg", ui::text_secondary(), 18.0)),
+                            .child(ui::icon_element(
+                                "icons/antenna.svg",
+                                if engine_running {
+                                    theme::semantic().bg_page
+                                } else {
+                                    ui::text_secondary()
+                                },
+                                18.0,
+                            )),
                     )
                     .child(
                         div()
@@ -438,20 +810,57 @@ impl Render for CaptureView {
                                 div()
                                     .text_size(px(18.0))
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .child("HTTP 抓包"),
+                                    .child("抓包代理"),
                             )
                             .child(
                                 div()
                                     .text_size(px(11.0))
                                     .text_color(theme::semantic().text_secondary)
                                     .child(if engine_running {
-                                        "代理引擎运行中"
+                                        "HTTP/HTTPS MITM 代理运行中，可接入桌面或移动端"
                                     } else {
-                                        "捕获引擎未接入 — 仅可浏览已存储的抓包记录"
+                                        "启动代理后，将系统或手机代理指向下方地址"
                                     }),
                             ),
                     )
                     .child(div().flex_1())
+                    .child(status_badge(
+                        if engine_running {
+                            "运行中"
+                        } else {
+                            "已停止"
+                        },
+                        if engine_running {
+                            theme::semantic().success
+                        } else {
+                            theme::semantic().text_secondary
+                        },
+                    ))
+                    .child(status_badge(
+                        certificate_status.label(),
+                        if certificate_status == CertificateStatus::Installed {
+                            theme::semantic().success
+                        } else if certificate_status.ready_for_https() {
+                            theme::semantic().warning
+                        } else {
+                            theme::semantic().danger
+                        },
+                    ))
+                    .child(if engine_running {
+                        ui::ui_button("停止代理", "secondary", dark, None, true)
+                            .id("stop-proxy-btn")
+                            .cursor_pointer()
+                            .on_click(cx.listener(|panel, _, _, cx| {
+                                panel.stop_proxy(cx);
+                            }))
+                    } else {
+                        ui::ui_button("启动代理", "primary", dark, None, false)
+                            .id("start-proxy-btn")
+                            .cursor_pointer()
+                            .on_click(cx.listener(|panel, _, _, cx| {
+                                panel.start_proxy(cx);
+                            }))
+                    })
                     .child({
                         let reset_btn = ui::ui_button("重置过滤", "ghost", dark, None, false)
                             .id("reset-filter-btn");
@@ -485,10 +894,12 @@ impl Render for CaptureView {
                     .flex_1()
                     .flex()
                     .gap_3()
+                    .min_h(px(0.0))
+                    .min_w(px(0.0))
                     // ── Left filter panel ──
                     .child(
                         div()
-                            .w(px(220.0))
+                            .w(px(260.0))
                             .rounded(theme::radius_lg())
                             .bg(theme::semantic().bg_surface)
                             .border_1()
@@ -496,7 +907,152 @@ impl Render for CaptureView {
                             .p_3()
                             .flex()
                             .flex_col()
+                            .min_h(px(0.0))
+                            .overflow_y_scrollbar()
                             .gap_3()
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap_2()
+                                    .child(section_label("连接向导"))
+                                    .child(proxy_value_row(
+                                        "本机",
+                                        local_proxy.clone(),
+                                        small_action("copy-local-proxy", "复制").on_click(
+                                            cx.listener(|panel, _, _, cx| {
+                                                panel.copy_local_proxy(cx);
+                                            }),
+                                        ),
+                                    ))
+                                    .child(proxy_value_row(
+                                        "移动端",
+                                        lan_proxy.clone(),
+                                        small_action("copy-lan-proxy", "复制").on_click(
+                                            cx.listener(|panel, _, _, cx| {
+                                                panel.copy_lan_proxy(cx);
+                                            }),
+                                        ),
+                                    ))
+                                    .child(
+                                        div()
+                                            .rounded(theme::radius_md())
+                                            .bg(theme::semantic().bg_subtle_2)
+                                            .border_1()
+                                            .border_color(theme::semantic().border_default)
+                                            .p_2()
+                                            .flex()
+                                            .flex_col()
+                                            .gap_1()
+                                            .child(guide_step(
+                                                "1",
+                                                if engine_running {
+                                                    "代理已运行，保持此窗口打开"
+                                                } else {
+                                                    "先点击右上角启动代理"
+                                                },
+                                            ))
+                                            .child(guide_step(
+                                                "2",
+                                                "桌面应用填本机地址，手机需同一局域网并填移动端地址",
+                                            ))
+                                            .child(guide_step(
+                                                "3",
+                                                "手机设置代理后访问下载地址，安装并信任 Qingqi CA",
+                                            ))
+                                            .child(guide_step(
+                                                "4",
+                                                "遇到证书固定的 App 时，该请求可能无法解密",
+                                            )),
+                                    )
+                                    .child(section_label("HTTPS 证书"))
+                                    .child(
+                                        div()
+                                            .rounded(theme::radius_md())
+                                            .bg(theme::semantic().bg_subtle)
+                                            .border_1()
+                                            .border_color(theme::semantic().border_default)
+                                            .p_2()
+                                            .flex()
+                                            .flex_col()
+                                            .gap_2()
+                                            .child(value_line(
+                                                "状态",
+                                                certificate_status.label().to_string(),
+                                                if certificate_status
+                                                    == CertificateStatus::Installed
+                                                {
+                                                    theme::semantic().success
+                                                } else {
+                                                    theme::semantic().warning
+                                                },
+                                            ))
+                                            .child(value_line(
+                                                "手机访问",
+                                                cert_download_url.clone(),
+                                                theme::semantic().primary,
+                                            ))
+                                            .child(value_line(
+                                                "移动证书",
+                                                short_path(&mobile_cert_path),
+                                                theme::semantic().text_primary,
+                                            ))
+                                            .child(
+                                                div()
+                                                    .flex()
+                                                    .gap_1()
+                                                    .child(
+                                                        small_action(
+                                                            "copy-cert-download-url",
+                                                            "复制下载地址",
+                                                        )
+                                                        .on_click(cx.listener(|panel, _, _, cx| {
+                                                            panel.copy_cert_download_url(cx);
+                                                        })),
+                                                    )
+                                                    .child(
+                                                        small_action(
+                                                            "copy-cert-path",
+                                                            "复制证书路径",
+                                                        )
+                                                        .on_click(cx.listener(|panel, _, _, cx| {
+                                                            panel.copy_cert_path(cx);
+                                                        })),
+                                                    ),
+                                            )
+                                            .child(div().flex().gap_1().child(
+                                                small_action("open-cert-dir", "打开目录").on_click(
+                                                    cx.listener(|panel, _, _, cx| {
+                                                        panel.open_certificate_dir(cx);
+                                                    }),
+                                                ),
+                                            ))
+                                            .child(
+                                                div()
+                                                    .flex()
+                                                    .gap_1()
+                                                    .child(
+                                                        small_action(
+                                                            "copy-install-command",
+                                                            "复制安装命令",
+                                                        )
+                                                        .on_click(cx.listener(|panel, _, _, cx| {
+                                                            panel.copy_install_command(cx);
+                                                        })),
+                                                    )
+                                                    .child(
+                                                        small_action(
+                                                            "refresh-cert-status",
+                                                            "刷新状态",
+                                                        )
+                                                        .on_click(cx.listener(|panel, _, _, cx| {
+                                                            panel.refresh_certificate_status(cx);
+                                                        })),
+                                                    ),
+                                            ),
+                                    ),
+                            )
+                            .child(ui::separator())
                             .child(
                                 div()
                                     .rounded(theme::radius_md())
@@ -683,6 +1239,8 @@ impl Render for CaptureView {
                     .child(
                         div()
                             .flex_1()
+                            .min_w(px(0.0))
+                            .min_h(px(0.0))
                             .rounded(theme::radius_lg())
                             .bg(theme::semantic().bg_surface)
                             .border_1()
@@ -728,6 +1286,7 @@ impl Render for CaptureView {
                             .child(if exchanges.is_empty() {
                                 div()
                                     .flex_1()
+                                    .min_h(px(0.0))
                                     .flex()
                                     .items_center()
                                     .justify_center()
@@ -749,114 +1308,152 @@ impl Render for CaptureView {
                             } else {
                                 div()
                                     .flex_1()
+                                    .min_h(px(0.0))
                                     .flex()
                                     .flex_col()
-                                    .children(exchanges.iter().enumerate().map(|(i, ex)| {
-                                        let selected = selected_id == Some(ex.id);
-                                        let ex_id = ex.id;
-                                        let method_color =
-                                            CaptureView::method_color(dark, &ex.method);
-                                        let status_color =
-                                            CaptureView::status_color(dark, ex.status);
-                                        let timestamp = ex.timestamp.clone();
-                                        let method = ex.method.clone();
-                                        let host = ex.host.clone();
-                                        let url = ex.url.clone();
-                                        let status = ex.status;
-                                        let size = ex.formatted_size();
-                                        let duration = ex.formatted_duration();
-
+                                    .child(
                                         div()
-                                            .id(("exchange-row", ex_id as u64))
-                                            .h(px(32.0))
-                                            .px_3()
-                                            .bg(if selected {
-                                                theme::semantic().primary_bg
-                                            } else if i % 2 == 0 {
-                                                theme::semantic().bg_surface
-                                            } else {
-                                                theme::semantic().bg_subtle_2
-                                            })
-                                            .hover(|s| {
-                                                s.bg(theme::semantic().bg_hover).cursor_pointer()
-                                            })
-                                            .flex()
-                                            .items_center()
-                                            .gap_2()
-                                            .text_size(px(11.0))
-                                            .font_family("SF Mono")
-                                            .cursor_pointer()
-                                            .on_click(cx.listener(move |panel, _, _, cx| {
-                                                panel.select_exchange(ex_id, cx);
-                                            }))
-                                            .child(
-                                                div()
-                                                    .w(px(58.0))
-                                                    .text_color(theme::semantic().text_secondary)
-                                                    .child(if timestamp.len() >= 16 {
-                                                        timestamp[11..16].to_string()
-                                                    } else {
-                                                        timestamp
-                                                    }),
-                                            )
-                                            .child(
-                                                div()
-                                                    .w(px(54.0))
-                                                    .text_color(method_color)
-                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                    .child(method),
-                                            )
-                                            .child(
-                                                div()
-                                                    .w(px(130.0))
-                                                    .text_color(theme::semantic().text_primary)
-                                                    .overflow_hidden()
-                                                    .text_ellipsis()
-                                                    .child(host),
-                                            )
-                                            .child(
-                                                div()
-                                                    .flex_1()
-                                                    .text_color(theme::semantic().text_primary)
-                                                    .overflow_hidden()
-                                                    .text_ellipsis()
-                                                    .child(url),
-                                            )
-                                            .child(
-                                                div()
-                                                    .w(px(48.0))
-                                                    .text_align(gpui::TextAlign::Right)
-                                                    .text_color(if status > 0 {
-                                                        status_color
-                                                    } else {
-                                                        theme::semantic().text_secondary
-                                                    })
-                                                    .font_weight(if status >= 400 {
-                                                        gpui::FontWeight::SEMIBOLD
-                                                    } else {
-                                                        gpui::FontWeight::NORMAL
-                                                    })
-                                                    .child(if status > 0 {
-                                                        status.to_string()
-                                                    } else {
-                                                        "-".to_string()
-                                                    }),
-                                            )
-                                            .child(
-                                                div()
-                                                    .w(px(70.0))
-                                                    .text_align(gpui::TextAlign::Right)
-                                                    .text_color(theme::semantic().text_secondary)
-                                                    .child(size),
-                                            )
-                                            .child(
-                                                div()
-                                                    .w(px(62.0))
-                                                    .text_align(gpui::TextAlign::Right)
-                                                    .text_color(theme::semantic().text_secondary)
-                                                    .child(duration),
-                                            )
-                                    }))
+                                            .flex_1()
+                                            .min_h(px(0.0))
+                                            .overflow_y_scrollbar()
+                                            .children(exchanges.iter().enumerate().map(
+                                                |(i, ex)| {
+                                                    let selected = selected_id == Some(ex.id);
+                                                    let ex_id = ex.id;
+                                                    let method_color = CaptureView::method_color(
+                                                        dark,
+                                                        &ex.method,
+                                                    );
+                                                    let status_color = CaptureView::status_color(
+                                                        dark,
+                                                        ex.status,
+                                                    );
+                                                    let timestamp = ex.timestamp.clone();
+                                                    let method = ex.method.clone();
+                                                    let host = ex.host.clone();
+                                                    let url = ex.url.clone();
+                                                    let status = ex.status;
+                                                    let size = ex.formatted_size();
+                                                    let duration = ex.formatted_duration();
+
+                                                    div()
+                                                        .id(("exchange-row", ex_id as u64))
+                                                        .h(px(32.0))
+                                                        .px_3()
+                                                        .bg(if selected {
+                                                            theme::semantic().primary_bg
+                                                        } else if i % 2 == 0 {
+                                                            theme::semantic().bg_surface
+                                                        } else {
+                                                            theme::semantic().bg_subtle_2
+                                                        })
+                                                        .hover(|s| {
+                                                            s.bg(theme::semantic().bg_hover)
+                                                                .cursor_pointer()
+                                                        })
+                                                        .flex()
+                                                        .items_center()
+                                                        .gap_2()
+                                                        .text_size(px(11.0))
+                                                        .font_family("SF Mono")
+                                                        .cursor_pointer()
+                                                        .on_click(cx.listener(
+                                                            move |panel, _, _, cx| {
+                                                                panel.select_exchange(ex_id, cx);
+                                                            },
+                                                        ))
+                                                        .child(
+                                                            div()
+                                                                .w(px(58.0))
+                                                                .text_color(
+                                                                    theme::semantic()
+                                                                        .text_secondary,
+                                                                )
+                                                                .child(if timestamp.len() >= 16 {
+                                                                    timestamp[11..16].to_string()
+                                                                } else {
+                                                                    timestamp
+                                                                }),
+                                                        )
+                                                        .child(
+                                                            div()
+                                                                .w(px(54.0))
+                                                                .text_color(method_color)
+                                                                .font_weight(
+                                                                    gpui::FontWeight::SEMIBOLD,
+                                                                )
+                                                                .child(method),
+                                                        )
+                                                        .child(
+                                                            div()
+                                                                .w(px(130.0))
+                                                                .text_color(
+                                                                    theme::semantic().text_primary,
+                                                                )
+                                                                .overflow_hidden()
+                                                                .text_ellipsis()
+                                                                .child(host),
+                                                        )
+                                                        .child(
+                                                            div()
+                                                                .flex_1()
+                                                                .text_color(
+                                                                    theme::semantic().text_primary,
+                                                                )
+                                                                .overflow_hidden()
+                                                                .text_ellipsis()
+                                                                .child(url),
+                                                        )
+                                                        .child(
+                                                            div()
+                                                                .w(px(48.0))
+                                                                .text_align(
+                                                                    gpui::TextAlign::Right,
+                                                                )
+                                                                .text_color(if status > 0 {
+                                                                    status_color
+                                                                } else {
+                                                                    theme::semantic()
+                                                                        .text_secondary
+                                                                })
+                                                                .font_weight(if status >= 400 {
+                                                                    gpui::FontWeight::SEMIBOLD
+                                                                } else {
+                                                                    gpui::FontWeight::NORMAL
+                                                                })
+                                                                .child(if status > 0 {
+                                                                    status.to_string()
+                                                                } else {
+                                                                    "-".to_string()
+                                                                }),
+                                                        )
+                                                        .child(
+                                                            div()
+                                                                .w(px(70.0))
+                                                                .text_align(
+                                                                    gpui::TextAlign::Right,
+                                                                )
+                                                                .text_color(
+                                                                    theme::semantic()
+                                                                        .text_secondary,
+                                                                )
+                                                                .child(size),
+                                                        )
+                                                        .child(
+                                                            div()
+                                                                .w(px(62.0))
+                                                                .text_align(
+                                                                    gpui::TextAlign::Right,
+                                                                )
+                                                                .text_color(
+                                                                    theme::semantic()
+                                                                        .text_secondary,
+                                                                )
+                                                                .child(duration),
+                                                        )
+                                                },
+                                            )),
+                                    )
                                     // Pagination row
                                     .child(
                                         div()
@@ -925,6 +1522,7 @@ impl Render for CaptureView {
                     .child(
                         div()
                             .w(px(340.0))
+                            .min_h(px(0.0))
                             .rounded(theme::radius_lg())
                             .bg(theme::semantic().bg_surface)
                             .border_1()
@@ -1061,8 +1659,11 @@ impl Render for CaptureView {
                             )
                             // Tab content
                             .child(
-                                div().flex_1().flex().flex_col().overflow_hidden().child(
-                                    match selected_detail {
+                                div()
+                                    .flex_1()
+                                    .min_h(px(0.0))
+                                    .overflow_y_scrollbar()
+                                    .child(match selected_detail {
                                         Some(ref detail) => {
                                             render_detail_tab_content(detail_tab, detail, dark)
                                         }
@@ -1075,8 +1676,7 @@ impl Render for CaptureView {
                                             .text_color(ui::text_tertiary())
                                             .child("选择一条记录查看详情")
                                             .into_any_element(),
-                                    },
-                                ),
+                                    }),
                             ),
                     ),
             )
@@ -1143,7 +1743,6 @@ fn render_detail_tab_content(
             render_body_section("响应体", detail.response_body_display(), dark)
         }
         DetailTab::Timing => render_timing_section(detail, dark),
-        DetailTab::Mock => todo!(),
     }
 }
 

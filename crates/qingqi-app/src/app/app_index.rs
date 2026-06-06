@@ -20,6 +20,9 @@ use time::{OffsetDateTime, format_description::FormatItem, macros::format_descri
 
 static TIMESTAMP_FORMAT: &[FormatItem<'static>] =
     format_description!("[year]-[month]-[day] [hour]:[minute]:[second]");
+const PROBE_SCAN_MIN_INTERVAL_SECS: u64 = 30;
+const SLOW_GENERAL_STEP_WARN_MS: u64 = 50;
+const SLOW_SCAN_STEP_WARN_MS: u64 = 500;
 
 #[derive(Debug)]
 struct AppIndexState {
@@ -110,6 +113,28 @@ impl AppIndexService {
         apps
     }
 
+    pub fn search_database(&self, query: &str, limit: usize) -> Vec<AppEntry> {
+        let page_limit = if limit == 0 {
+            AppIndexService::DEFAULT_PAGE_LIMIT
+        } else {
+            limit
+        };
+        match self.store.search_page(query, 0, page_limit) {
+            Ok(mut page) => {
+                if limit > 0 {
+                    page.rows.truncate(limit);
+                }
+                page.rows
+            }
+            Err(error) => {
+                let mut state = lock_or_recover(&self.state, "app-index");
+                state.last_error = Some(format!("读取应用索引失败: {error}"));
+                state.revision += 1;
+                Vec::new()
+            }
+        }
+    }
+
     pub fn top_apps(&self, limit: usize) -> Vec<AppEntry> {
         let (apps, usage) = {
             let state = lock_or_recover(&self.state, "app-index");
@@ -198,7 +223,7 @@ impl AppIndexService {
                 return false;
             }
             // Coalesce frequent triggers while launcher is open.
-            if now.saturating_sub(state.last_probe_at) < 2 {
+            if now.saturating_sub(state.last_probe_at) < PROBE_SCAN_MIN_INTERVAL_SECS {
                 return false;
             }
             state.probe_running = true;
@@ -476,10 +501,21 @@ fn icon_path_is_usable(path: &std::path::Path) -> bool {
 
 fn log_slow_app_index_step(step: &'static str, started: Instant, fields: &[(&str, &str)]) {
     let duration_ms = started.elapsed().as_millis() as u64;
-    if duration_ms < 50 {
+    if duration_ms < app_index_step_warn_threshold_ms(step) {
         tracing::debug!(step, duration_ms, ?fields, "app index step");
     } else {
         tracing::warn!(step, duration_ms, ?fields, "slow app index step");
+    }
+}
+
+fn app_index_step_warn_threshold_ms(step: &str) -> u64 {
+    match step {
+        "app index probe scan"
+        | "app index metadata scan"
+        | "app index icon refresh"
+        | "app index full cache save"
+        | "app index metadata cache save" => SLOW_SCAN_STEP_WARN_MS,
+        _ => SLOW_GENERAL_STEP_WARN_MS,
     }
 }
 

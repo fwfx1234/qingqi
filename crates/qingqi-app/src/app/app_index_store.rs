@@ -148,7 +148,6 @@ impl AppIndexStore {
         Ok(())
     }
 
-    #[cfg(test)]
     pub fn search_page(
         &self,
         query: &str,
@@ -214,7 +213,6 @@ fn ensure_schema(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
 fn count_matches(conn: &rusqlite::Connection, where_sql: &str, values: &[String]) -> Result<usize> {
     let sql = format!("SELECT COUNT(*) FROM app_index_entries {where_sql}");
     let total: i64 = conn.query_row(&sql, rusqlite::params_from_iter(values.iter()), |row| {
@@ -223,7 +221,6 @@ fn count_matches(conn: &rusqlite::Connection, where_sql: &str, values: &[String]
     Ok(total.max(0) as usize)
 }
 
-#[cfg(test)]
 fn select_matches(
     conn: &rusqlite::Connection,
     where_sql: &str,
@@ -265,7 +262,6 @@ fn select_matches(
     Ok(apps)
 }
 
-#[cfg(test)]
 fn search_where_clause(terms: &[String]) -> (String, Vec<String>) {
     if terms.is_empty() {
         return (String::new(), Vec::new());
@@ -324,7 +320,6 @@ pub(super) fn normalize_query(value: &str) -> String {
         .collect()
 }
 
-#[cfg(test)]
 fn escape_like(value: &str) -> String {
     value
         .replace('\\', "\\\\")

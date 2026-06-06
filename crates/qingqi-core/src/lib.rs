@@ -1,3 +1,4 @@
+pub mod command_catalog;
 pub mod command_usage;
 pub mod plugin;
 pub mod registry;

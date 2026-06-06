@@ -155,60 +155,44 @@ impl ClipboardService {
                     Ok(ClipboardBackgroundRead::Snapshot(change_count, snapshot))
                         if !snapshot.is_empty() =>
                     {
-                        let service = Arc::clone(&service);
-                        let _ = async_cx.update(move |_cx| {
-                            if let Ok(service) = service.lock() {
-                                match service.capture_snapshot(snapshot) {
-                                    Ok(_) => {
-                                        if let Err(error) =
-                                            service.mark_change_count_seen(Some(change_count))
-                                        {
-                                            tracing::warn!(
-                                                error = %error,
-                                                "failed to mark clipboard change count"
-                                            );
-                                        }
-                                    }
-                                    Err(error) => {
+                        if let Ok(service) = service.lock() {
+                            match service.capture_snapshot(snapshot) {
+                                Ok(_) => {
+                                    if let Err(error) =
+                                        service.mark_change_count_seen(Some(change_count))
+                                    {
                                         tracing::warn!(
                                             error = %error,
-                                            "clipboard capture failed; will retry this change"
+                                            "failed to mark clipboard change count"
                                         );
                                     }
                                 }
-                            }
-                        });
-                    }
-                    Ok(ClipboardBackgroundRead::Unsupported) => {
-                        let service = Arc::clone(&service);
-                        let _ = async_cx.update(move |cx| {
-                            if let Ok(service) = service.lock() {
-                                if let Err(error) = service.capture_current(cx) {
+                                Err(error) => {
                                     tracing::warn!(
                                         error = %error,
-                                        "clipboard fallback capture failed"
+                                        "clipboard capture failed; will retry this change"
                                     );
                                 }
                             }
-                        });
+                        }
+                    }
+                    Ok(ClipboardBackgroundRead::Unsupported) => {
+                        tracing::debug!(
+                            "clipboard background read unsupported; skipping foreground fallback"
+                        );
                     }
                     Err(error) => {
                         tracing::warn!(error = %error, "clipboard background read failed");
                     }
                     Ok(ClipboardBackgroundRead::Snapshot(change_count, _)) => {
-                        let service = Arc::clone(&service);
-                        let _ = async_cx.update(move |_cx| {
-                            if let Ok(service) = service.lock() {
-                                if let Err(error) =
-                                    service.mark_change_count_seen(Some(change_count))
-                                {
-                                    tracing::warn!(
-                                        error = %error,
-                                        "failed to mark empty clipboard change count"
-                                    );
-                                }
-                            }
-                        });
+                        if let Ok(service) = service.lock()
+                            && let Err(error) = service.mark_change_count_seen(Some(change_count))
+                        {
+                            tracing::warn!(
+                                error = %error,
+                                "failed to mark empty clipboard change count"
+                            );
+                        }
                     }
                 }
             }

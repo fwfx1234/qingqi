@@ -1,19 +1,19 @@
 use std::sync::Arc;
 
 use gpui::{
-    App, AppContext, Context, Entity, InteractiveElement, IntoElement, MouseButton,
-    ParentElement, Render, StatefulInteractiveElement, Styled, Window, AnyElement, div, hsla,
+    AnyElement, App, AppContext, Context, Entity, InteractiveElement, IntoElement, MouseButton,
+    ParentElement, Render, StatefulInteractiveElement, Styled, Window, div, hsla,
     prelude::FluentBuilder, px, rgb,
 };
 use gpui_component::{
-    IndexPath, Sizable, Size,
+    IconName, IndexPath, Sizable, Size,
     button::{Button, ButtonVariants},
-    IconName,
     select::{Select, SelectEvent, SelectState},
 };
 use uuid::Uuid;
 
 use crate::code_gen::CodeLanguage;
+use crate::model::NodeKind;
 use crate::service::{
     self, ApiEnvironment, ApiGroup, ApiRequest, ApiResponse, ApiScenario, ApiService, AuthType,
     BodyMode, EditorTab, EnvDetailTab, HttpHistory, HttpMethod, KeyValueRow, ResponseTab,
@@ -40,6 +40,7 @@ enum OpenTab {
         request_index: usize,
         scenario_index: usize,
         tab_id: String,
+        node_id: String,
     },
 }
 
@@ -73,10 +74,10 @@ impl OpenTab {
         }
     }
 
-    fn node_id(&self) -> &str {
+    fn fallback_node_id(&self) -> &str {
         match self {
             Self::Request { node_id, .. } => node_id,
-            Self::Scenario { .. } => "",
+            Self::Scenario { node_id, .. } => node_id,
         }
     }
 
@@ -88,11 +89,16 @@ impl OpenTab {
         }
     }
 
-    fn new_scenario(request_index: usize, scenario_index: usize) -> Self {
+    fn new_scenario_with_node(
+        request_index: usize,
+        scenario_index: usize,
+        node_id: String,
+    ) -> Self {
         Self::Scenario {
             request_index,
             scenario_index,
             tab_id: format!("tab-{}", Uuid::new_v4().simple()),
+            node_id,
         }
     }
 
@@ -103,9 +109,24 @@ impl OpenTab {
             node_id,
         }
     }
+
+    fn matches_request_index(&self, request_index: usize) -> bool {
+        matches!(self, Self::Request { index, .. } if *index == request_index)
+    }
+
+    fn matches_scenario_index(&self, request_index: usize, scenario_index: usize) -> bool {
+        matches!(
+            self,
+            Self::Scenario {
+                request_index: tab_request_index,
+                scenario_index: tab_scenario_index,
+                ..
+            } if *tab_request_index == request_index && *tab_scenario_index == scenario_index
+        )
+    }
 }
 
-/// One editable key/value row, backed by two live text inputs plus an
+/// One editable key/value row, backed by live text inputs plus an
 /// enabled flag. Cloning a row clones the entity handles (cheap) so the same
 /// underlying inputs can be rendered from a snapshot passed into `editor_panel`.
 #[derive(Clone)]
@@ -113,10 +134,12 @@ struct KvRow {
     enabled: bool,
     key: Entity<TextInput>,
     value: Entity<TextInput>,
+    value_type: Entity<TextInput>,
+    description: Entity<TextInput>,
 }
 
 /// Reusable editable key/value table model — the source of truth for the
-/// Params / Path / Headers / Cookies tabs. It serializes to the legacy
+/// Params / Path / Headers / Cookies tabs. It serializes to a legacy-compatible
 /// `KEY=VALUE` line format (with a leading `# ` marking disabled rows) via
 /// `parse_rows`/`format_rows`, so the existing text-based persistence
 /// (TabDraft / HttpTab / RequestSnapshot) keeps working unchanged.
@@ -144,6 +167,8 @@ impl KvEditor {
                 enabled: row.enabled,
                 key: kv_input(cx, &row.key, "键"),
                 value: kv_input(cx, &row.value, "值"),
+                value_type: kv_input(cx, &row.value_type, "string"),
+                description: kv_input(cx, &row.description, "说明"),
             })
             .collect();
     }
@@ -160,7 +185,8 @@ impl KvEditor {
                 enabled: row.enabled,
                 key: row.key.read(cx).text().trim().to_string(),
                 value: row.value.read(cx).text().trim().to_string(),
-                description: String::new(),
+                value_type: row.value_type.read(cx).text().trim().to_string(),
+                description: row.description.read(cx).text().trim().to_string(),
             })
             .collect()
     }
@@ -174,6 +200,8 @@ impl KvEditor {
             enabled: true,
             key: kv_input(cx, "", "键"),
             value: kv_input(cx, "", "值"),
+            value_type: kv_input(cx, "", "string"),
+            description: kv_input(cx, "", "说明"),
         });
     }
 
@@ -226,7 +254,9 @@ fn derive_auth_form(rows: &[KeyValueRow]) -> AuthFormValues {
     let key = row.key.trim();
     let value = row.value.trim();
     if key.eq_ignore_ascii_case("authorization") {
-        if let Some(token) = value.strip_prefix("Bearer ").or_else(|| value.strip_prefix("bearer "))
+        if let Some(token) = value
+            .strip_prefix("Bearer ")
+            .or_else(|| value.strip_prefix("bearer "))
         {
             return AuthFormValues {
                 auth_type: Some(AuthType::BearerToken),
@@ -234,7 +264,9 @@ fn derive_auth_form(rows: &[KeyValueRow]) -> AuthFormValues {
                 ..Default::default()
             };
         }
-        if let Some(encoded) = value.strip_prefix("Basic ").or_else(|| value.strip_prefix("basic "))
+        if let Some(encoded) = value
+            .strip_prefix("Basic ")
+            .or_else(|| value.strip_prefix("basic "))
         {
             let decoded = service::base64_decode(encoded.trim())
                 .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
@@ -388,41 +420,64 @@ impl ApiDebuggerView {
         // Try to restore persisted tabs
         let persisted_tabs = service.load_persisted_tabs();
         let first_persisted_tab = persisted_tabs.first().cloned();
-        let (open_tabs, active_tab, restored_request) = if !persisted_tabs.is_empty() {
-            let mut tabs = Vec::new();
-            let mut first_request_index = 0usize;
-            for ptab in &persisted_tabs {
-                // Match persisted tab to current group/request by method+url
-                let matched_index =
-                    find_request_index_by_method_url(&groups, &ptab.method, &ptab.url);
-                let req_index = matched_index.unwrap_or(0);
-                if tabs.is_empty() {
-                    first_request_index = req_index;
+        let (open_tabs, active_tab, restored_request, restored_scenario) =
+            if !persisted_tabs.is_empty() {
+                let mut tabs = Vec::new();
+                let mut first_request_index = 0usize;
+                let mut first_scenario_index = None;
+                for ptab in &persisted_tabs {
+                    let matched_tab = persisted_tab_to_open_tab(&groups, ptab)
+                        .unwrap_or_else(|| OpenTab::new_request(0));
+                    let (req_index, scenario_index) = match &matched_tab {
+                        OpenTab::Request { index, .. } => (*index, None),
+                        OpenTab::Scenario {
+                            request_index,
+                            scenario_index,
+                            ..
+                        } => (*request_index, Some(*scenario_index)),
+                    };
+                    if tabs.is_empty() {
+                        first_request_index = req_index;
+                        first_scenario_index = scenario_index;
+                    }
+                    tabs.push(matched_tab);
                 }
-                tabs.push(OpenTab::with_id(
-                    req_index,
-                    ptab.id.clone(),
-                    ptab.node_id.clone(),
-                ));
-            }
-            let active = tabs
-                .first()
-                .cloned()
-                .unwrap_or_else(|| OpenTab::new_request(selected_request));
-            (tabs, active, first_request_index)
-        } else {
-            let active_tab = selected_scenario
-                .map(|index| OpenTab::new_scenario(selected_request, index))
-                .unwrap_or_else(|| OpenTab::new_request(selected_request));
-            let mut tabs = vec![active_tab.clone()];
-            if request_at(&groups, 1).is_some() {
-                tabs.push(OpenTab::new_request(1));
-            }
-            (tabs, active_tab, selected_request)
-        };
-        let request = request_at(&groups, restored_request)
+                let active = tabs
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| OpenTab::new_request(selected_request));
+                (tabs, active, first_request_index, first_scenario_index)
+            } else {
+                let active_tab = selected_scenario
+                    .map(|index| {
+                        OpenTab::new_scenario_with_node(
+                            selected_request,
+                            index,
+                            request_at(&groups, selected_request)
+                                .and_then(|request| request.scenarios.get(index))
+                                .map(|scenario| scenario.node_id.clone())
+                                .unwrap_or_default(),
+                        )
+                    })
+                    .unwrap_or_else(|| OpenTab::new_request(selected_request));
+                let mut tabs = vec![active_tab.clone()];
+                if request_at(&groups, 1).is_some() {
+                    tabs.push(OpenTab::new_request(1));
+                }
+                (tabs, active_tab, selected_request, selected_scenario)
+            };
+        let base_request = request_at(&groups, restored_request)
             .expect("api request should exist")
             .clone();
+        let request = restored_scenario
+            .and_then(|scenario_index| {
+                base_request
+                    .scenarios
+                    .get(scenario_index)
+                    .and_then(|scenario| scenario.request.as_deref())
+            })
+            .cloned()
+            .unwrap_or_else(|| base_request.clone());
         let environment = environments
             .first()
             .cloned()
@@ -488,7 +543,7 @@ impl ApiDebuggerView {
             open_tabs,
             active_tab,
             selected_request: restored_request,
-            selected_scenario,
+            selected_scenario: restored_scenario,
             selected_environment: 0,
             editor_tab: init_editor_tab,
             response_tab: ResponseTab::Body,
@@ -518,7 +573,11 @@ impl ApiDebuggerView {
             auth_bearer_input: single_input(cx, &init_auth_form.bearer, "Token"),
             auth_basic_user_input: single_input(cx, &init_auth_form.basic_user, "用户名"),
             auth_basic_pass_input: single_input(cx, &init_auth_form.basic_pass, "密码"),
-            auth_apikey_name_input: single_input(cx, &init_auth_form.apikey_name, "Key（如 X-API-Key）"),
+            auth_apikey_name_input: single_input(
+                cx,
+                &init_auth_form.apikey_name,
+                "Key（如 X-API-Key）",
+            ),
             auth_apikey_value_input: single_input(cx, &init_auth_form.apikey_value, "Value"),
             auth_apikey_in_query: init_auth_form.in_query,
             pre_ops_input: multiline_input(cx, &init_pre_ops, "Pre-ops"),
@@ -537,15 +596,94 @@ impl ApiDebuggerView {
         }
     }
 
+    fn placeholder_request() -> ApiRequest {
+        ApiRequest {
+            node_id: String::new(),
+            title: String::from("新请求"),
+            method: HttpMethod::Get,
+            path: String::from("/"),
+            params: Vec::new(),
+            path_rows: Vec::new(),
+            body: String::new(),
+            body_mode: BodyMode::None,
+            headers: Vec::new(),
+            cookies: Vec::new(),
+            auth: Vec::new(),
+            pre_ops: String::new(),
+            post_ops: String::new(),
+            scenarios: Vec::new(),
+        }
+    }
+
+    fn placeholder_environment() -> ApiEnvironment {
+        ApiEnvironment {
+            name: String::from("默认环境"),
+            badge: String::from("默"),
+            color: 0x338855,
+            base_url: String::from("http://127.0.0.1:8000"),
+            variables: Vec::new(),
+            headers: Vec::new(),
+        }
+    }
+
+    fn ensure_renderable_workspace(&mut self) {
+        if self.groups.is_empty() || self.groups.iter().all(|group| group.requests.is_empty()) {
+            self.groups = vec![ApiGroup {
+                id: None,
+                name: String::from("集合"),
+                requests: vec![Self::placeholder_request()],
+            }];
+            self.selected_request = 0;
+            self.selected_scenario = None;
+            self.active_tab = OpenTab::new_request(0);
+            self.open_tabs = vec![self.active_tab.clone()];
+        } else {
+            let request_count: usize = self.groups.iter().map(|group| group.requests.len()).sum();
+            if self.selected_request >= request_count {
+                self.selected_request = 0;
+                self.selected_scenario = None;
+                self.active_tab = self.request_tab_for_index(0);
+            }
+            if let Some(scenario_index) = self.selected_scenario {
+                let valid = request_at(&self.groups, self.selected_request)
+                    .and_then(|request| request.scenarios.get(scenario_index))
+                    .is_some();
+                if !valid {
+                    self.selected_scenario = None;
+                    self.active_tab = self.request_tab_for_index(self.selected_request);
+                }
+            }
+            self.open_tabs.retain(|tab| match tab {
+                OpenTab::Request { index, .. } => *index < request_count,
+                OpenTab::Scenario {
+                    request_index,
+                    scenario_index,
+                    ..
+                } => request_at(&self.groups, *request_index)
+                    .and_then(|request| request.scenarios.get(*scenario_index))
+                    .is_some(),
+            });
+            if self.open_tabs.is_empty() {
+                self.active_tab = OpenTab::new_request(self.selected_request);
+                self.open_tabs.push(self.active_tab.clone());
+            }
+        }
+
+        if self.environments.is_empty() {
+            self.environments = vec![Self::placeholder_environment()];
+        }
+        self.selected_environment = self
+            .selected_environment
+            .min(self.environments.len().saturating_sub(1));
+    }
+
     fn sync_service_updates(&mut self) {
         let current_revision = self.service.revision();
         if current_revision != self.last_revision {
             if let Ok(workspace) = self.service.load_workspace() {
                 self.groups = workspace.groups;
                 self.environments = workspace.environments;
-                self.selected_environment = self
-                    .selected_environment
-                    .min(self.environments.len().saturating_sub(1));
+                self.ensure_renderable_workspace();
             }
             self.last_revision = current_revision;
         }
@@ -574,19 +712,51 @@ impl ApiDebuggerView {
         }
         if let Some(notice) = self.service.take_pending_notice() {
             self.environments = self.service.list_environments_ui();
-            self.selected_environment = self
-                .selected_environment
-                .min(self.environments.len().saturating_sub(1));
+            self.ensure_renderable_workspace();
             self.notice = notice;
         }
     }
 
-    fn selected_request(&self) -> &ApiRequest {
+    fn selected_base_request(&self) -> &ApiRequest {
         request_at(&self.groups, self.selected_request).expect("request should exist")
     }
 
+    fn selected_request(&self) -> &ApiRequest {
+        let request = self.selected_base_request();
+        if let Some(scenario_index) = self.selected_scenario {
+            if let Some(scenario_request) = request
+                .scenarios
+                .get(scenario_index)
+                .and_then(|scenario| scenario.request.as_deref())
+            {
+                return scenario_request;
+            }
+        }
+        request
+    }
+
     fn selected_request_mut(&mut self) -> &mut ApiRequest {
-        request_at_mut(&mut self.groups, self.selected_request).expect("request should exist")
+        let request =
+            request_at_mut(&mut self.groups, self.selected_request).expect("request should exist");
+        if let Some(scenario_index) = self.selected_scenario {
+            let base_request = request.clone();
+            let scenario = request
+                .scenarios
+                .get_mut(scenario_index)
+                .expect("scenario should exist");
+            if scenario.request.is_none() {
+                let mut scenario_request = base_request;
+                scenario_request.node_id = scenario.node_id.clone();
+                scenario_request.title = scenario.name.clone();
+                scenario_request.scenarios.clear();
+                scenario.request = Some(Box::new(scenario_request));
+            }
+            return scenario
+                .request
+                .as_deref_mut()
+                .expect("scenario request should exist");
+        }
+        request
     }
 
     fn selected_environment(&self) -> &ApiEnvironment {
@@ -646,6 +816,9 @@ impl ApiDebuggerView {
             return;
         }
         let request = self.selected_request();
+        if request.node_id.is_empty() {
+            return;
+        }
         let method_label = request.method.label().to_string();
         if let Err(error) = self.service.persist_endpoint_snapshot(
             &request.title,
@@ -655,6 +828,10 @@ impl ApiDebuggerView {
         ) {
             tracing::warn!("持久化端点失败: {error}");
         }
+    }
+
+    fn current_node_id(&self) -> &str {
+        self.selected_request().node_id.as_str()
     }
 
     fn persist_workspace(&mut self) {
@@ -703,10 +880,64 @@ impl ApiDebuggerView {
         });
     }
 
-    fn ensure_open_tab(&mut self, tab: OpenTab) {
-        if !self.open_tabs.contains(&tab) {
-            self.open_tabs.push(tab);
+    fn ensure_open_tab(&mut self, tab: OpenTab) -> OpenTab {
+        if let Some(existing) = self
+            .open_tabs
+            .iter()
+            .find(|open_tab| **open_tab == tab)
+            .cloned()
+        {
+            existing
+        } else {
+            self.open_tabs.push(tab.clone());
+            tab
         }
+    }
+
+    fn request_tab_for_index(&mut self, index: usize) -> OpenTab {
+        if let Some(existing) = self
+            .open_tabs
+            .iter()
+            .find(|tab| tab.matches_request_index(index))
+            .cloned()
+        {
+            return existing;
+        }
+        self.ensure_open_tab(OpenTab::new_request(index))
+    }
+
+    fn scenario_tab_for_index(&mut self, request_index: usize, scenario_index: usize) -> OpenTab {
+        if let Some(existing) = self
+            .open_tabs
+            .iter()
+            .find(|tab| tab.matches_scenario_index(request_index, scenario_index))
+            .cloned()
+        {
+            return existing;
+        }
+        let node_id = self.scenario_node_id(request_index, scenario_index);
+        self.ensure_open_tab(OpenTab::new_scenario_with_node(
+            request_index,
+            scenario_index,
+            node_id,
+        ))
+    }
+
+    fn scenario_node_id(&self, request_index: usize, scenario_index: usize) -> String {
+        request_at(&self.groups, request_index)
+            .and_then(|request| request.scenarios.get(scenario_index))
+            .map(|scenario| scenario.node_id.clone())
+            .unwrap_or_default()
+    }
+
+    fn sync_method_select(&self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(state) = self.method_select_state.as_ref().cloned() else {
+            return;
+        };
+        let method = self.selected_request().method;
+        state.update(cx, |state, state_cx| {
+            state.set_selected_value(&method, window, state_cx);
+        });
     }
 
     fn collect_tab_draft(&self, cx: &App) -> TabDraft {
@@ -733,7 +964,7 @@ impl ApiDebuggerView {
         let draft = self.collect_tab_draft(cx);
         let tab = service::build_http_tab(
             &tab_id,
-            self.active_tab.node_id(),
+            first_non_empty(self.current_node_id(), self.active_tab.fallback_node_id()),
             &request.title,
             request.method.label(),
             &draft,
@@ -805,10 +1036,9 @@ impl ApiDebuggerView {
         self.persist_current_tab_state(cx);
         self.selected_request = index;
         self.selected_scenario = None;
-        let new_tab = OpenTab::new_request(index);
+        let new_tab = self.request_tab_for_index(index);
         let new_tab_id = new_tab.tab_id().to_string();
         self.active_tab = new_tab.clone();
-        self.ensure_open_tab(new_tab);
 
         // Try restoring from persisted draft for this tab
         if let Some(persisted) = self.service.load_persisted_tab_by_id(&new_tab_id) {
@@ -830,10 +1060,9 @@ impl ApiDebuggerView {
         self.persist_current_tab_state(cx);
         self.selected_request = request_index;
         self.selected_scenario = Some(scenario_index);
-        let new_tab = OpenTab::new_scenario(request_index, scenario_index);
+        let new_tab = self.scenario_tab_for_index(request_index, scenario_index);
         let new_tab_id = new_tab.tab_id().to_string();
         self.active_tab = new_tab.clone();
-        self.ensure_open_tab(new_tab);
 
         if let Some(persisted) = self.service.load_persisted_tab_by_id(&new_tab_id) {
             self.restore_inputs_from_tab(&persisted, cx);
@@ -850,14 +1079,42 @@ impl ApiDebuggerView {
     }
 
     fn select_open_tab(&mut self, tab: OpenTab, cx: &mut App) {
-        match &tab {
-            OpenTab::Request { index, .. } => self.select_request(*index, cx),
+        self.sync_models(cx);
+        self.persist_current_tab_state(cx);
+        self.active_tab = tab.clone();
+        match tab {
+            OpenTab::Request { index, tab_id, .. } => {
+                self.selected_request = index;
+                self.selected_scenario = None;
+                if let Some(persisted) = self.service.load_persisted_tab_by_id(&tab_id) {
+                    self.restore_inputs_from_tab(&persisted, cx);
+                    if let Some(et) = service::index_to_editor_tab(persisted.active_request_tab) {
+                        self.editor_tab = et;
+                    }
+                } else {
+                    self.reload_request_inputs(cx);
+                }
+            }
             OpenTab::Scenario {
                 request_index,
                 scenario_index,
+                tab_id,
                 ..
-            } => self.select_scenario(*request_index, *scenario_index, cx),
+            } => {
+                self.selected_request = request_index;
+                self.selected_scenario = Some(scenario_index);
+                if let Some(persisted) = self.service.load_persisted_tab_by_id(&tab_id) {
+                    self.restore_inputs_from_tab(&persisted, cx);
+                    if let Some(et) = service::index_to_editor_tab(persisted.active_request_tab) {
+                        self.editor_tab = et;
+                    }
+                } else {
+                    self.reload_request_inputs(cx);
+                }
+            }
         }
+        self.notice = format!("已切换到 {}", self.current_title());
+        self.persist_current_tab_state(cx);
     }
 
     fn select_environment(&mut self, index: usize, cx: &mut App) {
@@ -891,11 +1148,14 @@ impl ApiDebuggerView {
             .map(|i| IndexPath::default().row(i));
 
         let state = cx.new(|cx| SelectState::new(methods, selected_index, window, cx));
-        cx.subscribe(&state, move |this: &mut ApiDebuggerView, _, event: &SelectEvent<Vec<HttpMethod>>, cx| {
-            if let SelectEvent::Confirm(Some(method)) = event {
-                this.set_method(*method, cx);
-            }
-        })
+        cx.subscribe(
+            &state,
+            move |this: &mut ApiDebuggerView, _, event: &SelectEvent<Vec<HttpMethod>>, cx| {
+                if let SelectEvent::Confirm(Some(method)) = event {
+                    this.set_method(*method, cx);
+                }
+            },
+        )
         .detach();
 
         self.method_select_state = Some(state);
@@ -930,8 +1190,7 @@ impl ApiDebuggerView {
         let text = self.body_input.read(cx).text();
         match serde_json::from_str::<serde_json::Value>(&text) {
             Ok(value) => {
-                let pretty =
-                    serde_json::to_string_pretty(&value).unwrap_or_else(|_| text.clone());
+                let pretty = serde_json::to_string_pretty(&value).unwrap_or_else(|_| text.clone());
                 self.body_input
                     .update(cx, |input, input_cx| input.set_text(pretty, input_cx));
                 self.sync_models(cx);
@@ -955,8 +1214,9 @@ impl ApiDebuggerView {
             return;
         };
         let path_string = path.display().to_string();
-        self.body_input
-            .update(cx, |input, input_cx| input.set_text(path_string.clone(), input_cx));
+        self.body_input.update(cx, |input, input_cx| {
+            input.set_text(path_string.clone(), input_cx)
+        });
         self.sync_models(cx);
         self.persist_current_tab_state(cx);
         self.notice = format!("已选择文件: {path_string}");
@@ -980,7 +1240,7 @@ impl ApiDebuggerView {
 
     fn current_scenario(&self) -> Option<&ApiScenario> {
         self.selected_scenario
-            .and_then(|index| self.selected_request().scenarios.get(index))
+            .and_then(|index| self.selected_base_request().scenarios.get(index))
     }
 
     fn tab_title(&self, tab: &OpenTab) -> String {
@@ -1081,8 +1341,7 @@ impl ApiDebuggerView {
             return;
         };
         let created_at = entry.created_at.clone();
-        self.response.status_line =
-            format!("{} {} · {}", entry.method, entry.status, entry.url);
+        self.response.status_line = format!("{} {} · {}", entry.method, entry.status, entry.url);
         self.response.status_code = entry.status.max(0) as u16;
         self.response.body = entry.response.clone();
         self.response.headers = String::new();
@@ -1182,14 +1441,26 @@ impl ApiDebuggerView {
                 if user.trim().is_empty() && pass.trim().is_empty() {
                     Vec::new()
                 } else {
-                    let encoded =
-                        service::base64_encode(format!("{user}:{pass}").as_bytes());
-                    vec![KeyValueRow::new("Authorization", format!("Basic {encoded}"))]
+                    let encoded = service::base64_encode(format!("{user}:{pass}").as_bytes());
+                    vec![KeyValueRow::new(
+                        "Authorization",
+                        format!("Basic {encoded}"),
+                    )]
                 }
             }
             AuthType::ApiKey => {
-                let name = self.auth_apikey_name_input.read(cx).text().trim().to_string();
-                let value = self.auth_apikey_value_input.read(cx).text().trim().to_string();
+                let name = self
+                    .auth_apikey_name_input
+                    .read(cx)
+                    .text()
+                    .trim()
+                    .to_string();
+                let value = self
+                    .auth_apikey_value_input
+                    .read(cx)
+                    .text()
+                    .trim()
+                    .to_string();
                 if name.is_empty() {
                     Vec::new()
                 } else {
@@ -1286,7 +1557,52 @@ impl ApiDebuggerView {
         self.notice = String::from("正在删除环境...");
     }
 
-    fn open_collection_menu(&mut self, title: impl Into<String>, position: Option<(f32, f32)>, node_id: String) {
+    fn export_environments(&mut self) {
+        let json = match self.service.export_environments_json() {
+            Ok(json) => json,
+            Err(error) => {
+                self.notice = format!("环境导出失败: {error}");
+                return;
+            }
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("导出 API 环境")
+            .set_file_name("qingqi-api-environments.json")
+            .save_file()
+        else {
+            self.notice = String::from("已取消导出");
+            return;
+        };
+        match std::fs::write(&path, json) {
+            Ok(()) => self.notice = format!("环境已导出: {}", path.display()),
+            Err(error) => self.notice = format!("环境导出失败: {error}"),
+        }
+    }
+
+    fn import_environments(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("导入 API 环境 JSON")
+            .add_filter("JSON", &["json"])
+            .pick_file()
+        else {
+            self.notice = String::from("已取消导入");
+            return;
+        };
+        match std::fs::read_to_string(&path) {
+            Ok(content) => {
+                self.service.import_environments_json_async(content);
+                self.notice = format!("正在导入环境: {}", path.display());
+            }
+            Err(error) => self.notice = format!("环境导入失败: {error}"),
+        }
+    }
+
+    fn open_collection_menu(
+        &mut self,
+        title: impl Into<String>,
+        position: Option<(f32, f32)>,
+        node_id: String,
+    ) {
         self.collection_menu_title = title.into();
         self.collection_menu_position = position;
         self.collection_menu_node_id = node_id;
@@ -1302,7 +1618,7 @@ impl ApiDebuggerView {
     }
 
     fn create_new_endpoint(&mut self) {
-        let parent_id = self.find_parent_id_for_new_node();
+        let parent_id = self.find_parent_id_for_new_node(NodeKind::Endpoint);
         let title = String::from("新请求");
         self.service
             .create_endpoint_async(parent_id, title, "GET".into(), "/".into());
@@ -1310,7 +1626,7 @@ impl ApiDebuggerView {
     }
 
     fn create_new_folder(&mut self) {
-        let parent_id = self.find_parent_id_for_new_node();
+        let parent_id = self.find_parent_id_for_new_node(NodeKind::Folder);
         let title = String::from("新分组");
         self.service.create_folder_async(parent_id, title);
         self.close_collection_menu();
@@ -1320,8 +1636,8 @@ impl ApiDebuggerView {
     /// new case appears as a scenario row beneath that request once the tree
     /// reloads.
     fn create_new_case(&mut self) {
-        let parent_id = request_at(&self.groups, self.selected_request)
-            .map(|request| request.node_id.clone())
+        let parent_id = self
+            .find_parent_id_for_new_node(NodeKind::Case)
             .unwrap_or_default();
         if parent_id.is_empty() {
             self.notice = String::from("请先选择一个已保存的端点再添加用例");
@@ -1341,12 +1657,29 @@ impl ApiDebuggerView {
         self.close_collection_menu();
     }
 
-    fn find_parent_id_for_new_node(&self) -> Option<String> {
-        let request = self.selected_request();
-        if request.node_id.is_empty() {
-            None
-        } else {
-            Some(request.node_id.clone())
+    fn find_parent_id_for_new_node(&self, new_kind: NodeKind) -> Option<String> {
+        let menu_node_id = self.collection_menu_node_id.trim();
+        if menu_node_id.is_empty() {
+            return None;
+        }
+        let Ok(Some(node)) = self.service.get_collection_node(menu_node_id) else {
+            return None;
+        };
+        match (new_kind, node.kind) {
+            (NodeKind::Endpoint | NodeKind::Folder, NodeKind::Folder) => Some(node.id),
+            (NodeKind::Endpoint | NodeKind::Folder, NodeKind::Endpoint) => node.parent_id,
+            (NodeKind::Endpoint | NodeKind::Folder, NodeKind::Case) => node
+                .parent_id
+                .and_then(|endpoint_id| {
+                    self.service
+                        .get_collection_node(&endpoint_id)
+                        .ok()
+                        .flatten()
+                })
+                .and_then(|endpoint| endpoint.parent_id),
+            (NodeKind::Case, NodeKind::Endpoint) => Some(node.id),
+            (NodeKind::Case, NodeKind::Case) => node.parent_id,
+            (NodeKind::Case, NodeKind::Folder) => None,
         }
     }
 
@@ -1460,6 +1793,7 @@ impl Render for ApiDebuggerView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_service_updates();
         self.init_method_select(window, cx);
+        self.sync_method_select(window, cx);
 
         let dark = qingqi_ui::theme_mode::is_dark();
         let stacked = window.bounds().size.width < px(STACK_BREAKPOINT_PX);
@@ -1505,6 +1839,7 @@ impl Render for ApiDebuggerView {
         let response_code_lang = self.response_code_lang;
         let notice = self.notice.clone();
         let current_request = self.selected_request().clone();
+        let base_request = self.selected_base_request().clone();
         let current_environment = self.selected_environment().clone();
         let current_scenario = self.current_scenario().cloned();
         let tab_titles = open_tabs
@@ -1539,11 +1874,11 @@ impl Render for ApiDebuggerView {
                     .size_full()
                     .relative()
                     .pt(px(chrome.metrics().content_top_padding + 6.0))
-                    .pl(px(8.0))
-                    .pr(px(8.0))
-                    .pb(px(8.0))
+                    .pl(px(10.0))
+                    .pr(px(10.0))
+                    .pb(px(10.0))
                     .flex()
-                    .gap(px(if stacked { 8.0 } else { 8.0 }))
+                    .gap(px(10.0))
                     .when(stacked, |layout| layout.flex_col())
                     .when(!stacked, |layout| layout.flex_row())
                     .child(collection_tree(
@@ -1558,9 +1893,9 @@ impl Render for ApiDebuggerView {
                             .flex_1()
                             .min_w(px(0.0))
                             .border_1()
-                            .border_color(glass::border(dark))
-                            .bg(theme::semantic().bg_surface)
-                            .rounded(px(8.0))
+                            .border_color(glass::divider(dark))
+                            .bg(glass::bg(dark))
+                            .rounded(px(10.0))
                             .overflow_hidden()
                             .flex()
                             .flex_col()
@@ -1584,7 +1919,7 @@ impl Render for ApiDebuggerView {
                             .when(current_scenario.is_some(), |content| {
                                 content.child(scenario_banner(
                                     current_scenario.expect("scenario should exist"),
-                                    current_request.clone(),
+                                    base_request.clone(),
                                     dark,
                                 ))
                             })
@@ -1688,7 +2023,7 @@ impl Render for ApiDebuggerView {
                     curl_import_dialog(entity.clone(), curl_import_input, dark),
                 )
                 .into_any_element()
-             } else {
+            } else {
                 div().into_any_element()
             })
             .child(if show_rename {
@@ -1714,28 +2049,21 @@ impl Render for ApiDebuggerView {
     }
 }
 
-fn titlebar_new_button(
-    view: Entity<ApiDebuggerView>,
-    dark: bool,
-) -> impl IntoElement {
-    div()
-        .flex()
-        .items_center()
-        .gap(px(4.0))
-        .child(
-            Button::new("api-titlebar-new")
-                .ghost()
-                .icon(IconName::Plus)
-                .with_size(Size::XSmall)
-                .on_click({
-                    let view = view.clone();
-                    move |_, _, cx| {
-                        view.update(cx, |view, _cx| {
-                            view.open_collection_menu("新建", None, String::new());
-                        });
-                    }
-                }),
-        )
+fn titlebar_new_button(view: Entity<ApiDebuggerView>, _dark: bool) -> impl IntoElement {
+    div().flex().items_center().gap(px(4.0)).child(
+        Button::new("api-titlebar-new")
+            .ghost()
+            .icon(IconName::Plus)
+            .with_size(Size::XSmall)
+            .on_click({
+                let view = view.clone();
+                move |_, _, cx| {
+                    view.update(cx, |view, _cx| {
+                        view.open_collection_menu("新建", None, String::new());
+                    });
+                }
+            }),
+    )
 }
 
 fn collection_tree(
@@ -1973,6 +2301,8 @@ fn request_tree_block(
             move |(scenario_index, scenario)| {
                 let active =
                     selected_request == request_index && selected_scenario == Some(scenario_index);
+                let scenario_name = scenario.name.clone();
+                let scenario_node_id = scenario.node_id.clone();
                 div()
                     .id(("api-scenario-row", request_index * 100 + scenario_index))
                     .min_h(px(26.0))
@@ -2023,6 +2353,22 @@ fn request_tree_block(
                             window.refresh();
                         }
                     })
+                    .on_mouse_down(MouseButton::Right, {
+                        let view = view.clone();
+                        let scenario_name = scenario_name.clone();
+                        let scenario_node_id = scenario_node_id.clone();
+                        move |event, window, cx| {
+                            view.update(cx, |view, _cx| {
+                                view.open_collection_menu(
+                                    scenario_name.clone(),
+                                    Some((event.position.x.into(), event.position.y.into())),
+                                    scenario_node_id.clone(),
+                                );
+                            });
+                            cx.stop_propagation();
+                            window.refresh();
+                        }
+                    })
             },
         ))
 }
@@ -2041,11 +2387,11 @@ fn open_tabs_bar(
         .h(px(36.0))
         .px(px(10.0))
         .border_b_1()
-        .border_color(ui::border_light())
+        .border_color(glass::divider(dark))
         .flex()
         .items_center()
         .gap(px(6.0))
-        .bg(theme::semantic().bg_surface)
+        .bg(glass::bar(dark))
         .child(
             div()
                 .flex_1()
@@ -2063,14 +2409,14 @@ fn open_tabs_bar(
                         .h(px(28.0))
                         .px(px(10.0))
                         .rounded(px(6.0))
-                        .border_b_2()
+                        .border_b_1()
                         .border_color(if active {
-                            api_accent()
+                            theme::rgba_with_alpha(api_accent(), 0.62)
                         } else {
-                            theme::rgba_with_alpha(theme::semantic().bg_surface, 0.0).into()
+                            transparent_surface()
                         })
                         .bg(if active {
-                            theme::rgba_with_alpha(api_accent(), 0.06)
+                            theme::rgba_with_alpha(api_accent(), 0.055)
                         } else {
                             transparent_surface()
                         })
@@ -2085,11 +2431,7 @@ fn open_tabs_bar(
                         } else {
                             ui::text_tertiary()
                         })
-                        .hover(move |style| {
-                            style
-                                .bg(glass::hover_bg(dark))
-                                .cursor_pointer()
-                        })
+                        .hover(move |style| style.bg(glass::hover_bg(dark)).cursor_pointer())
                         .flex()
                         .items_center()
                         .gap(px(4.0))
@@ -2183,15 +2525,17 @@ fn action_bar(
         .px(px(10.0))
         .py(px(6.0))
         .border_b_1()
-        .border_color(ui::border_light())
-        .bg(theme::semantic().bg_subtle)
+        .border_color(glass::divider(dark))
+        .bg(glass::bar(dark))
         .flex()
         .items_center()
         .gap(px(6.0))
         .child(
-            div()
-                .w(px(100.0))
-                .child(Select::new(&method_select).appearance(false).with_size(Size::Small)),
+            div().w(px(100.0)).child(
+                Select::new(&method_select)
+                    .appearance(false)
+                    .with_size(Size::Small),
+            ),
         )
         .child({
             let url_view = view.clone();
@@ -2200,8 +2544,8 @@ fn action_bar(
                 .h(px(32.0))
                 .rounded(px(6.0))
                 .border_1()
-                .border_color(ui::border_light())
-                .bg(theme::semantic().bg_subtle_2)
+                .border_color(glass::divider(dark))
+                .bg(glass::inset(dark))
                 .px(px(10.0))
                 .flex()
                 .items_center()
@@ -2250,8 +2594,8 @@ fn scenario_banner(scenario: ApiScenario, request: ApiRequest, dark: bool) -> im
         .px(px(12.0))
         .py(px(8.0))
         .border_b_1()
-        .border_color(ui::border_light())
-        .bg(theme::rgba_with_alpha(api_accent(), 0.06))
+        .border_color(glass::divider(dark))
+        .bg(theme::rgba_with_alpha(api_accent(), 0.045))
         .flex()
         .items_center()
         .gap(px(8.0))
@@ -2308,17 +2652,20 @@ fn editor_panel(
                         .rounded(px(4.0))
                         .text_size(px(10.0))
                         .text_color(if is_active {
-                            api_accent()
+                            theme::semantic().text_primary
                         } else {
                             ui::text_tertiary()
                         })
                         .bg(if is_active {
-                            theme::rgba_with_alpha(theme::semantic().primary, 0.12)
+                            theme::rgba_with_alpha(theme::semantic().text_primary, 0.055)
                         } else {
                             hsla(0.0, 0.0, 0.0, 0.0)
                         })
                         .hover(move |style| {
-                            style.cursor_pointer().text_color(api_accent())
+                            style
+                                .cursor_pointer()
+                                .bg(glass::hover_bg(dark))
+                                .text_color(theme::semantic().text_primary)
                         })
                         .on_click(move |_, _window, cx| {
                             bm_click.update(cx, |view, cx| {
@@ -2383,17 +2730,20 @@ fn editor_panel(
                         .rounded(px(4.0))
                         .text_size(px(10.0))
                         .text_color(if is_active {
-                            api_accent()
+                            theme::semantic().text_primary
                         } else {
                             ui::text_tertiary()
                         })
                         .bg(if is_active {
-                            theme::rgba_with_alpha(theme::semantic().primary, 0.12)
+                            theme::rgba_with_alpha(theme::semantic().text_primary, 0.055)
                         } else {
                             hsla(0.0, 0.0, 0.0, 0.0)
                         })
                         .hover(move |style| {
-                            style.cursor_pointer().text_color(api_accent())
+                            style
+                                .cursor_pointer()
+                                .bg(glass::hover_bg(dark))
+                                .text_color(theme::semantic().text_primary)
                         })
                         .on_click(move |_, _window, cx| {
                             au_click.update(cx, |view, cx| {
@@ -2410,101 +2760,46 @@ fn editor_panel(
         _ => div().into_any_element(),
     };
 
-    let primary_tabs = [EditorTab::Params, EditorTab::Headers, EditorTab::Body];
-    let more_tabs = [
-        EditorTab::Auth,
-        EditorTab::Cookies,
+    let editor_tabs = [
+        EditorTab::Params,
         EditorTab::Path,
+        EditorTab::Body,
+        EditorTab::Headers,
+        EditorTab::Cookies,
+        EditorTab::Auth,
         EditorTab::PreOps,
         EditorTab::PostOps,
     ];
-    let more_view = view.clone();
 
     div()
         .flex_1()
-        .min_w(px(320.0))
-        .border_r_1()
-        .border_color(ui::border_light())
-        .bg(theme::semantic().bg_surface)
+        .min_h(px(300.0))
+        .bg(glass::panel(dark))
         .flex()
         .flex_col()
         .child(
             div()
                 .px(px(10.0))
                 .border_b_1()
-                .border_color(ui::border_light())
-                .bg(theme::semantic().bg_subtle)
+                .border_color(glass::divider(dark))
+                .bg(glass::bar(dark))
                 .flex()
+                .flex_wrap()
                 .items_center()
-                .gap(px(2.0))
-                .children(primary_tabs.into_iter().enumerate().map(
-                    move |(index, tab)| {
-                        let active = tab == editor_tab;
-                        let tab_view = tabs_view.clone();
-                        div()
-                            .id(("api-editor-tab", index))
-                            .px(px(10.0))
-                            .py(px(6.0))
-                            .border_b_2()
-                            .border_color(if active {
-                                api_accent()
-                            } else {
-                                theme::rgba_with_alpha(theme::semantic().bg_surface, 0.0).into()
-                            })
-                            .text_size(px(11.0))
-                            .text_color(if active {
-                                api_accent()
-                            } else {
-                                ui::text_tertiary()
-                            })
-                            .hover(move |style| style.text_color(api_accent()).cursor_pointer())
-                            .child(tab.label())
-                            .on_click({
-                                move |_, _window, cx| {
-                                    tab_view.update(cx, |view, cx| {
-                                        view.sync_models(cx);
-                                        view.persist_current_tab_state(cx);
-                                        view.editor_tab = tab;
-                                        view.persist_current_tab_state(cx);
-                                    });
-                                }
-                            })
-                    },
-                ))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w(px(0.0))
-                        .flex()
-                        .justify_end()
-                        .child(
-                            div()
-                                .id("api-editor-more")
-                                .px(px(8.0))
-                                .py(px(6.0))
-                                .rounded(px(4.0))
-                                .text_size(px(11.0))
-                                .text_color(ui::text_tertiary())
-                                .hover(move |style| {
-                                    style.text_color(api_accent()).cursor_pointer()
-                                })
-                                .flex()
-                                .items_center()
-                                .gap(px(3.0))
-                                .child("更多")
-                                .child("▾")
-                                .on_click({
-                                    let view = more_view.clone();
-                                    move |_, _window, cx| {
-                                        view.update(cx, |view, cx| {
-                                            view.sync_models(cx);
-                                            view.persist_current_tab_state(cx);
-                                            view.editor_tab = EditorTab::Auth;
-                                            view.persist_current_tab_state(cx);
-                                        });
-                                    }
-                                }),
-                        ),
+                .gap(px(4.0))
+                .children(
+                    editor_tabs
+                        .into_iter()
+                        .enumerate()
+                        .map(move |(index, tab)| {
+                            editor_tab_button(
+                                tabs_view.clone(),
+                                index,
+                                tab,
+                                tab == editor_tab,
+                                dark,
+                            )
+                        }),
                 ),
         )
         .child(mode_row)
@@ -2515,7 +2810,7 @@ fn editor_panel(
                 .min_h(px(0.0))
                 .overflow_y_scroll()
                 .scrollbar_width(px(4.0))
-                .p(px(10.0))
+                .p(px(12.0))
                 .child(match editor_tab {
                     EditorTab::Params
                     | EditorTab::Headers
@@ -2527,20 +2822,17 @@ fn editor_panel(
                         auth_form_panel(view.clone(), auth_type, auth_form, dark).into_any_element()
                     }
                     _ => {
-                        let input =
-                            text_input.expect("non-KV editor tab must have a text input");
+                        let input = text_input.expect("non-KV editor tab must have a text input");
                         // Mode-specific hint for the body editor's text formats.
                         let hint = if editor_tab == EditorTab::Body {
                             match body_mode {
-                                BodyMode::FormData => Some(
-                                    "每行一个字段：key=value；文件用 key=@/path/to/file。",
-                                ),
+                                BodyMode::FormData => {
+                                    Some("每行一个字段：key=value；文件用 key=@/path/to/file。")
+                                }
                                 BodyMode::FormUrlEncoded => {
                                     Some("每行一个字段：key=value（发送时拼接为 a=1&b=2）。")
                                 }
-                                BodyMode::Binary => {
-                                    Some("填写文件路径，或点击右上角“选择文件”。")
-                                }
+                                BodyMode::Binary => Some("填写文件路径，或点击右上角“选择文件”。"),
                                 _ => None,
                             }
                         } else {
@@ -2551,15 +2843,13 @@ fn editor_panel(
                             .flex_col()
                             .gap(px(8.0))
                             .child(section_micro_label(label, dark))
-                            .when_some(hint, |column, text| {
-                                column.child(auth_hint(text))
-                            })
+                            .when_some(hint, |column, text| column.child(auth_hint(text)))
                             .child(
                                 div()
                                     .rounded(px(6.0))
                                     .border_1()
-                                    .border_color(ui::border_light())
-                                    .bg(theme::semantic().bg_subtle_2)
+                                    .border_color(glass::divider(dark))
+                                    .bg(glass::inset(dark))
                                     .overflow_hidden()
                                     .child(input),
                             )
@@ -2567,6 +2857,53 @@ fn editor_panel(
                     }
                 }),
         )
+}
+
+fn editor_tab_button(
+    view: Entity<ApiDebuggerView>,
+    index: usize,
+    tab: EditorTab,
+    active: bool,
+    dark: bool,
+) -> impl IntoElement {
+    div()
+        .id(("api-editor-tab", index))
+        .h(px(30.0))
+        .px(px(10.0))
+        .rounded(px(6.0))
+        .bg(if active {
+            theme::rgba_with_alpha(theme::semantic().text_primary, 0.055)
+        } else {
+            transparent_surface()
+        })
+        .text_size(px(11.0))
+        .font_weight(if active {
+            gpui::FontWeight::SEMIBOLD
+        } else {
+            gpui::FontWeight::NORMAL
+        })
+        .text_color(if active {
+            theme::semantic().text_primary
+        } else {
+            ui::text_tertiary()
+        })
+        .hover(move |style| {
+            style
+                .bg(glass::hover_bg(dark))
+                .text_color(theme::semantic().text_primary)
+                .cursor_pointer()
+        })
+        .flex()
+        .items_center()
+        .child(tab.label())
+        .on_click(move |_, _window, cx| {
+            view.update(cx, |view, cx| {
+                view.sync_models(cx);
+                view.persist_current_tab_state(cx);
+                view.editor_tab = tab;
+                view.persist_current_tab_state(cx);
+            });
+        })
 }
 
 /// The Auth tab body — renders a type-specific form (Bearer / Basic / API
@@ -2589,7 +2926,9 @@ fn auth_form_panel(
             .flex_col()
             .gap(px(10.0))
             .child(labeled_field("Token", form.bearer.clone(), dark))
-            .child(auth_hint("发送时自动添加请求头 Authorization: Bearer <token>。"))
+            .child(auth_hint(
+                "发送时自动添加请求头 Authorization: Bearer <token>。",
+            ))
             .into_any_element(),
         AuthType::BasicAuth => div()
             .flex()
@@ -2597,7 +2936,9 @@ fn auth_form_panel(
             .gap(px(10.0))
             .child(labeled_field("用户名", form.basic_user.clone(), dark))
             .child(labeled_field("密码", form.basic_pass.clone(), dark))
-            .child(auth_hint("发送时自动以 Base64 编码为 Authorization: Basic 头。"))
+            .child(auth_hint(
+                "发送时自动以 Base64 编码为 Authorization: Basic 头。",
+            ))
             .into_any_element(),
         AuthType::ApiKey => div()
             .flex()
@@ -2615,8 +2956,20 @@ fn auth_form_panel(
                         div()
                             .flex()
                             .gap(px(6.0))
-                            .child(auth_location_button(view.clone(), "Header", false, !form.in_query))
-                            .child(auth_location_button(view.clone(), "Query", true, form.in_query)),
+                            .child(auth_location_button(
+                                view.clone(),
+                                "Header",
+                                false,
+                                !form.in_query,
+                                dark,
+                            ))
+                            .child(auth_location_button(
+                                view.clone(),
+                                "Query",
+                                true,
+                                form.in_query,
+                                dark,
+                            )),
                     ),
             )
             .into_any_element(),
@@ -2637,6 +2990,7 @@ fn auth_location_button(
     label: &'static str,
     query: bool,
     active: bool,
+    dark: bool,
 ) -> impl IntoElement {
     div()
         .id(("api-auth-location", query as usize))
@@ -2645,22 +2999,21 @@ fn auth_location_button(
         .rounded(px(4.0))
         .text_size(px(10.0))
         .text_color(if active {
-            api_accent()
+            theme::semantic().text_primary
         } else {
             ui::text_tertiary()
         })
         .bg(if active {
-            theme::rgba_with_alpha(theme::semantic().primary, 0.12)
+            theme::rgba_with_alpha(theme::semantic().text_primary, 0.055)
         } else {
             hsla(0.0, 0.0, 0.0, 0.0)
         })
-        .border_1()
-        .border_color(if active {
-            api_accent().into()
-        } else {
-            ui::border_light()
+        .hover(move |style| {
+            style
+                .cursor_pointer()
+                .bg(glass::hover_bg(dark))
+                .text_color(theme::semantic().text_primary)
         })
-        .hover(|style| style.cursor_pointer().text_color(api_accent()))
         .child(label)
         .on_click(move |_, _, cx| {
             view.update(cx, |view, cx| {
@@ -2697,13 +3050,17 @@ fn response_panel(
             dark,
         )
         .into_any_element(),
-        _ => response_text_view(response_text).into_any_element(),
+        _ => response_text_view(response_text, dark).into_any_element(),
     };
 
     div()
-        .flex_1()
-        .min_w(px(320.0))
-        .bg(theme::semantic().bg_surface)
+        .h(px(310.0))
+        .min_h(px(220.0))
+        .max_h(px(380.0))
+        .flex_none()
+        .border_t_1()
+        .border_color(glass::divider(dark))
+        .bg(glass::panel(dark))
         .flex()
         .flex_col()
         .child(
@@ -2711,8 +3068,8 @@ fn response_panel(
                 .px(px(12.0))
                 .py(px(8.0))
                 .border_b_1()
-                .border_color(ui::border_light())
-                .bg(theme::semantic().bg_subtle)
+                .border_color(glass::divider(dark))
+                .bg(glass::bar(dark))
                 .flex()
                 .items_center()
                 .gap(px(8.0))
@@ -2729,40 +3086,45 @@ fn response_panel(
                 .px(px(10.0))
                 .py(px(4.0))
                 .border_b_1()
-                .border_color(ui::border_light())
-                .bg(theme::semantic().bg_subtle)
+                .border_color(glass::divider(dark))
+                .bg(glass::bar(dark))
                 .flex()
                 .flex_wrap()
                 .items_center()
                 .gap(px(4.0))
-                .children(ResponseTab::all().into_iter().enumerate().map(
-                    move |(index, tab)| {
-                        let active = tab == response_tab;
-                        let tab_view = tabs_view.clone();
-                        div()
-                            .id(("api-response-tab", index))
-                            .px(px(9.0))
-                            .py(px(5.0))
-                            .rounded(px(4.0))
-                            .bg(if active {
-                                theme::rgba_with_alpha(api_accent(), 0.08)
-                            } else {
-                                transparent_surface()
-                            })
-                            .text_size(px(11.0))
-                            .text_color(if active {
-                                api_accent()
-                            } else {
-                                ui::text_tertiary()
-                            })
-                            .hover(move |style| style.bg(glass::hover_bg(dark)).cursor_pointer())
-                            .child(tab.label())
-                            .on_click(move |_, window, cx| {
-                                tab_view.update(cx, |view, _cx| view.set_response_tab(tab));
-                                window.refresh();
-                            })
-                    },
-                )),
+                .children(
+                    ResponseTab::all()
+                        .into_iter()
+                        .enumerate()
+                        .map(move |(index, tab)| {
+                            let active = tab == response_tab;
+                            let tab_view = tabs_view.clone();
+                            div()
+                                .id(("api-response-tab", index))
+                                .px(px(9.0))
+                                .py(px(5.0))
+                                .rounded(px(4.0))
+                                .bg(if active {
+                                    theme::rgba_with_alpha(theme::semantic().text_primary, 0.055)
+                                } else {
+                                    transparent_surface()
+                                })
+                                .text_size(px(11.0))
+                                .text_color(if active {
+                                    theme::semantic().text_primary
+                                } else {
+                                    ui::text_tertiary()
+                                })
+                                .hover(move |style| {
+                                    style.bg(glass::hover_bg(dark)).cursor_pointer()
+                                })
+                                .child(tab.label())
+                                .on_click(move |_, window, cx| {
+                                    tab_view.update(cx, |view, _cx| view.set_response_tab(tab));
+                                    window.refresh();
+                                })
+                        }),
+                ),
         )
         .child(content)
         .child(
@@ -2770,7 +3132,7 @@ fn response_panel(
                 .px(px(12.0))
                 .py(px(6.0))
                 .border_t_1()
-                .border_color(ui::border_light())
+                .border_color(glass::divider(dark))
                 .text_size(px(11.0))
                 .text_color(ui::text_secondary())
                 .child(notice),
@@ -2778,7 +3140,7 @@ fn response_panel(
 }
 
 /// Scrollable monospace text body — the default response content area.
-fn response_text_view(text: String) -> impl IntoElement {
+fn response_text_view(text: String, dark: bool) -> impl IntoElement {
     div()
         .id("api-response-scroll")
         .flex_1()
@@ -2786,7 +3148,7 @@ fn response_text_view(text: String) -> impl IntoElement {
         .overflow_y_scroll()
         .scrollbar_width(px(4.0))
         .p(px(10.0))
-        .bg(theme::semantic().bg_subtle_2)
+        .bg(glass::inset(dark))
         .child(
             div()
                 .font_family("SF Mono")
@@ -2815,7 +3177,8 @@ fn response_body_view(
                 .px(px(10.0))
                 .py(px(6.0))
                 .border_b_1()
-                .border_color(ui::border_light())
+                .border_color(glass::divider(dark))
+                .bg(glass::bar(dark))
                 .flex()
                 .items_center()
                 .gap(px(6.0))
@@ -2854,12 +3217,21 @@ fn response_body_view(
                     .px(px(10.0))
                     .py(px(6.0))
                     .bg(theme::rgba_with_alpha(theme::semantic().danger, 0.08))
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0))
                     .text_size(px(11.0))
                     .text_color(theme::semantic().danger)
-                    .child("⚠ 二进制/图片响应，文本预览可能乱码，建议点击「保存」后查看"),
+                    .child(
+                        Button::new("api-response-binary-warning-icon")
+                            .ghost()
+                            .icon(IconName::TriangleAlert)
+                            .with_size(Size::XSmall),
+                    )
+                    .child("二进制/图片响应，文本预览可能乱码，建议点击「保存」后查看"),
             )
         })
-        .child(response_text_view(text))
+        .child(response_text_view(text, dark))
 }
 
 /// Response Code tab: language selector + generated snippet.
@@ -2879,42 +3251,48 @@ fn response_code_view(
                 .px(px(10.0))
                 .py(px(6.0))
                 .border_b_1()
-                .border_color(ui::border_light())
+                .border_color(glass::divider(dark))
+                .bg(glass::bar(dark))
                 .flex()
                 .flex_wrap()
                 .items_center()
                 .gap(px(4.0))
-                .children(CodeLanguage::all().into_iter().enumerate().map(
-                    move |(index, lang)| {
-                        let active = lang == code_lang;
-                        let lang_view = view.clone();
-                        div()
-                            .id(("api-code-lang", index))
-                            .px(px(8.0))
-                            .py(px(3.0))
-                            .rounded(px(4.0))
-                            .text_size(px(11.0))
-                            .bg(if active {
-                                theme::rgba_with_alpha(api_accent(), 0.08)
-                            } else {
-                                transparent_surface()
-                            })
-                            .text_color(if active {
-                                api_accent()
-                            } else {
-                                ui::text_tertiary()
-                            })
-                            .hover(move |style| style.bg(glass::hover_bg(dark)).cursor_pointer())
-                            .child(lang.label())
-                            .on_click(move |_, window, cx| {
-                                lang_view
-                                    .update(cx, |view, _cx| view.set_response_code_lang(lang));
-                                window.refresh();
-                            })
-                    },
-                )),
+                .children(
+                    CodeLanguage::all()
+                        .into_iter()
+                        .enumerate()
+                        .map(move |(index, lang)| {
+                            let active = lang == code_lang;
+                            let lang_view = view.clone();
+                            div()
+                                .id(("api-code-lang", index))
+                                .px(px(8.0))
+                                .py(px(3.0))
+                                .rounded(px(4.0))
+                                .text_size(px(11.0))
+                                .bg(if active {
+                                    theme::rgba_with_alpha(theme::semantic().text_primary, 0.055)
+                                } else {
+                                    transparent_surface()
+                                })
+                                .text_color(if active {
+                                    theme::semantic().text_primary
+                                } else {
+                                    ui::text_tertiary()
+                                })
+                                .hover(move |style| {
+                                    style.bg(glass::hover_bg(dark)).cursor_pointer()
+                                })
+                                .child(lang.label())
+                                .on_click(move |_, window, cx| {
+                                    lang_view
+                                        .update(cx, |view, _cx| view.set_response_code_lang(lang));
+                                    window.refresh();
+                                })
+                        }),
+                ),
         )
-        .child(response_text_view(code_text))
+        .child(response_text_view(code_text, dark))
 }
 
 /// Response History tab: count + 清空 header and a clickable list of past calls.
@@ -2935,7 +3313,8 @@ fn response_history_view(
                 .px(px(10.0))
                 .py(px(6.0))
                 .border_b_1()
-                .border_color(ui::border_light())
+                .border_color(glass::divider(dark))
+                .bg(glass::bar(dark))
                 .flex()
                 .items_center()
                 .gap(px(8.0))
@@ -2958,8 +3337,7 @@ fn response_history_view(
                             .hover(move |style| style.bg(glass::hover_bg(dark)).cursor_pointer())
                             .child("清空")
                             .on_click(move |_, window, cx| {
-                                clear_view
-                                    .update(cx, |view, _cx| view.clear_current_history());
+                                clear_view.update(cx, |view, _cx| view.clear_current_history());
                                 window.refresh();
                             }),
                     )
@@ -3008,7 +3386,7 @@ fn history_row(
         .px(px(10.0))
         .py(px(8.0))
         .border_b_1()
-        .border_color(ui::border_light())
+        .border_color(glass::divider(dark))
         .flex()
         .flex_col()
         .gap(px(2.0))
@@ -3064,24 +3442,23 @@ fn response_action_button(
     view: Entity<ApiDebuggerView>,
     label: &'static str,
     action: ResponseBodyAction,
-    dark: bool,
+    _dark: bool,
 ) -> impl IntoElement {
     let id_index = match action {
         ResponseBodyAction::Copy => 0usize,
         ResponseBodyAction::Format => 1,
         ResponseBodyAction::Save => 2,
     };
-    div()
-        .id(("api-response-action", id_index))
-        .px(px(8.0))
-        .py(px(3.0))
-        .rounded(px(4.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .text_size(px(11.0))
-        .text_color(ui::text_secondary())
-        .hover(move |style| style.bg(glass::hover_bg(dark)).cursor_pointer())
-        .child(label)
+    let icon = match action {
+        ResponseBodyAction::Copy => IconName::Copy,
+        ResponseBodyAction::Format => IconName::CaseSensitive,
+        ResponseBodyAction::Save => IconName::File,
+    };
+    Button::new(("api-response-action", id_index))
+        .ghost()
+        .icon(icon)
+        .label(label)
+        .with_size(Size::XSmall)
         .on_click(move |_, window, cx| {
             view.update(cx, |view, cx| match action {
                 ResponseBodyAction::Copy => view.copy_response_body(cx),
@@ -3128,7 +3505,6 @@ fn is_binary_content_type(content_type: &str) -> bool {
         || ct == "application/zip"
         || ct == "application/gzip"
 }
-
 
 fn env_popup(
     view: Entity<ApiDebuggerView>,
@@ -3232,7 +3608,14 @@ fn env_popup(
                 .flex()
                 .items_center()
                 .justify_center()
-                .child("⚙ 管理环境")
+                .gap(px(6.0))
+                .child(
+                    Button::new("api-env-manage-icon")
+                        .ghost()
+                        .icon(IconName::Settings)
+                        .with_size(Size::XSmall),
+                )
+                .child("管理环境")
                 .on_click({
                     let view = view.clone();
                     move |_, window, cx| {
@@ -3296,7 +3679,21 @@ fn env_manager_dialog(
                         .flex()
                         .items_center()
                         .gap(px(10.0))
-                        .child(div().text_size(px(18.0)).child("🌐"))
+                        .child(
+                            div()
+                                .size(px(28.0))
+                                .rounded(px(8.0))
+                                .bg(theme::rgba_with_alpha(api_accent(), 0.12))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(
+                                    Button::new("api-env-title-icon")
+                                        .ghost()
+                                        .icon(IconName::Globe)
+                                        .with_size(Size::XSmall),
+                                ),
+                        )
                         .child(
                             div()
                                 .text_size(px(15.0))
@@ -3361,7 +3758,7 @@ fn env_manager_dialog(
                                                 });
                                             }
                                         }),
-                                )
+                                ),
                         )
                         .child(
                             div()
@@ -3457,73 +3854,69 @@ fn env_manager_dialog(
                         .flex_col()
                         .gap(px(12.0))
                         .child(
+                            div().flex().items_center().justify_between().child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(6.0))
+                                    .child(
+                                        div()
+                                            .text_size(px(16.0))
+                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .text_color(theme::semantic().text_primary)
+                                            .child(current_environment.name.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .h(px(28.0))
+                                            .px(px(10.0))
+                                            .rounded(px(999.0))
+                                            .border_1()
+                                            .border_color(ui::border_light())
+                                            .bg(theme::rgba_with_alpha(
+                                                theme::semantic().bg_surface,
+                                                if dark { 0.32 } else { 0.52 },
+                                            ))
+                                            .font_family("SF Mono")
+                                            .text_size(px(12.0))
+                                            .text_color(ui::text_secondary())
+                                            .flex()
+                                            .items_center()
+                                            .child(current_environment.base_url.clone()),
+                                    ),
+                            ),
+                        )
+                        .child(
                             div()
                                 .flex()
-                                .items_center()
-                                .justify_between()
+                                .gap(px(6.0))
                                 .child(
-                                    div()
-                                        .flex()
-                                        .flex_col()
-                                        .gap(px(6.0))
-                                        .child(
-                                            div()
-                                                .text_size(px(16.0))
-                                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                .text_color(theme::semantic().text_primary)
-                                                .child(current_environment.name.clone()),
-                                        )
-                                        .child(
-                                            div()
-                                                .h(px(28.0))
-                                                .px(px(10.0))
-                                                .rounded(px(999.0))
-                                                .border_1()
-                                                .border_color(ui::border_light())
-                                                .bg(theme::rgba_with_alpha(
-                                                    theme::semantic().bg_surface,
-                                                    if dark { 0.32 } else { 0.52 },
-                                                ))
-                                                .font_family("SF Mono")
-                                                .text_size(px(12.0))
-                                                .text_color(ui::text_secondary())
-                                                .flex()
-                                                .items_center()
-                                                .child(current_environment.base_url.clone()),
-                ),
-        )
-        )
-        .child(
-                                    div()
-                                        .flex()
-                                        .gap(px(6.0))
-                                        .child(
-                                            Button::new("api-env-dup")
-                                                .ghost()
-                                                .label("复制")
-                                                .with_size(Size::Small)
-                                                .on_click({
-                                                    let view = view.clone();
-                                                    move |_, _, cx| {
-                                                        view.update(cx, |view, cx| {
-                                                            view.duplicate_current_environment(cx);
-                                                        });
-                                                    }
-                                                }),
-                                        )
-                                        .child(
-                                            Button::new("api-env-del")
-                                                .ghost()
-                                                .label("删除")
-                                                .with_size(Size::Small)
-                                                .on_click({
-                                                    let view = view.clone();
-                                                    move |_, _, cx| {
-                                                        view.update(cx, |view, cx| {
-                                                            view.delete_current_environment(cx);
-                                                        });
-                                                    }
-                                                }),
+                                    Button::new("api-env-dup")
+                                        .ghost()
+                                        .label("复制")
+                                        .with_size(Size::Small)
+                                        .on_click({
+                                            let view = view.clone();
+                                            move |_, _, cx| {
+                                                view.update(cx, |view, cx| {
+                                                    view.duplicate_current_environment(cx);
+                                                });
+                                            }
+                                        }),
+                                )
+                                .child(
+                                    Button::new("api-env-del")
+                                        .ghost()
+                                        .label("删除")
+                                        .with_size(Size::Small)
+                                        .on_click({
+                                            let view = view.clone();
+                                            move |_, _, cx| {
+                                                view.update(cx, |view, cx| {
+                                                    view.delete_current_environment(cx);
+                                                });
+                                            }
+                                        }),
                                 ),
                         )
                         .child(labeled_field("名称", env_name_input, dark))
@@ -3599,36 +3992,45 @@ fn env_manager_dialog(
                                             let view = view.clone();
                                             move |_, _, cx| {
                                                 view.update(cx, |view, cx| {
-                                                    let current =
-                                                        if view.env_detail_tab == EnvDetailTab::Variables {
-                                                            view.env_variables_input.read(cx).text()
-                                                        } else {
-                                                            view.env_headers_input.read(cx).text()
-                                                        };
+                                                    let current = if view.env_detail_tab
+                                                        == EnvDetailTab::Variables
+                                                    {
+                                                        view.env_variables_input.read(cx).text()
+                                                    } else {
+                                                        view.env_headers_input.read(cx).text()
+                                                    };
                                                     let appended = if current.trim().is_empty() {
                                                         String::from("KEY=VALUE")
                                                     } else {
                                                         format!("{current}\nKEY=VALUE")
                                                     };
-                                                    if view.env_detail_tab == EnvDetailTab::Variables {
+                                                    if view.env_detail_tab
+                                                        == EnvDetailTab::Variables
+                                                    {
                                                         view.env_variables_input.update(
                                                             cx,
                                                             |input, input_cx| {
-                                                                input.set_text(appended.clone(), input_cx)
+                                                                input.set_text(
+                                                                    appended.clone(),
+                                                                    input_cx,
+                                                                )
                                                             },
                                                         );
                                                     } else {
                                                         view.env_headers_input.update(
                                                             cx,
                                                             |input, input_cx| {
-                                                                input.set_text(appended.clone(), input_cx)
+                                                                input.set_text(
+                                                                    appended.clone(),
+                                                                    input_cx,
+                                                                )
                                                             },
                                                         );
                                                     }
                                                 });
                                             }
                                         }),
-                                )
+                                ),
                         )
                         .child(
                             div()
@@ -3690,44 +4092,35 @@ fn env_manager_dialog(
                 .child(
                     Button::new("api-env-export")
                         .ghost()
+                        .icon(IconName::File)
                         .label("导出")
                         .with_size(Size::Small)
                         .on_click({
                             let view = view.clone();
                             move |_, _, cx| {
-                                view.update(cx, |view, _cx| {
-                                    view.notice = String::from("环境导出功能开发中");
-                                });
+                                view.update(cx, |view, _cx| view.export_environments());
                             }
                         }),
                 )
                 .child(
                     Button::new("api-env-import")
                         .ghost()
+                        .icon(IconName::FolderOpen)
                         .label("导入")
                         .with_size(Size::Small)
                         .on_click({
                             let view = view.clone();
                             move |_, _, cx| {
-                                view.update(cx, |view, _cx| {
-                                    view.notice = String::from("环境导入功能开发中");
-                                });
+                                view.update(cx, |view, _cx| view.import_environments());
                             }
                         }),
                 )
-                .child(
-                    context_menu_item(
-                        "api-env-delete",
-                        "删除此环境",
-                        "",
-                        {
-                            let view = view.clone();
-                            move |_, cx| {
-                                view.update(cx, |view, cx| view.delete_current_environment(cx));
-                            }
-                        },
-                    )
-                ),
+                .child(context_menu_item("api-env-delete", "删除此环境", "", {
+                    let view = view.clone();
+                    move |_, cx| {
+                        view.update(cx, |view, cx| view.delete_current_environment(cx));
+                    }
+                })),
         )
 }
 
@@ -3974,7 +4367,12 @@ fn overlay_shell(
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(content),
+                .child(
+                    div()
+                        .id("api-overlay-content")
+                        .on_click(|_, _, cx| cx.stop_propagation())
+                        .child(content),
+                ),
         )
 }
 
@@ -3983,7 +4381,7 @@ fn context_menu_overlay(
     title: String,
     position: Option<(f32, f32)>,
     node_id: String,
-    dark: bool,
+    _dark: bool,
 ) -> impl IntoElement {
     let (x, y) = position.unwrap_or((248.0, 96.0));
     div()
@@ -4030,7 +4428,16 @@ fn context_menu_overlay(
                         .text_size(px(13.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(api_accent())
-                        .child(format!("📂 {title}")),
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0))
+                        .child(
+                            Button::new("api-collection-menu-icon")
+                                .ghost()
+                                .icon(IconName::Folder)
+                                .with_size(Size::XSmall),
+                        )
+                        .child(title),
                 )
                 .child(context_menu_item(
                     "api-collection-menu-new-request",
@@ -4083,7 +4490,7 @@ fn context_menu_overlay(
                     {
                         let view = view.clone();
                         move |_, cx| {
-                            view.update(cx, |view, cx| {
+                            view.update(cx, |view, _cx| {
                                 view.show_curl_import = true;
                             });
                         }
@@ -4133,7 +4540,9 @@ fn context_menu_overlay(
                         move |_, cx| {
                             let url = if !node_id.is_empty() {
                                 let api_view = view.read(cx);
-                                if let Ok(Some(node)) = api_view.service.get_collection_node(&node_id) {
+                                if let Ok(Some(node)) =
+                                    api_view.service.get_collection_node(&node_id)
+                                {
                                     Some(node.url.clone())
                                 } else {
                                     None
@@ -4215,13 +4624,8 @@ fn api_accent() -> gpui::Rgba {
     theme::semantic().primary
 }
 
-fn content_split(stacked: bool) -> gpui::Div {
-    div()
-        .flex_1()
-        .min_h(px(0.0))
-        .flex()
-        .when(stacked, |layout| layout.flex_col())
-        .when(!stacked, |layout| layout.flex_row())
+fn content_split(_stacked: bool) -> gpui::Div {
+    div().flex_1().min_h(px(0.0)).flex().flex_col()
 }
 
 fn group_count(count: usize) -> impl IntoElement {
@@ -4444,6 +4848,41 @@ fn find_request_index_by_method_url(groups: &[ApiGroup], method: &str, url: &str
     None
 }
 
+fn persisted_tab_to_open_tab(groups: &[ApiGroup], tab: &crate::model::HttpTab) -> Option<OpenTab> {
+    if !tab.node_id.is_empty() {
+        let mut offset = 0usize;
+        for group in groups {
+            for (request_offset, request) in group.requests.iter().enumerate() {
+                let request_index = offset + request_offset;
+                if request.node_id == tab.node_id {
+                    return Some(OpenTab::with_id(
+                        request_index,
+                        tab.id.clone(),
+                        tab.node_id.clone(),
+                    ));
+                }
+                if let Some((scenario_index, scenario)) = request
+                    .scenarios
+                    .iter()
+                    .enumerate()
+                    .find(|(_, scenario)| scenario.node_id == tab.node_id)
+                {
+                    return Some(OpenTab::Scenario {
+                        request_index,
+                        scenario_index,
+                        tab_id: tab.id.clone(),
+                        node_id: scenario.node_id.clone(),
+                    });
+                }
+            }
+            offset += group.requests.len();
+        }
+    }
+
+    find_request_index_by_method_url(groups, &tab.method, &tab.url)
+        .map(|index| OpenTab::with_id(index, tab.id.clone(), tab.node_id.clone()))
+}
+
 fn request_at_mut(groups: &mut [ApiGroup], index: usize) -> Option<&mut ApiRequest> {
     let mut offset = 0usize;
     for group in groups {
@@ -4453,6 +4892,14 @@ fn request_at_mut(groups: &mut [ApiGroup], index: usize) -> Option<&mut ApiReque
         offset += group.requests.len();
     }
     None
+}
+
+fn first_non_empty<'a>(primary: &'a str, fallback: &'a str) -> &'a str {
+    if primary.is_empty() {
+        fallback
+    } else {
+        primary
+    }
 }
 
 fn parse_rows(text: &str) -> Vec<KeyValueRow> {
@@ -4465,15 +4912,20 @@ fn parse_rows(text: &str) -> Vec<KeyValueRow> {
                 Some(rest) => (false, rest.trim()),
                 None => (true, line),
             };
-            let (key, value) = content
+            let mut parts = content.splitn(3, '\t');
+            let pair = parts.next().unwrap_or_default().trim();
+            let value_type = parts.next().unwrap_or_default().trim();
+            let description = parts.next().unwrap_or_default().trim();
+            let (key, value) = pair
                 .split_once('=')
                 .map(|(key, value)| (key.trim(), value.trim()))
-                .unwrap_or((content, ""));
+                .unwrap_or((pair, ""));
             KeyValueRow {
                 enabled,
                 key: key.to_string(),
                 value: value.to_string(),
-                description: String::new(),
+                value_type: value_type.to_string(),
+                description: description.to_string(),
             }
         })
         .collect()
@@ -4482,7 +4934,15 @@ fn parse_rows(text: &str) -> Vec<KeyValueRow> {
 fn format_rows(rows: &[KeyValueRow]) -> String {
     rows.iter()
         .map(|row| {
-            let body = format!("{}={}", row.key, row.value);
+            let mut body = format!("{}={}", row.key, row.value);
+            let value_type = sanitize_row_metadata(&row.value_type);
+            let description = sanitize_row_metadata(&row.description);
+            if !value_type.is_empty() || !description.is_empty() {
+                body.push('\t');
+                body.push_str(&value_type);
+                body.push('\t');
+                body.push_str(&description);
+            }
             if row.enabled {
                 body
             } else {
@@ -4491,6 +4951,10 @@ fn format_rows(rows: &[KeyValueRow]) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn sanitize_row_metadata(value: &str) -> String {
+    value.replace(['\t', '\n', '\r'], " ").trim().to_string()
 }
 
 fn detect_body_mode(body: &str) -> String {
@@ -4508,96 +4972,108 @@ fn kv_editor_table(
     view: Entity<ApiDebuggerView>,
     tab: EditorTab,
     rows: Vec<KvRow>,
-    _dark: bool,
+    dark: bool,
 ) -> impl IntoElement {
     let add_view = view.clone();
+    let show_schema_columns = tab == EditorTab::Params;
 
     div()
         .flex()
         .flex_col()
-        .bg(theme::semantic().bg_surface)
+        .rounded(px(8.0))
+        .border_1()
+        .border_color(glass::divider(dark))
+        .bg(glass::inset(dark))
+        .overflow_hidden()
         .child(
             div()
                 .id("kv-table-header")
-                .h(px(26.0))
-                .px(px(8.0))
+                .h(px(28.0))
+                .px(px(10.0))
                 .border_b_1()
-                .border_color(ui::border_light())
-                .bg(theme::semantic().bg_subtle)
+                .border_color(glass::divider(dark))
+                .bg(glass::bar(dark))
                 .flex()
                 .items_center()
-                .gap(px(6.0))
+                .gap(px(8.0))
                 .text_size(px(10.0))
                 .text_color(ui::text_tertiary())
-                .child(div().w(px(28.0)).child("启用"))
-                .child(div().flex_1().child("键"))
-                .child(div().flex_1().child("值"))
+                .child(div().w(px(24.0)))
+                .child(div().flex_1().min_w(px(0.0)).child("key"))
+                .child(div().flex_1().min_w(px(0.0)).child("value"))
+                .when(show_schema_columns, |header| {
+                    header
+                        .child(div().w(px(108.0)).flex_none().child("type"))
+                        .child(div().flex_1().min_w(px(0.0)).child("desc"))
+                })
                 .child(div().w(px(24.0))),
         )
         .children(rows.into_iter().enumerate().map(move |(i, row)| {
             let enabled = row.enabled;
             let key_input = row.key.clone();
             let value_input = row.value.clone();
+            let type_input = row.value_type.clone();
+            let desc_input = row.description.clone();
             let toggle_view = view.clone();
             let delete_view = view.clone();
 
             div()
                 .id(("kv-row", i))
-                .min_h(px(34.0))
-                .px(px(8.0))
-                .py(px(3.0))
+                .min_h(px(38.0))
+                .px(px(10.0))
+                .py(px(4.0))
                 .border_b_1()
-                .border_color(ui::border_light())
-                .hover(|s| s.bg(theme::rgba_with_alpha(theme::semantic().bg_subtle, 0.5)))
+                .border_color(glass::divider(dark))
+                .hover(move |s| s.bg(glass::hover_bg(dark)))
                 .flex()
                 .items_center()
-                .gap(px(6.0))
+                .gap(px(8.0))
                 .child(
-                    div()
-                        .w(px(28.0))
-                        .flex()
-                        .justify_center()
-                        .child(
-                            div()
-                                .id(("kv-checkbox", i))
-                                .w(px(14.0))
-                                .h(px(14.0))
-                                .rounded(px(3.0))
-                                .border_1()
-                                .border_color(if enabled {
-                                    theme::semantic().primary.into()
-                                } else {
-                                    ui::border_light()
-                                })
-                                .bg(if enabled {
-                                    theme::rgba_with_alpha(theme::semantic().primary, 0.14)
-                                } else {
-                                    theme::semantic().bg_surface.into()
-                                })
-                                .text_size(px(9.0))
-                                .text_color(if enabled {
-                                    theme::semantic().primary.into()
-                                } else {
-                                    hsla(0.0, 0.0, 0.0, 0.0)
-                                })
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .cursor_pointer()
-                                .child(if enabled { "✓" } else { "" })
-                                .on_click(move |_, _, cx| {
-                                    toggle_view.update(cx, |view, cx| {
-                                        if let Some(editor) = view.kv_editor_mut(tab) {
-                                            editor.toggle(i);
-                                        }
-                                        view.sync_models(cx);
-                                        view.persist_current_tab_state(cx);
-                                    });
-                                }),
-                        ),
+                    div().w(px(24.0)).flex().justify_center().child(
+                        div()
+                            .id(("kv-checkbox", i))
+                            .w(px(13.0))
+                            .h(px(13.0))
+                            .rounded(px(4.0))
+                            .border_1()
+                            .border_color(if enabled {
+                                theme::rgba_with_alpha(api_accent(), 0.55)
+                            } else {
+                                glass::divider(dark)
+                            })
+                            .bg(if enabled {
+                                theme::rgba_with_alpha(api_accent(), 0.11)
+                            } else {
+                                transparent_surface()
+                            })
+                            .text_size(px(9.0))
+                            .text_color(if enabled {
+                                api_accent().into()
+                            } else {
+                                hsla(0.0, 0.0, 0.0, 0.0)
+                            })
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor_pointer()
+                            .child(if enabled { "✓" } else { "" })
+                            .on_click(move |_, _, cx| {
+                                toggle_view.update(cx, |view, cx| {
+                                    if let Some(editor) = view.kv_editor_mut(tab) {
+                                        editor.toggle(i);
+                                    }
+                                    view.sync_models(cx);
+                                    view.persist_current_tab_state(cx);
+                                });
+                            }),
+                    ),
                 )
-                .child(kv_cell(key_input, enabled))
-                .child(kv_cell(value_input, enabled))
+                .child(kv_cell(key_input, enabled, dark))
+                .child(kv_cell(value_input, enabled, dark))
+                .when(show_schema_columns, |row| {
+                    row.child(kv_cell_fixed(type_input, enabled, dark, 108.0))
+                        .child(kv_cell(desc_input, enabled, dark))
+                })
                 .child(
                     Button::new(("kv-del", i))
                         .ghost()
@@ -4615,7 +5091,7 @@ fn kv_editor_table(
                 )
         }))
         .child(
-            div().px(px(8.0)).py(px(6.0)).child(
+            div().px(px(10.0)).py(px(7.0)).child(
                 Button::new("kv-add-row")
                     .ghost()
                     .icon(IconName::Plus)
@@ -4635,14 +5111,24 @@ fn kv_editor_table(
 
 /// A single editable cell wrapping a key/value `TextInput`. Dimmed when the
 /// row is disabled.
-fn kv_cell(input: Entity<TextInput>, enabled: bool) -> impl IntoElement {
+fn kv_cell(input: Entity<TextInput>, enabled: bool, dark: bool) -> gpui::Div {
+    kv_cell_base(input, enabled, dark).flex_1()
+}
+
+fn kv_cell_fixed(input: Entity<TextInput>, enabled: bool, dark: bool, width: f32) -> gpui::Div {
+    kv_cell_base(input, enabled, dark).w(px(width)).flex_none()
+}
+
+fn kv_cell_base(input: Entity<TextInput>, enabled: bool, dark: bool) -> gpui::Div {
     div()
-        .flex_1()
         .min_w(px(0.0))
-        .rounded(px(4.0))
+        .rounded(px(6.0))
         .border_1()
-        .border_color(ui::border_light())
-        .bg(theme::semantic().bg_subtle_2)
+        .border_color(glass::divider(dark))
+        .bg(theme::rgba_with_alpha(
+            theme::semantic().bg_surface,
+            if enabled { 0.36 } else { 0.18 },
+        ))
         .overflow_hidden()
         .when(!enabled, |cell| cell.opacity(0.5))
         .child(input)
@@ -4695,6 +5181,7 @@ mod tests {
                 enabled: false,
                 key: "b".into(),
                 value: "2".into(),
+                value_type: String::new(),
                 description: String::new(),
             },
         ];
@@ -4709,6 +5196,7 @@ mod tests {
                 enabled: false,
                 key: "limit".into(),
                 value: "10".into(),
+                value_type: String::new(),
                 description: String::new(),
             },
             KeyValueRow::new("sort", "desc"),
@@ -4720,6 +5208,25 @@ mod tests {
             assert_eq!(a.key, b.key);
             assert_eq!(a.value, b.value);
         }
+    }
+
+    #[test]
+    fn rows_text_roundtrip_preserves_type_and_description() {
+        let original = vec![KeyValueRow {
+            enabled: true,
+            key: "page".into(),
+            value: "1".into(),
+            value_type: "number".into(),
+            description: "页码".into(),
+        }];
+
+        let text = format_rows(&original);
+        assert_eq!(text, "page=1\tnumber\t页码");
+
+        let restored = parse_rows(&text);
+        assert_eq!(restored.len(), 1);
+        assert_eq!(restored[0].value_type, "number");
+        assert_eq!(restored[0].description, "页码");
     }
 
     #[test]
@@ -4751,5 +5258,143 @@ mod tests {
         assert!(is_binary_content_type("video/mp4"));
         assert!(!is_binary_content_type("application/json"));
         assert!(!is_binary_content_type("text/plain"));
+    }
+
+    #[test]
+    fn open_tab_matching_uses_request_identity() {
+        let tab = OpenTab::with_id(2, "tab-existing".into(), "node-a".into());
+        assert!(tab.matches_request_index(2));
+        assert!(!tab.matches_request_index(3));
+    }
+
+    #[test]
+    fn open_tab_matching_uses_scenario_identity() {
+        let tab = OpenTab::new_scenario_with_node(4, 1, "case-1".into());
+        assert!(tab.matches_scenario_index(4, 1));
+        assert!(!tab.matches_scenario_index(4, 2));
+        assert!(!tab.matches_scenario_index(3, 1));
+    }
+
+    #[test]
+    fn persisted_endpoint_tab_restores_by_node_id() {
+        let groups = vec![ApiGroup {
+            id: None,
+            name: "默认".into(),
+            requests: vec![
+                ApiRequest {
+                    node_id: "node-a".into(),
+                    title: "A".into(),
+                    method: HttpMethod::Get,
+                    path: "/same".into(),
+                    params: Vec::new(),
+                    path_rows: Vec::new(),
+                    body: String::new(),
+                    body_mode: BodyMode::None,
+                    headers: Vec::new(),
+                    cookies: Vec::new(),
+                    auth: Vec::new(),
+                    pre_ops: String::new(),
+                    post_ops: String::new(),
+                    scenarios: Vec::new(),
+                },
+                ApiRequest {
+                    node_id: "node-b".into(),
+                    title: "B".into(),
+                    method: HttpMethod::Get,
+                    path: "/same".into(),
+                    params: Vec::new(),
+                    path_rows: Vec::new(),
+                    body: String::new(),
+                    body_mode: BodyMode::None,
+                    headers: Vec::new(),
+                    cookies: Vec::new(),
+                    auth: Vec::new(),
+                    pre_ops: String::new(),
+                    post_ops: String::new(),
+                    scenarios: Vec::new(),
+                },
+            ],
+        }];
+        let tab = crate::model::HttpTab {
+            id: "tab-b".into(),
+            method: "GET".into(),
+            url: "/same".into(),
+            node_id: "node-b".into(),
+            ..empty_http_tab()
+        };
+
+        let restored = persisted_tab_to_open_tab(&groups, &tab).expect("tab restored");
+        assert!(matches!(restored, OpenTab::Request { index: 1, .. }));
+        assert_eq!(restored.fallback_node_id(), "node-b");
+    }
+
+    #[test]
+    fn persisted_case_tab_restores_as_scenario() {
+        let groups = vec![ApiGroup {
+            id: None,
+            name: "默认".into(),
+            requests: vec![ApiRequest {
+                node_id: "node-parent".into(),
+                title: "Parent".into(),
+                method: HttpMethod::Post,
+                path: "/login".into(),
+                params: Vec::new(),
+                path_rows: Vec::new(),
+                body: String::new(),
+                body_mode: BodyMode::None,
+                headers: Vec::new(),
+                cookies: Vec::new(),
+                auth: Vec::new(),
+                pre_ops: String::new(),
+                post_ops: String::new(),
+                scenarios: vec![ApiScenario {
+                    node_id: "case-wrong-password".into(),
+                    name: "错误密码".into(),
+                    status: ScenarioStatus::Pending,
+                    request: None,
+                }],
+            }],
+        }];
+        let tab = crate::model::HttpTab {
+            id: "tab-case".into(),
+            method: "POST".into(),
+            url: "/login".into(),
+            node_id: "case-wrong-password".into(),
+            ..empty_http_tab()
+        };
+
+        let restored = persisted_tab_to_open_tab(&groups, &tab).expect("tab restored");
+        assert!(matches!(
+            restored,
+            OpenTab::Scenario {
+                request_index: 0,
+                scenario_index: 0,
+                ..
+            }
+        ));
+        assert_eq!(restored.fallback_node_id(), "case-wrong-password");
+    }
+
+    fn empty_http_tab() -> crate::model::HttpTab {
+        crate::model::HttpTab {
+            id: String::new(),
+            name: String::new(),
+            method: String::new(),
+            url: String::new(),
+            request_mode: String::new(),
+            body_mode: String::new(),
+            auth_type: String::new(),
+            auth_value: String::new(),
+            headers_text: String::new(),
+            cookies_text: String::new(),
+            body_text: String::new(),
+            params_text: String::new(),
+            path_params_text: String::new(),
+            pre_ops_text: String::new(),
+            post_ops_text: String::new(),
+            node_id: String::new(),
+            active_request_tab: 0,
+            updated_at: String::new(),
+        }
     }
 }

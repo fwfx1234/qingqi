@@ -209,6 +209,8 @@ pub struct KeyValueRow {
     pub key: String,
     pub value: String,
     #[serde(default)]
+    pub value_type: String,
+    #[serde(default)]
     pub description: String,
 }
 
@@ -218,6 +220,7 @@ impl KeyValueRow {
             enabled: true,
             key: key.into(),
             value: value.into(),
+            value_type: String::new(),
             description: String::new(),
         }
     }
@@ -225,8 +228,12 @@ impl KeyValueRow {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ApiScenario {
+    #[serde(default)]
+    pub node_id: String,
     pub name: String,
     pub status: ScenarioStatus,
+    #[serde(default)]
+    pub request: Option<Box<ApiRequest>>,
 }
 
 // ── Script management ──

@@ -166,8 +166,9 @@ impl DownloadManagerView {
 
     fn ensure_inputs(&mut self, cx: &mut Context<Self>) {
         if self.url_input_entity.is_none() {
+            let current_text = self.url_text.clone();
             let input = cx.new(|cx| {
-                let mut input = TextInput::new(cx, "输入下载链接...", "");
+                let mut input = TextInput::new(cx, "输入下载链接...", current_text);
                 input.set_chrome(false, cx);
                 input.set_monospace(true, cx);
                 input.set_style(
@@ -348,6 +349,19 @@ impl DownloadManagerView {
         }
     }
 
+    pub fn import_launch_input(&mut self, text: &str, cx: &mut Context<Self>) {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        self.set_url_input_text(trimmed.to_string(), cx);
+        if super::model::extract_urls_from_text(trimmed).is_empty() {
+            self.message = String::from("未识别到有效 HTTP/HTTPS 链接");
+        } else {
+            self.add_download(cx);
+        }
+    }
+
     pub fn add_download(&mut self, cx: &mut Context<Self>) {
         let text = self.url_text.trim().to_string();
         if text.is_empty() {
@@ -400,17 +414,23 @@ impl DownloadManagerView {
         }
     }
 
-    pub fn paste_and_add(&mut self, cx: &Context<Self>) {
+    pub fn paste_and_add(&mut self, cx: &mut Context<Self>) {
         let text = qingqi_platform::clipboard::read_text(cx).unwrap_or_default();
         let trimmed = text.trim();
         if trimmed.is_empty() {
             self.message = String::from("剪贴板为空");
             return;
         }
-        if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-            self.url_text = trimmed.to_string();
-        } else {
+        if super::model::extract_urls_from_text(trimmed).is_empty() {
             self.message = String::from("剪贴板内容不是有效链接");
+        } else {
+            self.message = String::from("已粘贴链接");
+        }
+        self.url_text = trimmed.to_string();
+        if let Some(input) = self.url_input_entity.as_ref() {
+            input.update(cx, |input, input_cx| {
+                input.set_text(trimmed.to_string(), input_cx)
+            });
         }
     }
 

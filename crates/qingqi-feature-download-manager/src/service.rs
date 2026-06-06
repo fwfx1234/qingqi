@@ -43,7 +43,7 @@ pub struct DownloadService {
     revision: Arc<AtomicU64>,
     settings: Arc<Mutex<DownloadSettings>>,
     /// 复用的 HTTP 客户端，设置变更时重建以节省 TLS 握手和连接建立开销
-    client: Mutex<reqwest::blocking::Client>,
+    client: Arc<Mutex<reqwest::blocking::Client>>,
 }
 
 impl DownloadService {
@@ -56,7 +56,7 @@ impl DownloadService {
             active: Arc::new(Mutex::new(HashMap::new())),
             revision: Arc::new(AtomicU64::new(0)),
             settings: Arc::new(Mutex::new(settings)),
-            client: Mutex::new(client),
+            client: Arc::new(Mutex::new(client)),
         }
     }
 
@@ -73,9 +73,14 @@ impl DownloadService {
         builder.build().expect("构建 HTTP 客户端失败")
     }
 
-    /// 获取当前复用的 HTTP 客户端克隆（内部使用 Arc，克隆开销极低）
-    pub(crate) fn http_client(&self) -> reqwest::blocking::Client {
-        self.client.lock().unwrap().clone()
+    fn runtime(&self) -> DownloadRuntime {
+        DownloadRuntime {
+            store: Arc::clone(&self.store),
+            active: Arc::clone(&self.active),
+            revision: Arc::clone(&self.revision),
+            settings: Arc::clone(&self.settings),
+            client: Arc::clone(&self.client),
+        }
     }
 
     fn load_settings_from_store(store: &DownloadStore, save_dir: &Path) -> DownloadSettings {
@@ -292,17 +297,52 @@ impl DownloadService {
     }
 
     pub fn start_download(&self, task_id: &str) -> Result<()> {
-        // Enforce max concurrent limit
-        {
-            let active_map = lock_or_recover(&self.active, "download-active");
-            let settings = lock_or_recover(&self.settings, "download-settings");
-            if active_map.len() >= settings.max_concurrent {
-                return Err(anyhow!(
-                    "已达最大并发数 {}，请等待",
-                    settings.max_concurrent
-                ));
+        self.runtime().start_download(task_id)
+    }
+}
+
+#[derive(Clone)]
+struct DownloadRuntime {
+    store: Arc<Mutex<DownloadStore>>,
+    active: Arc<Mutex<HashMap<String, ActiveDownload>>>,
+    revision: Arc<AtomicU64>,
+    settings: Arc<Mutex<DownloadSettings>>,
+    client: Arc<Mutex<reqwest::blocking::Client>>,
+}
+
+impl DownloadRuntime {
+    fn http_client(&self) -> reqwest::blocking::Client {
+        lock_or_recover(&self.client, "download-client").clone()
+    }
+
+    fn schedule_pending_downloads(&self) {
+        loop {
+            let next_task = {
+                let store = lock_or_recover(&self.store, "download-store");
+                match store.list_tasks(Some(TaskStatus::Pending)) {
+                    Ok(mut pending) => pending.pop(),
+                    Err(error) => {
+                        tracing::warn!(error = %error, "failed to list pending downloads");
+                        return;
+                    }
+                }
+            };
+
+            let Some(task) = next_task else {
+                return;
+            };
+
+            if let Err(error) = self.start_download(&task.id) {
+                let message = error.to_string();
+                if message.contains("已达最大并发数") {
+                    return;
+                }
+                tracing::warn!(task_id = %task.id, error = %error, "failed to schedule pending download");
             }
         }
+    }
+
+    fn start_download(&self, task_id: &str) -> Result<()> {
         let task = {
             let store = lock_or_recover(&self.store, "download-store");
             store
@@ -310,7 +350,9 @@ impl DownloadService {
                 .ok_or_else(|| anyhow!("任务不存在"))?
         };
 
-        if task.status == TaskStatus::Downloading {
+        if task.status == TaskStatus::Downloading
+            && lock_or_recover(&self.active, "download-active").contains_key(task_id)
+        {
             return Ok(());
         }
 
@@ -322,9 +364,16 @@ impl DownloadService {
         let pause_flag = Arc::new(AtomicBool::new(false));
         let progress = Arc::new(AtomicU64::new(task.downloaded));
         let speed = Arc::new(Mutex::new(0.0));
+        let max_concurrent = lock_or_recover(&self.settings, "download-settings").max_concurrent;
 
         {
             let mut active = lock_or_recover(&self.active, "download-active");
+            if active.contains_key(task_id) {
+                return Ok(());
+            }
+            if active.len() >= max_concurrent {
+                return Err(anyhow!("已达最大并发数 {}，请等待", max_concurrent));
+            }
             active.insert(
                 task_id.to_string(),
                 ActiveDownload {
@@ -336,17 +385,22 @@ impl DownloadService {
             );
         }
 
-        self.store
-            .lock()
-            .unwrap()
-            .update_status(task_id, TaskStatus::Downloading, "")?;
-        self.bump_revision();
+        if let Err(error) = lock_or_recover(&self.store, "download-store").update_status(
+            task_id,
+            TaskStatus::Downloading,
+            "",
+        ) {
+            lock_or_recover(&self.active, "download-active").remove(task_id);
+            return Err(error);
+        }
+        self.revision.fetch_add(1, Ordering::SeqCst);
 
         let store = Arc::clone(&self.store);
         let active_map = Arc::clone(&self.active);
         let revision = Arc::clone(&self.revision);
         let settings = Arc::clone(&self.settings);
         let client = self.http_client();
+        let scheduler = self.clone();
         let task_id = task_id.to_string();
         let url = task.url.clone();
         let save_path = task.save_path.clone();
@@ -374,6 +428,7 @@ impl DownloadService {
                 Ok(()) => {
                     revision.fetch_add(1, Ordering::SeqCst);
                     tracing::info!(task_id, file_name, "download completed");
+                    scheduler.schedule_pending_downloads();
                 }
                 Err(DownloadError::Cancelled) => {
                     log_error!(
@@ -387,6 +442,7 @@ impl DownloadService {
                     );
                     revision.fetch_add(1, Ordering::SeqCst);
                     tracing::info!(task_id, "download cancelled");
+                    scheduler.schedule_pending_downloads();
                 }
                 Err(DownloadError::Paused) => {
                     let downloaded = progress.load(Ordering::Relaxed);
@@ -400,6 +456,7 @@ impl DownloadService {
                     );
                     revision.fetch_add(1, Ordering::SeqCst);
                     tracing::info!(task_id, downloaded, "download paused");
+                    scheduler.schedule_pending_downloads();
                 }
                 Err(DownloadError::Other(err)) => {
                     log_error!(
@@ -413,13 +470,16 @@ impl DownloadService {
                     );
                     revision.fetch_add(1, Ordering::SeqCst);
                     tracing::warn!(task_id, error = %err, "download failed");
+                    scheduler.schedule_pending_downloads();
                 }
             }
         });
 
         Ok(())
     }
+}
 
+impl DownloadService {
     pub fn pause_task(&self, task_id: &str) -> Result<()> {
         let active = lock_or_recover(&self.active, "download-active");
         if let Some(dl) = active.get(task_id) {
@@ -982,4 +1042,157 @@ fn now_label() -> String {
         .unwrap_or_else(|_| OffsetDateTime::now_utc())
         .format(&fmt)
         .unwrap_or_else(|_| String::from("1970-01-01 00:00:00"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use qingqi_plugin::{
+        database::{DatabaseService, DatabaseSpec, feature_database_key},
+        storage::AppPaths,
+    };
+    use std::{
+        env, fs,
+        io::{ErrorKind, Read, Write},
+        net::TcpListener,
+        sync::{
+            Arc,
+            atomic::{AtomicU64, Ordering},
+            mpsc,
+        },
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn temp_root(prefix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or_default();
+        let suffix = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let root = env::temp_dir().join(format!("{prefix}-{nanos}-{suffix}"));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    fn make_service() -> (DownloadService, PathBuf) {
+        let root = temp_root("qingqi-download-service");
+        let database = Arc::new(DatabaseService::new(AppPaths::for_test(root.clone())));
+        let key = feature_database_key(super::super::manifest::PLUGIN_ID, "tasks");
+        database
+            .register_database(DatabaseSpec::path(key.clone(), root.join("tasks.db")))
+            .unwrap();
+        let store = DownloadStore::open(database, &key).unwrap();
+        let service = DownloadService::new(store, root.join("downloads"));
+        (service, root)
+    }
+
+    fn wait_until(timeout: Duration, mut predicate: impl FnMut() -> bool) -> bool {
+        let started = Instant::now();
+        while started.elapsed() < timeout {
+            if predicate() {
+                return true;
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+        predicate()
+    }
+
+    fn accept_with_timeout(listener: &TcpListener) -> Option<std::net::TcpStream> {
+        let started = Instant::now();
+        loop {
+            match listener.accept() {
+                Ok((stream, _)) => return Some(stream),
+                Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                    if started.elapsed() > Duration::from_secs(5) {
+                        return None;
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(_) => return None,
+            }
+        }
+    }
+
+    fn spawn_two_response_server() -> (String, mpsc::Sender<()>, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let (release_tx, release_rx) = mpsc::channel();
+        let handle = thread::spawn(move || {
+            for index in 0..2 {
+                let Some(mut stream) = accept_with_timeout(&listener) else {
+                    return;
+                };
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
+                let mut buffer = [0; 1024];
+                let _ = stream.read(&mut buffer);
+                if index == 0 {
+                    let _ = release_rx.recv_timeout(Duration::from_secs(5));
+                }
+                let body = format!("download-{index}");
+                let headers = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = stream.write_all(headers.as_bytes());
+                let _ = stream.write_all(body.as_bytes());
+            }
+        });
+        (base_url, release_tx, handle)
+    }
+
+    fn task_status(service: &DownloadService, task_id: &str) -> Option<TaskStatus> {
+        service
+            .tasks_snapshot()
+            .into_iter()
+            .find(|task| task.id == task_id)
+            .map(|task| task.status)
+    }
+
+    #[test]
+    fn schedules_pending_download_after_slot_frees() {
+        let (service, root) = make_service();
+        service.set_max_concurrent(1).unwrap();
+        let (base_url, release_first, server) = spawn_two_response_server();
+
+        let first = service.add_task(&format!("{base_url}/first.bin")).unwrap();
+        let second = service.add_task(&format!("{base_url}/second.bin")).unwrap();
+
+        service.start_download(&first.id).unwrap();
+        assert!(wait_until(Duration::from_secs(1), || service
+            .active_count()
+            == 1));
+
+        let queued = service.start_download(&second.id).unwrap_err();
+        assert!(queued.to_string().contains("已达最大并发数"));
+        assert_eq!(task_status(&service, &second.id), Some(TaskStatus::Pending));
+
+        release_first.send(()).unwrap();
+        assert!(
+            wait_until(Duration::from_secs(5), || {
+                let tasks = service.tasks_snapshot();
+                tasks
+                    .iter()
+                    .filter(|task| task.status == TaskStatus::Completed)
+                    .count()
+                    == 2
+                    && service.active_count() == 0
+            }),
+            "pending download was not scheduled after the active slot freed"
+        );
+
+        server.join().unwrap();
+        assert_eq!(
+            task_status(&service, &first.id),
+            Some(TaskStatus::Completed)
+        );
+        assert_eq!(
+            task_status(&service, &second.id),
+            Some(TaskStatus::Completed)
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
 }

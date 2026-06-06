@@ -5751,6 +5751,7 @@ dependencies = [
  "gpui",
  "qingqi-plugin",
  "rusqlite",
+ "serde_json",
  "time",
  "tracing",
 ]
@@ -5885,10 +5886,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "gpui",
+ "gpui-component",
  "http-body-util",
  "hudsucker",
  "hyper",
  "hyper-util",
+ "qingqi-platform",
  "qingqi-plugin",
  "qingqi-ui",
  "rcgen",

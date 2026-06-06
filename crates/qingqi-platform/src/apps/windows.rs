@@ -50,25 +50,9 @@ struct ShortcutMetadata {
 pub(super) fn scan_application_metadata() -> Vec<InstalledApp> {
     let _com = ComApartment::init();
     let mut apps = Vec::new();
-    let mut seen = HashSet::new();
 
-    for shortcut in collect_shortcuts() {
-        let metadata = shortcut_metadata(&shortcut);
-        if should_skip_shortcut(&metadata) {
-            tracing::debug!(path = %shortcut.display(), "skip start menu shortcut");
-            continue;
-        }
-
-        let dedupe_key = metadata
-            .target_path
-            .as_ref()
-            .unwrap_or(&metadata.shortcut_path)
-            .to_string_lossy()
-            .to_lowercase();
-        if dedupe_key.is_empty() || !seen.insert(dedupe_key.clone()) {
-            continue;
-        }
-
+    for metadata in collect_indexable_shortcuts() {
+        let dedupe_key = shortcut_dedupe_key(&metadata);
         let target_stem = metadata
             .target_path
             .as_ref()
@@ -110,18 +94,9 @@ pub(super) fn scan_application_metadata() -> Vec<InstalledApp> {
 
 pub(super) fn scan_application_paths() -> Vec<String> {
     let _com = ComApartment::init();
-    let mut paths = collect_shortcuts()
+    let mut paths = collect_indexable_shortcuts()
         .into_iter()
-        .filter_map(|shortcut| {
-            let metadata = shortcut_metadata(&shortcut);
-            if should_skip_shortcut(&metadata) {
-                None
-            } else {
-                metadata.shortcut_path.to_str().map(ToOwned::to_owned)
-            }
-        })
-        .collect::<HashSet<_>>()
-        .into_iter()
+        .map(|metadata| metadata.shortcut_path.to_string_lossy().to_string())
         .collect::<Vec<_>>();
     paths.sort();
     paths
@@ -190,6 +165,24 @@ fn collect_shortcuts() -> Vec<PathBuf> {
     }
     shortcuts.sort();
     shortcuts.dedup();
+    shortcuts
+}
+
+fn collect_indexable_shortcuts() -> Vec<ShortcutMetadata> {
+    let mut shortcuts = Vec::new();
+    let mut seen = HashSet::new();
+
+    for shortcut in collect_shortcuts() {
+        let metadata = shortcut_metadata(&shortcut);
+        if should_skip_shortcut(&metadata) {
+            tracing::debug!(path = %shortcut.display(), "skip start menu shortcut");
+            continue;
+        }
+        if should_index_shortcut(&metadata, &mut seen) {
+            shortcuts.push(metadata);
+        }
+    }
+
     shortcuts
 }
 
@@ -302,6 +295,20 @@ fn should_skip_shortcut(metadata: &ShortcutMetadata) -> bool {
         .target_path
         .as_ref()
         .is_some_and(|path| path.to_string_lossy().trim().is_empty())
+}
+
+fn should_index_shortcut(metadata: &ShortcutMetadata, seen: &mut HashSet<String>) -> bool {
+    let dedupe_key = shortcut_dedupe_key(metadata);
+    !dedupe_key.is_empty() && seen.insert(dedupe_key)
+}
+
+fn shortcut_dedupe_key(metadata: &ShortcutMetadata) -> String {
+    metadata
+        .target_path
+        .as_ref()
+        .unwrap_or(&metadata.shortcut_path)
+        .to_string_lossy()
+        .to_lowercase()
 }
 
 fn extract_icon(metadata: &ShortcutMetadata) -> Option<String> {
@@ -514,5 +521,44 @@ impl Drop for ComApartment {
         if self.initialized {
             unsafe { CoUninitialize() };
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ShortcutMetadata, shortcut_dedupe_key, should_index_shortcut};
+    use std::{collections::HashSet, path::PathBuf};
+
+    fn shortcut(name: &str, shortcut_path: &str, target_path: Option<&str>) -> ShortcutMetadata {
+        ShortcutMetadata {
+            shortcut_path: PathBuf::from(shortcut_path),
+            name: name.to_string(),
+            target_path: target_path.map(PathBuf::from),
+            icon_path: None,
+            icon_index: 0,
+        }
+    }
+
+    #[test]
+    fn shortcut_dedupe_key_prefers_target_path() {
+        let metadata = shortcut("Tool", r"C:\Menu\Tool.lnk", Some(r"C:\Apps\Tool.exe"));
+
+        assert_eq!(shortcut_dedupe_key(&metadata), r"c:\apps\tool.exe");
+    }
+
+    #[test]
+    fn should_index_shortcut_rejects_duplicate_targets() {
+        let first = shortcut("Tool", r"C:\Menu\Tool.lnk", Some(r"C:\Apps\Tool.exe"));
+        let duplicate = shortcut(
+            "Tool Stable",
+            r"C:\Menu\Tool Stable.lnk",
+            Some(r"c:\apps\tool.exe"),
+        );
+        let fallback = shortcut("No Target", r"C:\Menu\No Target.lnk", None);
+        let mut seen = HashSet::new();
+
+        assert!(should_index_shortcut(&first, &mut seen));
+        assert!(!should_index_shortcut(&duplicate, &mut seen));
+        assert!(should_index_shortcut(&fallback, &mut seen));
     }
 }

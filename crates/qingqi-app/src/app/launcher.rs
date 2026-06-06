@@ -30,7 +30,9 @@ use crate::{
 };
 use qingqi_core::command_usage::CommandUsage;
 use qingqi_core::plugin::{InlineView, ListView, PluginListItem, PluginManager};
-use qingqi_plugin::command::{Activation, Command, CommandKind, MatchScore, build_launcher_context};
+use qingqi_plugin::command::{
+    Activation, Command, CommandKind, MatchScore, build_launcher_context,
+};
 use qingqi_plugin::events::{AppEventBus, AppEventKind};
 use qingqi_plugin::plugin_spec::{PluginStatus, ViewMode, WindowSize};
 
@@ -108,19 +110,20 @@ impl Launcher {
         HEADER_HEIGHT + Self::results_height_for_count(results_len)
     }
 
+    pub fn default_window_height() -> f32 {
+        HEADER_HEIGHT + RESULTS_MAX_HEIGHT
+    }
+
     pub fn new(
         plugin_manager: Arc<Mutex<PluginManager>>,
         app_catalog: Arc<AppCatalog>,
-        cx: &App,
+        _cx: &App,
     ) -> Self {
-        let (all_commands, plugin_visuals, boost_map, usage) = {
-            let mut manager = plugin_manager.lock().unwrap_or_else(|e| {
+        let (plugin_commands, plugin_visuals, usage) = {
+            let manager = plugin_manager.lock().unwrap_or_else(|e| {
                 tracing::error!("plugin manager poisoned, recovering");
                 e.into_inner()
             });
-            let boost_map = Self::latest_boost_map(cx, &*manager);
-            let mut all_commands = app_catalog.search("", COMMAND_SEARCH_LIMIT);
-            all_commands.extend(manager.commands_with_clipboard(&boost_map));
             let plugin_visuals = manager
                 .manifests()
                 .into_iter()
@@ -135,8 +138,10 @@ impl Launcher {
                 })
                 .collect();
             let usage = manager.usage_map();
-            (all_commands, plugin_visuals, boost_map, usage)
+            (manager.catalog_commands(), plugin_visuals, usage)
         };
+        let mut all_commands = app_catalog.search("", COMMAND_SEARCH_LIMIT);
+        all_commands.extend(plugin_commands);
         let results = Launcher::build_default_results(&all_commands, &plugin_visuals, &usage);
         Self {
             plugin_manager,
@@ -145,7 +150,7 @@ impl Launcher {
             query_input: None,
             results,
             selected: 0,
-            clipboard_boost_map: boost_map,
+            clipboard_boost_map: HashMap::new(),
             results_visible_start: 0,
             message: String::from("搜索功能或打开应用..."),
             window_controller: None,
@@ -164,7 +169,6 @@ impl Launcher {
     }
 
     pub fn initialize_async(&mut self, events: AppEventBus, cx: &mut Context<Self>) {
-        self.refresh_clipboard_boost_map(cx);
         self.start_event_watch(events, cx);
     }
 
@@ -194,7 +198,10 @@ impl Launcher {
                                     tracing::error!("plugin manager poisoned, recovering");
                                     e.into_inner()
                                 })
-                                .invalidate_commands();
+                                .rebuild_command_catalog()
+                                .unwrap_or_else(
+                                    |error| tracing::warn!(error = %error, "command catalog rebuild failed"),
+                                );
                         }
                         launcher.refresh_results_after_commands_changed(cx);
                         cx.notify();
@@ -206,7 +213,6 @@ impl Launcher {
 
     /// 事件驱动：唤起启动器时，从 DB 读最新使用数据重建排序。
     pub fn refresh_on_show(&mut self, cx: &mut App) {
-        self.refresh_clipboard_boost_map(cx);
         self.refresh_plugin_visuals();
         let commands = self.default_commands_with_clipboard();
         let query = self.query(cx);
@@ -223,7 +229,6 @@ impl Launcher {
     }
 
     fn refresh_results_after_commands_changed(&mut self, cx: &mut Context<Self>) {
-        self.refresh_clipboard_boost_map(cx);
         let commands = self.default_commands_with_clipboard();
 
         let query = self.query(cx);
@@ -367,13 +372,12 @@ impl Launcher {
             .unwrap_or_default()
     }
 
-    fn perform_search_for_query(&mut self, query: String, cx: &App) {
+    fn perform_search_for_query(&mut self, query: String, _cx: &App) {
         self.last_query = query.clone();
         self.pending_query = query.clone();
         let query_empty = query.trim().is_empty();
 
         if query_empty {
-            self.refresh_clipboard_boost_map(cx);
             let commands = self.default_commands_with_clipboard();
             self.results = self.default_results(&commands, &self.plugin_visuals);
             self.selected = self.selected.min(self.results.len().saturating_sub(1));
@@ -389,24 +393,6 @@ impl Launcher {
         self.results_visible_start = visible_start_for_selection(self.selected);
         self.results_scroll
             .scroll_to_item(self.selected, ScrollStrategy::Top);
-    }
-
-    fn latest_boost_map(cx: &App, plugin_manager: &PluginManager) -> HashMap<String, i32> {
-        let payload = current_payload(cx);
-        match payload {
-            Some(p) => plugin_manager.build_clipboard_boost_map(&p),
-            None => HashMap::new(),
-        }
-    }
-
-    fn refresh_clipboard_boost_map(&mut self, cx: &App) {
-        self.clipboard_boost_map = Self::latest_boost_map(
-            cx,
-            &*self.plugin_manager.lock().unwrap_or_else(|e| {
-                tracing::error!("plugin manager poisoned, recovering");
-                e.into_inner()
-            }),
-        );
     }
 
     fn refresh_plugin_visuals(&mut self) {
@@ -436,7 +422,7 @@ impl Launcher {
                     tracing::error!("plugin manager poisoned, recovering");
                     e.into_inner()
                 })
-                .commands_with_clipboard(&self.clipboard_boost_map),
+                .catalog_commands(),
         );
         commands
     }
@@ -450,7 +436,7 @@ impl Launcher {
                     tracing::error!("plugin manager poisoned, recovering");
                     e.into_inner()
                 })
-                .query_commands_with_clipboard(
+                .query_catalog_commands_with_clipboard(
                     query,
                     COMMAND_SEARCH_LIMIT,
                     &self.clipboard_boost_map,
@@ -683,7 +669,7 @@ impl Launcher {
                 tracing::error!("plugin manager poisoned, recovering");
                 e.into_inner()
             })
-            .record_command_launch(&item);
+            .record_command_launch_background(&item, cx);
         let activation = item.activation.clone();
         let Activation::Open { plugin_id } = &activation else {
             if let Some(window_controller) = self.window_controller.clone() {
@@ -709,11 +695,12 @@ impl Launcher {
         match visual.map(|visual| visual.mode).unwrap_or(ViewMode::Window) {
             ViewMode::Window => {
                 if let Some(window_controller) = self.window_controller.clone() {
-                    let _ = crate::app::runtime::run_command_with_trace(
+                    let _ = crate::app::runtime::run_command_with_input_with_trace(
                         window_controller,
                         activation.clone(),
                         cx,
                         Some(trace),
+                        Some(launch_input.clone()),
                     );
                 }
                 log_launcher_step(
@@ -755,7 +742,11 @@ impl Launcher {
                             error = %error,
                             "open inline plugin failed"
                         );
-                        self.run_command(item.activation, cx);
+                        self.run_command_with_input(
+                            item.activation,
+                            Some(launch_input.clone()),
+                            cx,
+                        );
                         self.close_window_app(window, cx);
                     }
                 }
@@ -800,7 +791,11 @@ impl Launcher {
                             error = %error,
                             "open list plugin failed"
                         );
-                        self.run_command(item.activation, cx);
+                        self.run_command_with_input(
+                            item.activation,
+                            Some(launch_input.clone()),
+                            cx,
+                        );
                         self.close_window_app(window, cx);
                     }
                 }
@@ -826,9 +821,19 @@ impl Launcher {
         }
     }
 
-    fn run_command(&mut self, activation: Activation, cx: &mut App) -> Option<String> {
+    fn run_command_with_input(
+        &mut self,
+        activation: Activation,
+        launch_input: Option<String>,
+        cx: &mut App,
+    ) -> Option<String> {
         if let Some(window_controller) = self.window_controller.clone() {
-            crate::app::runtime::run_command(window_controller, activation, cx)
+            crate::app::runtime::run_command_with_input(
+                window_controller,
+                activation,
+                cx,
+                launch_input,
+            )
         } else {
             tracing::warn!("launcher missing window controller while running command");
             None

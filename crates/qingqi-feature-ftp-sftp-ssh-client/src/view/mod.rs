@@ -1,6 +1,6 @@
 use std::{
     ops::Range,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -12,10 +12,10 @@ use gpui::{
     Styled, Task, Window, div, hsla, prelude::FluentBuilder, px, rgb, uniform_list,
 };
 use gpui_component::{
+    Icon, IconName, Selectable, Sizable, Size as ComponentSize,
     button::{Button, ButtonVariants},
     scroll::ScrollableElement,
     tab::{Tab, TabBar},
-    IconName, Selectable, Sizable,
 };
 use qingqi_plugin::plugin_spec::PluginAccent;
 use qingqi_ui::{
@@ -34,7 +34,7 @@ use crate::{
         TerminalCellStyle, TerminalInput, TerminalMouseButton, TerminalMouseEventKind,
         TerminalMouseModifiers, TerminalMouseScrollDirection,
     },
-    transfer::{TransferSnapshot, TransferStatus},
+    transfer::{TransferDirection, TransferSnapshot, TransferStatus},
 };
 
 mod glass;
@@ -132,6 +132,8 @@ pub struct FtpSftpSshView {
     needs_terminal_focus: bool,
     /// 传输面板展开状态
     transfer_panel_expanded: bool,
+    /// 防止系统文件对话框并发打开
+    file_dialog_task: Option<Task<()>>,
 }
 
 impl FtpSftpSshView {
@@ -156,6 +158,7 @@ impl FtpSftpSshView {
             last_terminal_revision: 0,
             needs_terminal_focus: false,
             transfer_panel_expanded: false,
+            file_dialog_task: None,
         };
         view.start_event_task(cx);
         view.reload();
@@ -411,11 +414,7 @@ impl FtpSftpSshView {
         profile_id: i64,
         _cx: &mut Context<Self>,
     ) {
-        self.profile_menu = Some(ProfileMenuState {
-            x,
-            y,
-            profile_id,
-        });
+        self.profile_menu = Some(ProfileMenuState { x, y, profile_id });
     }
 
     fn close_profile_menu(&mut self) {
@@ -478,6 +477,16 @@ impl FtpSftpSshView {
             self.notice = String::from("先选择一个连接配置");
             return;
         };
+        if let Some(existing_session) = self
+            .sessions
+            .iter()
+            .find(|session| session.profile_id == profile_id)
+            .cloned()
+        {
+            self.select_session(existing_session.session_id);
+            self.notice = format!("已切换到已有 session: {}", existing_session.title);
+            return;
+        }
         match self.runtime.open_session(profile_id) {
             Ok(session_id) => {
                 self.selected_session_id = Some(session_id);
@@ -567,15 +576,39 @@ impl FtpSftpSshView {
         self.reload();
     }
 
-    fn upload_into_current_directory(&mut self) {
-        let Some(local_paths) = rfd::FileDialog::new()
-            .set_title("选择要上传的文件")
-            .pick_files()
-        else {
-            self.notice = String::from("已取消上传");
+    fn upload_into_current_directory(&mut self, cx: &mut Context<Self>) {
+        if self.file_dialog_task.is_some() {
+            self.notice = String::from("已有文件选择器正在打开");
             return;
-        };
-        self.upload_paths_into_current_directory(local_paths);
+        }
+
+        let start_directory = self
+            .selected_session()
+            .and_then(|snapshot| dialog_directory_from_text(&snapshot.local_root));
+        self.notice = String::from("正在打开文件选择器");
+        self.file_dialog_task = Some(cx.spawn(async move |view, async_cx| {
+            let mut dialog = rfd::AsyncFileDialog::new().set_title("选择要上传的文件");
+            if let Some(directory) = start_directory {
+                dialog = dialog.set_directory(directory);
+            }
+            let picked = dialog.pick_files().await;
+            let _ = view.update(async_cx, |view, cx| {
+                view.file_dialog_task = None;
+                match picked {
+                    Some(files) => {
+                        let local_paths = files
+                            .into_iter()
+                            .map(|file| file.path().to_path_buf())
+                            .collect::<Vec<_>>();
+                        view.upload_paths_into_current_directory(local_paths);
+                    }
+                    None => {
+                        view.notice = String::from("已取消上传");
+                    }
+                }
+                cx.notify();
+            });
+        }));
     }
 
     fn upload_paths_into_current_directory(&mut self, local_paths: Vec<PathBuf>) {
@@ -628,7 +661,7 @@ impl FtpSftpSshView {
         self.reload();
     }
 
-    fn download_selected_entry(&mut self) {
+    fn download_selected_entry(&mut self, cx: &mut Context<Self>) {
         let Some(snapshot) = self.selected_session() else {
             self.notice = String::from("先打开一个 session");
             return;
@@ -637,12 +670,21 @@ impl FtpSftpSshView {
             self.notice = String::from("先选择一个远端文件");
             return;
         };
-        self.download_entry(&snapshot, &entry);
+        self.request_download_entry(snapshot, entry, cx);
     }
 
-    fn download_entry(&mut self, snapshot: &SessionSnapshot, entry: &RemoteEntry) {
+    fn request_download_entry(
+        &mut self,
+        snapshot: SessionSnapshot,
+        entry: RemoteEntry,
+        cx: &mut Context<Self>,
+    ) {
         if entry.is_dir {
             self.notice = String::from("目录暂不支持整体下载");
+            return;
+        }
+        if self.file_dialog_task.is_some() {
+            self.notice = String::from("已有文件选择器正在打开");
             return;
         }
         let default_target = match self
@@ -655,25 +697,50 @@ impl FtpSftpSshView {
                 return;
             }
         };
-        let save_target = rfd::FileDialog::new()
-            .set_title("保存远端文件")
-            .set_file_name(
-                default_target
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .unwrap_or("downloaded-file"),
-            )
-            .save_file()
-            .unwrap_or(default_target);
-
-        match self
-            .runtime
-            .download_entry(&snapshot.summary.session_id, &entry.path, &save_target)
-        {
-            Ok(local_path) => self.notice = format!("已下载到 {}", local_path.display()),
-            Err(error) => self.notice = format!("下载失败: {error}"),
-        }
-        self.reload();
+        let start_directory = default_target.parent().map(|path| path.to_path_buf());
+        let default_file_name = default_target
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("downloaded-file")
+            .to_string();
+        self.notice = String::from("正在打开保存对话框");
+        self.file_dialog_task = Some(cx.spawn(async move |view, async_cx| {
+            let mut dialog = rfd::AsyncFileDialog::new()
+                .set_title("保存远端文件")
+                .set_file_name(default_file_name);
+            if let Some(directory) = start_directory {
+                dialog = dialog.set_directory(directory);
+            }
+            let Some(save_target) = dialog
+                .save_file()
+                .await
+                .map(|file| file.path().to_path_buf())
+            else {
+                let _ = view.update(async_cx, |view, cx| {
+                    view.file_dialog_task = None;
+                    view.notice = String::from("已取消下载");
+                    cx.notify();
+                });
+                return;
+            };
+            let _ = view.update(async_cx, |view, cx| {
+                view.file_dialog_task = None;
+                match view.runtime.download_entry(
+                    &snapshot.summary.session_id,
+                    &entry.path,
+                    &save_target,
+                ) {
+                    Ok(local_path) => {
+                        view.notice = format!("已下载到 {}", local_path.display());
+                        view.reload();
+                    }
+                    Err(error) => {
+                        view.notice = format!("下载失败: {error}");
+                    }
+                }
+                cx.notify();
+            });
+        }));
     }
 
     fn edit_selected_entry(&mut self) {
@@ -909,40 +976,81 @@ impl FtpSftpSshView {
     }
 
     fn choose_private_key_path(&mut self, cx: &mut Context<Self>) {
-        let Some(editor) = self.editor_mut() else {
+        if self.file_dialog_task.is_some() {
+            self.notice = String::from("已有文件选择器正在打开");
+            return;
+        }
+        let Some(editor) = self.profile_editor.as_ref() else {
             self.notice = String::from("当前没有打开配置编辑器");
             return;
         };
-        let Some(path) = rfd::FileDialog::new().set_title("选择私钥文件").pick_file() else {
-            self.notice = String::from("已取消选择私钥");
-            return;
-        };
-        let path_string = path.display().to_string();
-        editor.draft.auth.private_key_path = path_string.clone();
-        editor
-            .private_key_path_input
-            .update(cx, |input, input_cx| input.set_text(path_string, input_cx));
-        self.notice = String::from("已更新私钥路径");
+        let current_path = editor.draft.auth.private_key_path.clone();
+        self.notice = String::from("正在打开文件选择器");
+        self.file_dialog_task = Some(cx.spawn(async move |view, async_cx| {
+            let mut dialog = rfd::AsyncFileDialog::new().set_title("选择私钥文件");
+            if let Some(directory) = dialog_directory_from_text(&current_path) {
+                dialog = dialog.set_directory(directory);
+            }
+            let picked = dialog.pick_file().await;
+            let _ = view.update(async_cx, |view, cx| {
+                view.file_dialog_task = None;
+                match picked {
+                    Some(path) => {
+                        let path_string = path.path().display().to_string();
+                        if let Some(editor) = view.profile_editor.as_mut() {
+                            editor.draft.auth.private_key_path = path_string.clone();
+                            editor.private_key_path_input.update(cx, |input, input_cx| {
+                                input.set_text(path_string, input_cx)
+                            });
+                            view.notice = String::from("已更新私钥路径");
+                        } else {
+                            view.notice = String::from("当前没有打开配置编辑器");
+                        }
+                    }
+                    None => view.notice = String::from("已取消选择私钥"),
+                }
+                cx.notify();
+            });
+        }));
     }
 
     fn choose_local_root(&mut self, cx: &mut Context<Self>) {
-        let Some(editor) = self.editor_mut() else {
+        if self.file_dialog_task.is_some() {
+            self.notice = String::from("已有文件选择器正在打开");
+            return;
+        }
+        let Some(editor) = self.profile_editor.as_ref() else {
             self.notice = String::from("当前没有打开配置编辑器");
             return;
         };
-        let Some(path) = rfd::FileDialog::new()
-            .set_title("选择默认下载目录")
-            .pick_folder()
-        else {
-            self.notice = String::from("已取消选择本地目录");
-            return;
-        };
-        let path_string = path.display().to_string();
-        editor.draft.paths.local_root = path_string.clone();
-        editor
-            .local_root_input
-            .update(cx, |input, input_cx| input.set_text(path_string, input_cx));
-        self.notice = String::from("已更新本地目录");
+        let current_path = editor.draft.paths.local_root.clone();
+        self.notice = String::from("正在打开文件选择器");
+        self.file_dialog_task = Some(cx.spawn(async move |view, async_cx| {
+            let mut dialog = rfd::AsyncFileDialog::new().set_title("选择默认下载目录");
+            if let Some(directory) = dialog_directory_from_text(&current_path) {
+                dialog = dialog.set_directory(directory);
+            }
+            let picked = dialog.pick_folder().await;
+            let _ = view.update(async_cx, |view, cx| {
+                view.file_dialog_task = None;
+                match picked {
+                    Some(path) => {
+                        let path_string = path.path().display().to_string();
+                        if let Some(editor) = view.profile_editor.as_mut() {
+                            editor.draft.paths.local_root = path_string.clone();
+                            editor.local_root_input.update(cx, |input, input_cx| {
+                                input.set_text(path_string, input_cx)
+                            });
+                            view.notice = String::from("已更新本地目录");
+                        } else {
+                            view.notice = String::from("当前没有打开配置编辑器");
+                        }
+                    }
+                    None => view.notice = String::from("已取消选择本地目录"),
+                }
+                cx.notify();
+            });
+        }));
     }
 
     fn set_editor_protocol(&mut self, protocol: RemoteProtocol, cx: &mut Context<Self>) {
@@ -1306,15 +1414,24 @@ impl Render for FtpSftpSshView {
                         view.profile_menu = None;
                     }
                     cx.stop_propagation();
+                } else if event.keystroke.key == "enter"
+                    && view.profile_editor.is_none()
+                    && view.remote_action.is_none()
+                    && view.remote_menu.is_none()
+                    && view.profile_menu.is_none()
+                    && view.selected_terminal_session_id().is_none()
+                {
+                    view.open_selected_profile();
+                    cx.stop_propagation();
                 }
             }))
             .child(
                 div()
                     .size_full()
-                    .bg(if dark { glass::bg(dark) } else { hsla(0.0, 0.0, 1.0, 1.0) })
+                    .bg(glass::bg(dark))
                     .pt(px(chrome.metrics().content_top_padding + 6.0))
-                    .pl(px(6.0))
-                    .pr(px(6.0))
+                    .pl(px(8.0))
+                    .pr(px(8.0))
                     .pb(px(6.0))
                     .gap_0p5()
                     .flex()
@@ -1419,45 +1536,40 @@ fn titlebar_slot(
         .items_center()
         .h_full()
         .child(
-            div()
-                .pl(px(80.0))
-                .flex_1()
-                .flex()
-                .items_center()
-                .child(
-                    TabBar::new("session-tabs")
-                        .underline()
-                        .selected_index(selected_index.unwrap_or(0))
-                        .children(sessions.iter().enumerate().map(|(index, session)| {
-                            let session_id = session.session_id.clone();
-                            let close_id = session.session_id.clone();
-                            let close_handle = h.clone();
-                            let select_handle = h.clone();
-                            Tab::new()
-                                .label(&session.title)
-                                .selected(
-                                    selected_session_id
-                                        .as_ref()
-                                        .is_some_and(|current| current == &session.session_id),
-                                )
-                                .suffix(
-                                    Button::new(("session-close", index))
-                                        .icon(IconName::Close)
-                                        .ghost()
-                                        .xsmall()
-                                        .on_click(move |_, _, cx| {
-                                            let _ = cx.update_entity(&close_handle, |view, _cx| {
-                                                view.close_session(close_id.clone());
-                                            });
-                                        }),
-                                )
-                                .on_click(move |_, _, cx| {
-                                    let _ = cx.update_entity(&select_handle, |view, _| {
-                                        view.select_session(session_id.clone());
-                                    });
-                                })
-                        })),
-                ),
+            div().pl(px(80.0)).flex_1().flex().items_center().child(
+                TabBar::new("session-tabs")
+                    .underline()
+                    .selected_index(selected_index.unwrap_or(0))
+                    .children(sessions.iter().enumerate().map(|(index, session)| {
+                        let session_id = session.session_id.clone();
+                        let close_id = session.session_id.clone();
+                        let close_handle = h.clone();
+                        let select_handle = h.clone();
+                        Tab::new()
+                            .label(&session.title)
+                            .selected(
+                                selected_session_id
+                                    .as_ref()
+                                    .is_some_and(|current| current == &session.session_id),
+                            )
+                            .suffix(
+                                Button::new(("session-close", index))
+                                    .icon(IconName::Close)
+                                    .ghost()
+                                    .xsmall()
+                                    .on_click(move |_, _, cx| {
+                                        let _ = cx.update_entity(&close_handle, |view, _cx| {
+                                            view.close_session(close_id.clone());
+                                        });
+                                    }),
+                            )
+                            .on_click(move |_, _, cx| {
+                                let _ = cx.update_entity(&select_handle, |view, _| {
+                                    view.select_session(session_id.clone());
+                                });
+                            })
+                    })),
+            ),
         )
         .child(
             Button::new("titlebar-add-profile")
@@ -1479,25 +1591,51 @@ fn left_sidebar(
     cx: &mut Context<FtpSftpSshView>,
     dark: bool,
 ) -> impl IntoElement {
-    glass_panel(px(220.0), dark)
+    glass_panel(px(272.0), dark)
         .child(
             div()
-                .h(px(36.0))
+                .h(px(40.0))
                 .flex()
                 .items_center()
                 .justify_between()
                 .px_2()
                 .child(
                     div()
-                        .text_size(px(14.0))
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .child(format!("连接 ({})", profiles.len())),
+                        .min_w(px(0.0))
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            Icon::new(IconName::PanelLeft)
+                                .with_size(ComponentSize::Small)
+                                .text_color(theme::semantic().text_secondary),
+                        )
+                        .child(
+                            div()
+                                .min_w(px(0.0))
+                                .flex()
+                                .flex_col()
+                                .gap_0p5()
+                                .child(
+                                    div()
+                                        .text_size(px(13.0))
+                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .child("连接"),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(11.0))
+                                        .line_clamp(1)
+                                        .text_color(theme::semantic().text_secondary)
+                                        .child(format!("{} 个配置", profiles.len())),
+                                ),
+                        ),
                 )
                 .child(
                     Button::new("new-profile")
                         .icon(IconName::Plus)
                         .ghost()
-                        .small()
+                        .xsmall()
                         .on_click(cx.listener(|view, _, _, cx| {
                             view.open_profile_creator(cx);
                         })),
@@ -1510,30 +1648,53 @@ fn left_sidebar(
                 .overflow_y_scrollbar()
                 .flex()
                 .flex_col()
-                .gap_1()
-                .p(px(4.0))
+                .gap_0p5()
+                .px_1()
+                .py_1()
+                .when(profiles.is_empty(), |list| {
+                    list.child(empty_state(
+                        IconName::Inbox,
+                        "还没有连接配置，点击右上角新建",
+                    ))
+                })
                 .children(profiles.iter().map(|profile| {
                     let selected = selected_profile_id == Some(profile.id);
                     let profile_id = profile.id;
                     let has_session = sessions.iter().any(|s| s.profile_id == profile_id);
+                    let endpoint = profile.endpoint();
                     div()
                         .id(("remote-profile-row", profile.id as usize))
+                        .relative()
+                        .overflow_hidden()
+                        .h(px(58.0))
                         .rounded(px(8.0))
                         .bg(if selected {
-                            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.14)
+                            if dark {
+                                hsla(0.0, 0.0, 1.0, 0.075)
+                            } else {
+                                hsla(215.0 / 360.0, 0.20, 0.91, 0.82)
+                            }
                         } else {
-                            glass::panel(dark)
+                            hsla(0.0, 0.0, 0.0, 0.0)
                         })
                         .border_1()
                         .border_color(if selected {
-                            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.34)
+                            theme::rgba_with_alpha(theme::semantic().border_strong, 0.14)
                         } else {
-                            glass::divider(dark)
+                            hsla(0.0, 0.0, 0.0, 0.0)
                         })
-                        .px_3()
-                        .py(px(8.0))
                         .cursor_pointer()
-                        .hover(move |style| style.bg(glass::hover_bg(dark)))
+                        .hover(move |style| {
+                            style.bg(if selected {
+                                if dark {
+                                    hsla(0.0, 0.0, 1.0, 0.09)
+                                } else {
+                                    hsla(215.0 / 360.0, 0.20, 0.89, 0.90)
+                                }
+                            } else {
+                                glass::hover_bg(dark)
+                            })
+                        })
                         .on_click(cx.listener(move |view, event: &gpui::ClickEvent, _, _| {
                             view.select_profile(profile_id);
                             if event.click_count() >= 2 {
@@ -1554,38 +1715,101 @@ fn left_sidebar(
                         )
                         .child(
                             div()
+                                .size_full()
                                 .flex()
                                 .items_center()
-                                .justify_between()
+                                .child(div().w(px(3.0)).h_full().flex_none().bg(if selected {
+                                    theme::rgba_with_alpha(
+                                        ui::accent_color(PluginAccent::Cyan),
+                                        if dark { 0.70 } else { 0.62 },
+                                    )
+                                } else if has_session {
+                                    theme::rgba_with_alpha(theme::semantic().success, 0.42)
+                                } else {
+                                    hsla(0.0, 0.0, 0.0, 0.0)
+                                }))
                                 .child(
                                     div()
+                                        .min_w(px(0.0))
+                                        .flex_1()
+                                        .pl(px(10.0))
+                                        .pr(px(6.0))
+                                        .py(px(6.0))
                                         .flex()
-                                        .flex_col()
-                                        .gap_1()
+                                        .items_center()
+                                        .justify_between()
+                                        .gap_2()
                                         .child(
                                             div()
-                                                .text_size(px(14.0))
-                                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                .line_clamp(1)
-                                                .child(profile.name.clone()),
+                                                .min_w(px(0.0))
+                                                .flex_1()
+                                                .flex()
+                                                .flex_col()
+                                                .gap_1()
+                                                .child(
+                                                    div()
+                                                        .flex()
+                                                        .items_center()
+                                                        .gap_1()
+                                                        .child(protocol_badge(
+                                                            profile.protocol_label(),
+                                                            selected,
+                                                            dark,
+                                                        ))
+                                                        .child(
+                                                            div()
+                                                                .min_w(px(0.0))
+                                                                .text_size(px(13.0))
+                                                                .font_weight(if selected {
+                                                                    gpui::FontWeight::MEDIUM
+                                                                } else {
+                                                                    gpui::FontWeight::NORMAL
+                                                                })
+                                                                .line_clamp(1)
+                                                                .child(profile.name.clone()),
+                                                        ),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .min_w(px(0.0))
+                                                        .text_size(px(12.0))
+                                                        .line_clamp(1)
+                                                        .font_family(ui::font_mono())
+                                                        .text_color(
+                                                            theme::semantic().text_secondary,
+                                                        )
+                                                        .child(endpoint),
+                                                ),
                                         )
                                         .child(
                                             div()
-                                                .text_size(px(12.0))
-                                                .line_clamp(1)
-                                                .text_color(theme::semantic().text_secondary)
-                                                .child(profile.endpoint()),
+                                                .flex_none()
+                                                .flex()
+                                                .items_center()
+                                                .gap_0p5()
+                                                .child(status_pill(has_session, dark))
+                                                .child(
+                                                    Button::new((
+                                                        "profile-connect",
+                                                        profile.id as usize,
+                                                    ))
+                                                    .icon(IconName::ArrowRight)
+                                                    .xsmall()
+                                                    .ghost()
+                                                    .tooltip(if has_session {
+                                                        "切换到已有 session"
+                                                    } else {
+                                                        "连接"
+                                                    })
+                                                    .on_click(cx.listener(
+                                                        move |view, _, _, _cx| {
+                                                            view.select_profile(profile_id);
+                                                            view.open_selected_profile();
+                                                        },
+                                                    )),
+                                                ),
                                         ),
-                                )
-                                .when(has_session, |el| {
-                                    el.child(
-                                        div()
-                                            .w(px(8.0))
-                                            .h(px(8.0))
-                                            .rounded_full()
-                                            .bg(theme::semantic().success),
-                                    )
-                                }),
+                                ),
                         )
                 })),
         )
@@ -1608,7 +1832,7 @@ fn main_workspace(
         .flex_1()
         .min_h(px(0.0))
         .flex()
-        .gap_0p5()
+        .gap_1()
         .child(file_pane(
             selected_session,
             selected_entry,
@@ -1636,12 +1860,20 @@ fn file_pane(
     cx: &mut Context<FtpSftpSshView>,
     dark: bool,
 ) -> impl IntoElement {
-    glass_panel(px(372.0), dark)
-        .child(panel_header("文件", None))
+    let file_header = selected_session.map(|snapshot| {
+        format!(
+            "{} 项 · {}",
+            snapshot.remote_entries.len(),
+            snapshot.summary.endpoint
+        )
+    });
+
+    glass_panel(px(392.0), dark)
+        .child(panel_header(IconName::FolderOpen, "文件", file_header))
         .child(
             div()
-                .h(px(32.0))
-                .rounded(px(6.0))
+                .h(px(34.0))
+                .rounded(px(7.0))
                 .bg(glass::inset(dark))
                 .border_1()
                 .border_color(glass::divider(dark))
@@ -1653,33 +1885,37 @@ fn file_pane(
                 .child(
                     div()
                         .min_w(px(0.0))
-                        .text_size(px(13.0))
-                        .line_clamp(1)
-                        .font_family(ui::font_mono())
+                        .flex()
+                        .items_center()
+                        .gap_2()
                         .child(
-                            selected_session
-                                .map(|snapshot| snapshot.remote_root.clone())
-                                .unwrap_or_else(|| String::from("未连接")),
+                            Icon::new(IconName::FolderOpen)
+                                .with_size(ComponentSize::Small)
+                                .text_color(theme::semantic().text_secondary),
+                        )
+                        .child(
+                            div()
+                                .min_w(px(0.0))
+                                .text_size(px(12.0))
+                                .line_clamp(1)
+                                .font_family(ui::font_mono())
+                                .text_color(if selected_session.is_some() {
+                                    theme::semantic().text_primary
+                                } else {
+                                    theme::semantic().text_secondary
+                                })
+                                .child(
+                                    selected_session
+                                        .map(|snapshot| snapshot.remote_root.clone())
+                                        .unwrap_or_else(|| String::from("未连接")),
+                                ),
                         ),
                 )
-                .child(
-                    div()
-                        .text_size(px(12.0))
-                        .text_color(theme::semantic().text_secondary)
-                        .child(
-                            selected_entry
-                                .map(|entry| {
-                                    if entry.is_dir {
-                                        String::from("目录")
-                                    } else if editable_local_path.is_some() {
-                                        String::from("可编辑")
-                                    } else {
-                                        String::from("文件")
-                                    }
-                                })
-                                .unwrap_or_else(|| String::from("空闲")),
-                        ),
-                ),
+                .child(file_selection_pill(
+                    selected_entry,
+                    editable_local_path.is_some(),
+                    dark,
+                )),
         )
         .when(selected_session.is_some(), |col| {
             let snapshot = selected_session.expect("selected session");
@@ -1689,11 +1925,17 @@ fn file_pane(
                 div()
                     .min_h(px(0.0))
                     .flex_1()
-                    .rounded(px(6.0))
-                    .bg(glass::inset(dark))
+                    .rounded(px(8.0))
+                    .bg(if dark {
+                        hsla(220.0 / 360.0, 0.12, 0.10, 0.18)
+                    } else {
+                        theme::rgba_with_alpha(theme::white(), 0.42)
+                    })
                     .border_1()
                     .border_color(glass::divider(dark))
                     .overflow_hidden()
+                    .flex()
+                    .flex_col()
                     .drag_over::<ExternalPaths>(move |style, _, _, _| {
                         style
                             .bg(theme::rgba_with_alpha(
@@ -1720,7 +1962,8 @@ fn file_pane(
                             cx.stop_propagation();
                         }),
                     )
-                    .child(remote_entry_list(
+                    .child(file_list_header(dark))
+                    .child(div().min_h(px(0.0)).flex_1().child(remote_entry_list(
                         entries,
                         selected_path,
                         if snapshot.remote_root == "/" || snapshot.remote_root == "~" {
@@ -1730,11 +1973,14 @@ fn file_pane(
                         },
                         cx,
                         dark,
-                    )),
+                    ))),
             )
         })
         .when(selected_session.is_none(), |col| {
-            col.child(empty_state("打开 session 后显示远端文件列表"))
+            col.child(empty_state(
+                IconName::SquareTerminal,
+                "打开 session 后显示远端文件列表",
+            ))
         })
 }
 
@@ -1752,7 +1998,7 @@ fn remote_entry_list(
         .size_full()
         .p(px(4.0))
         .when(item_count == 0, |list| {
-            list.child(empty_state("当前目录为空"))
+            list.child(empty_state(IconName::FolderOpen, "当前目录为空"))
         })
         .when(item_count > 0, |list| {
             let entries = entries.clone();
@@ -1796,12 +2042,12 @@ fn remote_parent_row(
     div()
         .id(("remote-parent-row", 0usize))
         .w_full()
-        .h(px(32.0))
+        .h(px(36.0))
         .rounded(px(6.0))
         .bg(if selected {
             theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.14)
         } else {
-            glass::panel(dark)
+            hsla(0.0, 0.0, 0.0, 0.0)
         })
         .border_1()
         .border_color(if selected {
@@ -1824,11 +2070,12 @@ fn remote_parent_row(
                 .min_w(px(0.0))
                 .flex()
                 .items_center()
-                .gap_1()
+                .gap_2()
+                .child(file_icon_tile(IconName::ChevronUp, selected, dark))
                 .child(
                     div()
                         .text_size(px(13.0))
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .font_weight(gpui::FontWeight::NORMAL)
                         .line_clamp(1)
                         .child(".."),
                 ),
@@ -1852,15 +2099,16 @@ fn remote_entry_row(
     let selected = selected_path == Some(entry.path.as_str());
     let remote_path = entry.path.clone();
     let row_path = entry.path.clone();
+    let is_dir = entry.is_dir;
     div()
         .id(("remote-entry-row", index))
         .w_full()
-        .h(px(32.0))
+        .h(px(36.0))
         .rounded(px(6.0))
         .bg(if selected {
             theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.14)
         } else {
-            glass::panel(dark)
+            hsla(0.0, 0.0, 0.0, 0.0)
         })
         .border_1()
         .border_color(if selected {
@@ -1894,17 +2142,36 @@ fn remote_entry_row(
             }),
         )
         .child(
-            div().min_w(px(0.0)).flex().items_center().gap_1().child(
-                div()
-                    .text_size(px(13.0))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .line_clamp(1)
-                    .child(if entry.is_dir {
-                        format!("{}/", entry.name)
+            div()
+                .min_w(px(0.0))
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(file_icon_tile(
+                    if is_dir {
+                        IconName::Folder
                     } else {
-                        entry.name.clone()
-                    }),
-            ),
+                        IconName::File
+                    },
+                    selected,
+                    dark,
+                ))
+                .child(
+                    div()
+                        .min_w(px(0.0))
+                        .text_size(px(13.0))
+                        .font_weight(if selected {
+                            gpui::FontWeight::MEDIUM
+                        } else {
+                            gpui::FontWeight::NORMAL
+                        })
+                        .line_clamp(1)
+                        .child(if entry.is_dir {
+                            format!("{}/", entry.name)
+                        } else {
+                            entry.name.clone()
+                        }),
+                ),
         )
         .child(
             div()
@@ -1933,13 +2200,27 @@ fn terminal_pane(
     let terminal_snapshot = terminal_frame;
     let session_id = selected_session.map(|snapshot| snapshot.summary.session_id.clone());
     let border_color = if terminal_focused {
-        theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.48)
+        theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.34)
     } else {
-        theme::rgba_with_alpha(theme::semantic().border_strong, 0.40)
+        theme::rgba_with_alpha(theme::semantic().border_strong, 0.18)
     };
+    let terminal_status = selected_session
+        .map(|snapshot| {
+            if snapshot.summary.has_terminal {
+                if terminal_frame.is_some() {
+                    "已连接"
+                } else {
+                    "等待终端"
+                }
+            } else {
+                "无终端"
+            }
+        })
+        .unwrap_or("未连接");
 
     glass_panel_flex(dark)
         .child(panel_header(
+            IconName::SquareTerminal,
             "终端",
             selected_session.map(|snapshot| {
                 format!(
@@ -1953,84 +2234,130 @@ fn terminal_pane(
                 .flex_1()
                 .min_h(px(0.0))
                 .rounded(px(8.0))
-                .bg(rgb(0xf5f5f5))
+                .bg(rgb(0x0f1117))
                 .border_1()
                 .border_color(border_color)
-                .p_2()
-                .font_family(ui::font_mono())
-                .text_size(px(14.0))
-                .text_color(rgb(0x1a1a1a))
-                .track_focus(&focus_handle)
-                .on_key_down(cx.listener(FtpSftpSshView::handle_terminal_key))
-                .on_children_prepainted({
-                    let runtime = runtime.clone();
-                    let terminal_layout = terminal_layout.clone();
-                    let session_id = session_id.clone();
-                    let terminal_snapshot = terminal_snapshot.cloned();
-                    move |child_bounds, _, _cx| {
-                        let layout = child_bounds.first().map(|bounds| TerminalLayoutSnapshot {
-                            origin_x: bounds.origin.x.into(),
-                            origin_y: bounds.origin.y.into(),
-                            width: bounds.size.width.into(),
-                            height: bounds.size.height.into(),
-                        });
-
-                        if let Ok(mut stored_layout) = terminal_layout.lock() {
-                            *stored_layout = layout;
-                        }
-
-                        if let (Some(session_id), Some(terminal), Some(layout)) =
-                            (session_id.as_ref(), terminal_snapshot.as_ref(), layout)
-                        {
-                            sync_terminal_size(
-                                runtime.as_ref(),
-                                session_id,
-                                terminal.columns,
-                                terminal.screen_lines,
-                                layout,
-                            );
-                        }
-                    }
-                })
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(FtpSftpSshView::handle_terminal_mouse_down),
-                )
-                .on_mouse_down(
-                    MouseButton::Right,
-                    cx.listener(FtpSftpSshView::handle_terminal_mouse_down),
-                )
-                .on_mouse_down(
-                    MouseButton::Middle,
-                    cx.listener(FtpSftpSshView::handle_terminal_mouse_down),
-                )
-                .on_mouse_up(
-                    MouseButton::Left,
-                    cx.listener(FtpSftpSshView::handle_terminal_mouse_up),
-                )
-                .on_mouse_up(
-                    MouseButton::Right,
-                    cx.listener(FtpSftpSshView::handle_terminal_mouse_up),
-                )
-                .on_mouse_up(
-                    MouseButton::Middle,
-                    cx.listener(FtpSftpSshView::handle_terminal_mouse_up),
-                )
-                .on_mouse_move(cx.listener(FtpSftpSshView::handle_terminal_mouse_move))
-                .on_scroll_wheel(cx.listener(FtpSftpSshView::handle_terminal_scroll))
-                .overflow_y_scrollbar()
                 .flex()
                 .flex_col()
+                .overflow_hidden()
+                .shadow(glass::panel_shadow(dark))
                 .child(
-                    div().size_full().flex().flex_col().gap_0().children(
-                        terminal_snapshot
-                            .map(|t| render_terminal_rows(t, false))
-                            .unwrap_or_else(|| {
-                                vec![
+                    div()
+                        .h(px(28.0))
+                        .flex_none()
+                        .bg(rgb(0x171a21))
+                        .border_b_1()
+                        .border_color(theme::rgba_with_alpha(rgb(0x2b313d), 0.72))
+                        .px_3()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            div()
+                                .min_w(px(0.0))
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(mac_window_dots())
+                                .child(
+                                    Icon::new(IconName::SquareTerminal)
+                                        .with_size(ComponentSize::Small)
+                                        .text_color(rgb(0x8aa0b6)),
+                                )
+                                .child(
                                     div()
-                                        .text_size(px(14.0))
-                                        .text_color(rgb(0x1a1a1a))
+                                        .min_w(px(0.0))
+                                        .text_size(px(12.0))
+                                        .font_family(ui::font_mono())
+                                        .line_clamp(1)
+                                        .text_color(rgb(0xd4dae4))
                                         .child(
+                                            selected_session
+                                                .map(|snapshot| {
+                                                    format!("{} shell", snapshot.summary.endpoint)
+                                                })
+                                                .unwrap_or_else(|| String::from("ssh shell")),
+                                        ),
+                                ),
+                        )
+                        .child(terminal_status_pill(terminal_status)),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_h(px(0.0))
+                        .p_3()
+                        .font_family(ui::font_mono())
+                        .text_size(px(14.0))
+                        .text_color(rgb(0xe6edf3))
+                        .track_focus(&focus_handle)
+                        .on_key_down(cx.listener(FtpSftpSshView::handle_terminal_key))
+                        .on_children_prepainted({
+                            let runtime = runtime.clone();
+                            let terminal_layout = terminal_layout.clone();
+                            let session_id = session_id.clone();
+                            let terminal_snapshot = terminal_snapshot.cloned();
+                            move |child_bounds, _, _cx| {
+                                let layout =
+                                    child_bounds.first().map(|bounds| TerminalLayoutSnapshot {
+                                        origin_x: bounds.origin.x.into(),
+                                        origin_y: bounds.origin.y.into(),
+                                        width: bounds.size.width.into(),
+                                        height: bounds.size.height.into(),
+                                    });
+
+                                if let Ok(mut stored_layout) = terminal_layout.lock() {
+                                    *stored_layout = layout;
+                                }
+
+                                if let (Some(session_id), Some(terminal), Some(layout)) =
+                                    (session_id.as_ref(), terminal_snapshot.as_ref(), layout)
+                                {
+                                    sync_terminal_size(
+                                        runtime.as_ref(),
+                                        session_id,
+                                        terminal.columns,
+                                        terminal.screen_lines,
+                                        layout,
+                                    );
+                                }
+                            }
+                        })
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(FtpSftpSshView::handle_terminal_mouse_down),
+                        )
+                        .on_mouse_down(
+                            MouseButton::Right,
+                            cx.listener(FtpSftpSshView::handle_terminal_mouse_down),
+                        )
+                        .on_mouse_down(
+                            MouseButton::Middle,
+                            cx.listener(FtpSftpSshView::handle_terminal_mouse_down),
+                        )
+                        .on_mouse_up(
+                            MouseButton::Left,
+                            cx.listener(FtpSftpSshView::handle_terminal_mouse_up),
+                        )
+                        .on_mouse_up(
+                            MouseButton::Right,
+                            cx.listener(FtpSftpSshView::handle_terminal_mouse_up),
+                        )
+                        .on_mouse_up(
+                            MouseButton::Middle,
+                            cx.listener(FtpSftpSshView::handle_terminal_mouse_up),
+                        )
+                        .on_mouse_move(cx.listener(FtpSftpSshView::handle_terminal_mouse_move))
+                        .on_scroll_wheel(cx.listener(FtpSftpSshView::handle_terminal_scroll))
+                        .overflow_y_scrollbar()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div().size_full().flex().flex_col().gap_0().children(
+                                terminal_snapshot
+                                    .map(|t| render_terminal_rows(t, true))
+                                    .unwrap_or_else(|| {
+                                        vec![terminal_empty_state(
                                             if selected_session.is_some_and(|snapshot| {
                                                 !snapshot.summary.has_terminal
                                             }) {
@@ -2038,10 +2365,10 @@ fn terminal_pane(
                                             } else {
                                                 "终端未激活"
                                             },
-                                        ),
-                                ]
-                            }),
-                    ),
+                                        )]
+                                    }),
+                            ),
+                        ),
                 ),
         )
 }
@@ -2053,19 +2380,36 @@ fn transfer_strip(
     cx: &mut Context<FtpSftpSshView>,
     dark: bool,
 ) -> impl IntoElement {
-    let collapsed_height = px(36.0);
+    let active = transfers
+        .iter()
+        .filter(|t| t.status == TransferStatus::Queued || t.status == TransferStatus::Running)
+        .count();
+    let collapsed_height = px(38.0);
     let expanded_height = if transfers.is_empty() {
-        px(60.0)
+        px(72.0)
     } else {
-        px(100.0)
+        px(126.0)
+    };
+    let summary = if active > 0 {
+        format!("{active} 个进行中")
+    } else if !transfers.is_empty() {
+        format!("{} 个完成", transfers.len())
+    } else {
+        String::from("空闲")
     };
     div()
-        .h(if expanded { expanded_height } else { collapsed_height })
+        .h(if expanded {
+            expanded_height
+        } else {
+            collapsed_height
+        })
         .rounded(px(8.0))
         .bg(glass::bar(dark))
         .border_1()
         .border_color(glass::border(dark))
-        .p_3()
+        .shadow(glass::panel_shadow(dark))
+        .px_3()
+        .py(px(6.0))
         .flex()
         .flex_col()
         .gap_2()
@@ -2081,58 +2425,50 @@ fn transfer_strip(
                         .items_center()
                         .gap_2()
                         .child(
-                            div()
-                                .id("transfer-toggle")
-                                .h(px(22.0))
-                                .w(px(22.0))
-                                .rounded(px(6.0))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .text_size(px(12.0))
-                                .text_color(theme::semantic().text_secondary)
-                                .cursor_pointer()
-                                .hover(move |style| style.bg(glass::hover_bg(dark)))
+                            Button::new("transfer-toggle")
+                                .icon(if expanded {
+                                    IconName::ChevronDown
+                                } else {
+                                    IconName::ChevronRight
+                                })
+                                .ghost()
+                                .xsmall()
+                                .tooltip(if expanded {
+                                    "收起传输队列"
+                                } else {
+                                    "展开传输队列"
+                                })
                                 .on_click(cx.listener(|view, _, _, _cx| {
                                     view.transfer_panel_expanded = !view.transfer_panel_expanded;
-                                }))
-                                .child(if expanded { "▼" } else { "▶" }),
+                                })),
+                        )
+                        .child(
+                            Icon::new(IconName::PanelBottom)
+                                .with_size(ComponentSize::Small)
+                                .text_color(theme::semantic().text_secondary),
                         )
                         .child(
                             div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
                                 .text_size(px(14.0))
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .child("传输队列"),
+                                .font_weight(gpui::FontWeight::NORMAL)
+                                .child("传输队列")
+                                .child(count_pill(transfers.len(), dark)),
                         ),
                 )
                 .child(
                     div()
                         .min_w(px(0.0))
                         .max_w(px(420.0))
-                        .line_clamp(1)
-                        .text_size(px(12.0))
-                        .text_color(theme::semantic().text_secondary)
-                        .child(if expanded {
-                            if notice.is_empty() {
-                                format!("{} 个项目", transfers.len())
-                            } else {
-                                notice
-                            }
-                        } else {
-                            let active = transfers
-                                .iter()
-                                .filter(|t| {
-                                    t.status == TransferStatus::Queued
-                                        || t.status == TransferStatus::Running
-                                })
-                                .count();
-                            if active > 0 {
-                                format!("{} 个进行中", active)
-                            } else if !transfers.is_empty() {
-                                format!("{} 个完成", transfers.len())
-                            } else {
-                                String::from("空闲")
-                            }
+                        .flex()
+                        .items_center()
+                        .justify_end()
+                        .gap_2()
+                        .child(status_text_pill(&summary, active > 0, dark))
+                        .when(expanded && !notice.is_empty(), |row| {
+                            row.child(notice_pill(notice.clone(), dark))
                         }),
                 ),
         )
@@ -2146,18 +2482,11 @@ fn transfer_strip(
                     .flex_col()
                     .gap_1()
                     .when(transfers.is_empty(), |col| {
-                        col.child(
-                            div()
-                                .flex_1()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .text_size(px(9.0))
-                                .text_color(theme::semantic().text_secondary)
-                                .child("当前没有传输任务"),
-                        )
+                        col.child(empty_state(IconName::Inbox, "当前没有传输任务"))
                     })
                     .children(transfers.iter().map(|item| {
+                        let progress = item.progress_percent();
+                        let transfer_id = item.id.clone();
                         div()
                             .rounded(px(7.0))
                             .bg(glass::panel(dark))
@@ -2177,9 +2506,18 @@ fn transfer_strip(
                                     .gap_1()
                                     .child(
                                         div()
-                                            .text_size(px(12.0))
-                                            .line_clamp(1)
-                                            .child(item.remote_path.clone()),
+                                            .flex()
+                                            .items_center()
+                                            .gap_2()
+                                            .child(transfer_direction_icon(item.direction, dark))
+                                            .child(
+                                                div()
+                                                    .min_w(px(0.0))
+                                                    .text_size(px(12.0))
+                                                    .font_weight(gpui::FontWeight::NORMAL)
+                                                    .line_clamp(1)
+                                                    .child(item.remote_path.clone()),
+                                            ),
                                     )
                                     .child(
                                         div()
@@ -2193,50 +2531,28 @@ fn transfer_strip(
                                 div()
                                     .flex()
                                     .items_center()
-                                    .gap_3()
+                                    .gap_2()
+                                    .child(progress_bar(progress, dark))
                                     .child(
                                         div()
+                                            .w(px(38.0))
                                             .text_size(px(12.0))
                                             .text_color(theme::semantic().text_secondary)
-                                            .child(format!("{}%", item.progress_percent())),
+                                            .child(format!("{progress}%")),
                                     )
-                                    .child(
-                                        div()
-                                            .text_size(px(12.0))
-                                            .text_color(match item.status {
-                                                TransferStatus::Completed => {
-                                                    theme::semantic().success
-                                                }
-                                                TransferStatus::Failed => theme::semantic().danger,
-                                                TransferStatus::Cancelled => {
-                                                    theme::semantic().warning
-                                                }
-                                                _ => theme::semantic().info,
-                                            })
-                                            .child(match item.status {
-                                                TransferStatus::Queued => "排队中",
-                                                TransferStatus::Running => "传输中",
-                                                TransferStatus::Completed => "完成",
-                                                TransferStatus::Failed => "失败",
-                                                TransferStatus::Cancelled => "已取消",
-                                            }),
-                                    )
+                                    .child(transfer_status_badge(item.status, dark))
                                     .when(
                                         matches!(
                                             item.status,
                                             TransferStatus::Queued | TransferStatus::Running
                                         ),
                                         |row| {
-                                            let transfer_id = item.id.clone();
                                             row.child(
-                                                toolbar_button("transfer-cancel", "取消")
-                                                    .on_click(cx.listener(
-                                                        move |view, _, _, _cx| {
-                                                            view.cancel_transfer(
-                                                                transfer_id.clone(),
-                                                            );
-                                                        },
-                                                    )),
+                                                toolbar_button("transfer-cancel", "取消").on_click(
+                                                    cx.listener(move |view, _, _, _cx| {
+                                                        view.cancel_transfer(transfer_id.clone());
+                                                    }),
+                                                ),
                                             )
                                         },
                                     ),
@@ -2347,7 +2663,7 @@ fn remote_menu_overlay(
                                     .on_click(cx.listener(move |view, _, _, _cx| {
                                         view.close_remote_menu();
                                         view.select_remote_entry(download_path.clone());
-                                        view.download_selected_entry();
+                                        view.download_selected_entry(_cx);
                                     }))
                                     .into_any_element(),
                             );
@@ -2396,7 +2712,7 @@ fn remote_menu_overlay(
                             menu_item("上传")
                                 .on_click(cx.listener(|view, _, _, _cx| {
                                     view.close_remote_menu();
-                                    view.upload_into_current_directory();
+                                    view.upload_into_current_directory(_cx);
                                 }))
                                 .into_any_element(),
                         );
@@ -2513,8 +2829,8 @@ fn remote_action_overlay(
             .gap_3()
             .child(
                 div()
-                    .text_size(px(18.0))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_size(px(16.0))
+                    .font_weight(gpui::FontWeight::MEDIUM)
                     .child(match action.kind {
                         RemoteActionKind::CreateDirectory => "新建文件夹",
                         RemoteActionKind::Rename => "重命名",
@@ -2564,11 +2880,13 @@ fn remote_action_overlay(
                             },
                         )),
                     )
-                    .child(toolbar_button("remote-action-confirm", "确认").on_click(
-                        cx.listener(|view, _, _, cx| {
-                            view.confirm_remote_action(cx);
-                        }),
-                    )),
+                    .child(
+                        toolbar_button("remote-action-confirm", "确认").on_click(cx.listener(
+                            |view, _, _, cx| {
+                                view.confirm_remote_action(cx);
+                            },
+                        )),
+                    ),
             ),
     )
 }
@@ -2588,20 +2906,12 @@ fn profile_editor_overlay(
     );
 
     let surface_bg = if dark {
-        hsla(0.0, 0.0, 0.12, 1.0)
+        hsla(220.0 / 360.0, 0.12, 0.14, 0.98)
     } else {
-        hsla(0.0, 0.0, 1.0, 1.0)
+        hsla(220.0 / 360.0, 0.16, 0.985, 0.98)
     };
-    let border_color = if dark {
-        hsla(0.0, 0.0, 0.28, 1.0)
-    } else {
-        hsla(0.0, 0.0, 0.87, 1.0)
-    };
-    let section_accent = if dark {
-        hsla(0.0, 0.0, 0.6, 1.0)
-    } else {
-        hsla(0.0, 0.0, 0.4, 1.0)
-    };
+    let border_color = theme::rgba_with_alpha(theme::semantic().border_default, 0.18);
+    let section_accent = theme::rgba_with_alpha(theme::semantic().text_secondary, 1.0);
 
     let handle_close = handle.clone();
     let handle_backdrop = handle.clone();
@@ -2616,9 +2926,9 @@ fn profile_editor_overlay(
             });
         },
         div()
-            .w(px(580.0))
-            .h(px(580.0))
-            .rounded(px(12.0))
+            .w(px(600.0))
+            .h(px(584.0))
+            .rounded(px(14.0))
             .bg(surface_bg)
             .border_1()
             .border_color(border_color)
@@ -2629,18 +2939,18 @@ fn profile_editor_overlay(
             // === 标题栏 ===
             .child(
                 div()
-                    .h(px(48.0))
+                    .h(px(52.0))
                     .border_b_1()
                     .border_color(border_color)
-                    .px(px(20.0))
+                    .px(px(24.0))
                     .flex()
                     .items_center()
                     .justify_between()
                     .child(
                         div()
-                            .text_size(px(16.0))
+                            .text_size(px(15.0))
                             .text_color(theme::semantic().text_primary)
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .font_weight(gpui::FontWeight::MEDIUM)
                             .child(match editor.mode {
                                 ProfileEditorMode::Create => "新建连接",
                                 ProfileEditorMode::Edit(_) => "编辑连接",
@@ -2664,11 +2974,11 @@ fn profile_editor_overlay(
                     .flex_1()
                     .min_h(px(0.0))
                     .overflow_y_scrollbar()
-                    .px(px(20.0))
-                    .py(px(16.0))
+                    .px(px(24.0))
+                    .py(px(18.0))
                     .flex()
                     .flex_col()
-                    .gap(px(16.0))
+                    .gap(px(14.0))
                     // == 基本信息 ==
                     .child(editor_section("基本信息", section_accent))
                     .child(labeled_input("名称", editor.name_input.clone(), dark))
@@ -2715,20 +3025,22 @@ fn profile_editor_overlay(
                         labeled_input("远端根目录", editor.remote_root_input.clone(), dark),
                         labeled_input("本地根目录", editor.local_root_input.clone(), dark),
                     ))
-                    .child(
-                        div().flex().justify_end().child(
-                            toolbar_button("profile-local-root", "选择文件夹").on_click(
-                                cx.listener(|view, _, _, cx| {
-                                    view.choose_local_root(cx);
-                                }),
-                            ),
-                        ),
-                    )
+                    .child(div().flex().justify_end().child(
+                        toolbar_button("profile-local-root", "选择文件夹").on_click(cx.listener(
+                            |view, _, _, cx| {
+                                view.choose_local_root(cx);
+                            },
+                        )),
+                    ))
                     // == 高级 ==
                     .child(editor_section("高级", section_accent))
                     .child(two_col_row(
                         labeled_input("连接超时（秒）", editor.connect_timeout_input.clone(), dark),
-                        labeled_input("传输并发数", editor.transfer_concurrency_input.clone(), dark),
+                        labeled_input(
+                            "传输并发数",
+                            editor.transfer_concurrency_input.clone(),
+                            dark,
+                        ),
                     ))
                     .child(toggle_row(
                         "FTP 被动模式",
@@ -2777,87 +3089,125 @@ fn profile_editor_overlay(
                     .child(labeled_multiline("备注", editor.notes_input.clone(), dark))
                     .when(matches!(editor.mode, ProfileEditorMode::Edit(_)), |col| {
                         col.child(
-                            div()
-                                .flex()
-                                .justify_end()
-                                .child(
-                                    Button::new("delete-profile")
-                                        .label("删除连接")
-                                        .danger()
-                                        .on_click(cx.listener(|view, _, _, _cx| {
-                                            view.delete_selected_profile();
-                                        })),
-                                ),
+                            div().flex().justify_end().child(
+                                Button::new("delete-profile")
+                                    .label("删除连接")
+                                    .danger()
+                                    .on_click(cx.listener(|view, _, _, _cx| {
+                                        view.delete_selected_profile();
+                                    })),
+                            ),
                         )
                     }),
             )
             // === 底部按钮栏 ===
             .child(
                 div()
-                    .h(px(48.0))
+                    .h(px(56.0))
                     .border_t_1()
                     .border_color(border_color)
-                    .px(px(20.0))
+                    .px(px(24.0))
                     .flex()
                     .items_center()
                     .justify_end()
                     .gap_2()
                     .child(
-                        Button::new("editor-cancel")
-                            .label("取消")
-                            .ghost()
-                            .on_click(move |_, _, cx| {
+                        mac_action_button("editor-cancel-lite", "取消", false).on_click(
+                            move |_, _, cx| {
                                 let _ = cx.update_entity(&handle_cancel, |view, _cx| {
                                     view.close_profile_editor();
                                 });
-                            }),
+                            },
+                        ),
                     )
                     .child(
-                        Button::new("editor-save")
-                            .label("保存")
-                            .primary()
-                            .on_click(cx.listener(|view, _, _, cx| {
+                        mac_action_button("editor-save-lite", "保存", true).on_click(cx.listener(
+                            |view, _, _, cx| {
                                 view.save_profile_editor(cx);
-                            })),
+                            },
+                        )),
                     ),
             ),
     )
+}
+
+fn mac_action_button(
+    id: &'static str,
+    label: &'static str,
+    primary: bool,
+) -> gpui::Stateful<gpui::Div> {
+    let mac_blue = rgb(0x007aff);
+    div()
+        .id(id)
+        .h(px(30.0))
+        .min_w(px(64.0))
+        .rounded(px(7.0))
+        .bg(if primary {
+            theme::rgba_with_alpha(mac_blue, 0.92)
+        } else {
+            hsla(0.0, 0.0, 0.0, 0.0)
+        })
+        .border_1()
+        .border_color(if primary {
+            theme::rgba_with_alpha(mac_blue, 0.22)
+        } else {
+            hsla(0.0, 0.0, 0.0, 0.0)
+        })
+        .px_3()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(13.0))
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .text_color(if primary {
+            theme::white()
+        } else {
+            theme::semantic().text_primary
+        })
+        .cursor_pointer()
+        .hover(move |style| {
+            style.bg(if primary {
+                theme::rgba_with_alpha(mac_blue, 1.0)
+            } else {
+                glass::hover_bg(theme_mode::is_dark())
+            })
+        })
+        .child(label)
 }
 
 fn editor_section(title: &'static str, color: gpui::Hsla) -> impl IntoElement {
     div()
         .flex()
         .items_center()
-        .gap_2()
+        .gap_3()
         .child(
             div()
-                .text_size(px(12.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_size(px(11.0))
+                .font_weight(gpui::FontWeight::MEDIUM)
                 .text_color(color)
                 .child(title),
         )
-        .child(
-            div()
-                .flex_1()
-                .h(px(1.0))
-                .bg(theme::rgba_with_alpha(theme::semantic().border_strong, 0.15)),
-        )
+        .child(div().flex_1().h(px(1.0)).bg(theme::rgba_with_alpha(
+            theme::semantic().border_strong,
+            0.08,
+        )))
 }
 
 fn toolbar_button(id: &'static str, label: &'static str) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
-        .h(px(28.0))
+        .h(px(30.0))
         .rounded(px(6.0))
-        .bg(glass::panel(theme_mode::is_dark()))
+        .bg(glass::inset(theme_mode::is_dark()))
         .border_1()
         .border_color(glass::divider(theme_mode::is_dark()))
         .px_3()
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(13.0))
-        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_size(px(12.0))
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .text_color(theme::semantic().text_primary)
         .cursor_pointer()
         .hover(|style| style.bg(glass::hover_bg(theme_mode::is_dark())))
         .child(label)
@@ -2899,11 +3249,11 @@ fn labeled_input(label: &'static str, input: Entity<TextInput>, dark: bool) -> i
         .gap_1()
         .child(
             div()
-                .text_size(px(13.0))
+                .text_size(px(12.0))
                 .text_color(theme::semantic().text_secondary)
                 .child(label),
         )
-        .child(input_shell(input, px(36.0), dark))
+        .child(input_shell(input, px(34.0), dark))
 }
 
 fn labeled_multiline(
@@ -2917,7 +3267,7 @@ fn labeled_multiline(
         .gap_1()
         .child(
             div()
-                .text_size(px(13.0))
+                .text_size(px(12.0))
                 .text_color(theme::semantic().text_secondary)
                 .child(label),
         )
@@ -2929,8 +3279,15 @@ fn input_shell(input: Entity<TextInput>, height: gpui::Pixels, dark: bool) -> im
         .h(height)
         .rounded(px(6.0))
         .border_1()
-        .border_color(glass::divider(dark))
-        .bg(glass::inset(dark))
+        .border_color(theme::rgba_with_alpha(
+            theme::semantic().border_default,
+            0.11,
+        ))
+        .bg(if dark {
+            hsla(220.0 / 360.0, 0.12, 0.11, 0.26)
+        } else {
+            theme::rgba_with_alpha(theme::white(), 0.52)
+        })
         .overflow_hidden()
         .child(input.into_any_element())
 }
@@ -2939,9 +3296,9 @@ fn two_col_row(left: impl IntoElement, right: impl IntoElement) -> impl IntoElem
     div()
         .flex()
         .items_start()
-        .gap_1()
+        .gap_2()
         .child(div().flex_1().child(left))
-        .child(div().w(px(138.0)).child(right))
+        .child(div().w(px(184.0)).child(right))
 }
 
 fn selector_group(title: &'static str, items: Vec<AnyElement>) -> impl IntoElement {
@@ -2951,11 +3308,25 @@ fn selector_group(title: &'static str, items: Vec<AnyElement>) -> impl IntoEleme
         .gap_1()
         .child(
             div()
-                .text_size(px(13.0))
+                .text_size(px(12.0))
                 .text_color(theme::semantic().text_secondary)
                 .child(title),
         )
-        .child(div().flex().flex_wrap().gap_2().children(items))
+        .child(
+            div()
+                .flex()
+                .flex_wrap()
+                .gap_1()
+                .rounded(px(8.0))
+                .bg(glass::inset(theme_mode::is_dark()))
+                .border_1()
+                .border_color(theme::rgba_with_alpha(
+                    theme::semantic().border_default,
+                    0.10,
+                ))
+                .p(px(3.0))
+                .children(items),
+        )
 }
 
 fn protocol_selector(
@@ -3061,9 +3432,12 @@ fn toggle_row(
 ) -> impl IntoElement {
     div()
         .rounded(px(8.0))
-        .bg(glass::inset(theme_mode::is_dark()))
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_elevated, 0.28))
         .border_1()
-        .border_color(glass::divider(theme_mode::is_dark()))
+        .border_color(theme::rgba_with_alpha(
+            theme::semantic().border_default,
+            0.10,
+        ))
         .px_3()
         .py(px(8.0))
         .flex()
@@ -3078,8 +3452,8 @@ fn toggle_row(
                 .gap_1()
                 .child(
                     div()
-                        .text_size(px(14.0))
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_size(px(13.0))
+                        .font_weight(gpui::FontWeight::MEDIUM)
                         .child(label),
                 )
                 .child(
@@ -3121,26 +3495,34 @@ fn profile_toggle(
         .h(px(28.0))
         .rounded(px(6.0))
         .bg(if selected {
-            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.16)
+            if theme_mode::is_dark() {
+                hsla(0.0, 0.0, 1.0, 0.09)
+            } else {
+                theme::rgba_with_alpha(theme::white(), 0.88)
+            }
         } else {
-            glass::panel(theme_mode::is_dark())
+            hsla(0.0, 0.0, 0.0, 0.0)
         })
         .border_1()
         .border_color(if selected {
-            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.36)
+            theme::rgba_with_alpha(theme::semantic().border_strong, 0.12)
         } else {
-            glass::divider(theme_mode::is_dark())
+            hsla(0.0, 0.0, 0.0, 0.0)
         })
         .px_3()
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(13.0))
-        .font_weight(gpui::FontWeight::SEMIBOLD)
-        .text_color(if selected {
-            ui::accent_color(PluginAccent::Cyan)
+        .text_size(px(12.0))
+        .font_weight(if selected {
+            gpui::FontWeight::MEDIUM
         } else {
+            gpui::FontWeight::NORMAL
+        })
+        .text_color(if selected {
             theme::semantic().text_primary
+        } else {
+            theme::semantic().text_secondary
         })
         .cursor_pointer()
         .hover(|style| style.bg(glass::hover_bg(theme_mode::is_dark())))
@@ -3194,11 +3576,24 @@ fn render_terminal_row(
     line
 }
 
-fn render_terminal_run(text: &str, style: TerminalCellStyle, cursor_here: bool, dark: bool) -> gpui::Div {
+fn render_terminal_run(
+    text: &str,
+    style: TerminalCellStyle,
+    cursor_here: bool,
+    dark: bool,
+) -> gpui::Div {
     // 浅色模式：将终端默认暗色主题的前景/背景替换为浅色
     // 0x111317 = alacritty 默认 Background，0xeaeaea = 默认 Foreground
-    let fg_val = if !dark && style.fg == 0xeaeaea { 0x1a1a1a } else { style.fg };
-    let bg_val = if !dark && style.bg == 0x111317 { 0xffffff } else { style.bg };
+    let fg_val = if !dark && style.fg == 0xeaeaea {
+        0x1a1a1a
+    } else {
+        style.fg
+    };
+    let bg_val = if !dark && style.bg == 0x111317 {
+        0xffffff
+    } else {
+        style.bg
+    };
     let fg = rgb(fg_val);
     let bg = rgb(bg_val);
     let cursor_fg = if dark { rgb(0x111317) } else { rgb(0xffffff) };
@@ -3245,66 +3640,475 @@ fn sync_terminal_size(
     let _ = runtime.resize_terminal(session_id, estimated_columns, estimated_rows);
 }
 
+fn protocol_badge(label: &'static str, selected: bool, dark: bool) -> impl IntoElement {
+    let color = if selected {
+        theme::semantic().text_primary
+    } else {
+        theme::semantic().text_secondary
+    };
+    div()
+        .h(px(17.0))
+        .min_w(px(36.0))
+        .rounded(px(5.0))
+        .bg(if selected {
+            theme::rgba_with_alpha(theme::semantic().bg_elevated, 0.46)
+        } else {
+            glass::inset(dark)
+        })
+        .border_1()
+        .border_color(if selected {
+            theme::rgba_with_alpha(theme::semantic().border_strong, 0.12)
+        } else {
+            glass::divider(dark)
+        })
+        .px_2()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(10.0))
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .text_color(color)
+        .child(label)
+}
+
+fn status_pill(has_session: bool, dark: bool) -> impl IntoElement {
+    let color = if has_session {
+        theme::semantic().success
+    } else if dark {
+        rgb(0x667085)
+    } else {
+        rgb(0x9aa3af)
+    };
+    div()
+        .h(px(22.0))
+        .w(px(12.0))
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(div().w(px(6.0)).h(px(6.0)).rounded_full().bg(color))
+}
+
+fn file_selection_pill(
+    selected_entry: Option<&RemoteEntry>,
+    editable: bool,
+    dark: bool,
+) -> impl IntoElement {
+    let (label, color) = selected_entry
+        .map(|entry| {
+            if entry.is_dir {
+                ("目录", ui::accent_color(PluginAccent::Cyan))
+            } else if editable {
+                ("可编辑", theme::semantic().success)
+            } else {
+                ("文件", theme::semantic().text_secondary)
+            }
+        })
+        .unwrap_or(("空闲", theme::semantic().text_secondary));
+
+    div()
+        .h(px(22.0))
+        .min_w(px(44.0))
+        .rounded(px(5.0))
+        .bg(if selected_entry.is_some() {
+            theme::rgba_with_alpha(color, 0.08)
+        } else {
+            glass::inset(dark)
+        })
+        .border_1()
+        .border_color(if selected_entry.is_some() {
+            theme::rgba_with_alpha(color, 0.14)
+        } else {
+            glass::divider(dark)
+        })
+        .px_2()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(11.0))
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .text_color(color)
+        .child(label)
+}
+
+fn file_list_header(dark: bool) -> impl IntoElement {
+    div()
+        .h(px(28.0))
+        .flex_none()
+        .border_b_1()
+        .border_color(glass::divider(dark))
+        .px_3()
+        .flex()
+        .items_center()
+        .justify_between()
+        .text_size(px(11.0))
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .text_color(theme::semantic().text_secondary)
+        .child("名称")
+        .child("类型 / 大小")
+}
+
+fn file_icon_tile(icon: IconName, selected: bool, _dark: bool) -> impl IntoElement {
+    div()
+        .w(px(20.0))
+        .h(px(20.0))
+        .flex_none()
+        .rounded(px(6.0))
+        .bg(if selected {
+            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.10)
+        } else {
+            hsla(0.0, 0.0, 0.0, 0.0)
+        })
+        .border_1()
+        .border_color(if selected {
+            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Cyan), 0.12)
+        } else {
+            hsla(0.0, 0.0, 0.0, 0.0)
+        })
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(
+            Icon::new(icon)
+                .with_size(ComponentSize::Small)
+                .text_color(if selected {
+                    ui::accent_color(PluginAccent::Cyan)
+                } else {
+                    theme::semantic().text_secondary
+                }),
+        )
+}
+
+fn terminal_status_pill(text: &'static str) -> impl IntoElement {
+    let color = match text {
+        "已连接" => theme::semantic().success,
+        "无终端" => theme::semantic().warning,
+        _ => rgb(0x94a3b8),
+    };
+    div()
+        .h(px(20.0))
+        .rounded(px(6.0))
+        .bg(theme::rgba_with_alpha(color, 0.12))
+        .border_1()
+        .border_color(theme::rgba_with_alpha(color, 0.24))
+        .px_2()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(11.0))
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .text_color(color)
+        .child(text)
+}
+
+fn mac_window_dots() -> impl IntoElement {
+    div()
+        .flex()
+        .items_center()
+        .gap_1()
+        .child(div().w(px(8.0)).h(px(8.0)).rounded_full().bg(rgb(0xff5f57)))
+        .child(div().w(px(8.0)).h(px(8.0)).rounded_full().bg(rgb(0xffbd2e)))
+        .child(div().w(px(8.0)).h(px(8.0)).rounded_full().bg(rgb(0x28c840)))
+}
+
+fn terminal_empty_state(text: &'static str) -> gpui::Div {
+    div()
+        .size_full()
+        .flex()
+        .items_start()
+        .justify_start()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(
+                    div()
+                        .text_size(px(13.0))
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_color(rgb(0x8fd8e8))
+                        .child("$"),
+                )
+                .child(
+                    div()
+                        .text_size(px(13.0))
+                        .text_color(rgb(0x94a3b8))
+                        .child(text),
+                ),
+        )
+}
+
+fn count_pill(count: usize, dark: bool) -> impl IntoElement {
+    div()
+        .h(px(18.0))
+        .min_w(px(26.0))
+        .rounded(px(5.0))
+        .bg(glass::inset(dark))
+        .border_1()
+        .border_color(glass::divider(dark))
+        .px_2()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(10.0))
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .text_color(theme::semantic().text_secondary)
+        .child(count.to_string())
+}
+
+fn status_text_pill(summary: &str, active: bool, dark: bool) -> impl IntoElement {
+    let color = if active {
+        theme::semantic().info
+    } else {
+        theme::semantic().text_secondary
+    };
+    div()
+        .h(px(24.0))
+        .rounded(px(6.0))
+        .bg(if active {
+            theme::rgba_with_alpha(color, 0.10)
+        } else {
+            glass::inset(dark)
+        })
+        .border_1()
+        .border_color(if active {
+            theme::rgba_with_alpha(color, 0.20)
+        } else {
+            glass::divider(dark)
+        })
+        .px_2()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(11.0))
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .text_color(color)
+        .child(summary.to_string())
+}
+
+fn notice_pill(notice: String, dark: bool) -> impl IntoElement {
+    div()
+        .h(px(24.0))
+        .max_w(px(300.0))
+        .rounded(px(6.0))
+        .bg(glass::inset(dark))
+        .border_1()
+        .border_color(glass::divider(dark))
+        .px_2()
+        .flex()
+        .items_center()
+        .gap_1()
+        .child(
+            Icon::new(IconName::Info)
+                .with_size(ComponentSize::Small)
+                .text_color(theme::semantic().text_secondary),
+        )
+        .child(
+            div()
+                .min_w(px(0.0))
+                .line_clamp(1)
+                .text_size(px(11.0))
+                .text_color(theme::semantic().text_secondary)
+                .child(notice),
+        )
+}
+
+fn transfer_direction_icon(direction: TransferDirection, dark: bool) -> impl IntoElement {
+    let icon = match direction {
+        TransferDirection::Upload => IconName::ArrowUp,
+        TransferDirection::Download => IconName::ArrowDown,
+    };
+    div()
+        .w(px(22.0))
+        .h(px(22.0))
+        .flex_none()
+        .rounded(px(6.0))
+        .bg(glass::inset(dark))
+        .border_1()
+        .border_color(glass::divider(dark))
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(
+            Icon::new(icon)
+                .with_size(ComponentSize::Small)
+                .text_color(ui::accent_color(PluginAccent::Cyan)),
+        )
+}
+
+fn progress_bar(progress: u8, dark: bool) -> impl IntoElement {
+    div()
+        .w(px(84.0))
+        .h(px(6.0))
+        .rounded_full()
+        .bg(glass::inset(dark))
+        .overflow_hidden()
+        .child(
+            div()
+                .h_full()
+                .w(px((progress as f32 / 100.0) * 84.0))
+                .rounded_full()
+                .bg(ui::accent_color(PluginAccent::Cyan)),
+        )
+}
+
+fn transfer_status_badge(status: TransferStatus, dark: bool) -> impl IntoElement {
+    let (label, color) = match status {
+        TransferStatus::Queued => ("排队中", theme::semantic().text_secondary),
+        TransferStatus::Running => ("传输中", theme::semantic().info),
+        TransferStatus::Completed => ("完成", theme::semantic().success),
+        TransferStatus::Failed => ("失败", theme::semantic().danger),
+        TransferStatus::Cancelled => ("已取消", theme::semantic().warning),
+    };
+    div()
+        .h(px(24.0))
+        .w(px(54.0))
+        .rounded(px(6.0))
+        .bg(if status == TransferStatus::Queued {
+            glass::inset(dark)
+        } else {
+            theme::rgba_with_alpha(color, 0.10)
+        })
+        .border_1()
+        .border_color(if status == TransferStatus::Queued {
+            glass::divider(dark)
+        } else {
+            theme::rgba_with_alpha(color, 0.22)
+        })
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(11.0))
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .text_color(color)
+        .child(label)
+}
+
 fn glass_panel(width: gpui::Pixels, dark: bool) -> gpui::Div {
     div()
         .w(width)
         .min_h(px(0.0))
-        .rounded(px(6.0))
+        .rounded(px(8.0))
         .bg(glass::panel(dark))
         .border_1()
         .border_color(glass::border(dark))
-        .p(px(6.0))
+        .shadow(glass::panel_shadow(dark))
+        .p(px(8.0))
         .flex()
         .flex_col()
-        .gap_0p5()
+        .gap_1()
 }
 
 fn glass_panel_flex(dark: bool) -> gpui::Div {
     div()
         .flex_1()
         .min_h(px(0.0))
-        .rounded(px(6.0))
+        .rounded(px(8.0))
         .bg(glass::panel(dark))
         .border_1()
         .border_color(glass::border(dark))
-        .p(px(6.0))
+        .shadow(glass::panel_shadow(dark))
+        .p(px(8.0))
         .flex()
         .flex_col()
-        .gap_0p5()
+        .gap_1()
 }
 
-fn panel_header(title: &'static str, subtitle: Option<String>) -> impl IntoElement {
+fn panel_header(icon: IconName, title: &'static str, subtitle: Option<String>) -> impl IntoElement {
     div()
         .flex_none()
-        .pb(px(2.0))
+        .h(px(40.0))
+        .px_2()
         .flex()
-        .flex_col()
-        .gap_0p5()
+        .items_center()
+        .justify_between()
+        .gap_3()
         .child(
             div()
-                .text_size(px(10.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .child(title),
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(
+                    Icon::new(icon)
+                        .with_size(ComponentSize::Small)
+                        .text_color(theme::semantic().text_secondary),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_0p5()
+                        .child(
+                            div()
+                                .text_size(px(13.0))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .child(title),
+                        )
+                        .children(subtitle.map(|subtitle| {
+                            div()
+                                .text_size(px(11.0))
+                                .line_clamp(1)
+                                .text_color(theme::semantic().text_secondary)
+                                .child(subtitle)
+                        })),
+                ),
         )
-        .children(subtitle.map(|subtitle| {
-            div()
-                .text_size(px(9.0))
-                .line_clamp(1)
-                .text_color(theme::semantic().text_secondary)
-                .child(subtitle)
-        }))
 }
 
-fn empty_state(text: &'static str) -> impl IntoElement {
+fn empty_state(icon: IconName, text: &'static str) -> impl IntoElement {
     div()
         .flex_1()
         .min_h(px(0.0))
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(10.0))
-        .text_color(theme::semantic().text_secondary)
-        .child(text)
+        .p_3()
+        .child(
+            div()
+                .min_w(px(0.0))
+                .max_w(px(230.0))
+                .flex()
+                .flex_col()
+                .items_center()
+                .gap_2()
+                .text_color(theme::semantic().text_secondary)
+                .child(
+                    Icon::new(icon)
+                        .with_size(ComponentSize::Medium)
+                        .text_color(theme::semantic().text_secondary),
+                )
+                .child(div().text_size(px(12.0)).line_height(px(16.0)).child(text)),
+        )
+}
+
+fn dialog_directory_from_text(text: &str) -> Option<PathBuf> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let expanded = expand_dialog_path(trimmed);
+    if expanded.is_dir() {
+        Some(expanded)
+    } else {
+        expanded
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .map(Path::to_path_buf)
+    }
+}
+
+fn expand_dialog_path(text: &str) -> PathBuf {
+    if text == "~" {
+        if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) {
+            return PathBuf::from(home);
+        }
+    }
+    if let Some(rest) = text.strip_prefix("~/").or_else(|| text.strip_prefix("~\\"))
+        && let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))
+    {
+        return PathBuf::from(home).join(rest);
+    }
+    PathBuf::from(text)
 }
 
 fn build_profile_editor_state(
@@ -3380,12 +4184,12 @@ fn compact_input(
     cx.new(|cx| {
         let mut input = TextInput::new(cx, placeholder.clone(), value.clone());
         input.set_chrome(false, cx);
-        input.set_monospace(true, cx);
+        input.set_monospace(false, cx);
         input.set_style(
             TextInputStyle {
-                height: if multiline { 92.0 } else { 32.0 },
-                font_size: 10.5,
-                padding: 8.0,
+                height: if multiline { 92.0 } else { 34.0 },
+                font_size: 12.0,
+                padding: 9.0,
             },
             cx,
         );

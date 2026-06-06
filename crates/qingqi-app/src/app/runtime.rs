@@ -32,7 +32,12 @@ use crate::{
         shortcut::{ShortcutAction, ShortcutGlobal, ShortcutService},
     },
 };
-use qingqi_core::{command_usage::CommandUsageStore, plugin::PluginManager, registry::BuildCx};
+use qingqi_core::{
+    command_catalog::{COMMAND_CATALOG_KEY, CommandCatalogStore},
+    command_usage::CommandUsageStore,
+    plugin::PluginManager,
+    registry::BuildCx,
+};
 use qingqi_platform::power::PowerManager;
 
 struct ThemeHandleAdapter {
@@ -143,6 +148,7 @@ pub fn bootstrap() -> Result<AppHost> {
     let events = AppEventBus::new();
     let database = Arc::new(DatabaseService::new(paths.clone()));
     database.register_database(DatabaseSpec::app("command-usage", "command_usage.db"))?;
+    database.register_database(DatabaseSpec::app(COMMAND_CATALOG_KEY, "command_catalog.db"))?;
     database.register_database(DatabaseSpec::app("app-launcher/index", "app_index.db"))?;
     let theme_store = Arc::new(RwLock::new(ThemeStore::new(paths.config("theme.json"))));
     let app_index_service = Arc::new(AppIndexService::with_events(
@@ -153,6 +159,7 @@ pub fn bootstrap() -> Result<AppHost> {
     let plugins = PluginManager::new(
         events.clone(),
         CommandUsageStore::new(Arc::clone(&database), "command-usage"),
+        CommandCatalogStore::new(Arc::clone(&database), COMMAND_CATALOG_KEY),
     );
     let shortcut_service = Arc::new(Mutex::new(ShortcutService::default()));
     let build_cx = BuildCx::new(Arc::clone(&database), paths.clone(), events);
@@ -456,6 +463,31 @@ pub fn run_command_with_trace(
     trace: Option<PluginOpenTrace>,
 ) -> Option<String> {
     WindowController::run_command_with_trace(window_controller, activation, cx, trace)
+}
+
+pub fn run_command_with_input(
+    window_controller: WindowControllerHandle,
+    activation: qingqi_plugin::command::Activation,
+    cx: &mut App,
+    launch_input: Option<String>,
+) -> Option<String> {
+    WindowController::run_command_with_input(window_controller, activation, cx, launch_input)
+}
+
+pub fn run_command_with_input_with_trace(
+    window_controller: WindowControllerHandle,
+    activation: qingqi_plugin::command::Activation,
+    cx: &mut App,
+    trace: Option<PluginOpenTrace>,
+    launch_input: Option<String>,
+) -> Option<String> {
+    WindowController::run_command_with_input_with_trace(
+        window_controller,
+        activation,
+        cx,
+        trace,
+        launch_input,
+    )
 }
 
 fn set_menus(cx: &mut App) {
