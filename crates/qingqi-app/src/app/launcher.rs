@@ -29,10 +29,8 @@ use crate::{
     core::clipboard::current_payload,
 };
 use qingqi_core::command_usage::CommandUsage;
-use qingqi_core::plugin::{
-    InlineView, ListView, PluginListItem, PluginManager, command_kind_priority,
-};
-use qingqi_plugin::command::{Activation, Command, CommandKind, build_launcher_context};
+use qingqi_core::plugin::{InlineView, ListView, PluginListItem, PluginManager};
+use qingqi_plugin::command::{Activation, Command, CommandKind, MatchScore, build_launcher_context};
 use qingqi_plugin::events::{AppEventBus, AppEventKind};
 use qingqi_plugin::plugin_spec::{PluginStatus, ViewMode, WindowSize};
 
@@ -321,22 +319,20 @@ impl Launcher {
         visuals: &HashMap<String, PluginVisual>,
         usage: &HashMap<String, CommandUsage>,
     ) -> Rc<Vec<Command>> {
-        let mut results: Vec<Command> = commands
+        // 默认列表无关键字/意图，全部置零，交由唯一排序函数按
+        // 「使用度(含时间衰减) → 插件优先 → 名称」排序，与查询列表共用同一逻辑。
+        let scored = commands
             .iter()
             .filter(|item| Self::is_default_command(item, visuals))
-            .cloned()
-            .collect();
-        // Sort by frecency (pre-computed decay score: recent + frequent = high)
-        results.sort_by(|a, b| {
-            let a_u = usage.get(&a.usage_key).cloned().unwrap_or_default();
-            let b_u = usage.get(&b.usage_key).cloned().unwrap_or_default();
-            b_u.frecency
-                .partial_cmp(&a_u.frecency)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| command_kind_priority(a.kind).cmp(&command_kind_priority(b.kind)))
-                .then_with(|| a.title.cmp(&b.title))
-        });
-        Rc::new(results)
+            .map(|item| (MatchScore::default(), item.clone()))
+            .collect::<Vec<_>>();
+        let now = time::OffsetDateTime::now_utc().unix_timestamp();
+        Rc::new(PluginManager::sort_commands(
+            scored,
+            usage,
+            &HashMap::new(),
+            now,
+        ))
     }
 
     fn is_default_command(item: &Command, visuals: &HashMap<String, PluginVisual>) -> bool {
@@ -471,12 +467,12 @@ impl Launcher {
             .flat_map(|command| command.prefixes.iter().cloned())
             .collect::<Vec<_>>();
         let context = build_launcher_context(query, &known_prefixes);
-        let mut scored = commands
+        let scored = commands
             .into_iter()
             .filter_map(|command| {
                 command
                     .score_with_context(&context)
-                    .map(|matched| (matched.score, command))
+                    .map(|matched| (matched, command))
             })
             .collect::<Vec<_>>();
         let usage = self
@@ -484,9 +480,9 @@ impl Launcher {
             .lock()
             .map(|pm| pm.usage_map())
             .unwrap_or_default();
-        // 使用 PluginManager 的统一排序逻辑，包含 clipboard boost 权重
-        PluginManager::sort_commands(&mut scored, &usage, &self.clipboard_boost_map);
-        scored.into_iter().map(|(_, command)| command).collect()
+        // 与默认列表共用 PluginManager 的唯一排序函数（加权融合 + clipboard boost）。
+        let now = time::OffsetDateTime::now_utc().unix_timestamp();
+        PluginManager::sort_commands(scored, &usage, &self.clipboard_boost_map, now)
     }
 
     fn handle_query_changed(&mut self, cx: &mut Context<Self>) {

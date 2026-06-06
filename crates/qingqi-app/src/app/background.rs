@@ -151,7 +151,7 @@ impl BackgroundSupervisor {
                     .background_executor()
                     .spawn(async move { rx.lock().ok()?.recv().ok() })
                     .await;
-                let Some(hook_id) = result.flatten() else {
+                let Some(hook_id) = result else {
                     break;
                 };
                 let window_controller = Arc::clone(&window_controller);

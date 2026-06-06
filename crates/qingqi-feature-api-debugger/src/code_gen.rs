@@ -71,14 +71,6 @@ fn escape_quote(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-fn indent_lines(text: &str, spaces: usize) -> String {
-    let pad = " ".repeat(spaces);
-    text.lines()
-        .map(|line| format!("{}{}", pad, line))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 // ── cURL ──
 
 fn gen_curl(req: &CodeGenRequest) -> String {
@@ -98,11 +90,7 @@ fn gen_curl(req: &CodeGenRequest) -> String {
         BodyMode::FormData => {
             for f in &req.form_data {
                 if f.enabled {
-                    if f.value.starts_with('@') {
-                        parts.push(format!("-F \"{}={}\"", escape_quote(&f.key), escape_quote(&f.value)));
-                    } else {
-                        parts.push(format!("-F \"{}={}\"", escape_quote(&f.key), escape_quote(&f.value)));
-                    }
+                    parts.push(format!("-F \"{}={}\"", escape_quote(&f.key), escape_quote(&f.value)));
                 }
             }
         }
@@ -233,11 +221,6 @@ fn gen_python(req: &CodeGenRequest) -> String {
 fn gen_javascript(req: &CodeGenRequest) -> String {
     let mut lines = Vec::new();
 
-    let has_body = match req.body_mode {
-        BodyMode::None => false,
-        _ => !req.body.is_empty() || !req.form_data.is_empty(),
-    };
-
     // Options
     let mut options = Vec::new();
     options.push(format!("  method: '{}',", req.method));
@@ -297,10 +280,6 @@ fn gen_node_axios(req: &CodeGenRequest) -> String {
             config_lines.push(format!("  data: {},", req.body.trim()));
         }
         BodyMode::FormData => {
-            let fd_lines: Vec<_> = req.form_data.iter()
-                .filter(|f| f.enabled)
-                .map(|f| format!("    {}: '{}',", f.key, f.value))
-                .collect();
             lines.push("const FormData = require('form-data');".to_string());
             lines.push("const form = new FormData();".to_string());
             for f in &req.form_data {
@@ -349,7 +328,6 @@ fn gen_rust(req: &CodeGenRequest) -> String {
     ];
 
     let method_lower = req.method.to_lowercase();
-    let mut builder = format!("    let response = client.{}(", method_lower);
 
     // form-data has special handling
     if req.body_mode == BodyMode::FormData && !req.form_data.is_empty() {

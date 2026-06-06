@@ -71,6 +71,18 @@ pub struct CommandMatch {
     pub reason: &'static str,
 }
 
+/// 上下文打分的两个分量，供统一排序做加权融合。
+///
+/// - `keyword`：输入文本字面命中（标题/关键字/副标题/前缀），即 [`Command::score`] 的结果
+///   加上前缀命中加成。
+/// - `intent`：由上下文推断的意图加成（[`Command::recommend_matchers`] 命中输入类型），
+///   不含 clipboard_boost——后者在排序处按 plugin_id 合并进意图分。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MatchScore {
+    pub keyword: i32,
+    pub intent: i32,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContextMatcher {
     pub kind: ContextKind,
@@ -255,36 +267,32 @@ impl Command {
         self.score_plain(&q)
     }
 
-    pub fn score_with_context(&self, context: &LauncherContext) -> Option<CommandMatch> {
-        let base_match = self
+    pub fn score_with_context(&self, context: &LauncherContext) -> Option<MatchScore> {
+        // keyword：字面文本命中（含 "prefix+text" / "prefix" 的基础分）。
+        let mut keyword = self
             .score(context.input_body.as_str())
-            .unwrap_or(CommandMatch {
-                score: 0,
-                reason: "none",
-            });
-        let mut matched = base_match.clone();
-        let mut recommended = matched.score > 0;
+            .map(|matched| matched.score)
+            .unwrap_or(0);
 
+        // 显式输入了本命令的前缀（如 "json "）：强字面意图，并入 keyword 主项。
         let prefix_hit = context.prefix.as_deref().is_some_and(|prefix| {
             self.prefixes
                 .iter()
                 .any(|candidate| candidate.eq_ignore_ascii_case(prefix))
         });
         if prefix_hit {
-            matched.score += 240;
-            matched.reason = "prefix";
-            recommended = true;
+            keyword += 240;
         }
 
+        // intent：上下文类型命中（如剪贴板内容是 JSON）推断出的意图加成。
+        let mut intent = 0;
         for matcher in &self.recommend_matchers {
             if context.input_kinds.contains(&matcher.kind) {
-                matched.score += matcher.boost;
-                matched.reason = "context";
-                recommended = true;
+                intent += matcher.boost;
             }
         }
 
-        recommended.then_some(matched)
+        (keyword > 0 || intent > 0).then_some(MatchScore { keyword, intent })
     }
 
     pub fn launch_input(&self, query: &str) -> String {
@@ -589,7 +597,9 @@ mod tests {
 
         let matched = command.score_with_context(&context).unwrap();
 
-        assert!(matched.score >= 180);
+        // 输入是 JSON 内容、并非字面命中标题/关键字：keyword 为 0，意图分来自 matcher。
+        assert_eq!(matched.keyword, 0);
+        assert_eq!(matched.intent, 180);
     }
 
     #[test]

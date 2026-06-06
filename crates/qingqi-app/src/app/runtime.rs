@@ -217,7 +217,8 @@ pub fn run(host: AppHost) -> Result<()> {
         cx.on_action(|_: &Quit, cx| cx.quit());
 
         #[cfg(target_os = "windows")]
-        lock_or_recover(&window_controller, "window_controller").ensure_keep_alive_window(cx);
+        qingqi_core::lock_or_recover(&window_controller, "window_controller")
+            .ensure_keep_alive_window(cx);
 
         set_menus(cx);
         app_catalog.start_background();

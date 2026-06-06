@@ -1,3 +1,5 @@
+#使用中文
+
 # Qingqi Agent Notes
 
 This project is a Rust + GPUI desktop toolbox. Keep changes aligned with the

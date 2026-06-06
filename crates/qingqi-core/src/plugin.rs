@@ -13,7 +13,7 @@ pub use qingqi_plugin::plugin::{
 };
 use qingqi_plugin::{
     command::{
-        ClipboardPayload, Command, CommandInvocation, CommandKind, CommandOutcome,
+        ClipboardPayload, Command, CommandInvocation, CommandKind, CommandOutcome, MatchScore,
         build_launcher_context,
     },
     events::AppEventBus,
@@ -160,20 +160,19 @@ impl PluginManager {
     ) -> Vec<Command> {
         self.refresh_command_cache();
         let limit = if limit == 0 { usize::MAX } else { limit };
-        let has_query = !query.trim().is_empty();
-        let mut scored = self.scored_cached_commands(query);
-        self.sort_scored_commands(&mut scored, has_query, boost_map);
-        scored.truncate(limit);
-        scored.into_iter().map(|(_, command)| command).collect()
+        let scored = self.scored_cached_commands(query);
+        let mut sorted = self.sort_scored_commands(scored, boost_map);
+        sorted.truncate(limit);
+        sorted
     }
 
-    fn scored_cached_commands(&mut self, query: &str) -> Vec<(i32, Command)> {
+    fn scored_cached_commands(&mut self, query: &str) -> Vec<(MatchScore, Command)> {
         let known_prefixes = self.known_prefixes();
         let context = build_launcher_context(query, &known_prefixes);
         let cached_scored = self.command_cache.iter().cloned().filter_map(|command| {
             command
                 .score_with_context(&context)
-                .map(|matched| (matched.score, command))
+                .map(|matched| (matched, command))
         });
 
         let plugin_query = context.input_body.trim();
@@ -198,7 +197,7 @@ impl PluginManager {
                     continue;
                 }
                 if let Some(matched) = command.score_with_context(&context) {
-                    scored.push((matched.score, command));
+                    scored.push((matched, command));
                 }
             }
         }
@@ -229,18 +228,17 @@ impl PluginManager {
     ) -> Vec<Command> {
         let known_prefixes = self.known_prefixes();
         let context = build_launcher_context(query, &known_prefixes);
-        let mut scored = commands
+        let scored = commands
             .iter()
             .cloned()
             .filter_map(|command| {
                 command
                     .score_with_context(&context)
-                    .map(|matched| (matched.score, command))
+                    .map(|matched| (matched, command))
             })
-            .filter(|(score, _)| !require_positive_score || *score > 0)
+            .filter(|(score, _)| !require_positive_score || score.keyword > 0 || score.intent > 0)
             .collect::<Vec<_>>();
-        self.sort_scored_commands(&mut scored, require_positive_score, boost_map);
-        scored.into_iter().map(|(_, command)| command).collect()
+        self.sort_scored_commands(scored, boost_map)
     }
 
     pub fn build_clipboard_boost_map(&self, payload: &ClipboardPayload) -> HashMap<String, i32> {
@@ -264,45 +262,60 @@ impl PluginManager {
             .collect()
     }
 
-    /// 统一排序：总分 = 关键词匹配分 + 使用频度分（Frecency）。
-    /// 空查询时关键词分为 0，退化为纯 Frecency 排序。
-    /// Frecency 权重 5.0：一个使用中的高频应用 (frecency~10) 获得 +50，
-    /// 不足以覆盖精确标题匹配 (120)，但足以把近期常用项排在前面。
-    pub const FRECENCY_WEIGHT: f64 = 5.0;
+    /// 加权融合的权重。关键字为原生分主项（×1）；意图、使用度按下列系数融入。
+    /// 关键字接近时高使用度/强意图可翻盘小差距，但明显更强的关键字不会被压垮。
+    /// 手感偏移时只需调这两个常量。
+    pub const INTENT_WEIGHT: f64 = 0.25;
+    pub const USAGE_WEIGHT: f64 = 1.5;
 
-    /// 公开的排序函数：总分 = 关键词匹配分 + 使用频度分 + clipboard boost。
-    /// 供 Launcher 等外部调用方复用统一的排序逻辑。
+    /// 唯一排序函数（默认列表与查询列表共用）。
+    ///
+    /// `total = keyword + (intent + clipboard_boost) × INTENT_WEIGHT + effective_frecency × USAGE_WEIGHT`，
+    /// 按 `total DESC → 插件优先 → 名称` 排序。`now_unix` 在调用前取一次传入，
+    /// 保证排序传递性，且每项的 `effective_frecency`（含 powf）只计算一次。
     pub fn sort_commands(
-        scored: &mut [(i32, Command)],
+        scored: Vec<(MatchScore, Command)>,
         usage_map: &HashMap<String, CommandUsage>,
         boost_map: &HashMap<String, i32>,
-    ) {
-        scored.sort_by(|(left_score, left), (right_score, right)| {
-            let left_u = usage_map.get(&left.usage_key).cloned().unwrap_or_default();
-            let right_u = usage_map.get(&right.usage_key).cloned().unwrap_or_default();
-            let left_boost = boost_map.get(&left.plugin_id).copied().unwrap_or(0) as f64;
-            let right_boost = boost_map.get(&right.plugin_id).copied().unwrap_or(0) as f64;
-            let left_total =
-                *left_score as f64 + left_u.frecency * Self::FRECENCY_WEIGHT + left_boost;
-            let right_total =
-                *right_score as f64 + right_u.frecency * Self::FRECENCY_WEIGHT + right_boost;
+        now_unix: i64,
+    ) -> Vec<Command> {
+        // decorate：一次性预算 (总分, kind 优先级, command)。
+        let mut decorated: Vec<(f64, u8, Command)> = scored
+            .into_iter()
+            .map(|(score, command)| {
+                let intent = (score.intent
+                    + boost_map.get(&command.plugin_id).copied().unwrap_or(0))
+                    as f64;
+                let freq = usage_map
+                    .get(&command.usage_key)
+                    .map(|usage| usage.effective_frecency(now_unix))
+                    .unwrap_or(0.0);
+                let total = score.keyword as f64
+                    + intent * Self::INTENT_WEIGHT
+                    + freq * Self::USAGE_WEIGHT;
+                (total, command_kind_priority(command.kind), command)
+            })
+            .collect();
+        decorated.sort_by(|(left_total, left_kind, left), (right_total, right_kind, right)| {
             right_total
-                .partial_cmp(&left_total)
+                .partial_cmp(left_total)
                 .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| {
-                    command_kind_priority(left.kind).cmp(&command_kind_priority(right.kind))
-                })
+                .then_with(|| left_kind.cmp(right_kind))
                 .then_with(|| left.title.cmp(&right.title))
         });
+        decorated
+            .into_iter()
+            .map(|(_, _, command)| command)
+            .collect()
     }
 
     fn sort_scored_commands(
         &self,
-        scored: &mut [(i32, Command)],
-        _has_query: bool,
+        scored: Vec<(MatchScore, Command)>,
         boost_map: &HashMap<String, i32>,
-    ) {
-        Self::sort_commands(scored, &self.usage_map(), boost_map);
+    ) -> Vec<Command> {
+        let now = time::OffsetDateTime::now_utc().unix_timestamp();
+        Self::sort_commands(scored, &self.usage_map(), boost_map, now)
     }
 
     pub fn usage_map(&self) -> HashMap<String, CommandUsage> {
@@ -502,5 +515,103 @@ pub fn command_kind_priority(kind: CommandKind) -> u8 {
         CommandKind::Plugin => 0,
         CommandKind::DynamicAction => 1,
         CommandKind::App => 2,
+    }
+}
+
+#[cfg(test)]
+mod sort_tests {
+    use super::*;
+
+    const NOW: i64 = 1_700_000_000;
+
+    fn used(frecency: f64) -> CommandUsage {
+        CommandUsage {
+            use_count: 1,
+            last_used_at: NOW,
+            frecency,
+        }
+    }
+
+    fn titles(commands: &[Command]) -> Vec<&str> {
+        commands.iter().map(|c| c.title.as_str()).collect()
+    }
+
+    #[test]
+    fn usage_overrides_small_keyword_gap() {
+        // Alpha: 关键字 105 + 高频(20) → 105 + 20×1.5 = 135；Beta: 关键字 120 → 120。
+        let alpha = Command::plugin_open("alpha", "Alpha", "", ["a"], [], "");
+        let beta = Command::plugin_open("beta", "Beta", "", ["b"], [], "");
+        let mut usage = HashMap::new();
+        usage.insert("plugin:alpha".to_string(), used(20.0));
+
+        let scored = vec![
+            (MatchScore { keyword: 120, intent: 0 }, beta),
+            (MatchScore { keyword: 105, intent: 0 }, alpha),
+        ];
+        let sorted = PluginManager::sort_commands(scored, &usage, &HashMap::new(), NOW);
+        assert_eq!(titles(&sorted), vec!["Alpha", "Beta"]);
+    }
+
+    #[test]
+    fn keyword_dominates_pure_intent() {
+        // Word: 关键字 90 → 90；Ctx: 意图 180 → 180×0.25 = 45。关键字胜。
+        let word = Command::plugin_open("word", "Word", "", ["w"], [], "");
+        let ctx = Command::plugin_open("ctx", "Ctx", "", ["c"], [], "");
+        let scored = vec![
+            (MatchScore { keyword: 0, intent: 180 }, ctx),
+            (MatchScore { keyword: 90, intent: 0 }, word),
+        ];
+        let sorted = PluginManager::sort_commands(scored, &HashMap::new(), &HashMap::new(), NOW);
+        assert_eq!(titles(&sorted), vec!["Word", "Ctx"]);
+    }
+
+    #[test]
+    fn intent_outranks_moderate_usage() {
+        // Ctx: 意图 180 → 45；Freq: 高频(20) → 30。意图胜。
+        let ctx = Command::plugin_open("ctx", "Ctx", "", ["c"], [], "");
+        let freq = Command::plugin_open("freq", "Freq", "", ["f"], [], "");
+        let mut usage = HashMap::new();
+        usage.insert("plugin:freq".to_string(), used(20.0));
+
+        let scored = vec![
+            (MatchScore { keyword: 0, intent: 0 }, freq),
+            (MatchScore { keyword: 0, intent: 180 }, ctx),
+        ];
+        let sorted = PluginManager::sort_commands(scored, &usage, &HashMap::new(), NOW);
+        assert_eq!(titles(&sorted), vec!["Ctx", "Freq"]);
+    }
+
+    #[test]
+    fn recorded_beats_unrecorded_and_plugin_first_on_tie() {
+        // 有记录的 app(7.5) > 无记录项(0)；无记录项之间插件(kind0)在 app(kind2) 前。
+        let used_app = Command::app_launch("/apps/Zoom", "Zoom", "", ["zoom"], "");
+        let unused_plugin = Command::plugin_open("calc", "Calc", "", ["calc"], [], "");
+        let unused_app = Command::app_launch("/apps/Notes", "Notes", "", ["notes"], "");
+        let mut usage = HashMap::new();
+        usage.insert("app:/apps/Zoom".to_string(), used(5.0));
+
+        let scored = vec![
+            (MatchScore::default(), unused_app),
+            (MatchScore::default(), used_app),
+            (MatchScore::default(), unused_plugin),
+        ];
+        let sorted = PluginManager::sort_commands(scored, &usage, &HashMap::new(), NOW);
+        assert_eq!(titles(&sorted), vec!["Zoom", "Calc", "Notes"]);
+    }
+
+    #[test]
+    fn clipboard_boost_counts_as_intent() {
+        // clipboard boost 按 plugin_id 并入意图分：160×0.25 = 40 > 无加成项。
+        let boosted = Command::plugin_open("img", "Img", "", ["i"], [], "");
+        let plain = Command::plugin_open("plain", "Plain", "", ["p"], [], "");
+        let mut boost = HashMap::new();
+        boost.insert("img".to_string(), 160);
+
+        let scored = vec![
+            (MatchScore { keyword: 10, intent: 0 }, plain),
+            (MatchScore { keyword: 10, intent: 0 }, boosted),
+        ];
+        let sorted = PluginManager::sort_commands(scored, &HashMap::new(), &boost, NOW);
+        assert_eq!(titles(&sorted), vec!["Img", "Plain"]);
     }
 }

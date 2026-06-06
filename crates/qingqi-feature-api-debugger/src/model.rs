@@ -10,6 +10,8 @@ pub enum HttpMethod {
     Put,
     Patch,
     Delete,
+    Head,
+    Options,
 }
 
 impl HttpMethod {
@@ -20,6 +22,8 @@ impl HttpMethod {
             Self::Put => "PUT",
             Self::Patch => "PATCH",
             Self::Delete => "DELETE",
+            Self::Head => "HEAD",
+            Self::Options => "OPTIONS",
         }
     }
 
@@ -30,11 +34,26 @@ impl HttpMethod {
             Self::Put => 0x7b5fff,
             Self::Patch => 0x997733,
             Self::Delete => 0x994444,
+            Self::Head => 0x557788,
+            Self::Options => 0x6b5b95,
         }
     }
 
-    pub fn all() -> [Self; 5] {
-        [Self::Get, Self::Post, Self::Put, Self::Patch, Self::Delete]
+    /// Whether a request body should be sent for this method.
+    pub fn allows_body(&self) -> bool {
+        !matches!(self, Self::Get | Self::Head)
+    }
+
+    pub fn all() -> [Self; 7] {
+        [
+            Self::Get,
+            Self::Post,
+            Self::Put,
+            Self::Patch,
+            Self::Delete,
+            Self::Head,
+            Self::Options,
+        ]
     }
 }
 
@@ -257,6 +276,8 @@ pub struct ApiRequest {
     pub params: Vec<KeyValueRow>,
     pub path_rows: Vec<KeyValueRow>,
     pub body: String,
+    #[serde(default)]
+    pub body_mode: BodyMode,
     pub headers: Vec<KeyValueRow>,
     pub cookies: Vec<KeyValueRow>,
     pub auth: Vec<KeyValueRow>,

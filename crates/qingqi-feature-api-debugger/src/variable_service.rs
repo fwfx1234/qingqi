@@ -112,6 +112,11 @@ pub fn resolve_key(
     None
 }
 
+/// Current wall-clock time, preferring local offset and falling back to UTC.
+fn local_now() -> time::OffsetDateTime {
+    time::OffsetDateTime::now_local().unwrap_or_else(|_| time::OffsetDateTime::now_utc())
+}
+
 /// Return magic value for built-in dynamic variables.
 pub fn magic_value(key: &str) -> Option<String> {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -124,24 +129,24 @@ pub fn magic_value(key: &str) -> Option<String> {
         "timestamp" => Some(now.as_secs().to_string()),
         "timestamp_ms" => Some(now.as_millis().to_string()),
         "iso_datetime" => {
-            let secs = now.as_secs();
+            let t = time::OffsetDateTime::now_utc();
             Some(format!(
-                "{}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-                1970 + secs / 31_536_000,
-                (secs / 2_592_000 % 12) + 1,
-                (secs / 86400 % 30) + 1,
-                (secs / 3600 % 24),
-                (secs / 60 % 60),
-                secs % 60,
+                "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+                t.year(),
+                u8::from(t.month()),
+                t.day(),
+                t.hour(),
+                t.minute(),
+                t.second(),
             ))
         }
         "date" => {
-            let secs = now.as_secs();
+            let t = local_now();
             Some(format!(
-                "{}-{:02}-{:02}",
-                1970 + secs / 31_536_000,
-                (secs / 2_592_000 % 12) + 1,
-                (secs / 86400 % 30) + 1,
+                "{:04}-{:02}-{:02}",
+                t.year(),
+                u8::from(t.month()),
+                t.day(),
             ))
         }
         "uuid" => {
@@ -171,29 +176,29 @@ pub fn magic_value(key: &str) -> Option<String> {
             Some(bytes.iter().map(|b| format!("{b:02x}")).collect())
         }
         "time" => {
-            let secs = now.as_secs();
+            let t = local_now();
             Some(format!(
                 "{:02}:{:02}:{:02}",
-                secs / 3600 % 24,
-                secs / 60 % 60,
-                secs % 60,
+                t.hour(),
+                t.minute(),
+                t.second(),
             ))
         }
         "datetime" => {
-            let secs = now.as_secs();
+            let t = local_now();
             Some(format!(
-                "{}-{:02}-{:02} {:02}:{:02}:{:02}",
-                1970 + secs / 31_536_000,
-                (secs / 2_592_000 % 12) + 1,
-                (secs / 86400 % 30) + 1,
-                secs / 3600 % 24,
-                secs / 60 % 60,
-                secs % 60,
+                "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+                t.year(),
+                u8::from(t.month()),
+                t.day(),
+                t.hour(),
+                t.minute(),
+                t.second(),
             ))
         }
-        "year" => Some((1970 + now.as_secs() / 31_536_000).to_string()),
-        "month" => Some(((now.as_secs() / 2_592_000 % 12) + 1).to_string()),
-        "day" => Some(((now.as_secs() / 86400 % 30) + 1).to_string()),
+        "year" => Some(local_now().year().to_string()),
+        "month" => Some(u8::from(local_now().month()).to_string()),
+        "day" => Some(local_now().day().to_string()),
         "random_int" => {
             use std::collections::hash_map::DefaultHasher;
             use std::hash::{Hash, Hasher};
@@ -589,6 +594,21 @@ mod tests {
         // Should be YYYY-MM-DD format
         assert_eq!(val.len(), 10);
         assert!(val.contains('-'));
+    }
+
+    #[test]
+    fn magic_value_dates_use_real_calendar() {
+        // Year/month/day should reflect a real, current-era calendar date,
+        // not the old 365-day/30-day approximation.
+        let year: i32 = magic_value("year").unwrap().parse().unwrap();
+        assert!(year >= 2025, "year {year} should be current era");
+        let month: u8 = magic_value("month").unwrap().parse().unwrap();
+        assert!((1..=12).contains(&month), "month {month} out of range");
+        let day: u8 = magic_value("day").unwrap().parse().unwrap();
+        assert!((1..=31).contains(&day), "day {day} out of range");
+        // date == year-month-day
+        let date = magic_value("date").unwrap();
+        assert_eq!(date, format!("{year:04}-{month:02}-{day:02}"));
     }
 
     #[test]

@@ -157,7 +157,7 @@ pub fn parse_openapi(content: &str) -> Result<ImportedCollection, String> {
                             snapshot.body_text = example;
                             snapshot.body_mode = "json".into();
                         }
-                    } else if let Some(form_media) = content.get("multipart/form-data") {
+                    } else if content.get("multipart/form-data").is_some() {
                         snapshot.body_mode = "form-data".into();
                     }
                 }

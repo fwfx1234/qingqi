@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicU64, Ordering},
     },
     thread,
     time::Instant,
@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     data_source::ApiDebuggerDataSource,
-    model::{CollectionNode, HttpTab, NodeKind, RequestSnapshot},
+    model::{ApiVariable, CollectionNode, HttpTab, NodeKind, RequestSnapshot, VariableScope},
     script_service,
     store::ApiWorkspace,
     variable_service,
@@ -24,7 +24,7 @@ use qingqi_plugin::{database::DatabaseService, log_error, storage::AppPaths};
 // Re-export model types for backward compatibility
 pub use crate::model::{
     ApiEnvironment, ApiGroup, ApiRequest, ApiScenario, AuthType, BodyMode, EnvHeader,
-    EnvVariable, EnvironmentFull, HttpMethod, KeyValueRow, ScenarioStatus,
+    EnvVariable, EnvironmentFull, HttpHistory, HttpMethod, KeyValueRow, ScenarioStatus,
 };
 
 // ── UI-specific enums (not persisted) ──
@@ -86,6 +86,7 @@ pub fn index_to_editor_tab(index: i64) -> Option<EditorTab> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ResponseTab {
     Body,
+    Cookies,
     Headers,
     Request,
     Curl,
@@ -98,6 +99,7 @@ impl ResponseTab {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Body => "Body",
+            Self::Cookies => "Cookies",
             Self::Headers => "Headers",
             Self::Request => "Request",
             Self::Curl => "cURL",
@@ -105,6 +107,19 @@ impl ResponseTab {
             Self::History => "历史",
             Self::Code => "代码",
         }
+    }
+
+    pub fn all() -> [Self; 8] {
+        [
+            Self::Body,
+            Self::Cookies,
+            Self::Headers,
+            Self::Request,
+            Self::Curl,
+            Self::Logs,
+            Self::History,
+            Self::Code,
+        ]
     }
 }
 
@@ -131,6 +146,10 @@ pub struct ApiResponse {
     pub size_bytes: usize,
     pub body: String,
     pub headers: String,
+    /// `Set-Cookie` response headers, one per line (empty when none).
+    pub cookies: String,
+    /// Raw `Content-Type` of the response (used to flag binary/image bodies).
+    pub content_type: String,
     pub request_dump: String,
     pub curl: String,
     pub logs: Vec<String>,
@@ -148,7 +167,10 @@ struct ApiServiceState {
 
 pub struct ApiService {
     revision: AtomicU64,
-    cancel_flag: AtomicBool,
+    /// Monotonic request generation. Each send claims the next value; a cancel
+    /// (or a superseding send) advances it so the in-flight worker discards its
+    /// result instead of clobbering newer state.
+    generation: AtomicU64,
     state: Mutex<ApiServiceState>,
     data_source: ApiDebuggerDataSource,
 }
@@ -160,7 +182,7 @@ impl ApiService {
             .expect("无法打开 API 调试器数据库");
         Self {
             revision: AtomicU64::new(0),
-            cancel_flag: AtomicBool::new(false),
+            generation: AtomicU64::new(0),
             state: Mutex::new(ApiServiceState {
                 in_flight: false,
                 pending_response: None,
@@ -184,7 +206,16 @@ impl ApiService {
     }
 
     pub fn cancel_request(&self) {
-        self.cancel_flag.store(true, Ordering::SeqCst);
+        // Invalidate the in-flight request so its result is discarded, and
+        // unlock the UI immediately. A blocking request already sent cannot be
+        // aborted mid-flight, so the server may still process it — we only stop
+        // waiting for / applying the response.
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        if let Ok(mut state) = self.state.lock() {
+            state.in_flight = false;
+            state.pending_notice = Some(String::from("请求已取消"));
+        }
+        self.revision.fetch_add(1, Ordering::SeqCst);
     }
 
     pub fn take_pending_response(&self) -> Option<ApiResponse> {
@@ -237,12 +268,20 @@ impl ApiService {
         url: &str,
         request: &ApiRequest,
     ) -> Result<()> {
+        let snapshot = request_to_snapshot(method, url, request);
+        // Prefer the stable node_id so endpoints that share a title don't clobber
+        // each other; fall back to title matching only for legacy requests that
+        // have not been assigned a node_id yet.
+        if !request.node_id.is_empty() {
+            self.data_source
+                .update_collection_node(&request.node_id, title, method, url, &snapshot)?;
+            return Ok(());
+        }
         let nodes = self.data_source.list_collection_nodes()?;
         if let Some(node) = nodes
             .iter()
             .find(|n| n.name == title && n.kind == NodeKind::Endpoint)
         {
-            let snapshot = request_to_snapshot(method, url, request);
             self.data_source
                 .update_collection_node(&node.id, title, method, url, &snapshot)?;
         }
@@ -317,6 +356,31 @@ impl ApiService {
         thread::spawn(move || match service.create_endpoint(parent_id.as_deref(), &name, &method, &url) {
             Ok(_) => service.publish_notice(format!("已创建端点 {}", name)),
             Err(e) => service.publish_notice(format!("创建端点失败: {e}")),
+        });
+    }
+
+    /// Create a test case as a child of an endpoint. Cases surface as scenarios
+    /// under their parent request in the collection tree.
+    pub fn create_case(&self, parent_id: &str, name: &str) -> Result<CollectionNode> {
+        let id = format!("case-{}", Uuid::new_v4().simple());
+        let node = self.data_source.create_collection_node(
+            &id,
+            Some(parent_id),
+            NodeKind::Case,
+            name,
+            "",
+            "",
+            &RequestSnapshot::default(),
+        )?;
+        self.revision.fetch_add(1, Ordering::SeqCst);
+        Ok(node)
+    }
+
+    pub fn create_case_async(self: &Arc<Self>, parent_id: String, name: String) {
+        let service = Arc::clone(self);
+        thread::spawn(move || match service.create_case(&parent_id, &name) {
+            Ok(_) => service.publish_notice(format!("已创建用例 {}", name)),
+            Err(e) => service.publish_notice(format!("创建用例失败: {e}")),
         });
     }
 
@@ -461,6 +525,26 @@ impl ApiService {
         Ok(nodes)
     }
 
+    pub fn import_from_openapi_async(self: &Arc<Self>, content: String) {
+        let service = Arc::clone(self);
+        thread::spawn(move || match service.import_from_openapi(&content) {
+            Ok(nodes) => {
+                service.publish_notice(format!("已从 OpenAPI 导入 {} 个端点", nodes.len()))
+            }
+            Err(e) => service.publish_notice(format!("OpenAPI 导入失败: {e}")),
+        });
+    }
+
+    pub fn import_from_postman_async(self: &Arc<Self>, content: String) {
+        let service = Arc::clone(self);
+        thread::spawn(move || match service.import_from_postman(&content) {
+            Ok(nodes) => {
+                service.publish_notice(format!("已从 Postman 导入 {} 个端点", nodes.len()))
+            }
+            Err(e) => service.publish_notice(format!("Postman 导入失败: {e}")),
+        });
+    }
+
     // ── Export ──
 
     pub fn export_collection_as_openapi(&self) -> Result<String> {
@@ -509,6 +593,10 @@ impl ApiService {
         self.data_source.list_history(tab_id, limit)
     }
 
+    pub fn clear_history(&self, tab_id: &str) -> Result<usize> {
+        self.data_source.clear_history(tab_id)
+    }
+
     // ── Collection node lookup ──
 
     pub fn get_collection_node(&self, id: &str) -> Result<Option<CollectionNode>> {
@@ -523,7 +611,7 @@ impl ApiService {
         post_ops_text: &str,
         tab_id: &str,
     ) -> Result<()> {
-        {
+        let my_gen = {
             let mut state = self
                 .state
                 .lock()
@@ -535,8 +623,10 @@ impl ApiService {
             state.pending_response = None;
             state.pending_error = None;
             state.last_tab_id = tab_id.to_string();
-        }
-        self.cancel_flag.store(false, Ordering::SeqCst);
+            self.generation
+                .fetch_add(1, Ordering::SeqCst)
+                .wrapping_add(1)
+        };
         self.revision.fetch_add(1, Ordering::SeqCst);
 
         let service = Arc::clone(self);
@@ -544,57 +634,113 @@ impl ApiService {
         let post_ops = post_ops_text.to_string();
         let tid = tab_id.to_string();
         thread::spawn(move || {
-            if service.cancel_flag.load(Ordering::SeqCst) {
-                if let Ok(mut state) = service.state.lock() {
-                    state.in_flight = false;
-                    state.pending_notice = Some(String::from("请求已取消"));
-                }
-                service.revision.fetch_add(1, Ordering::SeqCst);
+            // Load the persisted variable stores so chained values (extracted by
+            // earlier requests) resolve in this one. Module scope is not yet keyed
+            // from the UI, so it stays empty for now.
+            let env_store = service
+                .data_source
+                .list_variables(VariableScope::Environment, &environment.name)
+                .unwrap_or_default();
+            let global_store = service
+                .data_source
+                .list_variables(VariableScope::Global, "")
+                .unwrap_or_default();
+            let result = perform_request(
+                &environment,
+                &request,
+                &pre_ops,
+                &env_store,
+                &[],
+                &global_store,
+            );
+
+            // Discard if a newer request started or the user cancelled.
+            if service.generation.load(Ordering::SeqCst) != my_gen {
                 return;
             }
-            let result = perform_request(&environment, &request, &pre_ops);
-            if let Ok(mut state) = service.state.lock() {
+
+            // Post-process a successful response before taking the state lock so
+            // the (potentially I/O-bound) variable persistence does not hold it:
+            //   1. `extract` rules pull values from the body and are written back
+            //      to the environment-scoped store, so the next request in the
+            //      chain can reference them (request chaining).
+            //   2. assertions are evaluated and summarised into the logs.
+            let result = match result {
+                Ok(mut resp) => {
+                    if !post_ops.is_empty() {
+                        let extracted = script_service::extract_variables(&post_ops, &resp.body);
+                        if !extracted.is_empty() {
+                            let mut names: Vec<String> = extracted.keys().cloned().collect();
+                            names.sort();
+                            for (key, value) in &extracted {
+                                log_error!(
+                                    service.data_source.upsert_variable(
+                                        VariableScope::Environment,
+                                        &environment.name,
+                                        key,
+                                        value,
+                                    ),
+                                    warn,
+                                    "保存提取变量失败"
+                                );
+                            }
+                            resp.logs.push(format!("提取变量: {}", names.join(", ")));
+                        }
+                        let assertion_results =
+                            script_service::run_assertions(&post_ops, resp.status_code, &resp.body);
+                        if !assertion_results.is_empty() {
+                            let summary =
+                                script_service::format_assertion_results(&assertion_results);
+                            resp.logs.push(format!("断言结果:\n{summary}"));
+                            resp.assertion_results = assertion_results;
+                        }
+                    }
+                    Ok(resp)
+                }
+                Err(error) => Err(error),
+            };
+
+            let recorded = {
+                let mut state = match service.state.lock() {
+                    Ok(state) => state,
+                    Err(_) => return,
+                };
+                if service.generation.load(Ordering::SeqCst) != my_gen {
+                    return;
+                }
                 state.in_flight = false;
                 match result {
-                    Ok((response, _extracted_vars)) => {
-                        // Run assertions if post-ops contains assertions
-                        let mut resp = response;
-                        if !post_ops.is_empty() {
-                            let assertion_results = script_service::run_assertions(
-                                &post_ops,
-                                resp.status_code,
-                                &resp.body,
-                            );
-                            if !assertion_results.is_empty() {
-                                let summary =
-                                    script_service::format_assertion_results(&assertion_results);
-                                resp.logs.push(format!("断言结果:\n{summary}"));
-                                resp.assertion_results = assertion_results;
-                            }
-                        }
+                    Ok(resp) => {
+                        let snapshot = resp.clone();
                         state.pending_response = Some(resp);
                         state.pending_error = None;
+                        Some(snapshot)
                     }
                     Err(error) => {
                         state.pending_error = Some(error.to_string());
-                        state.pending_response = Some(ApiResponse {
+                        let resp = ApiResponse {
                             status_line: String::from("请求失败"),
                             status_code: 0,
                             duration_ms: 0,
                             size_bytes: 0,
                             body: format!("{{\n  \"error\": {:?}\n}}", error.to_string()),
                             headers: String::new(),
+                            cookies: String::new(),
+                            content_type: String::new(),
                             request_dump: String::new(),
                             curl: String::new(),
                             logs: vec![format!("请求失败: {error}")],
                             assertion_results: Vec::new(),
-                        });
+                        };
+                        let snapshot = resp.clone();
+                        state.pending_response = Some(resp);
+                        Some(snapshot)
                     }
                 }
-            }
+            };
 
-            // Persist history and save tab state
-            if let Some(resp) = service.take_pending_response_ref() {
+            // Persist history from the recorded response snapshot.
+            if let Some(resp) = recorded {
                 let title = resp.status_line.clone();
                 let method = request.method.label().to_string();
                 let url_str = build_final_url(&environment, &request);
@@ -642,7 +788,7 @@ impl ApiService {
                     method: request.method.label().to_string(),
                     url: request.path.clone(),
                     request_mode: "rest".into(),
-                    body_mode: detect_body_mode(&request.body).to_string(),
+                    body_mode: request.body_mode.as_str().to_string(),
                     auth_type,
                     auth_value,
                     headers_text: format_kv_rows(&request.headers),
@@ -667,13 +813,6 @@ impl ApiService {
         });
 
         Ok(())
-    }
-
-    fn take_pending_response_ref(&self) -> Option<ApiResponse> {
-        self.state
-            .lock()
-            .ok()
-            .and_then(|state| state.pending_response.clone())
     }
 
     // ── Environment CRUD (real actions) ──
@@ -989,7 +1128,10 @@ fn perform_request(
     environment: &ApiEnvironment,
     request: &ApiRequest,
     pre_ops_text: &str,
-) -> Result<(ApiResponse, HashMap<String, String>)> {
+    env_store: &[ApiVariable],
+    module_store: &[ApiVariable],
+    global_store: &[ApiVariable],
+) -> Result<ApiResponse> {
     let mut draft = script_service::RequestDraft {
         method: request.method.label().to_string(),
         url: request.path.clone(),
@@ -1016,19 +1158,51 @@ fn perform_request(
         .map(|row| (row.key.trim().to_string(), row.value.trim().to_string()))
         .collect();
 
-    let resolved_url = resolve_with_temp(&draft.url, &temporary, &env_vars);
-    let resolved_params: Vec<String> = draft
+    // Resolve `{{var}}` / `${var}` through the full precedence chain: pre-ops
+    // temporaries → inline env vars → env/module/global persisted stores. The
+    // persisted stores are what make request chaining work (a value `extract`ed
+    // by an earlier request is read back here).
+    let resolve = |text: &str| -> String {
+        variable_service::resolve_text(
+            text,
+            &temporary,
+            &env_vars,
+            env_store,
+            &HashMap::new(),
+            module_store,
+            &HashMap::new(),
+            global_store,
+        )
+    };
+
+    // Split auth into header- and query-based contributions. API keys placed
+    // in the query string are appended to the params; everything else (Bearer,
+    // Basic, header API keys) becomes a request header.
+    let mut auth_headers: Vec<(String, String)> = Vec::new();
+    let mut auth_query: Vec<(String, String)> = Vec::new();
+    for r in &request.auth {
+        if !r.enabled || r.key.trim().is_empty() {
+            continue;
+        }
+        let k = r.key.trim().to_string();
+        let v = resolve(r.value.trim());
+        if r.description.trim().eq_ignore_ascii_case("query") {
+            auth_query.push((k, v));
+        } else {
+            auth_headers.push((k, v));
+        }
+    }
+
+    let resolved_url = resolve(&draft.url);
+    let mut resolved_params: Vec<String> = draft
         .params
         .iter()
         .filter(|(_, v)| !v.trim().is_empty())
-        .map(|(k, v)| {
-            format!(
-                "{}={}",
-                resolve_with_temp(k, &temporary, &env_vars),
-                resolve_with_temp(v, &temporary, &env_vars)
-            )
-        })
+        .map(|(k, v)| format!("{}={}", resolve(k), resolve(v)))
         .collect();
+    for (k, v) in &auth_query {
+        resolved_params.push(format!("{k}={v}"));
+    }
 
     let base_url = if resolved_url.starts_with("http://") || resolved_url.starts_with("https://") {
         resolved_url.clone()
@@ -1047,14 +1221,68 @@ fn perform_request(
         format!("{base_url}?{}", resolved_params.join("&"))
     };
 
-    let body = if matches!(request.method, HttpMethod::Get | HttpMethod::Delete) {
-        String::new()
+    let allows_body = request.method.allows_body();
+    let raw_body = if allows_body {
+        resolve(&draft.body)
     } else {
-        resolve_with_temp(&draft.body, &temporary, &env_vars)
+        String::new()
     };
 
-    let curl_preview = build_curl_preview(&url, request.method, &[], &body);
-    let request_dump = build_request_dump(&url, request.method, &[], &body);
+    // Collect the effective request headers (resolved) once, so the real
+    // request, the cURL preview and the request dump all stay in sync.
+    let mut headers: Vec<(String, String)> = Vec::new();
+    for (k, v) in &draft.headers {
+        if k.trim().is_empty() {
+            continue;
+        }
+        headers.push((k.trim().to_string(), resolve(v)));
+    }
+    for (k, v) in &auth_headers {
+        headers.push((k.clone(), v.clone()));
+    }
+    let cookie_pairs: Vec<String> = request
+        .cookies
+        .iter()
+        .filter(|r| r.enabled && !r.key.trim().is_empty())
+        .map(|r| format!("{}={}", r.key.trim(), resolve(r.value.trim())))
+        .collect();
+    if !cookie_pairs.is_empty() {
+        headers.push(("Cookie".to_string(), cookie_pairs.join("; ")));
+    }
+    for r in &environment.headers {
+        if !r.enabled || r.key.trim().is_empty() {
+            continue;
+        }
+        headers.push((r.key.trim().to_string(), resolve(&r.value)));
+    }
+
+    // Auto Content-Type based on the body mode, unless the user set one.
+    let has_content_type = headers
+        .iter()
+        .any(|(k, _)| k.eq_ignore_ascii_case("content-type"));
+    if allows_body && !raw_body.is_empty() && !has_content_type {
+        if request.body_mode == BodyMode::FormData {
+            headers.push((
+                "Content-Type".to_string(),
+                format!("multipart/form-data; boundary={MULTIPART_BOUNDARY}"),
+            ));
+        } else if let Some(ct) = default_content_type(request.body_mode) {
+            headers.push(("Content-Type".to_string(), ct.to_string()));
+        }
+    }
+
+    // Resolve the outgoing body bytes. Binary mode treats the text as a path;
+    // FormData assembles a multipart body by hand.
+    let body_bytes: Vec<u8> = if !allows_body || raw_body.is_empty() {
+        Vec::new()
+    } else if request.body_mode == BodyMode::Binary {
+        std::fs::read(raw_body.trim())
+            .map_err(|e| anyhow!("读取二进制文件失败 ({}): {e}", raw_body.trim()))?
+    } else if request.body_mode == BodyMode::FormData {
+        build_multipart_body(&raw_body, MULTIPART_BOUNDARY)?
+    } else {
+        raw_body.clone().into_bytes()
+    };
 
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
@@ -1065,58 +1293,27 @@ fn perform_request(
         .unwrap_or(reqwest::Method::GET);
     let mut req = client.request(method, &url);
 
-    // Add headers from draft
-    for (k, v) in &draft.headers {
-        if let Ok(header_name) = reqwest::header::HeaderName::from_bytes(k.as_bytes()) {
-            if let Ok(header_value) = reqwest::header::HeaderValue::from_str(&resolve_with_temp(v, &temporary, &env_vars)) {
-                req = req.header(header_name, header_value);
+    for (k, v) in &headers {
+        if let Ok(name) = reqwest::header::HeaderName::from_bytes(k.as_bytes()) {
+            if let Ok(value) = reqwest::header::HeaderValue::from_str(v) {
+                req = req.header(name, value);
             }
         }
     }
 
-    // Add auth headers
-    for r in &request.auth {
-        if !r.enabled || r.key.trim().is_empty() {
-            continue;
-        }
-        let val = resolve_with_temp(r.value.trim(), &temporary, &env_vars);
-        if let Ok(header_name) = reqwest::header::HeaderName::from_bytes(r.key.trim().as_bytes()) {
-            if let Ok(header_value) = reqwest::header::HeaderValue::from_str(&val) {
-                req = req.header(header_name, header_value);
-            }
-        }
+    if !body_bytes.is_empty() {
+        req = req.body(body_bytes);
     }
 
-    // Add cookies
-    let cookie_pairs: Vec<String> = request
-        .cookies
-        .iter()
-        .filter(|r| r.enabled && !r.key.trim().is_empty())
-        .map(|r| format!("{}={}", r.key.trim(), resolve_with_temp(r.value.trim(), &temporary, &env_vars)))
-        .collect();
-    if !cookie_pairs.is_empty() {
-        if let Ok(header_value) = reqwest::header::HeaderValue::from_str(&cookie_pairs.join("; ")) {
-            req = req.header(reqwest::header::COOKIE, header_value);
-        }
-    }
-
-    // Add body
-    if !body.is_empty() && !matches!(request.method, HttpMethod::Get | HttpMethod::Delete) {
-        req = req.body(body.clone());
-    }
-
-    // Add environment headers
-    for r in &environment.headers {
-        if !r.enabled || r.key.trim().is_empty() {
-            continue;
-        }
-        let val = resolve_with_temp(&r.value, &temporary, &env_vars);
-        if let Ok(header_name) = reqwest::header::HeaderName::from_bytes(r.key.trim().as_bytes()) {
-            if let Ok(header_value) = reqwest::header::HeaderValue::from_str(&val) {
-                req = req.header(header_name, header_value);
-            }
-        }
-    }
+    // Build cURL preview and request dump from the same resolved headers/body.
+    let header_lines: Vec<String> = headers.iter().map(|(k, v)| format!("{k}: {v}")).collect();
+    let body_preview = if request.body_mode == BodyMode::Binary && !raw_body.is_empty() {
+        format!("<二进制文件: {}>", raw_body.trim())
+    } else {
+        raw_body.clone()
+    };
+    let curl_preview = build_curl_preview(&url, request.method, &header_lines, &body_preview);
+    let request_dump = build_request_dump(&url, request.method, &header_lines, &body_preview);
 
     let started = Instant::now();
     let resp = req.send()?;
@@ -1131,32 +1328,108 @@ fn perform_request(
 
     let mut headers_text = status_line.clone();
     headers_text.push('\n');
+    let mut cookies_text = String::new();
+    let mut content_type = String::new();
     for (key, value) in resp.headers() {
-        headers_text.push_str(&format!("{}: {}\n", key, value.to_str().unwrap_or("")));
+        let value_str = value.to_str().unwrap_or("");
+        headers_text.push_str(&format!("{key}: {value_str}\n"));
+        if key.as_str().eq_ignore_ascii_case("set-cookie") {
+            cookies_text.push_str(value_str);
+            cookies_text.push('\n');
+        }
+        if key.as_str().eq_ignore_ascii_case("content-type") {
+            content_type = value_str.to_string();
+        }
     }
 
     let resp_body = resp.text()?;
     let size_bytes = resp_body.len();
 
-    Ok((
-        ApiResponse {
-            status_line: status_line.clone(),
-            status_code,
-            duration_ms,
-            size_bytes,
-            body: prettify_body(&resp_body),
-            headers: headers_text,
-            request_dump,
-            curl: curl_preview,
-            logs: vec![
-                format!("发送 {} {}", request.method.label(), url),
-                format!("响应 {}", status_line),
-                format!("耗时 {} ms", duration_ms),
-            ],
-            assertion_results: Vec::new(),
-        },
-        temporary,
-    ))
+    Ok(ApiResponse {
+        status_line: status_line.clone(),
+        status_code,
+        duration_ms,
+        size_bytes,
+        body: prettify_body(&resp_body),
+        headers: headers_text,
+        cookies: cookies_text,
+        content_type,
+        request_dump,
+        curl: curl_preview,
+        logs: vec![
+            format!("发送 {} {}", request.method.label(), url),
+            format!("响应 {}", status_line),
+            format!("耗时 {} ms", duration_ms),
+        ],
+        assertion_results: Vec::new(),
+    })
+}
+
+/// Build a runnable code snippet for the request in the given language.
+/// Mirrors the real send path: the URL carries path + query params (and any
+/// query-located auth), headers carry request + environment + header-located
+/// auth + a combined `Cookie` line, and form bodies are split into `form_data`.
+pub fn code_snippet(
+    environment: &ApiEnvironment,
+    request: &ApiRequest,
+    lang: crate::code_gen::CodeLanguage,
+) -> String {
+    let mut url = build_final_url(environment, request);
+    let query_auth: Vec<String> = request
+        .auth
+        .iter()
+        .filter(|r| r.enabled && r.description == "query" && !r.key.trim().is_empty())
+        .map(|r| format!("{}={}", r.key.trim(), r.value.trim()))
+        .collect();
+    if !query_auth.is_empty() {
+        let sep = if url.contains('?') { '&' } else { '?' };
+        url = format!("{url}{sep}{}", query_auth.join("&"));
+    }
+
+    let mut headers: Vec<KeyValueRow> = request
+        .headers
+        .iter()
+        .filter(|r| r.enabled && !r.key.trim().is_empty())
+        .cloned()
+        .collect();
+    for r in &request.auth {
+        if r.enabled && r.description != "query" && !r.key.trim().is_empty() {
+            headers.push(r.clone());
+        }
+    }
+    for r in &environment.headers {
+        if r.enabled && !r.key.trim().is_empty() {
+            headers.push(r.clone());
+        }
+    }
+    let cookie_pairs: Vec<String> = request
+        .cookies
+        .iter()
+        .filter(|r| r.enabled && !r.key.trim().is_empty())
+        .map(|r| format!("{}={}", r.key.trim(), r.value.trim()))
+        .collect();
+    if !cookie_pairs.is_empty() {
+        headers.push(KeyValueRow::new("Cookie", cookie_pairs.join("; ")));
+    }
+
+    let form_data = if matches!(
+        request.body_mode,
+        BodyMode::FormData | BodyMode::FormUrlEncoded
+    ) {
+        parse_kv_text(&request.body)
+    } else {
+        Vec::new()
+    };
+
+    let code_req = crate::code_gen::CodeGenRequest {
+        method: request.method.label().to_string(),
+        url,
+        headers,
+        body: request.body.clone(),
+        body_mode: request.body_mode,
+        form_data,
+    };
+    crate::code_gen::generate(lang, &code_req)
 }
 
 fn build_final_url(environment: &ApiEnvironment, request: &ApiRequest) -> String {
@@ -1232,10 +1505,71 @@ fn build_curl_preview(url: &str, method: HttpMethod, headers: &[String], body: &
     preview
 }
 
+fn default_content_type(mode: BodyMode) -> Option<&'static str> {
+    match mode {
+        BodyMode::Json => Some("application/json"),
+        BodyMode::Xml => Some("application/xml"),
+        BodyMode::FormUrlEncoded => Some("application/x-www-form-urlencoded"),
+        BodyMode::Text => Some("text/plain; charset=utf-8"),
+        BodyMode::FormData | BodyMode::Binary | BodyMode::None => None,
+    }
+}
+
+/// Fixed multipart boundary. reqwest is built without the `multipart` feature,
+/// so the `multipart/form-data` body is assembled by hand.
+const MULTIPART_BOUNDARY: &str = "----QingqiFormBoundary7MA4YWxkTrZu0gW";
+
+/// Build a `multipart/form-data` body from `key=value` lines. A value of the
+/// form `@<path>` is sent as a file part (the file is read here); other values
+/// are plain text fields. Lines starting with `#` are skipped (disabled).
+fn build_multipart_body(raw_body: &str, boundary: &str) -> Result<Vec<u8>> {
+    let mut out: Vec<u8> = Vec::new();
+    for line in raw_body.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (key, value) = line
+            .split_once('=')
+            .map(|(k, v)| (k.trim(), v.trim()))
+            .unwrap_or((line, ""));
+        if key.is_empty() {
+            continue;
+        }
+        out.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+        if let Some(path) = value.strip_prefix('@') {
+            let path = path.trim();
+            let bytes = std::fs::read(path)
+                .map_err(|e| anyhow!("读取表单文件失败 ({path}): {e}"))?;
+            let filename = std::path::Path::new(path)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("file");
+            out.extend_from_slice(
+                format!(
+                    "Content-Disposition: form-data; name=\"{key}\"; filename=\"{filename}\"\r\n"
+                )
+                .as_bytes(),
+            );
+            out.extend_from_slice(b"Content-Type: application/octet-stream\r\n\r\n");
+            out.extend_from_slice(&bytes);
+            out.extend_from_slice(b"\r\n");
+        } else {
+            out.extend_from_slice(
+                format!("Content-Disposition: form-data; name=\"{key}\"\r\n\r\n").as_bytes(),
+            );
+            out.extend_from_slice(value.as_bytes());
+            out.extend_from_slice(b"\r\n");
+        }
+    }
+    out.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
+    Ok(out)
+}
+
 fn prettify_body(body: &str) -> String {
     let trimmed = body.trim();
     if trimmed.is_empty() {
-        return String::from("{\n  \"message\": \"empty body\"\n}");
+        return String::new();
     }
     serde_json::from_str::<Value>(trimmed)
         .and_then(|value| serde_json::to_string_pretty(&value))
@@ -1272,6 +1606,7 @@ pub fn detect_body_mode(body: &str) -> &'static str {
     "text"
 }
 
+#[cfg(test)]
 fn resolve_with_temp(
     text: &str,
     temporary: &HashMap<String, String>,
@@ -1374,7 +1709,7 @@ fn build_groups_from_nodes(nodes: &[CollectionNode]) -> Vec<ApiGroup> {
 
     for folder in &top_folders {
         let endpoints = collect_descendant_endpoints(folder.id.as_str(), nodes);
-        let requests: Vec<ApiRequest> = endpoints.iter().map(|ep| node_to_request(ep)).collect();
+        let requests: Vec<ApiRequest> = endpoints.iter().map(|ep| node_to_request(ep, nodes)).collect();
         groups.push(ApiGroup {
             id: Some(folder.id.clone()),
             name: folder.name.clone(),
@@ -1395,7 +1730,7 @@ fn build_groups_from_nodes(nodes: &[CollectionNode]) -> Vec<ApiGroup> {
                 name: String::from("默认"),
                 requests: root_endpoints
                     .iter()
-                    .map(|ep| node_to_request(ep))
+                    .map(|ep| node_to_request(ep, nodes))
                     .collect(),
             },
         );
@@ -1424,7 +1759,7 @@ fn collect_descendant_endpoints<'a>(
     result
 }
 
-fn node_to_request(node: &CollectionNode) -> ApiRequest {
+fn node_to_request(node: &CollectionNode, nodes: &[CollectionNode]) -> ApiRequest {
     let snapshot = RequestSnapshot::from_json(&node.request_json);
     let method = HttpMethod::from_label(&node.method);
     ApiRequest {
@@ -1439,13 +1774,32 @@ fn node_to_request(node: &CollectionNode) -> ApiRequest {
         params: parse_kv_text(&snapshot.params_text),
         path_rows: parse_kv_text(&snapshot.path_params_text),
         body: snapshot.body_text,
+        body_mode: BodyMode::from_db(&snapshot.body_mode),
         headers: parse_kv_text(&snapshot.headers_text),
         cookies: parse_kv_text(&snapshot.cookies_text),
         auth: parse_kv_text(&format_auth(&snapshot.auth_type, &snapshot.auth_value)),
         pre_ops: snapshot.pre_ops_text,
         post_ops: snapshot.post_ops_text,
-        scenarios: Vec::new(),
+        scenarios: node_scenarios(&node.id, nodes),
     }
+}
+
+/// Collect the `Case` child nodes of an endpoint as scenarios, ordered by
+/// `sort_order`. Cases are not executed on load, so each is reported as
+/// `Pending` until a run flips it.
+fn node_scenarios(endpoint_id: &str, nodes: &[CollectionNode]) -> Vec<ApiScenario> {
+    let mut cases: Vec<&CollectionNode> = nodes
+        .iter()
+        .filter(|n| n.kind == NodeKind::Case && n.parent_id.as_deref() == Some(endpoint_id))
+        .collect();
+    cases.sort_by_key(|n| n.sort_order);
+    cases
+        .iter()
+        .map(|c| ApiScenario {
+            name: c.name.clone(),
+            status: ScenarioStatus::Pending,
+        })
+        .collect()
 }
 
 fn request_to_snapshot(method: &str, url: &str, request: &ApiRequest) -> RequestSnapshot {
@@ -1457,7 +1811,7 @@ fn request_to_snapshot(method: &str, url: &str, request: &ApiRequest) -> Request
         headers_text: format_kv_rows(&request.headers),
         cookies_text: format_kv_rows(&request.cookies),
         body_text: request.body.clone(),
-        body_mode: String::new(),
+        body_mode: request.body_mode.as_str().to_string(),
         auth_type: extract_auth_type(&request.auth),
         auth_value: extract_auth_value(&request.auth),
         pre_ops_text: request.pre_ops.clone(),
@@ -1470,13 +1824,18 @@ fn parse_kv_text(text: &str) -> Vec<KeyValueRow> {
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .map(|line| {
-            let (key, value) = line
+            // A leading `#` marks a disabled row (round-trips with `format_kv_rows`).
+            let (enabled, content) = match line.strip_prefix('#') {
+                Some(rest) => (false, rest.trim()),
+                None => (true, line),
+            };
+            let (key, value) = content
                 .split_once('=')
-                .or_else(|| line.split_once(':'))
+                .or_else(|| content.split_once(':'))
                 .map(|(k, v)| (k.trim(), v.trim()))
-                .unwrap_or((line, ""));
+                .unwrap_or((content, ""));
             KeyValueRow {
-                enabled: true,
+                enabled,
                 key: key.to_string(),
                 value: value.to_string(),
                 description: String::new(),
@@ -1502,7 +1861,14 @@ fn parse_kv_lines(text: &str) -> Vec<(bool, String, String)> {
 fn format_kv_rows(rows: &[KeyValueRow]) -> String {
     rows.iter()
         .filter(|r| !r.key.is_empty())
-        .map(|r| format!("{}={}", r.key, r.value))
+        .map(|r| {
+            let body = format!("{}={}", r.key, r.value);
+            if r.enabled {
+                body
+            } else {
+                format!("# {body}")
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -1555,6 +1921,70 @@ fn extract_auth_value(auth_rows: &[KeyValueRow]) -> String {
     String::new()
 }
 
+const BASE64_ALPHABET: &[u8; 64] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// Standard base64 encode (with `=` padding). Implemented inline because the
+/// workspace does not depend on a base64 crate and `reqwest` only pulls
+/// `blocking`/`stream` features.
+pub(crate) fn base64_encode(input: &[u8]) -> String {
+    let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
+    for chunk in input.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = *chunk.get(1).unwrap_or(&0) as u32;
+        let b2 = *chunk.get(2).unwrap_or(&0) as u32;
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        out.push(BASE64_ALPHABET[((triple >> 18) & 0x3f) as usize] as char);
+        out.push(BASE64_ALPHABET[((triple >> 12) & 0x3f) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            BASE64_ALPHABET[((triple >> 6) & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            BASE64_ALPHABET[(triple & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+/// Standard base64 decode. Returns `None` on invalid input. Lossy bytes are
+/// converted to a UTF-8 string by the caller when needed.
+pub(crate) fn base64_decode(input: &str) -> Option<Vec<u8>> {
+    let val = |c: u8| -> Option<u32> {
+        match c {
+            b'A'..=b'Z' => Some((c - b'A') as u32),
+            b'a'..=b'z' => Some((c - b'a' + 26) as u32),
+            b'0'..=b'9' => Some((c - b'0' + 52) as u32),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    };
+    let cleaned: Vec<u8> = input
+        .bytes()
+        .filter(|b| !b.is_ascii_whitespace() && *b != b'=')
+        .collect();
+    let mut out = Vec::with_capacity(cleaned.len() / 4 * 3);
+    for chunk in cleaned.chunks(4) {
+        let mut acc = 0u32;
+        let mut bits = 0;
+        for &c in chunk {
+            acc = (acc << 6) | val(c)?;
+            bits += 6;
+        }
+        // Left-align the accumulated bits and emit whole bytes.
+        acc <<= 24 - bits;
+        let n_bytes = bits / 8;
+        for i in 0..n_bytes {
+            out.push(((acc >> (16 - i * 8)) & 0xff) as u8);
+        }
+    }
+    Some(out)
+}
+
 fn default_environments() -> Vec<ApiEnvironment> {
     vec![ApiEnvironment {
         name: String::from("默认环境"),
@@ -1577,6 +2007,8 @@ impl HttpMethod {
             "PUT" => Self::Put,
             "PATCH" => Self::Patch,
             "DELETE" | "DEL" => Self::Delete,
+            "HEAD" => Self::Head,
+            "OPTIONS" => Self::Options,
             _ => Self::Get,
         }
     }
@@ -1586,7 +2018,7 @@ impl HttpMethod {
 mod tests {
     use super::*;
     use crate::model::RequestSnapshot;
-    use qingqi_plugin::{database::DatabaseService, log_error, storage::AppPaths};
+    use qingqi_plugin::{database::DatabaseService, storage::AppPaths};
     use std::fs;
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1711,6 +2143,65 @@ mod tests {
     }
 
     #[test]
+    fn case_nodes_load_as_endpoint_scenarios() {
+        let store = temp_store();
+
+        store
+            .create_collection_node(
+                "ep-cases",
+                None,
+                NodeKind::Endpoint,
+                "下单",
+                "POST",
+                "/orders",
+                &RequestSnapshot::default(),
+            )
+            .unwrap();
+        store
+            .create_collection_node(
+                "case-1",
+                Some("ep-cases"),
+                NodeKind::Case,
+                "正常下单",
+                "",
+                "",
+                &RequestSnapshot::default(),
+            )
+            .unwrap();
+        store
+            .create_collection_node(
+                "case-2",
+                Some("ep-cases"),
+                NodeKind::Case,
+                "库存不足",
+                "",
+                "",
+                &RequestSnapshot::default(),
+            )
+            .unwrap();
+
+        let nodes = store.list_collection_nodes().unwrap();
+        let groups = build_groups_from_nodes(&nodes);
+
+        // The endpoint loads as a single request; its two cases become scenarios
+        // and are not promoted to standalone requests.
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].requests.len(), 1);
+        let request = &groups[0].requests[0];
+        assert_eq!(request.title, "下单");
+        assert_eq!(request.scenarios.len(), 2);
+        let names: Vec<&str> = request.scenarios.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"正常下单"));
+        assert!(names.contains(&"库存不足"));
+        assert!(
+            request
+                .scenarios
+                .iter()
+                .all(|s| s.status == ScenarioStatus::Pending)
+        );
+    }
+
+    #[test]
     fn build_groups_nested_folders_collect_descendants() {
         let store = temp_store();
 
@@ -1767,6 +2258,7 @@ mod tests {
             params: vec![KeyValueRow::new("page", "1")],
             path_rows: vec![KeyValueRow::new("id", "42")],
             body: String::from(r#"{"key":"val"}"#),
+            body_mode: BodyMode::Json,
             headers: vec![KeyValueRow::new("Content-Type", "application/json")],
             cookies: vec![KeyValueRow::new("sid", "abc")],
             auth: vec![KeyValueRow::new("Authorization", "Bearer tok")],
@@ -1789,8 +2281,79 @@ mod tests {
         assert_eq!(snapshot.auth_type, "bearer");
         assert_eq!(snapshot.auth_value, "tok");
         assert_eq!(snapshot.body_text, r#"{"key":"val"}"#);
+        assert_eq!(snapshot.body_mode, "json");
         assert_eq!(snapshot.pre_ops_text, "set x=1");
         assert_eq!(snapshot.post_ops_text, "extract id=$.id");
+    }
+
+    #[test]
+    fn code_snippet_includes_auth_cookies_and_query() {
+        let environment = ApiEnvironment {
+            name: "Test".into(),
+            badge: "T".into(),
+            color: 0,
+            base_url: "https://api.example.com".into(),
+            variables: Vec::new(),
+            headers: vec![KeyValueRow::new("X-Env", "envval")],
+        };
+        let mut apikey = KeyValueRow::new("api_key", "secret");
+        apikey.description = "query".into();
+        let request = ApiRequest {
+            node_id: String::new(),
+            title: "t".into(),
+            method: HttpMethod::Get,
+            path: "/users".into(),
+            params: vec![KeyValueRow::new("page", "2")],
+            path_rows: Vec::new(),
+            body: String::new(),
+            body_mode: BodyMode::None,
+            headers: vec![KeyValueRow::new("Accept", "application/json")],
+            cookies: vec![KeyValueRow::new("sid", "abc")],
+            auth: vec![apikey],
+            pre_ops: String::new(),
+            post_ops: String::new(),
+            scenarios: Vec::new(),
+        };
+
+        let curl = code_snippet(&environment, &request, crate::code_gen::CodeLanguage::Curl);
+        assert!(curl.contains("https://api.example.com/users"), "url: {curl}");
+        assert!(curl.contains("page=2"), "params: {curl}");
+        assert!(curl.contains("api_key=secret"), "query auth: {curl}");
+        assert!(curl.contains("Accept: application/json"), "header: {curl}");
+        assert!(curl.contains("X-Env: envval"), "env header: {curl}");
+        assert!(curl.contains("Cookie: sid=abc"), "cookie: {curl}");
+    }
+
+    #[test]
+    fn code_snippet_form_urlencoded_uses_form_data() {
+        let environment = ApiEnvironment {
+            name: "Test".into(),
+            badge: "T".into(),
+            color: 0,
+            base_url: "https://h.example.com".into(),
+            variables: Vec::new(),
+            headers: Vec::new(),
+        };
+        let request = ApiRequest {
+            node_id: String::new(),
+            title: "t".into(),
+            method: HttpMethod::Post,
+            path: "/submit".into(),
+            params: Vec::new(),
+            path_rows: Vec::new(),
+            body: "a=1\nb=2".into(),
+            body_mode: BodyMode::FormUrlEncoded,
+            headers: Vec::new(),
+            cookies: Vec::new(),
+            auth: Vec::new(),
+            pre_ops: String::new(),
+            post_ops: String::new(),
+            scenarios: Vec::new(),
+        };
+
+        let curl = code_snippet(&environment, &request, crate::code_gen::CodeLanguage::Curl);
+        assert!(curl.contains("--data-raw"), "data flag: {curl}");
+        assert!(curl.contains("a=1&b=2"), "form body: {curl}");
     }
 
     #[test]
@@ -1817,6 +2380,7 @@ mod tests {
             params: vec![KeyValueRow::new("id", "1")],
             path_rows: Vec::new(),
             body: String::from(r#"{"data": true}"#),
+            body_mode: BodyMode::Json,
             headers: vec![KeyValueRow::new("X-Test", "yes")],
             cookies: Vec::new(),
             auth: Vec::new(),
@@ -1874,6 +2438,48 @@ mod tests {
     }
 
     #[test]
+    fn http_method_head_options_and_allows_body() {
+        assert_eq!(HttpMethod::from_label("HEAD"), HttpMethod::Head);
+        assert_eq!(HttpMethod::from_label("options"), HttpMethod::Options);
+        assert_eq!(HttpMethod::Head.label(), "HEAD");
+        assert_eq!(HttpMethod::Options.label(), "OPTIONS");
+        assert!(!HttpMethod::Get.allows_body());
+        assert!(!HttpMethod::Head.allows_body());
+        assert!(HttpMethod::Post.allows_body());
+        assert!(HttpMethod::Put.allows_body());
+        assert!(HttpMethod::Delete.allows_body());
+        assert!(HttpMethod::Options.allows_body());
+    }
+
+    #[test]
+    fn default_content_type_maps_body_modes() {
+        assert_eq!(default_content_type(BodyMode::Json), Some("application/json"));
+        assert_eq!(default_content_type(BodyMode::Xml), Some("application/xml"));
+        assert_eq!(
+            default_content_type(BodyMode::FormUrlEncoded),
+            Some("application/x-www-form-urlencoded")
+        );
+        assert!(default_content_type(BodyMode::Text).is_some());
+        assert_eq!(default_content_type(BodyMode::None), None);
+        assert_eq!(default_content_type(BodyMode::Binary), None);
+        assert_eq!(default_content_type(BodyMode::FormData), None);
+    }
+
+    #[test]
+    fn build_multipart_body_encodes_text_fields() {
+        let body = build_multipart_body("name=alice\n# disabled=x\nrole=admin", "BOUNDARY")
+            .expect("multipart builds");
+        let text = String::from_utf8(body).expect("utf8");
+        assert!(text.starts_with("--BOUNDARY\r\n"));
+        assert!(text.contains("Content-Disposition: form-data; name=\"name\"\r\n\r\nalice\r\n"));
+        assert!(text.contains("Content-Disposition: form-data; name=\"role\"\r\n\r\nadmin\r\n"));
+        // Disabled rows are skipped.
+        assert!(!text.contains("disabled"));
+        // Terminates with the closing boundary.
+        assert!(text.ends_with("--BOUNDARY--\r\n"));
+    }
+
+    #[test]
     fn auth_extract_and_format_roundtrip() {
         let auth_rows = vec![KeyValueRow::new("Authorization", "Bearer my-token")];
         assert_eq!(extract_auth_type(&auth_rows), "bearer");
@@ -1906,6 +2512,41 @@ mod tests {
 
         let result = resolve_with_temp("http://{{HOST}}/api", &temporary, &env_vars);
         assert_eq!(result, "http://example.com/api");
+    }
+
+    #[test]
+    fn extract_then_resolve_chains_value() {
+        // Mirror the send path: a request `extract`s a value from its response,
+        // it is persisted to the environment store, and the next request resolves
+        // a template that references it.
+        let extracted = script_service::extract_variables(
+            "extract token=$.data.token",
+            r#"{"data":{"token":"t-42"}}"#,
+        );
+        assert_eq!(extracted.get("token"), Some(&"t-42".to_string()));
+
+        let store: Vec<ApiVariable> = extracted
+            .iter()
+            .map(|(k, v)| ApiVariable {
+                scope: VariableScope::Environment,
+                env_name: "Dev".into(),
+                var_key: k.clone(),
+                var_value: v.clone(),
+                updated_at: String::new(),
+            })
+            .collect();
+
+        let resolved = variable_service::resolve_text(
+            "Bearer {{token}}",
+            &HashMap::new(),
+            &HashMap::new(),
+            &store,
+            &HashMap::new(),
+            &[],
+            &HashMap::new(),
+            &[],
+        );
+        assert_eq!(resolved, "Bearer t-42");
     }
 
     #[test]
@@ -2029,6 +2670,56 @@ mod tests {
     }
 
     #[test]
+    fn kv_text_roundtrip_preserves_disabled_rows() {
+        let rows = vec![
+            KeyValueRow {
+                enabled: true,
+                key: "Accept".into(),
+                value: "application/json".into(),
+                description: String::new(),
+            },
+            KeyValueRow {
+                enabled: false,
+                key: "X-Debug".into(),
+                value: "1".into(),
+                description: String::new(),
+            },
+        ];
+        let text = format_kv_rows(&rows);
+        assert_eq!(text, "Accept=application/json\n# X-Debug=1");
+
+        let restored = parse_kv_text(&text);
+        assert_eq!(restored.len(), 2);
+        assert!(restored[0].enabled);
+        assert_eq!(restored[0].key, "Accept");
+        assert!(!restored[1].enabled);
+        assert_eq!(restored[1].key, "X-Debug");
+        assert_eq!(restored[1].value, "1");
+    }
+
+    #[test]
+    fn base64_encode_known_vectors() {
+        assert_eq!(base64_encode(b""), "");
+        assert_eq!(base64_encode(b"f"), "Zg==");
+        assert_eq!(base64_encode(b"fo"), "Zm8=");
+        assert_eq!(base64_encode(b"foo"), "Zm9v");
+        assert_eq!(base64_encode(b"foob"), "Zm9vYg==");
+        assert_eq!(base64_encode(b"fooba"), "Zm9vYmE=");
+        assert_eq!(base64_encode(b"foobar"), "Zm9vYmFy");
+        // The canonical Basic-auth example.
+        assert_eq!(base64_encode(b"user:pass"), "dXNlcjpwYXNz");
+    }
+
+    #[test]
+    fn base64_roundtrip_basic_auth() {
+        for cred in ["user:pass", "admin:s3cr3t!", "a:", ":b", "用户:密码"] {
+            let encoded = base64_encode(cred.as_bytes());
+            let decoded = base64_decode(&encoded).expect("valid base64");
+            assert_eq!(decoded, cred.as_bytes());
+        }
+    }
+
+    #[test]
     fn service_create_environment() {
         let store = temp_store();
         let service = ApiService {
@@ -2041,7 +2732,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
-            cancel_flag: AtomicBool::new(false),
+            generation: AtomicU64::new(0),
         };
         let env = service
             .create_environment("测试环境", "http://test.api.com")
@@ -2065,7 +2756,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
-            cancel_flag: AtomicBool::new(false),
+            generation: AtomicU64::new(0),
         };
         // Index 0 is the seeded default environment
         let dup = service.duplicate_environment(0).unwrap();
@@ -2087,7 +2778,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
-            cancel_flag: AtomicBool::new(false),
+            generation: AtomicU64::new(0),
         };
         // Only one seeded env — cannot delete
         let result = service.delete_environment_by_index(0);
@@ -2108,7 +2799,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
-            cancel_flag: AtomicBool::new(false),
+            generation: AtomicU64::new(0),
         };
         service
             .create_environment("额外环境", "http://extra.com")
@@ -2130,7 +2821,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
-            cancel_flag: AtomicBool::new(false),
+            generation: AtomicU64::new(0),
         };
         service
             .save_environment_fields(
@@ -2161,7 +2852,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
-            cancel_flag: AtomicBool::new(false),
+            generation: AtomicU64::new(0),
         };
         let tab = HttpTab {
             id: "tab-uuid-1".into(),
@@ -2213,7 +2904,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
-            cancel_flag: AtomicBool::new(false),
+            generation: AtomicU64::new(0),
         };
 
         let tab_a = HttpTab {
@@ -2602,7 +3293,7 @@ mod tests {
                 last_tab_id: String::new(),
             }),
             data_source: store,
-            cancel_flag: AtomicBool::new(false),
+            generation: AtomicU64::new(0),
         };
         let draft = sample_draft();
         let tab = build_http_tab("tab-uuid-1", "node-1", "Sample", "POST", &draft);

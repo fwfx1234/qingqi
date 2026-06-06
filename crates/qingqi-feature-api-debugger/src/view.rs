@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use gpui::{
     App, AppContext, Context, Entity, InteractiveElement, IntoElement, MouseButton,
-    ParentElement, Render, StatefulInteractiveElement, Styled, Window, div, hsla,
+    ParentElement, Render, StatefulInteractiveElement, Styled, Window, AnyElement, div, hsla,
     prelude::FluentBuilder, px, rgb,
 };
 use gpui_component::{
@@ -13,10 +13,11 @@ use gpui_component::{
 };
 use uuid::Uuid;
 
+use crate::code_gen::CodeLanguage;
 use crate::service::{
     self, ApiEnvironment, ApiGroup, ApiRequest, ApiResponse, ApiScenario, ApiService, AuthType,
-    BodyMode, EditorTab, EnvDetailTab, HttpMethod, KeyValueRow, ResponseTab, ScenarioStatus,
-    TabDraft,
+    BodyMode, EditorTab, EnvDetailTab, HttpHistory, HttpMethod, KeyValueRow, ResponseTab,
+    ScenarioStatus, TabDraft,
 };
 use qingqi_ui::{
     text_input::{TextInput, TextInputStyle},
@@ -104,6 +105,159 @@ impl OpenTab {
     }
 }
 
+/// One editable key/value row, backed by two live text inputs plus an
+/// enabled flag. Cloning a row clones the entity handles (cheap) so the same
+/// underlying inputs can be rendered from a snapshot passed into `editor_panel`.
+#[derive(Clone)]
+struct KvRow {
+    enabled: bool,
+    key: Entity<TextInput>,
+    value: Entity<TextInput>,
+}
+
+/// Reusable editable key/value table model — the source of truth for the
+/// Params / Path / Headers / Cookies tabs. It serializes to the legacy
+/// `KEY=VALUE` line format (with a leading `# ` marking disabled rows) via
+/// `parse_rows`/`format_rows`, so the existing text-based persistence
+/// (TabDraft / HttpTab / RequestSnapshot) keeps working unchanged.
+struct KvEditor {
+    rows: Vec<KvRow>,
+}
+
+impl KvEditor {
+    fn new(cx: &mut App, rows: &[KeyValueRow]) -> Self {
+        let mut editor = Self { rows: Vec::new() };
+        editor.set_rows(cx, rows);
+        editor
+    }
+
+    fn from_text(cx: &mut App, text: &str) -> Self {
+        Self::new(cx, &parse_rows(text))
+    }
+
+    /// Rebuild the live inputs from a row model (used when switching
+    /// request/tab/scenario).
+    fn set_rows(&mut self, cx: &mut App, rows: &[KeyValueRow]) {
+        self.rows = rows
+            .iter()
+            .map(|row| KvRow {
+                enabled: row.enabled,
+                key: kv_input(cx, &row.key, "键"),
+                value: kv_input(cx, &row.value, "值"),
+            })
+            .collect();
+    }
+
+    fn set_from_text(&mut self, cx: &mut App, text: &str) {
+        self.set_rows(cx, &parse_rows(text));
+    }
+
+    /// Read the current inputs back into a row model.
+    fn to_rows(&self, cx: &App) -> Vec<KeyValueRow> {
+        self.rows
+            .iter()
+            .map(|row| KeyValueRow {
+                enabled: row.enabled,
+                key: row.key.read(cx).text().trim().to_string(),
+                value: row.value.read(cx).text().trim().to_string(),
+                description: String::new(),
+            })
+            .collect()
+    }
+
+    fn to_text(&self, cx: &App) -> String {
+        format_rows(&self.to_rows(cx))
+    }
+
+    fn add_row(&mut self, cx: &mut App) {
+        self.rows.push(KvRow {
+            enabled: true,
+            key: kv_input(cx, "", "键"),
+            value: kv_input(cx, "", "值"),
+        });
+    }
+
+    fn remove_row(&mut self, index: usize) {
+        if index < self.rows.len() {
+            self.rows.remove(index);
+        }
+    }
+
+    fn toggle(&mut self, index: usize) {
+        if let Some(row) = self.rows.get_mut(index) {
+            row.enabled = !row.enabled;
+        }
+    }
+}
+
+/// Live input entities for the Auth tab form, snapshotted into `editor_panel`.
+#[derive(Clone)]
+struct AuthFormInputs {
+    bearer: Entity<TextInput>,
+    basic_user: Entity<TextInput>,
+    basic_pass: Entity<TextInput>,
+    apikey_name: Entity<TextInput>,
+    apikey_value: Entity<TextInput>,
+    in_query: bool,
+}
+
+/// Plain-string values derived from canonical auth rows, used to seed the
+/// Auth form inputs. The reverse of `ApiDebuggerView::auth_rows`.
+#[derive(Default)]
+struct AuthFormValues {
+    auth_type: Option<AuthType>,
+    bearer: String,
+    basic_user: String,
+    basic_pass: String,
+    apikey_name: String,
+    apikey_value: String,
+    in_query: bool,
+}
+
+/// Decode canonical auth rows (the header/query pairs produced by
+/// `auth_rows`) back into editable form values.
+fn derive_auth_form(rows: &[KeyValueRow]) -> AuthFormValues {
+    let Some(row) = rows.iter().find(|r| !r.key.trim().is_empty()) else {
+        return AuthFormValues {
+            auth_type: Some(AuthType::None),
+            ..Default::default()
+        };
+    };
+    let key = row.key.trim();
+    let value = row.value.trim();
+    if key.eq_ignore_ascii_case("authorization") {
+        if let Some(token) = value.strip_prefix("Bearer ").or_else(|| value.strip_prefix("bearer "))
+        {
+            return AuthFormValues {
+                auth_type: Some(AuthType::BearerToken),
+                bearer: token.trim().to_string(),
+                ..Default::default()
+            };
+        }
+        if let Some(encoded) = value.strip_prefix("Basic ").or_else(|| value.strip_prefix("basic "))
+        {
+            let decoded = service::base64_decode(encoded.trim())
+                .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+                .unwrap_or_default();
+            let (user, pass) = decoded.split_once(':').unwrap_or((decoded.as_str(), ""));
+            return AuthFormValues {
+                auth_type: Some(AuthType::BasicAuth),
+                basic_user: user.to_string(),
+                basic_pass: pass.to_string(),
+                ..Default::default()
+            };
+        }
+    }
+    // Anything else is treated as an API key (header or query).
+    AuthFormValues {
+        auth_type: Some(AuthType::ApiKey),
+        apikey_name: key.to_string(),
+        apikey_value: value.to_string(),
+        in_query: row.description.trim().eq_ignore_ascii_case("query"),
+        ..Default::default()
+    }
+}
+
 pub struct ApiDebuggerView {
     service: Arc<ApiService>,
     groups: Vec<ApiGroup>,
@@ -115,6 +269,10 @@ pub struct ApiDebuggerView {
     selected_environment: usize,
     editor_tab: EditorTab,
     response_tab: ResponseTab,
+    /// Selected language for the response "代码" tab.
+    response_code_lang: CodeLanguage,
+    /// History rows for the active tab (loaded lazily when the 历史 tab opens).
+    history_entries: Vec<HttpHistory>,
     env_detail_tab: EnvDetailTab,
     body_mode: BodyMode,
     auth_type: AuthType,
@@ -127,13 +285,21 @@ pub struct ApiDebuggerView {
     method_select_state: Option<Entity<SelectState<Vec<HttpMethod>>>>,
     show_curl_import: bool,
     curl_import_input: Entity<TextInput>,
+    show_rename: bool,
+    rename_input: Entity<TextInput>,
+    rename_node_id: String,
     path_input: Entity<TextInput>,
-    params_input: Entity<TextInput>,
-    path_rows_input: Entity<TextInput>,
+    params_kv: KvEditor,
+    path_kv: KvEditor,
     body_input: Entity<TextInput>,
-    headers_input: Entity<TextInput>,
-    cookies_input: Entity<TextInput>,
-    auth_input: Entity<TextInput>,
+    headers_kv: KvEditor,
+    cookies_kv: KvEditor,
+    auth_bearer_input: Entity<TextInput>,
+    auth_basic_user_input: Entity<TextInput>,
+    auth_basic_pass_input: Entity<TextInput>,
+    auth_apikey_name_input: Entity<TextInput>,
+    auth_apikey_value_input: Entity<TextInput>,
+    auth_apikey_in_query: bool,
     pre_ops_input: Entity<TextInput>,
     post_ops_input: Entity<TextInput>,
     env_name_input: Entity<TextInput>,
@@ -143,10 +309,6 @@ pub struct ApiDebuggerView {
     response: ApiResponse,
     notice: String,
     last_revision: u64,
-    kv_key_inputs: Vec<Entity<TextInput>>,
-    kv_value_inputs: Vec<Entity<TextInput>>,
-    kv_enabled: Vec<bool>,
-    kv_row_count: usize,
 }
 
 impl ApiDebuggerView {
@@ -166,6 +328,7 @@ impl ApiDebuggerView {
                         params: Vec::new(),
                         path_rows: Vec::new(),
                         body: String::new(),
+                        body_mode: BodyMode::None,
                         headers: Vec::new(),
                         cookies: Vec::new(),
                         auth: Vec::new(),
@@ -199,6 +362,7 @@ impl ApiDebuggerView {
                     params: Vec::new(),
                     path_rows: Vec::new(),
                     body: String::new(),
+                    body_mode: BodyMode::None,
                     headers: Vec::new(),
                     cookies: Vec::new(),
                     auth: Vec::new(),
@@ -315,6 +479,7 @@ impl ApiDebuggerView {
         };
 
         let rev = service.revision();
+        let init_auth_form = derive_auth_form(&parse_rows(&init_auth));
 
         Self {
             service,
@@ -327,9 +492,11 @@ impl ApiDebuggerView {
             selected_environment: 0,
             editor_tab: init_editor_tab,
             response_tab: ResponseTab::Body,
+            response_code_lang: CodeLanguage::Curl,
+            history_entries: Vec::new(),
             env_detail_tab: EnvDetailTab::Variables,
             body_mode: BodyMode::from_db(&detect_body_mode(&init_body)),
-            auth_type: AuthType::from_db(&detect_auth_type_str(&init_auth)),
+            auth_type: init_auth_form.auth_type.unwrap_or(AuthType::None),
             show_env_popup: false,
             show_env_manager: false,
             show_collection_menu: false,
@@ -339,13 +506,21 @@ impl ApiDebuggerView {
             method_select_state: None,
             show_curl_import: false,
             curl_import_input: multiline_input(cx, "", "粘贴 cURL 命令..."),
+            show_rename: false,
+            rename_input: single_input(cx, "", "输入新名称..."),
+            rename_node_id: String::new(),
             path_input: single_input(cx, &init_path, "/api/v1/user/info"),
-            params_input: multiline_input(cx, &init_params, "KEY=VALUE"),
-            path_rows_input: multiline_input(cx, &init_path_rows, "segment"),
+            params_kv: KvEditor::from_text(cx, &init_params),
+            path_kv: KvEditor::from_text(cx, &init_path_rows),
             body_input: multiline_input(cx, &init_body, "{ }"),
-            headers_input: multiline_input(cx, &init_headers, "KEY=VALUE"),
-            cookies_input: multiline_input(cx, &init_cookies, "KEY=VALUE"),
-            auth_input: multiline_input(cx, &init_auth, "KEY=VALUE"),
+            headers_kv: KvEditor::from_text(cx, &init_headers),
+            cookies_kv: KvEditor::from_text(cx, &init_cookies),
+            auth_bearer_input: single_input(cx, &init_auth_form.bearer, "Token"),
+            auth_basic_user_input: single_input(cx, &init_auth_form.basic_user, "用户名"),
+            auth_basic_pass_input: single_input(cx, &init_auth_form.basic_pass, "密码"),
+            auth_apikey_name_input: single_input(cx, &init_auth_form.apikey_name, "Key（如 X-API-Key）"),
+            auth_apikey_value_input: single_input(cx, &init_auth_form.apikey_value, "Value"),
+            auth_apikey_in_query: init_auth_form.in_query,
             pre_ops_input: multiline_input(cx, &init_pre_ops, "Pre-ops"),
             post_ops_input: multiline_input(cx, &init_post_ops, "Post-ops"),
             env_name_input: single_input(cx, &environment.name, "环境名称"),
@@ -359,10 +534,6 @@ impl ApiDebuggerView {
             response: sample_response(),
             notice,
             last_revision: rev,
-            kv_key_inputs: (0..20).map(|_| single_input(cx, "", "键")).collect(),
-            kv_value_inputs: (0..20).map(|_| single_input(cx, "", "值")).collect(),
-            kv_enabled: vec![true; 20],
-            kv_row_count: 0,
         }
     }
 
@@ -393,6 +564,10 @@ impl ApiDebuggerView {
             };
             self.notice = format!("响应已更新 · {}{assertion_summary}", response.status_line);
             self.response = response;
+            // Keep the history list live if the user is watching that tab.
+            if self.response_tab == ResponseTab::History {
+                self.refresh_history();
+            }
         }
         if let Some(error) = self.service.take_pending_error() {
             self.notice = format!("请求失败: {error}");
@@ -428,14 +603,15 @@ impl ApiDebuggerView {
 
     fn sync_models(&mut self, cx: &App) {
         let path = self.path_input.read(cx).text();
-        let params = parse_rows(&self.params_input.read(cx).text());
-        let path_rows = parse_rows(&self.path_rows_input.read(cx).text());
+        let params = self.params_kv.to_rows(cx);
+        let path_rows = self.path_kv.to_rows(cx);
         let body = self.body_input.read(cx).text();
-        let headers = parse_rows(&self.headers_input.read(cx).text());
-        let cookies = parse_rows(&self.cookies_input.read(cx).text());
-        let auth = parse_rows(&self.auth_input.read(cx).text());
+        let headers = self.headers_kv.to_rows(cx);
+        let cookies = self.cookies_kv.to_rows(cx);
+        let auth = self.auth_rows(cx);
         let pre_ops = self.pre_ops_input.read(cx).text();
         let post_ops = self.post_ops_input.read(cx).text();
+        let body_mode = self.body_mode;
 
         {
             let request = self.selected_request_mut();
@@ -443,6 +619,7 @@ impl ApiDebuggerView {
             request.params = params;
             request.path_rows = path_rows;
             request.body = body;
+            request.body_mode = body_mode;
             request.headers = headers;
             request.cookies = cookies;
             request.auth = auth;
@@ -476,12 +653,16 @@ impl ApiDebuggerView {
             &request.path,
             request,
         ) {
-            eprintln!("持久化端点失败: {error}");
+            tracing::warn!("持久化端点失败: {error}");
         }
     }
 
     fn persist_workspace(&mut self) {
-        self.service.save_workspace_async(self.environments.clone());
+        // Environment edits persist through the explicit env-manager save
+        // (`save_environment_changes` → UUID-keyed CRUD). The old index-based
+        // `save_workspace_async` rewrote every environment with `env-{i}` IDs on
+        // each send/switch — clobbering the UUID IDs and racing the background
+        // CRUD threads (#22) — so it's no longer driven from the hot path.
         self.persist_endpoint_if_needed();
     }
 
@@ -490,24 +671,14 @@ impl ApiDebuggerView {
         self.path_input.update(cx, |input, input_cx| {
             input.set_text(request.path.clone(), input_cx)
         });
-        self.params_input.update(cx, |input, input_cx| {
-            input.set_text(format_rows(&request.params), input_cx)
-        });
-        self.path_rows_input.update(cx, |input, input_cx| {
-            input.set_text(format_rows(&request.path_rows), input_cx)
-        });
+        self.params_kv.set_rows(cx, &request.params);
+        self.path_kv.set_rows(cx, &request.path_rows);
         self.body_input.update(cx, |input, input_cx| {
             input.set_text(request.body.clone(), input_cx)
         });
-        self.headers_input.update(cx, |input, input_cx| {
-            input.set_text(format_rows(&request.headers), input_cx)
-        });
-        self.cookies_input.update(cx, |input, input_cx| {
-            input.set_text(format_rows(&request.cookies), input_cx)
-        });
-        self.auth_input.update(cx, |input, input_cx| {
-            input.set_text(format_rows(&request.auth), input_cx)
-        });
+        self.headers_kv.set_rows(cx, &request.headers);
+        self.cookies_kv.set_rows(cx, &request.cookies);
+        self.load_auth_form(cx, &request.auth);
         self.pre_ops_input.update(cx, |input, input_cx| {
             input.set_text(request.pre_ops.clone(), input_cx)
         });
@@ -541,12 +712,12 @@ impl ApiDebuggerView {
     fn collect_tab_draft(&self, cx: &App) -> TabDraft {
         TabDraft {
             url: self.path_input.read(cx).text(),
-            params_text: self.params_input.read(cx).text(),
-            path_params_text: self.path_rows_input.read(cx).text(),
+            params_text: self.params_kv.to_text(cx),
+            path_params_text: self.path_kv.to_text(cx),
             body_text: self.body_input.read(cx).text(),
-            headers_text: self.headers_input.read(cx).text(),
-            cookies_text: self.cookies_input.read(cx).text(),
-            auth_text: self.auth_input.read(cx).text(),
+            headers_text: self.headers_kv.to_text(cx),
+            cookies_text: self.cookies_kv.to_text(cx),
+            auth_text: format_rows(&self.auth_rows(cx)),
             pre_ops_text: self.pre_ops_input.read(cx).text(),
             post_ops_text: self.post_ops_input.read(cx).text(),
             active_request_tab: service::editor_tab_index(self.editor_tab),
@@ -570,34 +741,25 @@ impl ApiDebuggerView {
         self.service.save_tab_state_async(tab);
     }
 
-    fn restore_inputs_from_tab(&self, tab: &crate::model::HttpTab, cx: &mut App) {
+    fn restore_inputs_from_tab(&mut self, tab: &crate::model::HttpTab, cx: &mut App) {
         let draft = service::restore_tab_draft(tab);
         self.path_input
             .update(cx, |input, input_cx| input.set_text(draft.url, input_cx));
-        self.params_input.update(cx, |input, input_cx| {
-            input.set_text(draft.params_text, input_cx)
-        });
-        self.path_rows_input.update(cx, |input, input_cx| {
-            input.set_text(draft.path_params_text, input_cx)
-        });
+        self.params_kv.set_from_text(cx, &draft.params_text);
+        self.path_kv.set_from_text(cx, &draft.path_params_text);
         self.body_input.update(cx, |input, input_cx| {
             input.set_text(draft.body_text, input_cx)
         });
-        self.headers_input.update(cx, |input, input_cx| {
-            input.set_text(draft.headers_text, input_cx)
-        });
-        self.cookies_input.update(cx, |input, input_cx| {
-            input.set_text(draft.cookies_text, input_cx)
-        });
+        self.headers_kv.set_from_text(cx, &draft.headers_text);
+        self.cookies_kv.set_from_text(cx, &draft.cookies_text);
         self.pre_ops_input.update(cx, |input, input_cx| {
             input.set_text(draft.pre_ops_text, input_cx)
         });
         self.post_ops_input.update(cx, |input, input_cx| {
             input.set_text(draft.post_ops_text, input_cx)
         });
-        self.auth_input.update(cx, |input, input_cx| {
-            input.set_text(draft.auth_text, input_cx)
-        });
+        let auth_rows = parse_rows(&draft.auth_text);
+        self.load_auth_form(cx, &auth_rows);
     }
 
     fn close_open_tab(&mut self, tab_index: usize, cx: &mut App) {
@@ -636,13 +798,6 @@ impl ApiDebuggerView {
             }
             self.reload_request_inputs(cx);
         }
-    }
-
-    fn active_index(&self) -> usize {
-        self.open_tabs
-            .iter()
-            .position(|t| t == &self.active_tab)
-            .unwrap_or(0)
     }
 
     fn select_request(&mut self, index: usize, cx: &mut App) {
@@ -769,6 +924,44 @@ impl ApiDebuggerView {
         self.notice = String::from("请求已取消");
     }
 
+    /// Pretty-print the JSON body in place. Leaves the body untouched and
+    /// surfaces a notice if it does not parse.
+    fn format_json_body(&mut self, cx: &mut App) {
+        let text = self.body_input.read(cx).text();
+        match serde_json::from_str::<serde_json::Value>(&text) {
+            Ok(value) => {
+                let pretty =
+                    serde_json::to_string_pretty(&value).unwrap_or_else(|_| text.clone());
+                self.body_input
+                    .update(cx, |input, input_cx| input.set_text(pretty, input_cx));
+                self.sync_models(cx);
+                self.persist_current_tab_state(cx);
+                self.notice = String::from("JSON 已格式化");
+            }
+            Err(error) => {
+                self.notice = format!("JSON 无法解析: {error}");
+            }
+        }
+    }
+
+    /// Pick a file for Binary body mode; stores its path as the body text
+    /// (the request path reads the file bytes at send time).
+    fn pick_binary_file(&mut self, cx: &mut App) {
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("选择要上传的文件")
+            .pick_file()
+        else {
+            self.notice = String::from("已取消选择文件");
+            return;
+        };
+        let path_string = path.display().to_string();
+        self.body_input
+            .update(cx, |input, input_cx| input.set_text(path_string.clone(), input_cx));
+        self.sync_models(cx);
+        self.persist_current_tab_state(cx);
+        self.notice = format!("已选择文件: {path_string}");
+    }
+
     fn current_title(&self) -> String {
         match &self.active_tab {
             OpenTab::Request { index, .. } => request_at(&self.groups, *index)
@@ -809,6 +1002,13 @@ impl ApiDebuggerView {
     fn response_text(&self) -> String {
         match self.response_tab {
             ResponseTab::Body => self.response.body.clone(),
+            ResponseTab::Cookies => {
+                if self.response.cookies.trim().is_empty() {
+                    String::from("（无 Set-Cookie 响应头）")
+                } else {
+                    self.response.cookies.clone()
+                }
+            }
             ResponseTab::Headers => self.response.headers.clone(),
             ResponseTab::Request => self.response.request_dump.clone(),
             ResponseTab::Curl => self.response.curl.clone(),
@@ -823,40 +1023,227 @@ impl ApiDebuggerView {
                 }
                 text
             }
-            ResponseTab::History => String::from("历史记录（点击请求自动追加）"),
-            ResponseTab::Code => {
-                let request = self.selected_request();
-                let environment = self.selected_environment();
-                let all_headers: Vec<KeyValueRow> = request.headers.iter()
-                    .chain(environment.headers.iter())
-                    .cloned()
-                    .collect();
-                let code_req = crate::code_gen::CodeGenRequest {
-                    method: request.method.label().to_string(),
-                    url: format!("{}/{}", environment.base_url.trim_end_matches('/'), request.path.trim_start_matches('/')),
-                    headers: all_headers,
-                    body: request.body.clone(),
-                    body_mode: crate::model::BodyMode::Json,
-                    form_data: vec![],
-                };
-                format!("// cURL\n{}\n\n// Python\n{}",
-                    crate::code_gen::generate(crate::code_gen::CodeLanguage::Curl, &code_req),
-                    crate::code_gen::generate(crate::code_gen::CodeLanguage::Python, &code_req),
-                )
+            // History and Code render their own widgets in `response_panel`;
+            // the scrolled text body is only used for Code (the generated snippet).
+            ResponseTab::History => String::new(),
+            ResponseTab::Code => self.code_snippet(),
+        }
+    }
+
+    /// Generate the code snippet for the response "代码" tab in the selected
+    /// language, using the real (synced) request + environment.
+    fn code_snippet(&self) -> String {
+        service::code_snippet(
+            self.selected_environment(),
+            self.selected_request(),
+            self.response_code_lang,
+        )
+    }
+
+    /// Switch the response tab, lazily loading history when 历史 is opened.
+    fn set_response_tab(&mut self, tab: ResponseTab) {
+        self.response_tab = tab;
+        if tab == ResponseTab::History {
+            self.refresh_history();
+        }
+    }
+
+    fn set_response_code_lang(&mut self, lang: CodeLanguage) {
+        self.response_code_lang = lang;
+    }
+
+    /// Reload the active tab's request history from the database.
+    fn refresh_history(&mut self) {
+        let tab_id = self.active_tab.tab_id().to_string();
+        match self.service.list_history(&tab_id, 50) {
+            Ok(rows) => self.history_entries = rows,
+            Err(error) => {
+                self.history_entries.clear();
+                tracing::warn!("加载历史记录失败: {error}");
             }
         }
     }
 
-    fn editor_input(&self) -> Entity<TextInput> {
-        match self.editor_tab {
-            EditorTab::Params => self.params_input.clone(),
-            EditorTab::Path => self.path_rows_input.clone(),
-            EditorTab::Body => self.body_input.clone(),
-            EditorTab::Headers => self.headers_input.clone(),
-            EditorTab::Cookies => self.cookies_input.clone(),
-            EditorTab::Auth => self.auth_input.clone(),
-            EditorTab::PreOps => self.pre_ops_input.clone(),
-            EditorTab::PostOps => self.post_ops_input.clone(),
+    fn clear_current_history(&mut self) {
+        let tab_id = self.active_tab.tab_id().to_string();
+        match self.service.clear_history(&tab_id) {
+            Ok(count) => {
+                self.history_entries.clear();
+                self.notice = format!("已清空 {count} 条历史记录");
+            }
+            Err(error) => self.notice = format!("清空历史失败: {error}"),
+        }
+    }
+
+    /// Load a stored history response into the response view (read-only replay).
+    fn view_history_entry(&mut self, index: usize) {
+        let Some(entry) = self.history_entries.get(index) else {
+            return;
+        };
+        let created_at = entry.created_at.clone();
+        self.response.status_line =
+            format!("{} {} · {}", entry.method, entry.status, entry.url);
+        self.response.status_code = entry.status.max(0) as u16;
+        self.response.body = entry.response.clone();
+        self.response.headers = String::new();
+        self.response.cookies = String::new();
+        self.response.content_type = String::new();
+        self.response.assertion_results = Vec::new();
+        self.response.logs = vec![format!("历史响应 @ {created_at}")];
+        self.response_tab = ResponseTab::Body;
+        self.notice = format!("已载入历史响应（{created_at}）");
+    }
+
+    fn copy_response_body(&mut self, cx: &mut App) {
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(self.response.body.clone()));
+        self.notice = String::from("响应已复制到剪贴板");
+    }
+
+    /// Pretty-print the response body JSON in place (no-op for non-JSON).
+    fn format_response_body(&mut self) {
+        match serde_json::from_str::<serde_json::Value>(&self.response.body) {
+            Ok(value) => match serde_json::to_string_pretty(&value) {
+                Ok(pretty) => {
+                    self.response.body = pretty;
+                    self.notice = String::from("响应 JSON 已格式化");
+                }
+                Err(error) => self.notice = format!("格式化失败: {error}"),
+            },
+            Err(error) => self.notice = format!("响应不是合法 JSON: {error}"),
+        }
+    }
+
+    /// Save the response body to a file via a native dialog. The suggested
+    /// extension follows the response `Content-Type`.
+    fn save_response_body(&mut self) {
+        let suggested = format!(
+            "response.{}",
+            content_type_extension(&self.response.content_type)
+        );
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("保存响应到文件")
+            .set_file_name(&suggested)
+            .save_file()
+        else {
+            self.notice = String::from("已取消保存");
+            return;
+        };
+        match std::fs::write(&path, self.response.body.as_bytes()) {
+            Ok(()) => self.notice = format!("响应已保存: {}", path.display()),
+            Err(error) => self.notice = format!("保存失败: {error}"),
+        }
+    }
+
+    /// Text input backing a free-text editor tab (Body / Pre-ops / Post-ops).
+    /// KV-table tabs (Params / Path / Headers / Cookies) and the Auth form tab
+    /// return `None` — they render their own editors.
+    fn text_editor_input(&self, tab: EditorTab) -> Option<Entity<TextInput>> {
+        match tab {
+            EditorTab::Body => Some(self.body_input.clone()),
+            EditorTab::PreOps => Some(self.pre_ops_input.clone()),
+            EditorTab::PostOps => Some(self.post_ops_input.clone()),
+            EditorTab::Auth
+            | EditorTab::Params
+            | EditorTab::Path
+            | EditorTab::Headers
+            | EditorTab::Cookies => None,
+        }
+    }
+
+    fn auth_form_inputs(&self) -> AuthFormInputs {
+        AuthFormInputs {
+            bearer: self.auth_bearer_input.clone(),
+            basic_user: self.auth_basic_user_input.clone(),
+            basic_pass: self.auth_basic_pass_input.clone(),
+            apikey_name: self.auth_apikey_name_input.clone(),
+            apikey_value: self.auth_apikey_value_input.clone(),
+            in_query: self.auth_apikey_in_query,
+        }
+    }
+
+    /// Build the canonical auth rows (header/query pairs) from the current
+    /// auth type and form inputs. Basic credentials are base64-encoded here so
+    /// the request path can send them verbatim. API keys placed in the query
+    /// string carry `description = "query"`.
+    fn auth_rows(&self, cx: &App) -> Vec<KeyValueRow> {
+        match self.auth_type {
+            AuthType::None => Vec::new(),
+            AuthType::BearerToken => {
+                let token = self.auth_bearer_input.read(cx).text().trim().to_string();
+                if token.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![KeyValueRow::new("Authorization", format!("Bearer {token}"))]
+                }
+            }
+            AuthType::BasicAuth => {
+                let user = self.auth_basic_user_input.read(cx).text();
+                let pass = self.auth_basic_pass_input.read(cx).text();
+                if user.trim().is_empty() && pass.trim().is_empty() {
+                    Vec::new()
+                } else {
+                    let encoded =
+                        service::base64_encode(format!("{user}:{pass}").as_bytes());
+                    vec![KeyValueRow::new("Authorization", format!("Basic {encoded}"))]
+                }
+            }
+            AuthType::ApiKey => {
+                let name = self.auth_apikey_name_input.read(cx).text().trim().to_string();
+                let value = self.auth_apikey_value_input.read(cx).text().trim().to_string();
+                if name.is_empty() {
+                    Vec::new()
+                } else {
+                    let mut row = KeyValueRow::new(name, value);
+                    row.description = if self.auth_apikey_in_query {
+                        String::from("query")
+                    } else {
+                        String::from("header")
+                    };
+                    vec![row]
+                }
+            }
+        }
+    }
+
+    /// Seed the auth type and form inputs from canonical auth rows.
+    fn load_auth_form(&mut self, cx: &mut App, rows: &[KeyValueRow]) {
+        let values = derive_auth_form(rows);
+        self.auth_type = values.auth_type.unwrap_or(AuthType::None);
+        self.auth_apikey_in_query = values.in_query;
+        self.auth_bearer_input.update(cx, |input, input_cx| {
+            input.set_text(values.bearer.clone(), input_cx)
+        });
+        self.auth_basic_user_input.update(cx, |input, input_cx| {
+            input.set_text(values.basic_user.clone(), input_cx)
+        });
+        self.auth_basic_pass_input.update(cx, |input, input_cx| {
+            input.set_text(values.basic_pass.clone(), input_cx)
+        });
+        self.auth_apikey_name_input.update(cx, |input, input_cx| {
+            input.set_text(values.apikey_name.clone(), input_cx)
+        });
+        self.auth_apikey_value_input.update(cx, |input, input_cx| {
+            input.set_text(values.apikey_value.clone(), input_cx)
+        });
+    }
+
+    fn kv_editor(&self, tab: EditorTab) -> Option<&KvEditor> {
+        match tab {
+            EditorTab::Params => Some(&self.params_kv),
+            EditorTab::Path => Some(&self.path_kv),
+            EditorTab::Headers => Some(&self.headers_kv),
+            EditorTab::Cookies => Some(&self.cookies_kv),
+            _ => None,
+        }
+    }
+
+    fn kv_editor_mut(&mut self, tab: EditorTab) -> Option<&mut KvEditor> {
+        match tab {
+            EditorTab::Params => Some(&mut self.params_kv),
+            EditorTab::Path => Some(&mut self.path_kv),
+            EditorTab::Headers => Some(&mut self.headers_kv),
+            EditorTab::Cookies => Some(&mut self.cookies_kv),
+            _ => None,
         }
     }
 
@@ -929,6 +1316,23 @@ impl ApiDebuggerView {
         self.close_collection_menu();
     }
 
+    /// Create a test case under the currently selected (persisted) endpoint. The
+    /// new case appears as a scenario row beneath that request once the tree
+    /// reloads.
+    fn create_new_case(&mut self) {
+        let parent_id = request_at(&self.groups, self.selected_request)
+            .map(|request| request.node_id.clone())
+            .unwrap_or_default();
+        if parent_id.is_empty() {
+            self.notice = String::from("请先选择一个已保存的端点再添加用例");
+            self.close_collection_menu();
+            return;
+        }
+        self.service
+            .create_case_async(parent_id, String::from("新用例"));
+        self.close_collection_menu();
+    }
+
     fn delete_selected_collection_item(&mut self) {
         let node_id = self.collection_menu_node_id.clone();
         if !node_id.is_empty() {
@@ -955,37 +1359,100 @@ impl ApiDebuggerView {
     }
 
     fn export_openapi(&mut self) {
-        match self.service.export_collection_as_openapi() {
-            Ok(_json) => {
-                self.notice = String::from("OpenAPI 导出成功");
+        let json = match self.service.export_collection_as_openapi() {
+            Ok(json) => json,
+            Err(error) => {
+                self.notice = format!("导出失败: {error}");
+                self.close_collection_menu();
+                return;
             }
-            Err(e) => self.notice = format!("导出失败: {e}"),
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("导出为 OpenAPI")
+            .set_file_name("openapi.json")
+            .save_file()
+        else {
+            self.notice = String::from("已取消导出");
+            self.close_collection_menu();
+            return;
+        };
+        match std::fs::write(&path, json) {
+            Ok(()) => self.notice = format!("已导出到 {}", path.display()),
+            Err(error) => self.notice = format!("写入文件失败: {error}"),
         }
         self.close_collection_menu();
     }
 
-    fn cycle_body_mode(&mut self, cx: &App) {
-        self.body_mode = match self.body_mode {
-            BodyMode::None => BodyMode::Json,
-            BodyMode::Json => BodyMode::Text,
-            BodyMode::Text => BodyMode::Xml,
-            BodyMode::Xml => BodyMode::FormUrlEncoded,
-            BodyMode::FormUrlEncoded => BodyMode::FormData,
-            BodyMode::FormData => BodyMode::Binary,
-            BodyMode::Binary => BodyMode::None,
+    /// Pick an OpenAPI document (JSON or YAML) and import its endpoints into the
+    /// collection tree. The parse + insert run on a background thread; the tree
+    /// refreshes when the service publishes its completion notice.
+    fn import_openapi_file(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("选择 OpenAPI 文件 (JSON / YAML)")
+            .pick_file()
+        else {
+            self.close_collection_menu();
+            return;
         };
-        self.persist_current_tab_state(cx);
+        match std::fs::read_to_string(&path) {
+            Ok(content) => self.service.import_from_openapi_async(content),
+            Err(error) => self.notice = format!("读取文件失败: {error}"),
+        }
+        self.close_collection_menu();
     }
 
-    fn cycle_auth_type(&mut self, cx: &App) {
-        self.auth_type = match self.auth_type {
-            AuthType::None => AuthType::BearerToken,
-            AuthType::BearerToken => AuthType::BasicAuth,
-            AuthType::BasicAuth => AuthType::ApiKey,
-            AuthType::ApiKey => AuthType::None,
+    /// Pick a Postman Collection (v2.1 JSON) and import its requests.
+    fn import_postman_file(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("选择 Postman Collection 文件")
+            .pick_file()
+        else {
+            self.close_collection_menu();
+            return;
         };
-        self.sync_models(cx);
-        self.persist_current_tab_state(cx);
+        match std::fs::read_to_string(&path) {
+            Ok(content) => self.service.import_from_postman_async(content),
+            Err(error) => self.notice = format!("读取文件失败: {error}"),
+        }
+        self.close_collection_menu();
+    }
+
+    /// Open the rename dialog for the node the context menu was opened on,
+    /// pre-filling the input with its current name.
+    fn open_rename(&mut self, cx: &mut App) {
+        let node_id = self.collection_menu_node_id.clone();
+        if node_id.is_empty() {
+            self.notice = String::from("请在具体节点上重命名");
+            self.close_collection_menu();
+            return;
+        }
+        let current_name = self
+            .service
+            .get_collection_node(&node_id)
+            .ok()
+            .flatten()
+            .map(|node| node.name)
+            .unwrap_or_default();
+        self.rename_node_id = node_id;
+        self.rename_input
+            .update(cx, |input, input_cx| input.set_text(current_name, input_cx));
+        self.show_rename = true;
+        self.close_collection_menu();
+    }
+
+    fn confirm_rename(&mut self, cx: &App) {
+        let new_name = self.rename_input.read(cx).text().trim().to_string();
+        let node_id = self.rename_node_id.clone();
+        if node_id.is_empty() {
+            // nothing selected — just dismiss
+        } else if new_name.is_empty() {
+            self.notice = String::from("名称不能为空");
+            return;
+        } else {
+            self.service.rename_collection_item_async(node_id, new_name);
+        }
+        self.show_rename = false;
+        self.rename_node_id = String::new();
     }
 }
 
@@ -1019,14 +1486,23 @@ impl Render for ApiDebuggerView {
         let collection_menu_position = self.collection_menu_position;
         let collection_menu_node_id = self.collection_menu_node_id.clone();
         let path_input = self.path_input.clone();
-        let editor_input = self.editor_input();
+        let editor_text_input = self.text_editor_input(editor_tab);
+        let editor_kv_rows = self
+            .kv_editor(editor_tab)
+            .map(|editor| editor.rows.clone())
+            .unwrap_or_default();
+        let editor_auth_form = self.auth_form_inputs();
         let env_name_input = self.env_name_input.clone();
         let curl_import_input = self.curl_import_input.clone();
+        let show_rename = self.show_rename;
+        let rename_input = self.rename_input.clone();
         let env_base_url_input = self.env_base_url_input.clone();
         let env_variables_input = self.env_variables_input.clone();
         let env_headers_input = self.env_headers_input.clone();
         let response = self.response.clone();
         let response_text = self.response_text();
+        let response_history = self.history_entries.clone();
+        let response_code_lang = self.response_code_lang;
         let notice = self.notice.clone();
         let current_request = self.selected_request().clone();
         let current_environment = self.selected_environment().clone();
@@ -1117,17 +1593,20 @@ impl Render for ApiDebuggerView {
                                     .child(editor_panel(
                                         entity.clone(),
                                         editor_tab,
-                                        editor_input,
+                                        editor_text_input,
+                                        editor_kv_rows,
+                                        editor_auth_form,
                                         body_mode,
                                         auth_type,
                                         dark,
-                                        cx,
                                     ))
                                     .child(response_panel(
                                         entity.clone(),
                                         response_tab,
                                         response,
                                         response_text,
+                                        response_history,
+                                        response_code_lang,
                                         notice,
                                         dark,
                                     )),
@@ -1210,6 +1689,22 @@ impl Render for ApiDebuggerView {
                 )
                 .into_any_element()
              } else {
+                div().into_any_element()
+            })
+            .child(if show_rename {
+                overlay_shell(
+                    dark,
+                    "api-rename-backdrop",
+                    {
+                        let view = entity.clone();
+                        move |_, cx| {
+                            view.update(cx, |view, _cx| view.show_rename = false);
+                        }
+                    },
+                    rename_dialog(entity.clone(), rename_input, dark),
+                )
+                .into_any_element()
+            } else {
                 div().into_any_element()
             })
             .child(ui::popup_window_chrome_with_titlebar_slot(
@@ -1780,11 +2275,12 @@ fn scenario_banner(scenario: ApiScenario, request: ApiRequest, dark: bool) -> im
 fn editor_panel(
     view: Entity<ApiDebuggerView>,
     editor_tab: EditorTab,
-    editor_input: Entity<TextInput>,
+    text_input: Option<Entity<TextInput>>,
+    kv_rows: Vec<KvRow>,
+    auth_form: AuthFormInputs,
     body_mode: BodyMode,
     auth_type: AuthType,
     dark: bool,
-    cx: &App,
 ) -> impl IntoElement {
     let label = editor_tab.label();
     let tabs_view = view.clone();
@@ -1833,6 +2329,35 @@ fn editor_panel(
                         })
                         .child(label),
                 );
+            }
+            // Mode-specific actions on the right (format JSON / pick file).
+            row = row.child(div().flex_1());
+            match body_mode {
+                BodyMode::Json => {
+                    let fmt_view = bm_view.clone();
+                    row = row.child(
+                        Button::new("api-body-format-json")
+                            .ghost()
+                            .label("格式化")
+                            .with_size(Size::XSmall)
+                            .on_click(move |_, _, cx| {
+                                fmt_view.update(cx, |view, cx| view.format_json_body(cx));
+                            }),
+                    );
+                }
+                BodyMode::Binary => {
+                    let pick_view = bm_view.clone();
+                    row = row.child(
+                        Button::new("api-body-pick-file")
+                            .ghost()
+                            .label("选择文件")
+                            .with_size(Size::XSmall)
+                            .on_click(move |_, _, cx| {
+                                pick_view.update(cx, |view, cx| view.pick_binary_file(cx));
+                            }),
+                    );
+                }
+                _ => {}
             }
             row.into_any_element()
         }
@@ -1992,15 +2517,43 @@ fn editor_panel(
                 .scrollbar_width(px(4.0))
                 .p(px(10.0))
                 .child(match editor_tab {
-                    EditorTab::Params | EditorTab::Headers | EditorTab::Path => {
-                        key_value_table(view.clone(), editor_input, cx, dark).into_any_element()
+                    EditorTab::Params
+                    | EditorTab::Headers
+                    | EditorTab::Path
+                    | EditorTab::Cookies => {
+                        kv_editor_table(view.clone(), editor_tab, kv_rows, dark).into_any_element()
+                    }
+                    EditorTab::Auth => {
+                        auth_form_panel(view.clone(), auth_type, auth_form, dark).into_any_element()
                     }
                     _ => {
+                        let input =
+                            text_input.expect("non-KV editor tab must have a text input");
+                        // Mode-specific hint for the body editor's text formats.
+                        let hint = if editor_tab == EditorTab::Body {
+                            match body_mode {
+                                BodyMode::FormData => Some(
+                                    "每行一个字段：key=value；文件用 key=@/path/to/file。",
+                                ),
+                                BodyMode::FormUrlEncoded => {
+                                    Some("每行一个字段：key=value（发送时拼接为 a=1&b=2）。")
+                                }
+                                BodyMode::Binary => {
+                                    Some("填写文件路径，或点击右上角“选择文件”。")
+                                }
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        };
                         div()
                             .flex()
                             .flex_col()
                             .gap(px(8.0))
                             .child(section_micro_label(label, dark))
+                            .when_some(hint, |column, text| {
+                                column.child(auth_hint(text))
+                            })
                             .child(
                                 div()
                                     .rounded(px(6.0))
@@ -2008,24 +2561,7 @@ fn editor_panel(
                                     .border_color(ui::border_light())
                                     .bg(theme::semantic().bg_subtle_2)
                                     .overflow_hidden()
-                                    .child(editor_input),
-                            )
-                            .into_any_element()
-                    }
-                    _ => {
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(8.0))
-                            .child(section_micro_label(label, dark))
-                            .child(
-                                div()
-                                    .rounded(px(6.0))
-                                    .border_1()
-                                    .border_color(ui::border_light())
-                                    .bg(theme::semantic().bg_subtle_2)
-                                    .overflow_hidden()
-                                    .child(editor_input),
+                                    .child(input),
                             )
                             .into_any_element()
                     }
@@ -2033,21 +2569,136 @@ fn editor_panel(
         )
 }
 
+/// The Auth tab body — renders a type-specific form (Bearer / Basic / API
+/// Key). The type itself is chosen via the buttons in the editor's `mode_row`.
+fn auth_form_panel(
+    view: Entity<ApiDebuggerView>,
+    auth_type: AuthType,
+    form: AuthFormInputs,
+    dark: bool,
+) -> impl IntoElement {
+    let body = match auth_type {
+        AuthType::None => div()
+            .py(px(6.0))
+            .text_size(px(11.0))
+            .text_color(ui::text_tertiary())
+            .child("该请求不附带认证信息。")
+            .into_any_element(),
+        AuthType::BearerToken => div()
+            .flex()
+            .flex_col()
+            .gap(px(10.0))
+            .child(labeled_field("Token", form.bearer.clone(), dark))
+            .child(auth_hint("发送时自动添加请求头 Authorization: Bearer <token>。"))
+            .into_any_element(),
+        AuthType::BasicAuth => div()
+            .flex()
+            .flex_col()
+            .gap(px(10.0))
+            .child(labeled_field("用户名", form.basic_user.clone(), dark))
+            .child(labeled_field("密码", form.basic_pass.clone(), dark))
+            .child(auth_hint("发送时自动以 Base64 编码为 Authorization: Basic 头。"))
+            .into_any_element(),
+        AuthType::ApiKey => div()
+            .flex()
+            .flex_col()
+            .gap(px(10.0))
+            .child(labeled_field("Key", form.apikey_name.clone(), dark))
+            .child(labeled_field("Value", form.apikey_value.clone(), dark))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.0))
+                    .child(section_micro_label("位置", dark))
+                    .child(
+                        div()
+                            .flex()
+                            .gap(px(6.0))
+                            .child(auth_location_button(view.clone(), "Header", false, !form.in_query))
+                            .child(auth_location_button(view.clone(), "Query", true, form.in_query)),
+                    ),
+            )
+            .into_any_element(),
+    };
+
+    div().flex().flex_col().gap(px(12.0)).child(body)
+}
+
+fn auth_hint(text: &'static str) -> impl IntoElement {
+    div()
+        .text_size(px(10.0))
+        .text_color(ui::text_tertiary())
+        .child(text)
+}
+
+fn auth_location_button(
+    view: Entity<ApiDebuggerView>,
+    label: &'static str,
+    query: bool,
+    active: bool,
+) -> impl IntoElement {
+    div()
+        .id(("api-auth-location", query as usize))
+        .px(px(10.0))
+        .py(px(4.0))
+        .rounded(px(4.0))
+        .text_size(px(10.0))
+        .text_color(if active {
+            api_accent()
+        } else {
+            ui::text_tertiary()
+        })
+        .bg(if active {
+            theme::rgba_with_alpha(theme::semantic().primary, 0.12)
+        } else {
+            hsla(0.0, 0.0, 0.0, 0.0)
+        })
+        .border_1()
+        .border_color(if active {
+            api_accent().into()
+        } else {
+            ui::border_light()
+        })
+        .hover(|style| style.cursor_pointer().text_color(api_accent()))
+        .child(label)
+        .on_click(move |_, _, cx| {
+            view.update(cx, |view, cx| {
+                view.auth_apikey_in_query = query;
+                view.sync_models(cx);
+                view.persist_current_tab_state(cx);
+            });
+        })
+}
+
 fn response_panel(
     view: Entity<ApiDebuggerView>,
     response_tab: ResponseTab,
     response: ApiResponse,
     response_text: String,
+    history_entries: Vec<HttpHistory>,
+    code_lang: CodeLanguage,
     notice: String,
     dark: bool,
 ) -> impl IntoElement {
     let tabs_view = view.clone();
-    let primary_response_tabs = [
-        ResponseTab::Body,
-        ResponseTab::Headers,
-        ResponseTab::Request,
-        ResponseTab::Code,
-    ];
+
+    let content: AnyElement = match response_tab {
+        ResponseTab::History => {
+            response_history_view(view.clone(), history_entries, dark).into_any_element()
+        }
+        ResponseTab::Code => {
+            response_code_view(view.clone(), code_lang, response_text, dark).into_any_element()
+        }
+        ResponseTab::Body => response_body_view(
+            view.clone(),
+            response.content_type.clone(),
+            response_text,
+            dark,
+        )
+        .into_any_element(),
+        _ => response_text_view(response_text).into_any_element(),
+    };
 
     div()
         .flex_1()
@@ -2081,66 +2732,39 @@ fn response_panel(
                 .border_color(ui::border_light())
                 .bg(theme::semantic().bg_subtle)
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap(px(4.0))
-                .children(
-                    primary_response_tabs
-                        .into_iter()
-                        .enumerate()
-                        .map(move |(index, tab)| {
-                            let active = tab == response_tab;
-                            let tab_view = tabs_view.clone();
-                            div()
-                                .id(("api-response-tab", index))
-                                .px(px(10.0))
-                                .py(px(5.0))
-                                .rounded(px(4.0))
-                                .bg(if active {
-                                    theme::rgba_with_alpha(api_accent(), 0.08)
-                                } else {
-                                    theme::rgba_with_alpha(theme::semantic().bg_surface, 0.0)
-                                })
-                                .text_size(px(11.0))
-                                .text_color(if active {
-                                    api_accent()
-                                } else {
-                                    ui::text_tertiary()
-                                })
-                                .hover(move |style| {
-                                    style
-                                        .bg(glass::hover_bg(dark))
-                                        .cursor_pointer()
-                                })
-                                .child(tab.label())
-                                .on_click({
-                                    move |_, window, cx| {
-                                        tab_view.update(cx, |view, _cx| {
-                                            view.response_tab = tab;
-                                        });
-                                        window.refresh();
-                                    }
-                                })
-                        }),
-                ),
+                .children(ResponseTab::all().into_iter().enumerate().map(
+                    move |(index, tab)| {
+                        let active = tab == response_tab;
+                        let tab_view = tabs_view.clone();
+                        div()
+                            .id(("api-response-tab", index))
+                            .px(px(9.0))
+                            .py(px(5.0))
+                            .rounded(px(4.0))
+                            .bg(if active {
+                                theme::rgba_with_alpha(api_accent(), 0.08)
+                            } else {
+                                transparent_surface()
+                            })
+                            .text_size(px(11.0))
+                            .text_color(if active {
+                                api_accent()
+                            } else {
+                                ui::text_tertiary()
+                            })
+                            .hover(move |style| style.bg(glass::hover_bg(dark)).cursor_pointer())
+                            .child(tab.label())
+                            .on_click(move |_, window, cx| {
+                                tab_view.update(cx, |view, _cx| view.set_response_tab(tab));
+                                window.refresh();
+                            })
+                    },
+                )),
         )
-        .child(
-            div()
-                .id("api-response-scroll")
-                .flex_1()
-                .min_h(px(0.0))
-                .overflow_y_scroll()
-                .scrollbar_width(px(4.0))
-                .p(px(10.0))
-                .bg(theme::semantic().bg_subtle_2)
-                .child(
-                    div()
-                        .font_family("SF Mono")
-                        .text_size(px(12.0))
-                        .line_height(px(18.0))
-                        .text_color(theme::semantic().text_body)
-                        .child(response_text),
-                ),
-        )
+        .child(content)
         .child(
             div()
                 .px(px(12.0))
@@ -2152,6 +2776,359 @@ fn response_panel(
                 .child(notice),
         )
 }
+
+/// Scrollable monospace text body — the default response content area.
+fn response_text_view(text: String) -> impl IntoElement {
+    div()
+        .id("api-response-scroll")
+        .flex_1()
+        .min_h(px(0.0))
+        .overflow_y_scroll()
+        .scrollbar_width(px(4.0))
+        .p(px(10.0))
+        .bg(theme::semantic().bg_subtle_2)
+        .child(
+            div()
+                .font_family("SF Mono")
+                .text_size(px(12.0))
+                .line_height(px(18.0))
+                .text_color(theme::semantic().text_body)
+                .child(text),
+        )
+}
+
+/// Response Body tab: action bar (复制 / 格式化 / 保存) + content-type hint + body.
+fn response_body_view(
+    view: Entity<ApiDebuggerView>,
+    content_type: String,
+    text: String,
+    dark: bool,
+) -> impl IntoElement {
+    let binary = is_binary_content_type(&content_type);
+    div()
+        .flex_1()
+        .min_h(px(0.0))
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .px(px(10.0))
+                .py(px(6.0))
+                .border_b_1()
+                .border_color(ui::border_light())
+                .flex()
+                .items_center()
+                .gap(px(6.0))
+                .child(response_action_button(
+                    view.clone(),
+                    "复制",
+                    ResponseBodyAction::Copy,
+                    dark,
+                ))
+                .child(response_action_button(
+                    view.clone(),
+                    "格式化",
+                    ResponseBodyAction::Format,
+                    dark,
+                ))
+                .child(response_action_button(
+                    view.clone(),
+                    "保存",
+                    ResponseBodyAction::Save,
+                    dark,
+                ))
+                .child(div().flex_1())
+                .when(!content_type.is_empty(), |row| {
+                    row.child(
+                        div()
+                            .text_size(px(10.0))
+                            .font_family("SF Mono")
+                            .text_color(ui::text_tertiary())
+                            .child(content_type.clone()),
+                    )
+                }),
+        )
+        .when(binary, |panel| {
+            panel.child(
+                div()
+                    .px(px(10.0))
+                    .py(px(6.0))
+                    .bg(theme::rgba_with_alpha(theme::semantic().danger, 0.08))
+                    .text_size(px(11.0))
+                    .text_color(theme::semantic().danger)
+                    .child("⚠ 二进制/图片响应，文本预览可能乱码，建议点击「保存」后查看"),
+            )
+        })
+        .child(response_text_view(text))
+}
+
+/// Response Code tab: language selector + generated snippet.
+fn response_code_view(
+    view: Entity<ApiDebuggerView>,
+    code_lang: CodeLanguage,
+    code_text: String,
+    dark: bool,
+) -> impl IntoElement {
+    div()
+        .flex_1()
+        .min_h(px(0.0))
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .px(px(10.0))
+                .py(px(6.0))
+                .border_b_1()
+                .border_color(ui::border_light())
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap(px(4.0))
+                .children(CodeLanguage::all().into_iter().enumerate().map(
+                    move |(index, lang)| {
+                        let active = lang == code_lang;
+                        let lang_view = view.clone();
+                        div()
+                            .id(("api-code-lang", index))
+                            .px(px(8.0))
+                            .py(px(3.0))
+                            .rounded(px(4.0))
+                            .text_size(px(11.0))
+                            .bg(if active {
+                                theme::rgba_with_alpha(api_accent(), 0.08)
+                            } else {
+                                transparent_surface()
+                            })
+                            .text_color(if active {
+                                api_accent()
+                            } else {
+                                ui::text_tertiary()
+                            })
+                            .hover(move |style| style.bg(glass::hover_bg(dark)).cursor_pointer())
+                            .child(lang.label())
+                            .on_click(move |_, window, cx| {
+                                lang_view
+                                    .update(cx, |view, _cx| view.set_response_code_lang(lang));
+                                window.refresh();
+                            })
+                    },
+                )),
+        )
+        .child(response_text_view(code_text))
+}
+
+/// Response History tab: count + 清空 header and a clickable list of past calls.
+fn response_history_view(
+    view: Entity<ApiDebuggerView>,
+    entries: Vec<HttpHistory>,
+    dark: bool,
+) -> impl IntoElement {
+    let clear_view = view.clone();
+    let count = entries.len();
+    div()
+        .flex_1()
+        .min_h(px(0.0))
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .px(px(10.0))
+                .py(px(6.0))
+                .border_b_1()
+                .border_color(ui::border_light())
+                .flex()
+                .items_center()
+                .gap(px(8.0))
+                .child(
+                    div()
+                        .flex_1()
+                        .text_size(px(11.0))
+                        .text_color(ui::text_secondary())
+                        .child(format!("共 {count} 条历史记录")),
+                )
+                .when(count > 0, |row| {
+                    row.child(
+                        div()
+                            .id("api-history-clear")
+                            .px(px(8.0))
+                            .py(px(3.0))
+                            .rounded(px(4.0))
+                            .text_size(px(11.0))
+                            .text_color(theme::semantic().danger)
+                            .hover(move |style| style.bg(glass::hover_bg(dark)).cursor_pointer())
+                            .child("清空")
+                            .on_click(move |_, window, cx| {
+                                clear_view
+                                    .update(cx, |view, _cx| view.clear_current_history());
+                                window.refresh();
+                            }),
+                    )
+                }),
+        )
+        .child(
+            div()
+                .id("api-history-scroll")
+                .flex_1()
+                .min_h(px(0.0))
+                .overflow_y_scroll()
+                .scrollbar_width(px(4.0))
+                .when(count == 0, |list| {
+                    list.child(
+                        div()
+                            .p(px(12.0))
+                            .text_size(px(11.0))
+                            .text_color(ui::text_tertiary())
+                            .child("暂无历史记录，发送请求后会自动追加"),
+                    )
+                })
+                .children(
+                    entries
+                        .into_iter()
+                        .enumerate()
+                        .map(move |(index, entry)| history_row(view.clone(), index, entry, dark)),
+                ),
+        )
+}
+
+fn history_row(
+    view: Entity<ApiDebuggerView>,
+    index: usize,
+    entry: HttpHistory,
+    dark: bool,
+) -> impl IntoElement {
+    let status_color = if entry.status == 0 {
+        theme::semantic().text_secondary
+    } else if (200..300).contains(&entry.status) {
+        theme::semantic().success
+    } else {
+        theme::semantic().danger
+    };
+    div()
+        .id(("api-history-row", index))
+        .px(px(10.0))
+        .py(px(8.0))
+        .border_b_1()
+        .border_color(ui::border_light())
+        .flex()
+        .flex_col()
+        .gap(px(2.0))
+        .hover(move |style| style.bg(glass::hover_bg(dark)).cursor_pointer())
+        .on_click(move |_, window, cx| {
+            view.update(cx, |view, _cx| view.view_history_entry(index));
+            window.refresh();
+        })
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(6.0))
+                .child(
+                    div()
+                        .text_size(px(10.0))
+                        .font_family("SF Mono")
+                        .font_weight(gpui::FontWeight::BOLD)
+                        .text_color(theme::semantic().text_primary)
+                        .child(entry.method.clone()),
+                )
+                .child(
+                    div()
+                        .text_size(px(10.0))
+                        .font_family("SF Mono")
+                        .text_color(status_color)
+                        .child(entry.status.to_string()),
+                )
+                .child(div().flex_1())
+                .child(
+                    div()
+                        .text_size(px(10.0))
+                        .text_color(ui::text_tertiary())
+                        .child(entry.created_at.clone()),
+                ),
+        )
+        .child(
+            div()
+                .text_size(px(11.0))
+                .text_color(theme::semantic().text_body)
+                .child(entry.url.clone()),
+        )
+}
+
+#[derive(Clone, Copy)]
+enum ResponseBodyAction {
+    Copy,
+    Format,
+    Save,
+}
+
+fn response_action_button(
+    view: Entity<ApiDebuggerView>,
+    label: &'static str,
+    action: ResponseBodyAction,
+    dark: bool,
+) -> impl IntoElement {
+    let id_index = match action {
+        ResponseBodyAction::Copy => 0usize,
+        ResponseBodyAction::Format => 1,
+        ResponseBodyAction::Save => 2,
+    };
+    div()
+        .id(("api-response-action", id_index))
+        .px(px(8.0))
+        .py(px(3.0))
+        .rounded(px(4.0))
+        .border_1()
+        .border_color(ui::border_light())
+        .text_size(px(11.0))
+        .text_color(ui::text_secondary())
+        .hover(move |style| style.bg(glass::hover_bg(dark)).cursor_pointer())
+        .child(label)
+        .on_click(move |_, window, cx| {
+            view.update(cx, |view, cx| match action {
+                ResponseBodyAction::Copy => view.copy_response_body(cx),
+                ResponseBodyAction::Format => view.format_response_body(),
+                ResponseBodyAction::Save => view.save_response_body(),
+            });
+            window.refresh();
+        })
+}
+
+/// Map a response `Content-Type` to a sensible file extension for saving.
+fn content_type_extension(content_type: &str) -> &'static str {
+    let ct = content_type.to_ascii_lowercase();
+    let ct = ct.split(';').next().unwrap_or("").trim();
+    match ct {
+        "application/json" => "json",
+        "text/html" => "html",
+        "application/xml" | "text/xml" => "xml",
+        "text/css" => "css",
+        "text/csv" => "csv",
+        "application/javascript" | "text/javascript" => "js",
+        "application/pdf" => "pdf",
+        "application/zip" => "zip",
+        "image/png" => "png",
+        "image/jpeg" => "jpg",
+        "image/gif" => "gif",
+        "image/svg+xml" => "svg",
+        "image/webp" => "webp",
+        _ if ct.starts_with("text/") => "txt",
+        _ => "txt",
+    }
+}
+
+/// Whether a `Content-Type` denotes binary content unsuitable for text preview.
+fn is_binary_content_type(content_type: &str) -> bool {
+    let ct = content_type.to_ascii_lowercase();
+    let ct = ct.split(';').next().unwrap_or("").trim();
+    ct.starts_with("image/")
+        || ct.starts_with("audio/")
+        || ct.starts_with("video/")
+        || ct.starts_with("font/")
+        || ct == "application/octet-stream"
+        || ct == "application/pdf"
+        || ct == "application/zip"
+        || ct == "application/gzip"
+}
+
 
 fn env_popup(
     view: Entity<ApiDebuggerView>,
@@ -2873,6 +3850,100 @@ fn curl_import_dialog(
         )
 }
 
+fn rename_dialog(
+    view: Entity<ApiDebuggerView>,
+    rename_input: Entity<TextInput>,
+    dark: bool,
+) -> impl IntoElement {
+    let confirm_view = view.clone();
+    let cancel_view = view.clone();
+    div()
+        .w(px(420.0))
+        .rounded(px(16.0))
+        .border_1()
+        .border_color(glass::border(dark))
+        .bg(glass::bg(dark))
+        .overflow_hidden()
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .h(px(44.0))
+                .px(px(18.0))
+                .border_b_1()
+                .border_color(ui::border_light())
+                .bg(theme::rgba_with_alpha(
+                    theme::semantic().bg_surface,
+                    if dark { 0.34 } else { 0.52 },
+                ))
+                .flex()
+                .items_center()
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(theme::semantic().text_body)
+                        .child("重命名"),
+                ),
+        )
+        .child(
+            div()
+                .p(px(16.0))
+                .flex()
+                .flex_col()
+                .gap(px(12.0))
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(theme::semantic().text_secondary)
+                        .child("输入新的名称"),
+                )
+                .child(div().id("api-rename-input-wrapper").child(rename_input))
+                .child(
+                    div()
+                        .flex()
+                        .justify_end()
+                        .gap(px(8.0))
+                        .child(
+                            div()
+                                .id("api-rename-cancel-btn")
+                                .px(px(16.0))
+                                .py(px(6.0))
+                                .rounded(px(6.0))
+                                .bg(theme::rgba_with_alpha(
+                                    theme::semantic().bg_surface,
+                                    if dark { 0.5 } else { 0.7 },
+                                ))
+                                .text_xs()
+                                .text_color(theme::semantic().text_secondary)
+                                .cursor_pointer()
+                                .on_click(move |_event, _window, cx| {
+                                    cancel_view.update(cx, |view, _cx| {
+                                        view.show_rename = false;
+                                    });
+                                })
+                                .child("取消"),
+                        )
+                        .child(
+                            div()
+                                .id("api-rename-ok-btn")
+                                .px(px(16.0))
+                                .py(px(6.0))
+                                .rounded(px(6.0))
+                                .bg(theme::semantic().primary)
+                                .text_xs()
+                                .text_color(theme::semantic().text_primary)
+                                .cursor_pointer()
+                                .on_click(move |_event, _window, cx| {
+                                    confirm_view.update(cx, |view, cx| {
+                                        view.confirm_rename(cx);
+                                    });
+                                })
+                                .child("确定"),
+                        ),
+                ),
+        )
+}
+
 fn overlay_shell(
     dark: bool,
     backdrop_id: &'static str,
@@ -2984,6 +4055,17 @@ fn context_menu_overlay(
                     },
                 ))
                 .child(context_menu_item(
+                    "api-collection-menu-new-case",
+                    "新建用例",
+                    "",
+                    {
+                        let view = view.clone();
+                        move |_, cx| {
+                            view.update(cx, |view, _cx| view.create_new_case());
+                        }
+                    },
+                ))
+                .child(context_menu_item(
                     "api-collection-menu-export",
                     "导出为 OpenAPI",
                     "",
@@ -3007,7 +4089,40 @@ fn context_menu_overlay(
                         }
                     },
                 ))
+                .child(context_menu_item(
+                    "api-collection-menu-import-openapi",
+                    "导入 OpenAPI",
+                    "",
+                    {
+                        let view = view.clone();
+                        move |_, cx| {
+                            view.update(cx, |view, _cx| view.import_openapi_file());
+                        }
+                    },
+                ))
+                .child(context_menu_item(
+                    "api-collection-menu-import-postman",
+                    "导入 Postman",
+                    "",
+                    {
+                        let view = view.clone();
+                        move |_, cx| {
+                            view.update(cx, |view, _cx| view.import_postman_file());
+                        }
+                    },
+                ))
                 .child(menu_separator())
+                .child(context_menu_item(
+                    "api-collection-menu-rename",
+                    "重命名",
+                    "",
+                    {
+                        let view = view.clone();
+                        move |_, cx| {
+                            view.update(cx, |view, cx| view.open_rename(cx));
+                        }
+                    },
+                ))
                 .child(context_menu_item(
                     "api-collection-menu-duplicate",
                     "复制路径",
@@ -3246,6 +4361,25 @@ fn status_color(status: ScenarioStatus, _dark: bool) -> gpui::Rgba {
     }
 }
 
+fn kv_input(cx: &mut App, value: &str, placeholder: &str) -> Entity<TextInput> {
+    let value = value.to_string();
+    let placeholder = placeholder.to_string();
+    cx.new(|cx| {
+        let mut input = TextInput::new(cx, placeholder.clone(), value.clone());
+        input.set_chrome(false, cx);
+        input.set_monospace(true, cx);
+        input.set_style(
+            TextInputStyle {
+                height: 28.0,
+                font_size: 11.0,
+                padding: 6.0,
+            },
+            cx,
+        );
+        input
+    })
+}
+
 fn single_input(cx: &mut App, value: &str, placeholder: &str) -> Entity<TextInput> {
     let value = value.to_string();
     let placeholder = placeholder.to_string();
@@ -3326,12 +4460,17 @@ fn parse_rows(text: &str) -> Vec<KeyValueRow> {
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .map(|line| {
-            let (key, value) = line
+            // A leading `#` marks a disabled row (round-trips with `format_rows`).
+            let (enabled, content) = match line.strip_prefix('#') {
+                Some(rest) => (false, rest.trim()),
+                None => (true, line),
+            };
+            let (key, value) = content
                 .split_once('=')
                 .map(|(key, value)| (key.trim(), value.trim()))
-                .unwrap_or((line, ""));
+                .unwrap_or((content, ""));
             KeyValueRow {
-                enabled: true,
+                enabled,
                 key: key.to_string(),
                 value: value.to_string(),
                 description: String::new(),
@@ -3342,7 +4481,14 @@ fn parse_rows(text: &str) -> Vec<KeyValueRow> {
 
 fn format_rows(rows: &[KeyValueRow]) -> String {
     rows.iter()
-        .map(|row| format!("{}={}", row.key, row.value))
+        .map(|row| {
+            let body = format!("{}={}", row.key, row.value);
+            if row.enabled {
+                body
+            } else {
+                format!("# {body}")
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -3358,46 +4504,13 @@ fn detect_body_mode(body: &str) -> String {
     "text".to_string()
 }
 
-fn detect_auth_type_str(auth_text: &str) -> String {
-    let text = auth_text.trim();
-    if text.is_empty() {
-        return "none".to_string();
-    }
-    let lines: Vec<&str> = text.lines().collect();
-    for line in &lines {
-        let line = line.trim();
-        if line.starts_with('#') || line.is_empty() {
-            continue;
-        }
-        if let Some((key, _)) = line.split_once('=') {
-            let key = key.trim().to_lowercase();
-            if key == "authorization" {
-                let val = line.split_once('=').map(|(_, v)| v.trim()).unwrap_or("");
-                if val.starts_with("Bearer ") || val.starts_with("bearer ") {
-                    return "bearer".to_string();
-                }
-                if val.starts_with("Basic ") || val.starts_with("basic ") {
-                    return "basic".to_string();
-                }
-            }
-            if key == "x-api-key" {
-                return "apikey".to_string();
-            }
-        }
-    }
-    "none".to_string()
-}
-
-fn key_value_table(
+fn kv_editor_table(
     view: Entity<ApiDebuggerView>,
-    source_input: Entity<TextInput>,
-    cx: &App,
-    dark: bool,
+    tab: EditorTab,
+    rows: Vec<KvRow>,
+    _dark: bool,
 ) -> impl IntoElement {
-    let rows_text = source_input.read(cx).text();
-    let rows = parse_rows(&rows_text);
     let add_view = view.clone();
-    let add_input = source_input.clone();
 
     div()
         .flex()
@@ -3413,34 +4526,35 @@ fn key_value_table(
                 .bg(theme::semantic().bg_subtle)
                 .flex()
                 .items_center()
+                .gap(px(6.0))
                 .text_size(px(10.0))
                 .text_color(ui::text_tertiary())
-                .child(div().w(px(32.0)).child("启用"))
+                .child(div().w(px(28.0)).child("启用"))
                 .child(div().flex_1().child("键"))
                 .child(div().flex_1().child("值"))
-                .child(div().w(px(28.0))),
+                .child(div().w(px(24.0))),
         )
-        .children(rows.iter().enumerate().map(move |(i, row)| {
-            let key = row.key.clone();
-            let val = row.value.clone();
+        .children(rows.into_iter().enumerate().map(move |(i, row)| {
             let enabled = row.enabled;
+            let key_input = row.key.clone();
+            let value_input = row.value.clone();
             let toggle_view = view.clone();
-            let toggle_input = source_input.clone();
             let delete_view = view.clone();
-            let delete_input = source_input.clone();
 
             div()
                 .id(("kv-row", i))
-                .min_h(px(28.0))
+                .min_h(px(34.0))
                 .px(px(8.0))
+                .py(px(3.0))
                 .border_b_1()
                 .border_color(ui::border_light())
                 .hover(|s| s.bg(theme::rgba_with_alpha(theme::semantic().bg_subtle, 0.5)))
                 .flex()
                 .items_center()
+                .gap(px(6.0))
                 .child(
                     div()
-                        .w(px(32.0))
+                        .w(px(28.0))
                         .flex()
                         .justify_center()
                         .child(
@@ -3472,85 +4586,66 @@ fn key_value_table(
                                 .cursor_pointer()
                                 .child(if enabled { "✓" } else { "" })
                                 .on_click(move |_, _, cx| {
-                                    let current = toggle_input.read(cx).text();
-                                    let lines: Vec<String> = current.lines().enumerate().map(|(idx, l)| {
-                                        if idx == i {
-                                            if l.trim_start().starts_with('#') {
-                                                l.trim_start().trim_start_matches('#').trim().to_string()
-                                            } else {
-                                                format!("# {}", l.trim())
-                                            }
-                                        } else {
-                                            l.to_string()
+                                    toggle_view.update(cx, |view, cx| {
+                                        if let Some(editor) = view.kv_editor_mut(tab) {
+                                            editor.toggle(i);
                                         }
-                                    }).collect();
-                                    toggle_input.update(cx, |input, cx| input.set_text(lines.join("\n"), cx));
-                                    toggle_view.update(cx, |_v, _cx| {});
+                                        view.sync_models(cx);
+                                        view.persist_current_tab_state(cx);
+                                    });
                                 }),
                         ),
                 )
-                .child(
-                    div()
-                        .flex_1()
-                        .px(px(4.0))
-                        .font_family("SF Mono")
-                        .text_size(px(11.0))
-                        .text_color(theme::semantic().text_primary)
-                        .truncate()
-                        .child(key.clone()),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .px(px(4.0))
-                        .font_family("SF Mono")
-                        .text_size(px(11.0))
-                        .text_color(ui::text_secondary())
-                        .truncate()
-                        .child(val.clone()),
-                )
+                .child(kv_cell(key_input, enabled))
+                .child(kv_cell(value_input, enabled))
                 .child(
                     Button::new(("kv-del", i))
                         .ghost()
                         .icon(IconName::Close)
                         .with_size(Size::XSmall)
                         .on_click(move |_, _, cx| {
-                            let current = delete_input.read(cx).text();
-                            let lines: Vec<String> = current
-                                .lines()
-                                .enumerate()
-                                .filter(|(idx, _)| *idx != i)
-                                .map(|(_, l)| l.to_string())
-                                .collect();
-                            delete_input.update(cx, |input, cx| {
-                                input.set_text(lines.join("\n"), cx)
+                            delete_view.update(cx, |view, cx| {
+                                if let Some(editor) = view.kv_editor_mut(tab) {
+                                    editor.remove_row(i);
+                                }
+                                view.sync_models(cx);
+                                view.persist_current_tab_state(cx);
                             });
-                            delete_view.update(cx, |v, cx| v.sync_models(cx));
                         }),
                 )
         }))
         .child(
-            div()
-                .px(px(8.0))
-                .py(px(4.0))
-                .child(
-                    Button::new("kv-add-row")
-                        .ghost()
-                        .icon(IconName::Plus)
-                        .label("新增")
-                        .with_size(Size::XSmall)
-                        .on_click(move |_, _, cx| {
-                            let current = add_input.read(cx).text();
-                            let appended = if current.trim().is_empty() {
-                                String::from("KEY=VALUE")
-                            } else {
-                                format!("{current}\nKEY=VALUE")
-                            };
-                            add_input.update(cx, |input, cx| input.set_text(appended, cx));
-                            add_view.update(cx, |v, cx| v.sync_models(cx));
-                        }),
-                ),
+            div().px(px(8.0)).py(px(6.0)).child(
+                Button::new("kv-add-row")
+                    .ghost()
+                    .icon(IconName::Plus)
+                    .label("新增")
+                    .with_size(Size::XSmall)
+                    .on_click(move |_, _, cx| {
+                        add_view.update(cx, |view, cx| {
+                            if let Some(editor) = view.kv_editor_mut(tab) {
+                                editor.add_row(cx);
+                            }
+                            view.persist_current_tab_state(cx);
+                        });
+                    }),
+            ),
         )
+}
+
+/// A single editable cell wrapping a key/value `TextInput`. Dimmed when the
+/// row is disabled.
+fn kv_cell(input: Entity<TextInput>, enabled: bool) -> impl IntoElement {
+    div()
+        .flex_1()
+        .min_w(px(0.0))
+        .rounded(px(4.0))
+        .border_1()
+        .border_color(ui::border_light())
+        .bg(theme::semantic().bg_subtle_2)
+        .overflow_hidden()
+        .when(!enabled, |cell| cell.opacity(0.5))
+        .child(input)
 }
 
 fn sample_response() -> ApiResponse {
@@ -3561,9 +4656,100 @@ fn sample_response() -> ApiResponse {
         size_bytes: 0,
         body: String::from("{\n  \"_notice\": \"发送请求后，响应内容将显示在此处\"\n}"),
         headers: String::new(),
+        cookies: String::new(),
+        content_type: String::new(),
         request_dump: String::new(),
         curl: String::new(),
         logs: vec![String::from("尚未发送请求")],
         assertion_results: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_rows_decodes_disabled_prefix() {
+        let rows = parse_rows("Accept=application/json\n# X-Debug=1\nempty");
+        assert_eq!(rows.len(), 3);
+
+        assert!(rows[0].enabled);
+        assert_eq!(rows[0].key, "Accept");
+        assert_eq!(rows[0].value, "application/json");
+
+        assert!(!rows[1].enabled);
+        assert_eq!(rows[1].key, "X-Debug");
+        assert_eq!(rows[1].value, "1");
+
+        assert!(rows[2].enabled);
+        assert_eq!(rows[2].key, "empty");
+        assert_eq!(rows[2].value, "");
+    }
+
+    #[test]
+    fn format_rows_encodes_disabled_prefix() {
+        let rows = vec![
+            KeyValueRow::new("a", "1"),
+            KeyValueRow {
+                enabled: false,
+                key: "b".into(),
+                value: "2".into(),
+                description: String::new(),
+            },
+        ];
+        assert_eq!(format_rows(&rows), "a=1\n# b=2");
+    }
+
+    #[test]
+    fn rows_text_roundtrip_preserves_enabled() {
+        let original = vec![
+            KeyValueRow::new("page", "1"),
+            KeyValueRow {
+                enabled: false,
+                key: "limit".into(),
+                value: "10".into(),
+                description: String::new(),
+            },
+            KeyValueRow::new("sort", "desc"),
+        ];
+        let restored = parse_rows(&format_rows(&original));
+        assert_eq!(restored.len(), original.len());
+        for (a, b) in original.iter().zip(restored.iter()) {
+            assert_eq!(a.enabled, b.enabled);
+            assert_eq!(a.key, b.key);
+            assert_eq!(a.value, b.value);
+        }
+    }
+
+    #[test]
+    fn value_with_hash_is_not_treated_as_disabled() {
+        // A `#` only disables when it is the first character of the line.
+        let rows = parse_rows("color=#fff");
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].enabled);
+        assert_eq!(rows[0].key, "color");
+        assert_eq!(rows[0].value, "#fff");
+    }
+
+    #[test]
+    fn content_type_extension_maps_known_types() {
+        assert_eq!(
+            content_type_extension("application/json; charset=utf-8"),
+            "json"
+        );
+        assert_eq!(content_type_extension("image/png"), "png");
+        assert_eq!(content_type_extension("text/html"), "html");
+        assert_eq!(content_type_extension("application/octet-stream"), "txt");
+        assert_eq!(content_type_extension(""), "txt");
+    }
+
+    #[test]
+    fn binary_content_types_are_flagged() {
+        assert!(is_binary_content_type("image/jpeg"));
+        assert!(is_binary_content_type("application/pdf"));
+        assert!(is_binary_content_type("video/mp4"));
+        assert!(!is_binary_content_type("application/json"));
+        assert!(!is_binary_content_type("text/plain"));
     }
 }
