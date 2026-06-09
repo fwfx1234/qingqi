@@ -8,6 +8,7 @@ use gpui::{
 use gpui_component::{
     IconName, IndexPath, Sizable, Size,
     button::{Button, ButtonVariants},
+    scroll::ScrollableElement,
     select::{Select, SelectEvent, SelectState},
 };
 use uuid::Uuid;
@@ -24,6 +25,8 @@ use qingqi_ui::{
     theme, ui,
     ui::glass,
 };
+
+use qingqi_plugin::plugin_spec::PluginAccent;
 
 const STACK_BREAKPOINT_PX: f32 = 980.0;
 
@@ -308,8 +311,8 @@ pub struct ApiDebuggerView {
     env_detail_tab: EnvDetailTab,
     body_mode: BodyMode,
     auth_type: AuthType,
-    show_env_popup: bool,
-    show_env_manager: bool,
+    show_env_dropdown: bool,
+    show_env_editor: bool,
     show_collection_menu: bool,
     collection_menu_title: String,
     collection_menu_position: Option<(f32, f32)>,
@@ -552,8 +555,8 @@ impl ApiDebuggerView {
             env_detail_tab: EnvDetailTab::Variables,
             body_mode: BodyMode::from_db(&detect_body_mode(&init_body)),
             auth_type: init_auth_form.auth_type.unwrap_or(AuthType::None),
-            show_env_popup: false,
-            show_env_manager: false,
+            show_env_dropdown: false,
+            show_env_editor: false,
             show_collection_menu: false,
             collection_menu_title: String::from("集合"),
             collection_menu_position: None,
@@ -1121,7 +1124,7 @@ impl ApiDebuggerView {
         self.sync_models(cx);
         self.persist_workspace();
         self.selected_environment = index;
-        self.show_env_popup = false;
+        self.show_env_dropdown = false;
         self.reload_environment_inputs(cx);
         self.notice = format!("已切换到 {}", self.selected_environment().name);
     }
@@ -1528,7 +1531,7 @@ impl ApiDebuggerView {
             format_rows(&env.variables),
             format_rows(&env.headers),
         );
-        self.show_env_manager = false;
+        self.show_env_editor = false;
         self.notice = String::from("正在保存环境...");
     }
 
@@ -1607,8 +1610,8 @@ impl ApiDebuggerView {
         self.collection_menu_position = position;
         self.collection_menu_node_id = node_id;
         self.show_collection_menu = true;
-        self.show_env_popup = false;
-        self.show_env_manager = false;
+        self.show_env_dropdown = false;
+        self.show_env_editor = false;
     }
 
     fn close_collection_menu(&mut self) {
@@ -1811,8 +1814,8 @@ impl Render for ApiDebuggerView {
         let auth_type = self.auth_type;
         let response_tab = self.response_tab;
         let env_detail_tab = self.env_detail_tab;
-        let show_env_popup = self.show_env_popup;
-        let show_env_manager = self.show_env_manager;
+        let show_env_dropdown = self.show_env_dropdown;
+        let show_env_editor = self.show_env_editor;
         let show_collection_menu = self.show_collection_menu;
         let show_curl_import = self.show_curl_import;
         let method_select = self.method_select_state.as_ref().expect("init").clone();
@@ -1847,14 +1850,13 @@ impl Render for ApiDebuggerView {
             .map(|tab| self.tab_title(tab))
             .collect::<Vec<_>>();
         let in_flight = self.service.is_in_flight();
-        let chrome = crate::mac_ui::workspace_chrome_config();
 
         let esc_view = entity.clone();
 
         div()
             .relative()
             .size_full()
-            .bg(theme::semantic().bg_glass)
+            .bg(glass::bg(dark))
             .rounded(px(12.0))
             .overflow_hidden()
             .font_family("Inter, PingFang SC")
@@ -1862,8 +1864,8 @@ impl Render for ApiDebuggerView {
             .on_key_down(move |event, _window, cx| {
                 if event.keystroke.key == "escape" {
                     esc_view.update(cx, |view, _cx| {
-                        view.show_env_popup = false;
-                        view.show_env_manager = false;
+                        view.show_env_dropdown = false;
+                        view.show_env_editor = false;
                         view.show_collection_menu = false;
                         view.show_curl_import = false;
                     });
@@ -1872,132 +1874,148 @@ impl Render for ApiDebuggerView {
             .child(
                 div()
                     .size_full()
-                    .relative()
-                    .pt(px(chrome.metrics().content_top_padding + 6.0))
-                    .pl(px(10.0))
-                    .pr(px(10.0))
-                    .pb(px(10.0))
+                    .pt(px(0.0))
+                    .pl(px(8.0))
+                    .pr(px(8.0))
+                    .pb(px(6.0))
                     .flex()
-                    .gap(px(10.0))
-                    .when(stacked, |layout| layout.flex_col())
-                    .when(!stacked, |layout| layout.flex_row())
-                    .child(collection_tree(
-                        entity.clone(),
-                        groups,
-                        selected_request,
-                        selected_scenario,
-                        dark,
-                    ))
+                    .flex_col()
                     .child(
                         div()
                             .flex_1()
-                            .min_w(px(0.0))
-                            .border_1()
-                            .border_color(glass::divider(dark))
-                            .bg(glass::bg(dark))
-                            .rounded(px(10.0))
-                            .overflow_hidden()
+                            .min_h(px(0.0))
                             .flex()
-                            .flex_col()
-                            .child(open_tabs_bar(
-                                entity.clone(),
-                                open_tabs,
-                                active_tab,
-                                tab_titles,
-                                current_environment.clone(),
-                                dark,
-                            ))
-                            .child(action_bar(
-                                entity.clone(),
-                                current_request.clone(),
-                                current_environment.clone(),
-                                path_input,
-                                in_flight,
-                                dark,
-                                method_select,
-                            ))
-                            .when(current_scenario.is_some(), |content| {
-                                content.child(scenario_banner(
-                                    current_scenario.expect("scenario should exist"),
-                                    base_request.clone(),
-                                    dark,
-                                ))
-                            })
+                            .gap(px(10.0))
+                            .when(stacked, |layout| layout.flex_col())
+                            .when(!stacked, |layout| layout.flex_row())
                             .child(
-                                content_split(stacked)
-                                    .child(editor_panel(
+                                div()
+                                    .w(px(260.0))
+                                    .min_h(px(0.0))
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(6.0))
+                                    .child(
+                                        div()
+                                            .h(px(32.0))
+                                            .flex()
+                                            .items_center()
+                                            .pl(px(68.0))
+                                            .pr_2()
+                                            .child(
+                                                div()
+                                                    .flex()
+                                                    .items_center()
+                                                    .gap_2()
+                                                    .child(
+                                                        div()
+                                                            .text_size(px(13.0))
+                                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                            .child("API 调试"),
+                                                    )
+                                                    .child(
+                                                        Button::new("api-sidebar-new")
+                                                            .ghost()
+                                                            .icon(IconName::Plus)
+                                                            .with_size(Size::XSmall)
+                                                            .on_click({
+                                                                let view = entity.clone();
+                                                                move |_, _, cx| {
+                                                                    view.update(cx, |view, _cx| {
+                                                                        view.open_collection_menu("新建", None, String::new());
+                                                                    });
+                                                                }
+                                                            }),
+                                                    ),
+                                            )
+                                    )
+                                    .child(collection_tree(
                                         entity.clone(),
-                                        editor_tab,
-                                        editor_text_input,
-                                        editor_kv_rows,
-                                        editor_auth_form,
-                                        body_mode,
-                                        auth_type,
+                                        groups,
+                                        selected_request,
+                                        selected_scenario,
                                         dark,
                                     ))
-                                    .child(response_panel(
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w(px(0.0))
+                                    .border_1()
+                                    .border_color(glass::divider(dark))
+                                    .bg(glass::bg(dark))
+                                    .rounded(px(10.0))
+                                    .overflow_hidden()
+                                    .flex()
+                                    .flex_col()
+                                    .child(open_tabs_bar(
                                         entity.clone(),
-                                        response_tab,
-                                        response,
-                                        response_text,
-                                        response_history,
-                                        response_code_lang,
-                                        notice,
+                                        open_tabs,
+                                        active_tab,
+                                        tab_titles,
+                                        current_environment.clone(),
+                                        environments.clone(),
+                                        selected_environment,
+                                        show_env_dropdown,
                                         dark,
-                                    )),
-                            ),
-                    ),
+                                    ))
+                                    .child(action_bar(
+                                        entity.clone(),
+                                        current_request.clone(),
+                                        current_environment.clone(),
+                                        path_input,
+                                        in_flight,
+                                        dark,
+                                        method_select,
+                                    ))
+                                    .when(current_scenario.is_some(), |content| {
+                                        content.child(scenario_banner(
+                                            current_scenario.expect("scenario should exist"),
+                                            base_request.clone(),
+                                            dark,
+                                        ))
+                                    })
+                                    .when(show_env_editor, |content| {
+                                        content.child(env_editor_inline(
+                                            entity.clone(),
+                                            selected_environment,
+                                            env_detail_tab,
+                                            environments.clone(),
+                                            env_name_input.clone(),
+                                            env_base_url_input.clone(),
+                                            env_variables_input.clone(),
+                                            env_headers_input.clone(),
+                                            dark,
+                                        ))
+                                    })
+                                    .when(!show_env_editor, |content| {
+                                        content.child(
+                                            content_split(stacked)
+                                                .child(editor_panel(
+                                                    entity.clone(),
+                                                    editor_tab,
+                                                    editor_text_input,
+                                                    editor_kv_rows,
+                                                    editor_auth_form,
+                                                    body_mode,
+                                                    auth_type,
+                                                    dark,
+                                                ))
+                                                .child(response_panel(
+                                                    entity.clone(),
+                                                    response_tab,
+                                                    response,
+                                                    response_text,
+                                                    response_history,
+                                                    response_code_lang,
+                                                    notice,
+                                                    dark,
+                                                )),
+                                        )
+                                    }),
+                            )
+                    )
             )
-            .child(if show_env_popup {
-                overlay_shell(
-                    dark,
-                    "api-env-popup-backdrop",
-                    {
-                        let entity = entity.clone();
-                        move |_, cx| {
-                            entity.update(cx, |view, _cx| view.show_env_popup = false);
-                        }
-                    },
-                    env_popup(
-                        entity.clone(),
-                        environments.clone(),
-                        selected_environment,
-                        dark,
-                    ),
-                )
-                .into_any_element()
-            } else {
-                div().into_any_element()
-            })
-            .child(if show_env_manager {
-                overlay_shell(
-                    dark,
-                    "api-env-manager-backdrop",
-                    {
-                        let entity = entity.clone();
-                        move |_, cx| {
-                            entity.update(cx, |view, _cx| {
-                                view.show_env_manager = false;
-                                view.show_env_popup = false;
-                            });
-                        }
-                    },
-                    env_manager_dialog(
-                        entity.clone(),
-                        selected_environment,
-                        env_detail_tab,
-                        environments,
-                        env_name_input,
-                        env_base_url_input,
-                        env_variables_input,
-                        env_headers_input,
-                        dark,
-                    ),
-                )
-                .into_any_element()
-            } else {
-                div().into_any_element()
-            })
             .child(if show_collection_menu {
                 context_menu_overlay(
                     entity.clone(),
@@ -2042,28 +2060,7 @@ impl Render for ApiDebuggerView {
             } else {
                 div().into_any_element()
             })
-            .child(ui::popup_window_chrome_with_titlebar_slot(
-                chrome,
-                Some(titlebar_new_button(entity.clone(), dark).into_any_element()),
-            ))
     }
-}
-
-fn titlebar_new_button(view: Entity<ApiDebuggerView>, _dark: bool) -> impl IntoElement {
-    div().flex().items_center().gap(px(4.0)).child(
-        Button::new("api-titlebar-new")
-            .ghost()
-            .icon(IconName::Plus)
-            .with_size(Size::XSmall)
-            .on_click({
-                let view = view.clone();
-                move |_, _, cx| {
-                    view.update(cx, |view, _cx| {
-                        view.open_collection_menu("新建", None, String::new());
-                    });
-                }
-            }),
-    )
 }
 
 fn collection_tree(
@@ -2076,8 +2073,8 @@ fn collection_tree(
     let mut request_index = 0usize;
     div()
         .w(px(260.0))
-        .min_h(px(220.0))
-        .flex_none()
+        .min_h(px(0.0))
+        .flex_1()
         .border_1()
         .border_color(glass::border(dark))
         .bg(glass::bg(dark))
@@ -2379,12 +2376,16 @@ fn open_tabs_bar(
     active_tab: OpenTab,
     titles: Vec<String>,
     environment: ApiEnvironment,
+    environments: Vec<ApiEnvironment>,
+    selected_environment: usize,
+    show_env_dropdown: bool,
     dark: bool,
 ) -> impl IntoElement {
     let tabs_view = view.clone();
     let env_view = view.clone();
+    let dropdown_view = view.clone();
     div()
-        .h(px(36.0))
+        .h(px(32.0))
         .px(px(10.0))
         .border_b_1()
         .border_color(glass::divider(dark))
@@ -2399,42 +2400,45 @@ fn open_tabs_bar(
                 .flex()
                 .items_center()
                 .gap(px(2.0))
-                .overflow_x_hidden()
+                .overflow_x_scrollbar()
                 .children(tabs.into_iter().enumerate().map(move |(index, tab)| {
                     let active = tab == active_tab;
                     let click_view = tabs_view.clone();
                     let close_view = tabs_view.clone();
+                    let tab_bg: gpui::Rgba = if active {
+                        ui::accent_color(PluginAccent::Blue).into()
+                    } else {
+                        hsla(0.0, 0.0, 0.0, 0.0).into()
+                    };
+                    let tab_text = if active {
+                        ui::white()
+                    } else {
+                        theme::semantic().text_secondary
+                    };
                     div()
                         .id(("api-open-tab", index))
                         .h(px(28.0))
-                        .px(px(10.0))
+                        .px_2()
                         .rounded(px(6.0))
-                        .border_b_1()
-                        .border_color(if active {
-                            theme::rgba_with_alpha(api_accent(), 0.62)
-                        } else {
-                            transparent_surface()
-                        })
-                        .bg(if active {
-                            theme::rgba_with_alpha(api_accent(), 0.055)
-                        } else {
-                            transparent_surface()
-                        })
-                        .text_size(px(11.0))
+                        .gap_1()
+                        .flex()
+                        .items_center()
+                        .cursor_pointer()
+                        .bg(tab_bg)
+                        .text_color(tab_text)
+                        .text_size(px(12.0))
                         .font_weight(if active {
-                            gpui::FontWeight::SEMIBOLD
+                            gpui::FontWeight::MEDIUM
                         } else {
                             gpui::FontWeight::NORMAL
                         })
-                        .text_color(if active {
-                            api_accent()
-                        } else {
-                            ui::text_tertiary()
+                        .hover(move |style| {
+                            if active {
+                                style
+                            } else {
+                                style.bg(glass::hover_bg(dark))
+                            }
                         })
-                        .hover(move |style| style.bg(glass::hover_bg(dark)).cursor_pointer())
-                        .flex()
-                        .items_center()
-                        .gap(px(4.0))
                         .child(
                             div().max_w(px(180.0)).truncate().child(
                                 titles
@@ -2448,6 +2452,7 @@ fn open_tabs_bar(
                                 .ghost()
                                 .icon(IconName::Close)
                                 .with_size(Size::XSmall)
+                                .text_color(tab_text)
                                 .on_click({
                                     let view = close_view.clone();
                                     move |_event, _window, cx| {
@@ -2469,46 +2474,61 @@ fn open_tabs_bar(
         )
         .child(
             div()
-                .id("api-current-env")
-                .h(px(28.0))
-                .px(px(10.0))
-                .rounded(px(999.0))
-                .bg(theme::rgba_with_alpha(
-                    theme::semantic().bg_surface,
-                    if dark { 0.48 } else { 0.74 },
-                ))
-                .text_size(px(11.0))
-                .text_color(ui::text_secondary())
-                .hover(move |style| {
-                    style
-                        .bg(theme::rgba_with_alpha(api_accent(), 0.06))
-                        .cursor_pointer()
-                })
-                .flex()
-                .items_center()
-                .gap(px(4.0))
+                .relative()
                 .child(
                     div()
-                        .size(px(8.0))
+                        .id("api-current-env")
+                        .h(px(28.0))
+                        .px(px(10.0))
                         .rounded(px(999.0))
-                        .bg(rgb(environment.color)),
+                        .bg(theme::rgba_with_alpha(
+                            theme::semantic().bg_surface,
+                            if dark { 0.48 } else { 0.74 },
+                        ))
+                        .text_size(px(11.0))
+                        .text_color(ui::text_secondary())
+                        .hover(move |style| {
+                            style
+                                .bg(theme::rgba_with_alpha(api_accent(), 0.06))
+                                .cursor_pointer()
+                        })
+                        .flex()
+                        .items_center()
+                        .gap(px(4.0))
+                        .child(
+                            div()
+                                .size(px(8.0))
+                                .rounded(px(999.0))
+                                .bg(rgb(environment.color)),
+                        )
+                        .child(environment.name.clone())
+                        .child(
+                            div()
+                                .text_size(px(9.0))
+                                .text_color(ui::text_tertiary())
+                                .child("▾"),
+                        )
+                        .on_click({
+                            move |_, window, cx| {
+                                env_view.update(cx, |view, _cx| {
+                                    view.show_env_dropdown = !view.show_env_dropdown;
+                                    view.show_env_editor = false;
+                                });
+                                window.refresh();
+                            }
+                        }),
                 )
-                .child(environment.name.clone())
-                .child(
-                    div()
-                        .text_size(px(9.0))
-                        .text_color(ui::text_tertiary())
-                        .child("▾"),
-                )
-                .on_click({
-                    move |_, window, cx| {
-                        env_view.update(cx, |view, _cx| {
-                            view.show_env_popup = true;
-                            view.show_env_manager = false;
-                        });
-                        window.refresh();
-                    }
-                }),
+                .child(if show_env_dropdown {
+                    env_dropdown_list(
+                        dropdown_view.clone(),
+                        environments,
+                        selected_environment,
+                        dark,
+                    )
+                    .into_any_element()
+                } else {
+                    div().into_any_element()
+                })
         )
 }
 
@@ -2531,11 +2551,20 @@ fn action_bar(
         .items_center()
         .gap(px(6.0))
         .child(
-            div().w(px(100.0)).child(
-                Select::new(&method_select)
-                    .appearance(false)
-                    .with_size(Size::Small),
-            ),
+            div()
+                .w(px(100.0))
+                .h(px(32.0))
+                .border_1()
+                .border_color(glass::divider(dark))
+                .bg(glass::inset(dark))
+                .rounded(px(6.0))
+                .flex()
+                .items_center()
+                .child(
+                    Select::new(&method_select)
+                        .appearance(false)
+                        .with_size(Size::Small),
+                ),
         )
         .child({
             let url_view = view.clone();
@@ -3506,130 +3535,120 @@ fn is_binary_content_type(content_type: &str) -> bool {
         || ct == "application/gzip"
 }
 
-fn env_popup(
+fn env_dropdown_list(
     view: Entity<ApiDebuggerView>,
     environments: Vec<ApiEnvironment>,
     selected_environment: usize,
     dark: bool,
 ) -> impl IntoElement {
     div()
-        .w(px(340.0))
+        .absolute()
+        .top(px(34.0))
+        .right_0()
+        .w(px(280.0))
         .border_1()
         .border_color(glass::border(dark))
-        .bg(glass::bg(dark))
+        .bg(glass::panel(dark))
         .rounded(px(8.0))
         .overflow_hidden()
+        .shadow(glass::shadow())
         .flex()
         .flex_col()
-        .children(
-            environments
-                .into_iter()
-                .enumerate()
-                .map(|(index, environment)| {
-                    let active = index == selected_environment;
+        .children(environments.into_iter().enumerate().map(|(index, env)| {
+            let active = index == selected_environment;
+            div()
+                .id(("api-env-dd-row", index))
+                .min_h(px(56.0))
+                .px(px(14.0))
+                .py(px(8.0))
+                .flex()
+                .items_center()
+                .gap(px(10.0))
+                .bg(if active {
+                    theme::rgba_with_alpha(api_accent(), 0.06)
+                } else {
+                    transparent_surface()
+                })
+                .hover(move |style| {
+                    style
+                        .bg(theme::rgba_with_alpha(api_accent(), 0.04))
+                        .cursor_pointer()
+                })
+                .child(circle_badge(&env.badge, env.color, 32.0))
+                .child(
                     div()
-                        .id(("api-env-popup-row", index))
-                        .min_h(px(64.0))
-                        .px(px(14.0))
-                        .py(px(10.0))
+                        .flex_1()
+                        .min_w(px(0.0))
                         .flex()
-                        .items_center()
-                        .gap(px(10.0))
-                        .bg(if active {
-                            theme::rgba_with_alpha(api_accent(), 0.06)
-                        } else {
-                            transparent_surface()
-                        })
-                        .hover(move |style| {
-                            style
-                                .bg(theme::rgba_with_alpha(api_accent(), 0.04))
-                                .cursor_pointer()
-                        })
-                        .child(circle_badge(&environment.badge, environment.color, 36.0))
+                        .flex_col()
+                        .gap(px(2.0))
                         .child(
                             div()
-                                .flex_1()
-                                .min_w(px(0.0))
-                                .flex()
-                                .flex_col()
-                                .gap(px(4.0))
-                                .child(
-                                    div()
-                                        .text_size(px(13.0))
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        .text_color(theme::semantic().text_primary)
-                                        .truncate()
-                                        .child(environment.name.clone()),
-                                )
-                                .child(
-                                    div()
-                                        .font_family("SF Mono")
-                                        .text_size(px(11.0))
-                                        .text_color(ui::text_tertiary())
-                                        .truncate()
-                                        .child(environment.base_url.clone()),
-                                ),
+                                .text_size(px(12.0))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(theme::semantic().text_primary)
+                                .truncate()
+                                .child(env.name.clone()),
                         )
-                        .when(active, |row| {
-                            row.child(
-                                div()
-                                    .text_size(px(14.0))
-                                    .font_weight(gpui::FontWeight::BOLD)
-                                    .text_color(api_accent())
-                                    .child("✓"),
-                            )
-                        })
-                        .on_click({
-                            let view = view.clone();
-                            move |_, window, cx| {
-                                view.update(cx, |view, cx| {
-                                    view.select_environment(index, cx);
-                                });
-                                window.refresh();
-                            }
-                        })
-                }),
-        )
+                        .child(
+                            div()
+                                .font_family("SF Mono")
+                                .text_size(px(10.0))
+                                .text_color(ui::text_tertiary())
+                                .truncate()
+                                .child(env.base_url.clone()),
+                        ),
+                )
+                .when(active, |row| {
+                    row.child(
+                        div()
+                            .text_size(px(12.0))
+                            .font_weight(gpui::FontWeight::BOLD)
+                            .text_color(api_accent())
+                            .child("\u{2713}"),
+                    )
+                })
+                .on_click({
+                    let view = view.clone();
+                    move |_, window, cx| {
+                        view.update(cx, |view, cx| {
+                            view.select_environment(index, cx);
+                            view.show_env_dropdown = false;
+                        });
+                        window.refresh();
+                    }
+                })
+        }))
         .child(
             div()
-                .id("api-env-manage")
                 .px(px(14.0))
                 .py(px(8.0))
                 .border_t_1()
                 .border_color(ui::border_light())
-                .text_size(px(11.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(api_accent())
-                .hover(move |style| {
-                    style
-                        .bg(theme::rgba_with_alpha(api_accent(), 0.05))
-                        .cursor_pointer()
-                })
                 .flex()
                 .items_center()
                 .justify_center()
-                .gap(px(6.0))
                 .child(
-                    Button::new("api-env-manage-icon")
+                    Button::new("api-env-dd-edit")
                         .ghost()
                         .icon(IconName::Settings)
-                        .with_size(Size::XSmall),
-                )
-                .child("管理环境")
-                .on_click({
-                    let view = view.clone();
-                    move |_, window, cx| {
-                        view.update(cx, |view, _cx| {
-                            view.show_env_popup = false;
-                            view.show_env_manager = true;
-                        });
-                        window.refresh();
-                    }
-                }),
+                        .label("编辑环境")
+                        .with_size(Size::XSmall)
+                        .on_click({
+                            let view = view.clone();
+                            move |_, window, cx| {
+                                view.update(cx, |view, _cx| {
+                                    view.show_env_dropdown = false;
+                                    view.show_env_editor = true;
+                                });
+                                window.refresh();
+                            }
+                        }),
+                ),
         )
 }
 
-fn env_manager_dialog(
+fn env_editor_inline(
     view: Entity<ApiDebuggerView>,
     selected_environment: usize,
     env_detail_tab: EnvDetailTab,
@@ -3640,37 +3659,33 @@ fn env_manager_dialog(
     env_headers_input: Entity<TextInput>,
     dark: bool,
 ) -> impl IntoElement {
-    let current_environment = environments
+    let current_env = environments
         .get(selected_environment)
         .cloned()
         .expect("environment should exist");
     let detail_input = if env_detail_tab == EnvDetailTab::Variables {
-        env_variables_input
+        env_variables_input.clone()
     } else {
-        env_headers_input
+        env_headers_input.clone()
     };
-    let env_tabs_view = view.clone();
-
+    let tab_view = view.clone();
     div()
-        .w(px(1040.0))
-        .max_w(px(1180.0))
-        .rounded(px(16.0))
-        .border_1()
-        .border_color(glass::border(dark))
-        .bg(glass::bg(dark))
-        .overflow_hidden()
+        .flex_1()
+        .min_h(px(0.0))
         .flex()
         .flex_col()
+        .border_1()
+        .border_color(glass::divider(dark))
+        .bg(glass::bg(dark))
+        .rounded(px(10.0))
+        .overflow_hidden()
         .child(
             div()
-                .h(px(52.0))
-                .px(px(20.0))
+                .h(px(44.0))
+                .px(px(14.0))
                 .border_b_1()
                 .border_color(ui::border_light())
-                .bg(theme::rgba_with_alpha(
-                    theme::semantic().bg_surface,
-                    if dark { 0.34 } else { 0.52 },
-                ))
+                .bg(glass::bar(dark))
                 .flex()
                 .items_center()
                 .justify_between()
@@ -3678,390 +3693,206 @@ fn env_manager_dialog(
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(10.0))
+                        .gap(px(8.0))
+                        .child(circle_badge(&current_env.badge, current_env.color, 24.0))
                         .child(
                             div()
-                                .size(px(28.0))
-                                .rounded(px(8.0))
-                                .bg(theme::rgba_with_alpha(api_accent(), 0.12))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .child(
-                                    Button::new("api-env-title-icon")
-                                        .ghost()
-                                        .icon(IconName::Globe)
-                                        .with_size(Size::XSmall),
-                                ),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(15.0))
+                                .text_size(px(13.0))
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(theme::semantic().text_primary)
-                                .child("环境管理"),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(12.0))
-                                .text_color(ui::text_secondary())
-                                .child(format!("{} 个环境", environments.len())),
+                                .child(format!("编辑环境: {}", current_env.name)),
                         ),
                 )
                 .child(
-                    Button::new("api-env-close")
+                    Button::new("api-env-editor-close")
                         .ghost()
-                        .label("关闭")
-                        .with_size(Size::Small)
+                        .icon(IconName::Close)
+                        .with_size(Size::XSmall)
                         .on_click({
                             let view = view.clone();
                             move |_, _, cx| {
-                                view.update(cx, |view, _cx| view.show_env_manager = false);
+                                view.update(cx, |view, _cx| view.show_env_editor = false);
                             }
                         }),
                 ),
         )
         .child(
             div()
+                .flex_1()
+                .min_h(px(0.0))
                 .flex()
-                .min_h(px(500.0))
+                .flex_col()
+                .gap(px(12.0))
+                .p(px(14.0))
+                .child(labeled_field("名称", env_name_input.clone(), dark))
+                .child(labeled_field("Base URL", env_base_url_input.clone(), dark))
                 .child(
                     div()
-                        .w(px(260.0))
-                        .border_r_1()
-                        .border_color(ui::border_light())
-                        .bg(theme::rgba_with_alpha(
-                            theme::semantic().bg_surface,
-                            if dark { 0.18 } else { 0.34 },
-                        ))
-                        .p(px(12.0))
                         .flex()
-                        .flex_col()
-                        .gap(px(10.0))
+                        .items_center()
+                        .gap(px(6.0))
                         .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .justify_between()
-                                .child(section_micro_label("环境", dark))
-                                .child(
-                                    Button::new("api-env-add")
-                                        .ghost()
-                                        .icon(IconName::Plus)
-                                        .label("新建")
-                                        .with_size(Size::XSmall)
-                                        .on_click({
-                                            let view = view.clone();
-                                            move |_, _, cx| {
-                                                view.update(cx, |view, _cx| {
-                                                    view.create_new_environment();
-                                                });
-                                            }
-                                        }),
-                                ),
+                            Button::new("api-env-inline-new")
+                                .ghost()
+                                .icon(IconName::Plus)
+                                .label("新建")
+                                .with_size(Size::XSmall)
+                                .on_click({
+                                    let view = view.clone();
+                                    move |_, _, cx| {
+                                        view.update(cx, |view, _cx| view.create_new_environment());
+                                    }
+                                }),
                         )
                         .child(
-                            div()
-                                .id("api-env-list-scroll")
-                                .flex_1()
-                                .min_h(px(0.0))
-                                .overflow_y_scroll()
-                                .scrollbar_width(px(4.0))
-                                .flex()
-                                .flex_col()
-                                .gap(px(8.0))
-                                .children(environments.into_iter().enumerate().map(
-                                    |(index, environment)| {
-                                        let active = index == selected_environment;
-                                        div()
-                                            .id(("api-env-list-row", index))
-                                            .min_h(px(70.0))
-                                            .px(px(10.0))
-                                            .py(px(8.0))
-                                            .rounded(px(8.0))
-                                            .border_1()
-                                            .border_color(if active {
-                                                theme::rgba_with_alpha(api_accent(), 0.18).into()
+                            Button::new("api-env-inline-dup")
+                                .ghost()
+                                .label("复制")
+                                .with_size(Size::XSmall)
+                                .on_click({
+                                    let view = view.clone();
+                                    move |_, _, cx| {
+                                        view.update(cx, |view, cx| {
+                                            view.duplicate_current_environment(cx);
+                                        });
+                                    }
+                                }),
+                        )
+                        .child(
+                            Button::new("api-env-inline-del")
+                                .ghost()
+                                .label("删除")
+                                .with_size(Size::XSmall)
+                                .on_click({
+                                    let view = view.clone();
+                                    move |_, _, cx| {
+                                        view.update(cx, |view, cx| {
+                                            view.delete_current_environment(cx);
+                                        });
+                                    }
+                                }),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.0))
+                        .children(
+                            [EnvDetailTab::Variables, EnvDetailTab::Headers]
+                                .into_iter()
+                                .enumerate()
+                                .map(move |(index, tab)| {
+                                    let active = tab == env_detail_tab;
+                                    let tv = tab_view.clone();
+                                    div()
+                                        .id(("api-env-inline-tab", index))
+                                        .px(px(12.0))
+                                        .py(px(6.0))
+                                        .rounded(px(6.0))
+                                        .border_1()
+                                        .border_color(if active {
+                                            theme::rgba_with_alpha(api_accent(), 0.18)
+                                        } else {
+                                            ui::border_light()
+                                        })
+                                        .bg(if active {
+                                            theme::rgba_with_alpha(api_accent(), 0.08)
+                                        } else {
+                                            transparent_surface()
+                                        })
+                                        .text_size(px(11.0))
+                                        .font_weight(if active {
+                                            gpui::FontWeight::SEMIBOLD
+                                        } else {
+                                            gpui::FontWeight::NORMAL
+                                        })
+                                        .text_color(if active {
+                                            api_accent()
+                                        } else {
+                                            ui::text_secondary()
+                                        })
+                                        .hover(move |style| {
+                                            style
+                                                .bg(theme::rgba_with_alpha(api_accent(), 0.06))
+                                                .cursor_pointer()
+                                        })
+                                        .child(tab.label())
+                                        .on_click(move |_, window, cx| {
+                                            tv.update(cx, |view, _cx| {
+                                                view.env_detail_tab = tab;
+                                            });
+                                            window.refresh();
+                                        })
+                                }),
+                        )
+                        .child(
+                            Button::new("api-env-inline-add-row")
+                                .ghost()
+                                .icon(IconName::Plus)
+                                .label("新增")
+                                .with_size(Size::XSmall)
+                                .on_click({
+                                    let view = view.clone();
+                                    move |_, _, cx| {
+                                        view.update(cx, |view, cx| {
+                                            let current = if view.env_detail_tab
+                                                == EnvDetailTab::Variables
+                                            {
+                                                view.env_variables_input.read(cx).text()
                                             } else {
-                                                transparent_surface()
-                                            })
-                                            .bg(if active {
-                                                theme::rgba_with_alpha(api_accent(), 0.08)
+                                                view.env_headers_input.read(cx).text()
+                                            };
+                                            let appended = if current.trim().is_empty() {
+                                                String::from("KEY=VALUE")
                                             } else {
-                                                transparent_surface()
-                                            })
-                                            .hover(move |style| {
-                                                style
-                                                    .bg(theme::rgba_with_alpha(api_accent(), 0.05))
-                                                    .cursor_pointer()
-                                            })
-                                            .flex()
-                                            .items_center()
-                                            .gap(px(8.0))
-                                            .child(circle_badge(
-                                                &environment.badge,
-                                                environment.color,
-                                                34.0,
-                                            ))
-                                            .child(
-                                                div()
-                                                    .flex_1()
-                                                    .min_w(px(0.0))
-                                                    .flex()
-                                                    .flex_col()
-                                                    .gap(px(4.0))
-                                                    .child(
-                                                        div()
-                                                            .text_size(px(12.0))
-                                                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                            .text_color(
-                                                                theme::semantic().text_primary,
-                                                            )
-                                                            .truncate()
-                                                            .child(environment.name.clone()),
-                                                    )
-                                                    .child(
-                                                        div()
-                                                            .font_family("SF Mono")
-                                                            .text_size(px(10.0))
-                                                            .text_color(ui::text_tertiary())
-                                                            .truncate()
-                                                            .child(environment.base_url.clone()),
-                                                    ),
-                                            )
-                                            .on_click({
-                                                let view = view.clone();
-                                                move |_, window, cx| {
-                                                    view.update(cx, |view, _cx| {
-                                                        view.select_environment(index, _cx);
-                                                    });
-                                                    view.update(cx, |view, _cx| {
-                                                        view.show_env_manager = true;
-                                                    });
-                                                    window.refresh();
-                                                }
-                                            })
-                                    },
-                                )),
+                                                format!("{current}\nKEY=VALUE")
+                                            };
+                                            if view.env_detail_tab == EnvDetailTab::Variables {
+                                                view.env_variables_input.update(
+                                                    cx,
+                                                    |input, input_cx| {
+                                                        input.set_text(appended.clone(), input_cx)
+                                                    },
+                                                );
+                                            } else {
+                                                view.env_headers_input.update(
+                                                    cx,
+                                                    |input, input_cx| {
+                                                        input.set_text(appended.clone(), input_cx)
+                                                    },
+                                                );
+                                            }
+                                        });
+                                    }
+                                }),
                         ),
                 )
                 .child(
                     div()
                         .flex_1()
-                        .min_w(px(0.0))
-                        .p(px(16.0))
-                        .flex()
-                        .flex_col()
-                        .gap(px(12.0))
-                        .child(
-                            div().flex().items_center().justify_between().child(
-                                div()
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(6.0))
-                                    .child(
-                                        div()
-                                            .text_size(px(16.0))
-                                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                                            .text_color(theme::semantic().text_primary)
-                                            .child(current_environment.name.clone()),
-                                    )
-                                    .child(
-                                        div()
-                                            .h(px(28.0))
-                                            .px(px(10.0))
-                                            .rounded(px(999.0))
-                                            .border_1()
-                                            .border_color(ui::border_light())
-                                            .bg(theme::rgba_with_alpha(
-                                                theme::semantic().bg_surface,
-                                                if dark { 0.32 } else { 0.52 },
-                                            ))
-                                            .font_family("SF Mono")
-                                            .text_size(px(12.0))
-                                            .text_color(ui::text_secondary())
-                                            .flex()
-                                            .items_center()
-                                            .child(current_environment.base_url.clone()),
-                                    ),
-                            ),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .gap(px(6.0))
-                                .child(
-                                    Button::new("api-env-dup")
-                                        .ghost()
-                                        .label("复制")
-                                        .with_size(Size::Small)
-                                        .on_click({
-                                            let view = view.clone();
-                                            move |_, _, cx| {
-                                                view.update(cx, |view, cx| {
-                                                    view.duplicate_current_environment(cx);
-                                                });
-                                            }
-                                        }),
-                                )
-                                .child(
-                                    Button::new("api-env-del")
-                                        .ghost()
-                                        .label("删除")
-                                        .with_size(Size::Small)
-                                        .on_click({
-                                            let view = view.clone();
-                                            move |_, _, cx| {
-                                                view.update(cx, |view, cx| {
-                                                    view.delete_current_environment(cx);
-                                                });
-                                            }
-                                        }),
-                                ),
-                        )
-                        .child(labeled_field("名称", env_name_input, dark))
-                        .child(labeled_field("Base URL", env_base_url_input, dark))
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(8.0))
-                                .children(
-                                    [EnvDetailTab::Variables, EnvDetailTab::Headers]
-                                        .into_iter()
-                                        .enumerate()
-                                        .map(move |(index, tab)| {
-                                            let active = tab == env_detail_tab;
-                                            let tab_view = env_tabs_view.clone();
-                                            div()
-                                                .id(("api-env-detail-tab", index))
-                                                .px(px(12.0))
-                                                .py(px(6.0))
-                                                .rounded(px(6.0))
-                                                .border_1()
-                                                .border_color(if active {
-                                                    theme::rgba_with_alpha(api_accent(), 0.18)
-                                                } else {
-                                                    ui::border_light()
-                                                })
-                                                .bg(if active {
-                                                    theme::rgba_with_alpha(api_accent(), 0.08)
-                                                } else {
-                                                    theme::rgba_with_alpha(
-                                                        theme::semantic().bg_surface,
-                                                        if dark { 0.24 } else { 0.48 },
-                                                    )
-                                                })
-                                                .text_size(px(11.0))
-                                                .font_weight(if active {
-                                                    gpui::FontWeight::SEMIBOLD
-                                                } else {
-                                                    gpui::FontWeight::NORMAL
-                                                })
-                                                .text_color(if active {
-                                                    api_accent()
-                                                } else {
-                                                    ui::text_secondary()
-                                                })
-                                                .hover(move |style| {
-                                                    style
-                                                        .bg(theme::rgba_with_alpha(
-                                                            api_accent(),
-                                                            0.06,
-                                                        ))
-                                                        .cursor_pointer()
-                                                })
-                                                .child(tab.label())
-                                                .on_click({
-                                                    move |_, window, cx| {
-                                                        tab_view.update(cx, |view, _cx| {
-                                                            view.env_detail_tab = tab;
-                                                        });
-                                                        window.refresh();
-                                                    }
-                                                })
-                                        }),
-                                )
-                                .child(
-                                    Button::new("api-env-add-row")
-                                        .ghost()
-                                        .icon(IconName::Plus)
-                                        .label("新增")
-                                        .with_size(Size::XSmall)
-                                        .on_click({
-                                            let view = view.clone();
-                                            move |_, _, cx| {
-                                                view.update(cx, |view, cx| {
-                                                    let current = if view.env_detail_tab
-                                                        == EnvDetailTab::Variables
-                                                    {
-                                                        view.env_variables_input.read(cx).text()
-                                                    } else {
-                                                        view.env_headers_input.read(cx).text()
-                                                    };
-                                                    let appended = if current.trim().is_empty() {
-                                                        String::from("KEY=VALUE")
-                                                    } else {
-                                                        format!("{current}\nKEY=VALUE")
-                                                    };
-                                                    if view.env_detail_tab
-                                                        == EnvDetailTab::Variables
-                                                    {
-                                                        view.env_variables_input.update(
-                                                            cx,
-                                                            |input, input_cx| {
-                                                                input.set_text(
-                                                                    appended.clone(),
-                                                                    input_cx,
-                                                                )
-                                                            },
-                                                        );
-                                                    } else {
-                                                        view.env_headers_input.update(
-                                                            cx,
-                                                            |input, input_cx| {
-                                                                input.set_text(
-                                                                    appended.clone(),
-                                                                    input_cx,
-                                                                )
-                                                            },
-                                                        );
-                                                    }
-                                                });
-                                            }
-                                        }),
-                                ),
-                        )
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_h(px(0.0))
-                                .border_1()
-                                .border_color(ui::border_light())
-                                .bg(theme::rgba_with_alpha(
-                                    theme::semantic().bg_surface,
-                                    if dark { 0.30 } else { 0.54 },
-                                ))
-                                .overflow_hidden()
-                                .child(detail_input),
-                        ),
+                        .min_h(px(0.0))
+                        .border_1()
+                        .border_color(ui::border_light())
+                        .bg(theme::rgba_with_alpha(
+                            theme::semantic().bg_surface,
+                            if dark { 0.30 } else { 0.54 },
+                        ))
+                        .overflow_hidden()
+                        .child(detail_input),
                 ),
         )
         .child(
             div()
-                .h(px(48.0))
-                .px(px(20.0))
+                .h(px(44.0))
+                .px(px(14.0))
                 .border_t_1()
                 .border_color(ui::border_light())
-                .bg(theme::rgba_with_alpha(
-                    theme::semantic().bg_surface,
-                    if dark { 0.28 } else { 0.46 },
-                ))
+                .bg(glass::bar(dark))
                 .flex()
                 .items_center()
-                .gap(px(10.0))
+                .gap(px(8.0))
                 .child(
-                    Button::new("api-env-save")
+                    Button::new("api-env-inline-save")
                         .primary()
                         .label("保存更改")
                         .with_size(Size::Small)
@@ -4075,7 +3906,7 @@ fn env_manager_dialog(
                         }),
                 )
                 .child(
-                    Button::new("api-env-reset")
+                    Button::new("api-env-inline-reset")
                         .ghost()
                         .label("重置")
                         .with_size(Size::Small)
@@ -4090,11 +3921,11 @@ fn env_manager_dialog(
                 )
                 .child(div().flex_1())
                 .child(
-                    Button::new("api-env-export")
+                    Button::new("api-env-inline-export")
                         .ghost()
                         .icon(IconName::File)
-                        .label("导出")
-                        .with_size(Size::Small)
+                        .with_size(Size::XSmall)
+                        .tooltip("导出")
                         .on_click({
                             let view = view.clone();
                             move |_, _, cx| {
@@ -4103,24 +3934,18 @@ fn env_manager_dialog(
                         }),
                 )
                 .child(
-                    Button::new("api-env-import")
+                    Button::new("api-env-inline-import")
                         .ghost()
                         .icon(IconName::FolderOpen)
-                        .label("导入")
-                        .with_size(Size::Small)
+                        .with_size(Size::XSmall)
+                        .tooltip("导入")
                         .on_click({
                             let view = view.clone();
                             move |_, _, cx| {
                                 view.update(cx, |view, _cx| view.import_environments());
                             }
                         }),
-                )
-                .child(context_menu_item("api-env-delete", "删除此环境", "", {
-                    let view = view.clone();
-                    move |_, cx| {
-                        view.update(cx, |view, cx| view.delete_current_environment(cx));
-                    }
-                })),
+                ),
         )
 }
 

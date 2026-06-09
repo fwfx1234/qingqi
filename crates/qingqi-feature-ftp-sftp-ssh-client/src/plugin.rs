@@ -63,7 +63,7 @@ impl WindowView for FtpSftpSshWindow {
     }
 
     fn title(&self) -> Arc<str> {
-        "远程管理工作区".into()
+        "".into()
     }
 
     fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {

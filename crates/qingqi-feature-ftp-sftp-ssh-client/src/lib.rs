@@ -3,6 +3,7 @@ pub mod model;
 pub mod plugin;
 pub mod protocols;
 pub mod runtime;
+pub mod settings;
 pub mod store;
 pub mod terminal;
 pub mod transfer;

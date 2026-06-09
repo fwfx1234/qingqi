@@ -2,7 +2,6 @@ use std::{
     ops::Range,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
 };
 
 use gpui::{
@@ -18,10 +17,8 @@ use gpui_component::{
     tab::{Tab, TabBar},
 };
 use qingqi_plugin::plugin_spec::PluginAccent;
-use qingqi_ui::{
-    text_input::{TextInput, TextInputStyle},
-    theme, theme_mode, ui,
-};
+use gpui_component::input::{Input, InputState};
+use qingqi_ui::{theme, theme_mode, ui};
 
 use crate::{
     model::{
@@ -65,27 +62,27 @@ impl ProfileEditorMode {
 struct ProfileEditorState {
     mode: ProfileEditorMode,
     draft: ProfileDraft,
-    name_input: Entity<TextInput>,
-    host_input: Entity<TextInput>,
-    port_input: Entity<TextInput>,
-    username_input: Entity<TextInput>,
-    password_input: Entity<TextInput>,
-    private_key_path_input: Entity<TextInput>,
-    private_key_passphrase_input: Entity<TextInput>,
-    remote_root_input: Entity<TextInput>,
-    local_root_input: Entity<TextInput>,
-    connect_timeout_input: Entity<TextInput>,
-    transfer_concurrency_input: Entity<TextInput>,
-    pinned_host_key_input: Entity<TextInput>,
-    pinned_tls_sha256_input: Entity<TextInput>,
-    notes_input: Entity<TextInput>,
+    name_input: Entity<InputState>,
+    host_input: Entity<InputState>,
+    port_input: Entity<InputState>,
+    username_input: Entity<InputState>,
+    password_input: Entity<InputState>,
+    private_key_path_input: Entity<InputState>,
+    private_key_passphrase_input: Entity<InputState>,
+    remote_root_input: Entity<InputState>,
+    local_root_input: Entity<InputState>,
+    connect_timeout_input: Entity<InputState>,
+    transfer_concurrency_input: Entity<InputState>,
+    pinned_host_key_input: Entity<InputState>,
+    pinned_tls_sha256_input: Entity<InputState>,
+    notes_input: Entity<InputState>,
 }
 
 struct RemoteActionState {
     kind: RemoteActionKind,
     target_path: Option<String>,
     target_name: String,
-    input: Option<Entity<TextInput>>,
+    input: Option<Entity<InputState>>,
     is_dir: bool,
 }
 
@@ -172,88 +169,71 @@ impl FtpSftpSshView {
 
         let runtime = Arc::clone(&self.runtime);
         self.event_task = Some(cx.spawn(async move |view, async_cx| {
-            let receiver = Arc::new(Mutex::new(runtime.subscribe_events()));
-            loop {
-                let rx = Arc::clone(&receiver);
-                let events = async_cx
-                    .background_executor()
-                    .spawn(async move {
-                        let mut events = Vec::new();
-                        let receiver = rx.lock().ok()?;
-                        let first = receiver.recv().ok()?;
-                        events.push(first);
-                        let drain_until = Instant::now() + Duration::from_millis(16);
-                        while events.len() < 128 {
-                            let remaining = drain_until.saturating_duration_since(Instant::now());
-                            if remaining.is_zero() {
-                                break;
-                            }
-                            match receiver.recv_timeout(remaining) {
-                                Ok(event) => events.push(event),
-                                Err(_) => break,
-                            }
-                        }
-                        Some(events)
-                    })
-                    .await;
-                let Some(events) = events else {
+            let mut events_rx = runtime.subscribe_events();
+            while let Some(event) = events_rx.recv().await {
+                let Ok(()) = view.update(async_cx, |view, cx| {
+                    view.apply_runtime_event(&event, cx);
+                }) else {
                     break;
                 };
-                if view
-                    .update(async_cx, |view, cx| {
-                        if view.apply_runtime_events(&events) {
-                            cx.notify();
-                        }
-                    })
-                    .is_err()
-                {
-                    break;
-                }
             }
         }));
     }
 
-    fn apply_runtime_events(&mut self, events: &[RemoteRuntimeEvent]) -> bool {
+    fn apply_runtime_event(&mut self, event: &RemoteRuntimeEvent, cx: &mut Context<Self>) {
         let selected = self.selected_session_id.clone();
-        let mut profiles_changed = false;
-        let mut sessions_changed = false;
-        let mut transfers_changed = false;
-        let mut terminal_dirty = false;
-        for event in events {
-            match event {
-                RemoteRuntimeEvent::ProfilesChanged => profiles_changed = true,
-                RemoteRuntimeEvent::SessionsChanged => sessions_changed = true,
-                RemoteRuntimeEvent::SessionChanged(id) => {
-                    sessions_changed = true;
-                    if selected.as_ref() == Some(id) {
-                        terminal_dirty = true;
-                    }
+        match event {
+            RemoteRuntimeEvent::ProfilesChanged => {
+                self.reload();
+            }
+            RemoteRuntimeEvent::SessionsChanged => {
+                self.refresh_session_list();
+            }
+            RemoteRuntimeEvent::SessionChanged(id) => {
+                self.refresh_session_list();
+                if selected.as_ref() == Some(id) {
+                    let _ = self.refresh_selected_terminal();
                 }
-                RemoteRuntimeEvent::TransfersChanged => transfers_changed = true,
-                RemoteRuntimeEvent::TerminalChanged(id) => {
-                    if selected.as_ref() == Some(id) {
-                        terminal_dirty = true;
+                if let Some(snapshot) = self.runtime.session_snapshot(id) {
+                    match snapshot.summary.status {
+                        crate::model::SessionStatus::Connected => {
+                            self.selected_session_id = Some(id.clone());
+                            self.selected_remote_path = None;
+                            self.needs_terminal_focus = true;
+                            let _ = self.refresh_selected_terminal();
+                        }
+                        crate::model::SessionStatus::Degraded => {
+                            self.notice = format!("{} 部分可用: {}", snapshot.summary.title, snapshot.summary.message);
+                        }
+                        crate::model::SessionStatus::Failed => {
+                            self.notice = format!("{} 连接失败: {}", snapshot.summary.title, snapshot.summary.message);
+                        }
+                        _ => {}
                     }
                 }
             }
+            RemoteRuntimeEvent::TransfersChanged => {
+                self.transfers = self.runtime.all_transfer_snapshots();
+            }
+            RemoteRuntimeEvent::TerminalChanged(id) => {
+                if selected.as_ref() == Some(id) {
+                    let _ = self.refresh_selected_terminal();
+                }
+            }
+            RemoteRuntimeEvent::SessionOpenFailed { error, .. } => {
+                self.notice = format!("连接失败: {error}");
+            }
+            RemoteRuntimeEvent::ConnectionProgress { message, .. } => {
+                self.notice = message.clone();
+            }
+            RemoteRuntimeEvent::EditReady { local_path, .. } => {
+                match qingqi_platform::shell::open_path(&PathBuf::from(local_path.clone())) {
+                    Ok(()) => self.notice = format!("已打开本地编辑副本 {}", local_path),
+                    Err(error) => self.notice = format!("下载完成，但打开本地文件失败: {error}"),
+                }
+            }
         }
-
-        let mut dirty = false;
-        if profiles_changed {
-            self.reload();
-            dirty = true;
-        } else if sessions_changed {
-            self.refresh_session_list();
-            dirty = true;
-        }
-        if transfers_changed {
-            self.transfers = self.runtime.all_transfer_snapshots();
-            dirty = true;
-        }
-        if terminal_dirty && self.refresh_selected_terminal() {
-            dirty = true;
-        }
-        dirty
+        cx.notify();
     }
 
     fn reload(&mut self) {
@@ -438,16 +418,17 @@ impl FtpSftpSshView {
         self.notice = String::from("已选择远端项目");
     }
 
-    fn open_profile_creator(&mut self, cx: &mut Context<Self>) {
+    fn open_profile_creator(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.profile_editor = Some(build_profile_editor_state(
             ProfileEditorMode::Create,
             ProfileDraft::default(),
+            window,
             cx,
         ));
         self.notice = String::from("新建连接配置");
     }
 
-    fn open_profile_editor(&mut self, cx: &mut Context<Self>) {
+    fn open_profile_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(profile) = self.selected_profile() else {
             self.notice = String::from("先选择一个连接配置");
             return;
@@ -455,6 +436,7 @@ impl FtpSftpSshView {
         self.profile_editor = Some(build_profile_editor_state(
             ProfileEditorMode::Edit(profile.id),
             ProfileDraft::from_profile(&profile),
+            window,
             cx,
         ));
         self.notice = format!("编辑 {}", profile.name);
@@ -797,7 +779,7 @@ impl FtpSftpSshView {
         self.reload();
     }
 
-    fn open_create_directory_prompt(&mut self, cx: &mut Context<Self>) {
+    fn open_create_directory_prompt(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(snapshot) = self.selected_session() else {
             self.notice = String::from("先打开一个 session");
             return;
@@ -806,14 +788,14 @@ impl FtpSftpSshView {
             kind: RemoteActionKind::CreateDirectory,
             target_path: Some(snapshot.remote_root.clone()),
             target_name: String::new(),
-            input: Some(compact_input(cx, "", "new-folder", false)),
+            input: Some(compact_input(window, cx, "", "new-folder", false)),
             is_dir: true,
         });
         self.remote_menu = None;
         self.notice = String::from("输入新目录名称");
     }
 
-    fn open_rename_prompt_for_path(&mut self, remote_path: &str, cx: &mut Context<Self>) {
+    fn open_rename_prompt_for_path(&mut self, remote_path: &str, window: &mut Window, cx: &mut Context<Self>) {
         let Some(snapshot) = self.selected_session() else {
             self.notice = String::from("先打开一个 session");
             return;
@@ -832,7 +814,7 @@ impl FtpSftpSshView {
             kind: RemoteActionKind::Rename,
             target_path: Some(entry.path.clone()),
             target_name: entry.name.clone(),
-            input: Some(compact_input(cx, &entry.name, "rename", false)),
+            input: Some(compact_input(window, cx, &entry.name, "rename", false)),
             is_dir: entry.is_dir,
         });
         self.remote_menu = None;
@@ -887,7 +869,7 @@ impl FtpSftpSshView {
                     self.notice = String::from("缺少目录名称输入");
                     return;
                 };
-                let name = input.read(cx).text().trim().to_string();
+                let name = input.read(cx).value().trim().to_string();
                 if name.is_empty() {
                     self.notice = String::from("目录名称不能为空");
                     self.remote_action = Some(action);
@@ -918,7 +900,7 @@ impl FtpSftpSshView {
                     self.notice = String::from("缺少新名称输入");
                     return;
                 };
-                let new_name = input.read(cx).text().trim().to_string();
+                let new_name = input.read(cx).value().trim().to_string();
                 if new_name.is_empty() {
                     self.notice = String::from("新名称不能为空");
                     self.remote_action = Some(action);
@@ -999,9 +981,7 @@ impl FtpSftpSshView {
                         let path_string = path.path().display().to_string();
                         if let Some(editor) = view.profile_editor.as_mut() {
                             editor.draft.auth.private_key_path = path_string.clone();
-                            editor.private_key_path_input.update(cx, |input, input_cx| {
-                                input.set_text(path_string, input_cx)
-                            });
+
                             view.notice = String::from("已更新私钥路径");
                         } else {
                             view.notice = String::from("当前没有打开配置编辑器");
@@ -1038,9 +1018,7 @@ impl FtpSftpSshView {
                         let path_string = path.path().display().to_string();
                         if let Some(editor) = view.profile_editor.as_mut() {
                             editor.draft.paths.local_root = path_string.clone();
-                            editor.local_root_input.update(cx, |input, input_cx| {
-                                input.set_text(path_string, input_cx)
-                            });
+
                             view.notice = String::from("已更新本地目录");
                         } else {
                             view.notice = String::from("当前没有打开配置编辑器");
@@ -1053,7 +1031,7 @@ impl FtpSftpSshView {
         }));
     }
 
-    fn set_editor_protocol(&mut self, protocol: RemoteProtocol, cx: &mut Context<Self>) {
+    fn set_editor_protocol(&mut self, protocol: RemoteProtocol, window: &mut Window, cx: &mut Context<Self>) {
         let Some(editor) = self.editor_mut() else {
             return;
         };
@@ -1068,11 +1046,11 @@ impl FtpSftpSshView {
             editor.draft.paths.remote_root = protocol.default_remote_root().to_string();
         }
         editor.port_input.update(cx, |input, input_cx| {
-            input.set_text(editor.draft.port.to_string(), input_cx);
+            input.set_value(editor.draft.port.to_string(), window, input_cx);
         });
         editor.remote_root_input.update(cx, |input, input_cx| {
-            input.set_text(editor.draft.paths.remote_root.clone(), input_cx);
-            input.set_placeholder(protocol.default_remote_root(), input_cx);
+            input.set_value(editor.draft.paths.remote_root.clone(), window, input_cx);
+            input.set_placeholder(protocol.default_remote_root(), window, input_cx);
         });
         self.notice = format!("协议已切换为 {}", protocol.label());
     }
@@ -1116,38 +1094,32 @@ impl FtpSftpSshView {
         };
 
         let mut draft = editor.draft.clone();
-        draft.name = editor.name_input.read(cx).text();
-        draft.host = editor.host_input.read(cx).text();
+        draft.name = editor.name_input.read(cx).value().to_string();
+        draft.host = editor.host_input.read(cx).value().to_string();
         draft.port = editor
-            .port_input
-            .read(cx)
-            .text()
+            .port_input.read(cx).value()
             .trim()
             .parse::<u16>()
             .unwrap_or(draft.protocol.default_port());
-        draft.auth.username = editor.username_input.read(cx).text();
-        draft.auth.password = editor.password_input.read(cx).text();
-        draft.auth.private_key_path = editor.private_key_path_input.read(cx).text();
-        draft.auth.private_key_passphrase = editor.private_key_passphrase_input.read(cx).text();
-        draft.paths.remote_root = editor.remote_root_input.read(cx).text();
-        draft.paths.local_root = editor.local_root_input.read(cx).text();
-        draft.security.pinned_host_key = editor.pinned_host_key_input.read(cx).text();
-        draft.security.pinned_tls_sha256 = editor.pinned_tls_sha256_input.read(cx).text();
+        draft.auth.username = editor.username_input.read(cx).value().to_string();
+        draft.auth.password = editor.password_input.read(cx).value().to_string();
+        draft.auth.private_key_path = editor.private_key_path_input.read(cx).value().to_string();
+        draft.auth.private_key_passphrase = editor.private_key_passphrase_input.read(cx).value().to_string();
+        draft.paths.remote_root = editor.remote_root_input.read(cx).value().to_string();
+        draft.paths.local_root = editor.local_root_input.read(cx).value().to_string();
+        draft.security.pinned_host_key = editor.pinned_host_key_input.read(cx).value().to_string();
+        draft.security.pinned_tls_sha256 = editor.pinned_tls_sha256_input.read(cx).value().to_string();
         draft.limits.connect_timeout_secs = editor
-            .connect_timeout_input
-            .read(cx)
-            .text()
+            .connect_timeout_input.read(cx).value()
             .trim()
             .parse::<u16>()
             .unwrap_or(draft.limits.connect_timeout_secs);
         draft.limits.transfer_concurrency = editor
-            .transfer_concurrency_input
-            .read(cx)
-            .text()
+            .transfer_concurrency_input.read(cx).value()
             .trim()
             .parse::<u16>()
             .unwrap_or(draft.limits.transfer_concurrency);
-        draft.notes = editor.notes_input.read(cx).text();
+        draft.notes = editor.notes_input.read(cx).value().to_string();
 
         match editor.mode {
             ProfileEditorMode::Create => match self.runtime.create_profile(draft.normalize()) {
@@ -1576,9 +1548,9 @@ fn titlebar_slot(
                 .icon(IconName::Plus)
                 .ghost()
                 .xsmall()
-                .on_click(move |_, _, cx| {
+                .on_click(move |_, window, cx| {
                     let _ = cx.update_entity(&h, |view, cx| {
-                        view.open_profile_creator(cx);
+                        view.open_profile_creator(window, cx);
                     });
                 }),
         )
@@ -1636,8 +1608,8 @@ fn left_sidebar(
                         .icon(IconName::Plus)
                         .ghost()
                         .xsmall()
-                        .on_click(cx.listener(|view, _, _, cx| {
-                            view.open_profile_creator(cx);
+                        .on_click(cx.listener(|view, _, window, cx| {
+                            view.open_profile_creator(window, cx);
                         })),
                 ),
         )
@@ -2485,7 +2457,7 @@ fn transfer_strip(
                         col.child(empty_state(IconName::Inbox, "当前没有传输任务"))
                     })
                     .children(transfers.iter().map(|item| {
-                        let progress = item.progress_percent();
+                        let progress = item.progress_percent().unwrap_or(0);
                         let transfer_id = item.id.clone();
                         div()
                             .rounded(px(7.0))
@@ -2641,9 +2613,9 @@ fn remote_menu_overlay(
                             );
                             items.push(
                                 menu_item("新建文件夹")
-                                    .on_click(cx.listener(|view, _, _, cx| {
+                                    .on_click(cx.listener(|view, _, window, cx| {
                                         view.close_remote_menu();
-                                        view.open_create_directory_prompt(cx);
+                                        view.open_create_directory_prompt(window, cx);
                                     }))
                                     .into_any_element(),
                             );
@@ -2683,9 +2655,9 @@ fn remote_menu_overlay(
                         let rename_path = path.clone();
                         items.push(
                             menu_item("重命名")
-                                .on_click(cx.listener(move |view, _, _, cx| {
+                                .on_click(cx.listener(move |view, _, window, cx| {
                                     view.close_remote_menu();
-                                    view.open_rename_prompt_for_path(&rename_path, cx);
+                                    view.open_rename_prompt_for_path(&rename_path, window, cx);
                                 }))
                                 .into_any_element(),
                         );
@@ -2702,9 +2674,9 @@ fn remote_menu_overlay(
                     } else {
                         items.push(
                             menu_item("新建文件夹")
-                                .on_click(cx.listener(|view, _, _, cx| {
+                                .on_click(cx.listener(|view, _, window, cx| {
                                     view.close_remote_menu();
-                                    view.open_create_directory_prompt(cx);
+                                    view.open_create_directory_prompt(window, cx);
                                 }))
                                 .into_any_element(),
                         );
@@ -2788,9 +2760,9 @@ fn profile_menu_overlay(
                     })),
                 )
                 .child(
-                    menu_item("编辑").on_click(cx.listener(move |view, _, _, cx| {
+                    menu_item("编辑").on_click(cx.listener(move |view, _, window, cx| {
                         view.close_profile_menu();
-                        view.open_profile_editor(cx);
+                        view.open_profile_editor(window, cx);
                     })),
                 )
                 .child(
@@ -3242,7 +3214,7 @@ fn danger_menu_item(label: &'static str) -> gpui::Stateful<gpui::Div> {
         .child(label)
 }
 
-fn labeled_input(label: &'static str, input: Entity<TextInput>, dark: bool) -> impl IntoElement {
+fn labeled_input(label: &'static str, input: Entity<InputState>, dark: bool) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -3258,7 +3230,7 @@ fn labeled_input(label: &'static str, input: Entity<TextInput>, dark: bool) -> i
 
 fn labeled_multiline(
     label: &'static str,
-    input: Entity<TextInput>,
+    input: Entity<InputState>,
     dark: bool,
 ) -> impl IntoElement {
     div()
@@ -3274,7 +3246,7 @@ fn labeled_multiline(
         .child(input_shell(input, px(92.0), dark))
 }
 
-fn input_shell(input: Entity<TextInput>, height: gpui::Pixels, dark: bool) -> impl IntoElement {
+fn input_shell(input: Entity<InputState>, height: gpui::Pixels, dark: bool) -> impl IntoElement {
     div()
         .h(height)
         .rounded(px(6.0))
@@ -3289,7 +3261,7 @@ fn input_shell(input: Entity<TextInput>, height: gpui::Pixels, dark: bool) -> im
             theme::rgba_with_alpha(theme::white(), 0.52)
         })
         .overflow_hidden()
-        .child(input.into_any_element())
+        .child(Input::new(&input).w_full())
 }
 
 fn two_col_row(left: impl IntoElement, right: impl IntoElement) -> impl IntoElement {
@@ -3298,7 +3270,7 @@ fn two_col_row(left: impl IntoElement, right: impl IntoElement) -> impl IntoElem
         .items_start()
         .gap_2()
         .child(div().flex_1().child(left))
-        .child(div().w(px(184.0)).child(right))
+        .child(div().w(px(218.0)).child(right))
 }
 
 fn selector_group(title: &'static str, items: Vec<AnyElement>) -> impl IntoElement {
@@ -3345,8 +3317,8 @@ fn protocol_selector(
         .into_iter()
         .map(|protocol| {
             profile_toggle(protocol.as_str(), protocol.label(), selected == protocol)
-                .on_click(cx.listener(move |view, _, _, cx| {
-                    view.set_editor_protocol(protocol, cx);
+                .on_click(cx.listener(move |view, _, window, cx| {
+                    view.set_editor_protocol(protocol, window, cx);
                 }))
                 .into_any_element()
         })
@@ -4114,90 +4086,83 @@ fn expand_dialog_path(text: &str) -> PathBuf {
 fn build_profile_editor_state(
     mode: ProfileEditorMode,
     draft: ProfileDraft,
+    window: &mut Window,
     cx: &mut Context<FtpSftpSshView>,
 ) -> ProfileEditorState {
     let draft = draft.normalize();
     let remote_root_placeholder = draft.protocol.default_remote_root();
     ProfileEditorState {
         mode,
-        name_input: compact_input(cx, &draft.name, "连接名称", false),
-        host_input: compact_input(cx, &draft.host, "example.com", false),
-        port_input: compact_input(cx, &draft.port.to_string(), "22", false),
-        username_input: compact_input(cx, &draft.auth.username, "用户名", false),
-        password_input: compact_input(cx, &draft.auth.password, "密码", false),
+        name_input: compact_input(window, cx, &draft.name, "连接名称", false),
+        host_input: compact_input(window, cx, &draft.host, "example.com", false),
+        port_input: compact_input(window, cx, &draft.port.to_string(), "22", false),
+        username_input: compact_input(window, cx, &draft.auth.username, "用户名", false),
+        password_input: compact_input(window, cx, &draft.auth.password, "密码", false),
         private_key_path_input: compact_input(
+            window,
             cx,
             &draft.auth.private_key_path,
             "~/.ssh/id_ed25519",
             false,
         ),
         private_key_passphrase_input: compact_input(
+            window,
             cx,
             &draft.auth.private_key_passphrase,
             "私钥口令",
             false,
         ),
         remote_root_input: compact_input(
+            window,
             cx,
             &draft.paths.remote_root,
             remote_root_placeholder,
             false,
         ),
-        local_root_input: compact_input(cx, &draft.paths.local_root, "~/Downloads", false),
+        local_root_input: compact_input(window, cx, &draft.paths.local_root, "~/Downloads", false),
         connect_timeout_input: compact_input(
+            window,
             cx,
             &draft.limits.connect_timeout_secs.to_string(),
             "15",
             false,
         ),
         transfer_concurrency_input: compact_input(
+            window,
             cx,
             &draft.limits.transfer_concurrency.to_string(),
             "3",
             false,
         ),
         pinned_host_key_input: compact_input(
+            window,
             cx,
             &draft.security.pinned_host_key,
             "ssh-ed25519 AAAA...",
             false,
         ),
         pinned_tls_sha256_input: compact_input(
+            window,
             cx,
             &draft.security.pinned_tls_sha256,
             "sha256:abcd...",
             false,
         ),
-        notes_input: compact_input(cx, &draft.notes, "备注 / 环境说明", true),
+        notes_input: compact_input(window, cx, &draft.notes, "备注 / 环境说明", true),
         draft,
     }
 }
 
 fn compact_input(
+    window: &mut Window,
     cx: &mut Context<FtpSftpSshView>,
     value: &str,
     placeholder: &str,
-    multiline: bool,
-) -> Entity<TextInput> {
+    _multiline: bool,
+) -> Entity<InputState> {
     let value = value.to_string();
     let placeholder = placeholder.to_string();
-    cx.new(|cx| {
-        let mut input = TextInput::new(cx, placeholder.clone(), value.clone());
-        input.set_chrome(false, cx);
-        input.set_monospace(false, cx);
-        input.set_style(
-            TextInputStyle {
-                height: if multiline { 92.0 } else { 34.0 },
-                font_size: 12.0,
-                padding: 9.0,
-            },
-            cx,
-        );
-        if multiline {
-            input.set_multiline(true, cx);
-        }
-        input
-    })
+    cx.new(|cx| InputState::new(window, cx).placeholder(placeholder).default_value(value))
 }
 
 fn join_remote_path(parent: &str, child: &str) -> String {

@@ -38,11 +38,11 @@ pub struct TransferSnapshot {
 }
 
 impl TransferSnapshot {
-    pub fn progress_percent(&self) -> u8 {
+    pub fn progress_percent(&self) -> Option<u8> {
         if self.total_bytes == 0 {
-            return 0;
+            return None;
         }
-        ((self.transferred_bytes as f64 / self.total_bytes as f64) * 100.0).clamp(0.0, 100.0) as u8
+        Some(((self.transferred_bytes as f64 / self.total_bytes as f64) * 100.0).clamp(0.0, 100.0) as u8)
     }
 }
 

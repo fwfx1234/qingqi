@@ -6,7 +6,7 @@ pub fn bg(dark: bool) -> Hsla {
     if dark {
         theme::rgba_with_alpha(semantic().bg_surface, 0.22)
     } else {
-        hsla(220.0 / 360.0, 0.18, 0.972, 1.0)
+        theme::rgba_with_alpha(theme::white(), 0.82)
     }
 }
 pub fn border(dark: bool) -> Hsla {
@@ -55,6 +55,7 @@ pub fn inset(dark: bool) -> Hsla {
     }
 }
 
+#[allow(dead_code)]
 pub fn bar(dark: bool) -> Hsla {
     if dark {
         hsla(225.0 / 360.0, 0.16, 0.14, 0.26)

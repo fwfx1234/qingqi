@@ -337,11 +337,31 @@ impl TextInput {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.is_selecting = true;
-        if event.modifiers.shift {
-            self.select_to(self.index_for_mouse_position(event.position), cx);
-        } else {
-            self.move_to(self.index_for_mouse_position(event.position), cx);
+        let pos = self.index_for_mouse_position(event.position);
+        match event.click_count {
+            0 | 1 => {
+                self.is_selecting = true;
+                if event.modifiers.shift {
+                    self.select_to(pos, cx);
+                } else {
+                    self.move_to(pos, cx);
+                }
+            }
+            2 => {
+                self.is_selecting = false;
+                let len = self.content.len();
+                if len > 0 {
+                    let range = word_boundaries(&self.content, pos);
+                    self.selected_range = range;
+                }
+                self.selection_reversed = false;
+                cx.notify();
+            }
+            _ => {
+                self.is_selecting = false;
+                self.move_to(0, cx);
+                self.select_to(self.content.len(), cx);
+            }
         }
     }
 
@@ -551,6 +571,33 @@ impl TextInput {
             .find_map(|(idx, _)| (idx > offset).then_some(idx))
             .unwrap_or(self.content.len())
     }
+}
+
+fn word_boundaries(text: &str, offset: usize) -> Range<usize> {
+    let chars: Vec<char> = text.chars().collect();
+    let len = chars.len();
+    if len == 0 || offset >= len {
+        return offset..offset;
+    }
+    let is_word_char = |c: char| c.is_alphanumeric() || c == '_';
+    let mut start = offset;
+    let mut end = offset;
+    if is_word_char(chars[offset]) {
+        while start > 0 && is_word_char(chars[start - 1]) {
+            start -= 1;
+        }
+        while end < len && is_word_char(chars[end]) {
+            end += 1;
+        }
+    } else if !chars[offset].is_whitespace() {
+        while start > 0 && !chars[start - 1].is_whitespace() && !is_word_char(chars[start - 1]) {
+            start -= 1;
+        }
+        while end < len && !chars[end].is_whitespace() && !is_word_char(chars[end]) {
+            end += 1;
+        }
+    }
+    start..end
 }
 
 fn normalize_pasted_text(text: &str, multiline: bool) -> String {

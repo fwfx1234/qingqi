@@ -177,6 +177,10 @@ impl SessionId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
+
+    pub fn as_uuid(&self) -> &Uuid {
+        &self.0
+    }
 }
 
 impl Default for SessionId {
@@ -459,6 +463,33 @@ fn normalize_local_root(value: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LogLevel {
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl LogLevel {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Debug => "DBG",
+            Self::Info => "INFO",
+            Self::Warn => "WARN",
+            Self::Error => "ERR",
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct LogEntry {
+    pub timestamp: String,
+    pub level: LogLevel,
+    pub message: String,
+    pub profile_name: Option<String>,
 }
 
 #[cfg(test)]

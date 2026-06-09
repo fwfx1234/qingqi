@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, mpsc},
+    sync::{Arc, Mutex},
     thread,
 };
 
@@ -13,7 +13,7 @@ use tokio::sync::mpsc as tokio_mpsc;
 use crate::{
     manifest::PLUGIN_ID,
     model::{Profile, ProfileDraft, RemoteProtocol, SessionId, SessionStatus, SessionSummary},
-    protocols::{ConnectionHealth, RemoteEntry, connect_ssh, create_file_client},
+    protocols::{ConnectionHealth, RemoteEntry, connect_ssh, create_file_client, remote_parent_dir},
     store::ProfileStore,
     terminal::{TerminalEngine, TerminalFrame, TerminalInput},
     transfer::{TransferDirection, TransferQueue, TransferSnapshot},
@@ -46,11 +46,23 @@ pub enum RemoteRuntimeEvent {
     SessionChanged(SessionId),
     TransfersChanged,
     TerminalChanged(SessionId),
+    SessionOpenFailed {
+        profile_id: i64,
+        error: String,
+    },
+    ConnectionProgress {
+        profile_id: i64,
+        message: String,
+    },
+    EditReady {
+        session_id: SessionId,
+        local_path: String,
+    },
 }
 
 #[derive(Clone, Default)]
 struct RuntimeEventBus {
-    subscribers: Arc<Mutex<Vec<mpsc::Sender<RemoteRuntimeEvent>>>>,
+    subscribers: Arc<Mutex<Vec<tokio_mpsc::UnboundedSender<RemoteRuntimeEvent>>>>,
 }
 
 impl RuntimeEventBus {
@@ -60,8 +72,8 @@ impl RuntimeEventBus {
         }
     }
 
-    fn subscribe(&self) -> mpsc::Receiver<RemoteRuntimeEvent> {
-        let (sender, receiver) = mpsc::channel();
+    fn subscribe(&self) -> tokio_mpsc::UnboundedReceiver<RemoteRuntimeEvent> {
+        let (sender, receiver) = tokio_mpsc::unbounded_channel();
         if let Ok(mut subscribers) = self.subscribers.lock() {
             subscribers.push(sender);
         }
@@ -73,6 +85,7 @@ struct SessionRuntime {
     profile: Profile,
     snapshot: SessionSnapshot,
     terminal: Option<LiveTerminal>,
+    file_client: Option<Box<dyn crate::protocols::RemoteFileClient>>,
 }
 
 enum TerminalCommand {
@@ -87,9 +100,9 @@ struct LiveTerminal {
 }
 
 impl LiveTerminal {
-    fn spawn(profile: Profile, session_id: SessionId, events: RuntimeEventBus) -> Result<Self> {
+    fn spawn(rt: tokio::runtime::Handle, profile: Profile, session_id: SessionId, events: RuntimeEventBus) -> Result<Self> {
         let engine = Arc::new(Mutex::new(TerminalEngine::new(profile.name.clone())));
-        let command_tx = spawn_terminal_thread(profile, session_id, Arc::clone(&engine), events)?;
+        let command_tx = spawn_terminal_thread(rt, profile, session_id, Arc::clone(&engine), events)?;
         Ok(Self { engine, command_tx })
     }
 
@@ -133,6 +146,7 @@ impl Drop for LiveTerminal {
 pub struct RemoteRuntime {
     store: ProfileStore,
     paths: AppPaths,
+    rt: tokio::runtime::Runtime,
     sessions: Arc<Mutex<HashMap<SessionId, SessionRuntime>>>,
     transfer_queue: Arc<TransferQueue>,
     events: RuntimeEventBus,
@@ -142,13 +156,23 @@ impl RemoteRuntime {
     pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> Result<Self> {
         let store = ProfileStore::open(database, &feature_database_key(PLUGIN_ID, "profiles"))?;
         store.seed_defaults()?;
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .thread_name("qingqi-remote-rt")
+            .build()
+            .context("创建远程连接运行时失败")?;
         Ok(Self {
             store,
             paths,
+            rt,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             transfer_queue: Arc::new(TransferQueue::new(3)),
             events: RuntimeEventBus::default(),
         })
+    }
+
+    pub fn rt_handle(&self) -> tokio::runtime::Handle {
+        self.rt.handle().clone()
     }
 
     pub fn list_profiles(&self) -> Result<Vec<Profile>> {
@@ -177,33 +201,78 @@ impl RemoteRuntime {
         Ok(deleted)
     }
 
-    pub fn subscribe_events(&self) -> mpsc::Receiver<RemoteRuntimeEvent> {
+    pub fn subscribe_events(&self) -> tokio_mpsc::UnboundedReceiver<RemoteRuntimeEvent> {
         self.events.subscribe()
     }
 
     pub fn open_session(&self, profile_id: i64) -> Result<SessionId> {
+        self.events.emit(RemoteRuntimeEvent::ConnectionProgress {
+            profile_id,
+            message: "正在连接远端主机…".into(),
+        });
+        let result = self.open_session_inner(profile_id);
+        if let Err(error) = &result {
+            self.events.emit(RemoteRuntimeEvent::SessionOpenFailed {
+                profile_id,
+                error: format!("{error:#}"),
+            });
+        }
+        result
+    }
+
+    fn open_session_inner(&self, profile_id: i64) -> Result<SessionId> {
         let profile = self
             .store
             .get_profile(profile_id)?
             .with_context(|| format!("连接配置不存在: {profile_id}"))?;
         self.store.update_last_used(profile.id)?;
 
-        let mut file_client = create_file_client(&profile);
+        self.events.emit(RemoteRuntimeEvent::ConnectionProgress {
+            profile_id,
+            message: format!("正在连接 {}:{}…", profile.host, profile.port),
+        });
+
+        let mut file_client = create_file_client(&profile, self.rt.handle().clone());
         let connection = file_client.connect()?;
+
+        self.events.emit(RemoteRuntimeEvent::ConnectionProgress {
+            profile_id,
+            message: format!("已连接，正在获取目录列表…"),
+        });
+
+        // TOFU 首次连接自动固定主机密钥指纹
+        if let Some(fingerprint) = file_client.tou_pending_fingerprint() {
+            let _ = self.store.update_host_key(profile.id, &fingerprint);
+        }
+
         let remote_root = normalize_remote_dir(&profile.paths.remote_root, profile.protocol);
-        let remote_entries = file_client.list(&remote_root).unwrap_or_default();
+        let (remote_entries, list_error) = match file_client.list(&remote_root) {
+            Ok(entries) => (entries, None),
+            Err(error) => {
+                if !connection.can_files {
+                    (Vec::new(), None)
+                } else {
+                    (Vec::new(), Some(format!("文件列表读取失败: {error}")))
+                }
+            }
+        };
         let session_id = SessionId::new();
 
-        let mut session_status =
-            if profile.protocol.supports_file_browser() && remote_entries.is_empty() {
-                SessionStatus::Degraded
-            } else {
-                SessionStatus::Connected
-            };
-        let mut session_message = connection.message.clone();
+        let mut session_status = if !connection.can_files {
+            SessionStatus::Connected
+        } else if list_error.is_some() {
+            SessionStatus::Degraded
+        } else {
+            SessionStatus::Connected
+        };
+        let mut session_message = if let Some(error) = &list_error {
+            format!("{}；{error}", connection.message)
+        } else {
+            connection.message.clone()
+        };
 
         let terminal = if profile.protocol.supports_terminal() {
-            match LiveTerminal::spawn(profile.clone(), session_id.clone(), self.events.clone()) {
+            match LiveTerminal::spawn(self.rt.handle().clone(), profile.clone(), session_id.clone(), self.events.clone()) {
                 Ok(terminal) => Some(terminal),
                 Err(error) => {
                     session_status = SessionStatus::Degraded;
@@ -248,6 +317,7 @@ impl RemoteRuntime {
                 profile,
                 snapshot,
                 terminal,
+                file_client: Some(file_client),
             },
         );
         self.transfer_queue
@@ -277,29 +347,21 @@ impl RemoteRuntime {
         session_id: &SessionId,
         path: Option<&str>,
     ) -> Result<Vec<RemoteEntry>> {
-        let (profile, remote_root) = {
-            let sessions = self
-                .sessions
-                .lock()
-                .map_err(|_| anyhow!("session manager lock poisoned"))?;
-            let session = sessions
-                .get(session_id)
-                .with_context(|| format!("session 不存在: {}", session_id.0))?;
-            let remote_root = path
-                .map(|p| normalize_remote_dir(p, session.profile.protocol))
-                .unwrap_or_else(|| session.snapshot.remote_root.clone());
-            (session.profile.clone(), remote_root)
-        };
-
-        let file_client = create_file_client(&profile);
-        let remote_entries = file_client.list(&remote_root)?;
         let mut sessions = self
             .sessions
             .lock()
             .map_err(|_| anyhow!("session manager lock poisoned"))?;
         let session = sessions
             .get_mut(session_id)
-            .with_context(|| format!("session 不存在: {}", session_id.0))?;
+            .with_context(|| format!("session 不存在: {}", session_id.as_uuid()))?;
+        let remote_root = path
+            .map(|p| normalize_remote_dir(p, session.profile.protocol))
+            .unwrap_or_else(|| session.snapshot.remote_root.clone());
+        let file_client = session
+            .file_client
+            .as_mut()
+            .context("session 文件客户端未初始化")?;
+        let remote_entries = file_client.list(&remote_root)?;
         session.snapshot.remote_root = remote_root;
         session.snapshot.remote_entries = remote_entries.clone();
         session.snapshot.summary.status = SessionStatus::Connected;
@@ -317,49 +379,53 @@ impl RemoteRuntime {
         let current = self
             .session_snapshot(session_id)
             .map(|snapshot| snapshot.remote_root)
-            .with_context(|| format!("session 不存在: {}", session_id.0))?;
+            .with_context(|| format!("session 不存在: {}", session_id.as_uuid()))?;
         let parent = remote_parent_dir(&current);
         self.refresh_session_directory(session_id, Some(&parent))?;
         Ok(())
     }
 
     pub fn create_remote_directory(&self, session_id: &SessionId, path: &str) -> Result<()> {
-        let (profile, remote_root) = {
-            let sessions = self
-                .sessions
-                .lock()
-                .map_err(|_| anyhow!("session manager lock poisoned"))?;
-            let session = sessions
-                .get(session_id)
-                .with_context(|| format!("session 不存在: {}", session_id.0))?;
-            (
-                session.profile.clone(),
-                session.snapshot.remote_root.clone(),
-            )
-        };
-
-        create_file_client(&profile).mkdir(path)?;
-        self.refresh_session_directory(session_id, Some(&remote_root))?;
+        let mut sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| anyhow!("session manager lock poisoned"))?;
+        let session = sessions
+            .get_mut(session_id)
+            .with_context(|| format!("session 不存在: {}", session_id.as_uuid()))?;
+        let remote_root = session.snapshot.remote_root.clone();
+        let file_client = session
+            .file_client
+            .as_mut()
+            .context("session 文件客户端未初始化")?;
+        file_client.mkdir(path)?;
+        let remote_entries = file_client.list(&remote_root)?;
+        session.snapshot.remote_entries = remote_entries;
+        session.snapshot.summary.status = SessionStatus::Connected;
+        self.events
+            .emit(RemoteRuntimeEvent::SessionChanged(session_id.clone()));
         Ok(())
     }
 
     pub fn rename_remote_entry(&self, session_id: &SessionId, from: &str, to: &str) -> Result<()> {
-        let (profile, remote_root) = {
-            let sessions = self
-                .sessions
-                .lock()
-                .map_err(|_| anyhow!("session manager lock poisoned"))?;
-            let session = sessions
-                .get(session_id)
-                .with_context(|| format!("session 不存在: {}", session_id.0))?;
-            (
-                session.profile.clone(),
-                session.snapshot.remote_root.clone(),
-            )
-        };
-
-        create_file_client(&profile).rename(from, to)?;
-        self.refresh_session_directory(session_id, Some(&remote_root))?;
+        let mut sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| anyhow!("session manager lock poisoned"))?;
+        let session = sessions
+            .get_mut(session_id)
+            .with_context(|| format!("session 不存在: {}", session_id.as_uuid()))?;
+        let remote_root = session.snapshot.remote_root.clone();
+        let file_client = session
+            .file_client
+            .as_mut()
+            .context("session 文件客户端未初始化")?;
+        file_client.rename(from, to)?;
+        let remote_entries = file_client.list(&remote_root)?;
+        session.snapshot.remote_entries = remote_entries;
+        session.snapshot.summary.status = SessionStatus::Connected;
+        self.events
+            .emit(RemoteRuntimeEvent::SessionChanged(session_id.clone()));
         Ok(())
     }
 
@@ -369,22 +435,24 @@ impl RemoteRuntime {
         path: &str,
         is_dir: bool,
     ) -> Result<()> {
-        let (profile, remote_root) = {
-            let sessions = self
-                .sessions
-                .lock()
-                .map_err(|_| anyhow!("session manager lock poisoned"))?;
-            let session = sessions
-                .get(session_id)
-                .with_context(|| format!("session 不存在: {}", session_id.0))?;
-            (
-                session.profile.clone(),
-                session.snapshot.remote_root.clone(),
-            )
-        };
-
-        create_file_client(&profile).remove(path, is_dir)?;
-        self.refresh_session_directory(session_id, Some(&remote_root))?;
+        let mut sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| anyhow!("session manager lock poisoned"))?;
+        let session = sessions
+            .get_mut(session_id)
+            .with_context(|| format!("session 不存在: {}", session_id.as_uuid()))?;
+        let remote_root = session.snapshot.remote_root.clone();
+        let file_client = session
+            .file_client
+            .as_mut()
+            .context("session 文件客户端未初始化")?;
+        file_client.remove(path, is_dir)?;
+        let remote_entries = file_client.list(&remote_root)?;
+        session.snapshot.remote_entries = remote_entries;
+        session.snapshot.summary.status = SessionStatus::Connected;
+        self.events
+            .emit(RemoteRuntimeEvent::SessionChanged(session_id.clone()));
         Ok(())
     }
 
@@ -394,25 +462,27 @@ impl RemoteRuntime {
         remote_path: &str,
         local_path: &Path,
     ) -> Result<PathBuf> {
-        let (profile, remote_path_string, local_path_buf) = {
-            let sessions = self
+        let (profile, remote_path_string, local_path_buf, total_bytes) = {
+            let mut sessions = self
                 .sessions
                 .lock()
                 .map_err(|_| anyhow!("session manager lock poisoned"))?;
             let session = sessions
-                .get(session_id)
-                .with_context(|| format!("session 不存在: {}", session_id.0))?;
+                .get_mut(session_id)
+                .with_context(|| format!("session 不存在: {}", session_id.as_uuid()))?;
+            let total_bytes = session
+                .file_client
+                .as_mut()
+                .and_then(|client| client.stat(remote_path).ok())
+                .map(|entry| entry.size)
+                .unwrap_or_default();
             (
                 session.profile.clone(),
                 remote_path.to_string(),
                 local_path.to_path_buf(),
+                total_bytes,
             )
         };
-
-        let total_bytes = create_file_client(&profile)
-            .stat(&remote_path_string)
-            .map(|entry| entry.size)
-            .unwrap_or_default();
         let transfer_id = self.transfer_queue.enqueue(
             session_id.clone(),
             TransferDirection::Download,
@@ -445,7 +515,7 @@ impl RemoteRuntime {
                 .map_err(|_| anyhow!("session manager lock poisoned"))?;
             let session = sessions
                 .get(session_id)
-                .with_context(|| format!("session 不存在: {}", session_id.0))?;
+                .with_context(|| format!("session 不存在: {}", session_id.as_uuid()))?;
             (
                 session.profile.clone(),
                 local_path.to_path_buf(),
@@ -477,17 +547,7 @@ impl RemoteRuntime {
 
     pub fn download_for_edit(&self, session_id: &SessionId, remote_path: &str) -> Result<PathBuf> {
         let path = self.edit_cache_path(session_id, remote_path)?;
-        let profile = {
-            let sessions = self
-                .sessions
-                .lock()
-                .map_err(|_| anyhow!("session manager lock poisoned"))?;
-            let session = sessions
-                .get(session_id)
-                .with_context(|| format!("session 不存在: {}", session_id.0))?;
-            session.profile.clone()
-        };
-        self.download_entry_blocking(session_id, profile, remote_path, &path)?;
+        self.download_entry_blocking(session_id, remote_path, &path)?;
 
         let mut sessions = self
             .sessions
@@ -495,7 +555,7 @@ impl RemoteRuntime {
             .map_err(|_| anyhow!("session manager lock poisoned"))?;
         let session = sessions
             .get_mut(session_id)
-            .with_context(|| format!("session 不存在: {}", session_id.0))?;
+            .with_context(|| format!("session 不存在: {}", session_id.as_uuid()))?;
         if session
             .snapshot
             .editable_files
@@ -509,6 +569,10 @@ impl RemoteRuntime {
         }
         self.events
             .emit(RemoteRuntimeEvent::SessionChanged(session_id.clone()));
+        self.events.emit(RemoteRuntimeEvent::EditReady {
+            session_id: session_id.clone(),
+            local_path: path.to_string_lossy().to_string(),
+        });
         Ok(path)
     }
 
@@ -518,17 +582,7 @@ impl RemoteRuntime {
         local_path: &Path,
         remote_path: &str,
     ) -> Result<()> {
-        let profile = {
-            let sessions = self
-                .sessions
-                .lock()
-                .map_err(|_| anyhow!("session manager lock poisoned"))?;
-            let session = sessions
-                .get(session_id)
-                .with_context(|| format!("session 不存在: {}", session_id.0))?;
-            session.profile.clone()
-        };
-        self.upload_file_blocking(session_id, profile, local_path, remote_path)
+        self.upload_file_blocking(session_id, local_path, remote_path)
     }
 
     pub fn default_download_path(
@@ -538,7 +592,7 @@ impl RemoteRuntime {
     ) -> Result<PathBuf> {
         let snapshot = self
             .session_snapshot(session_id)
-            .with_context(|| format!("session 不存在: {}", session_id.0))?;
+            .with_context(|| format!("session 不存在: {}", session_id.as_uuid()))?;
         let name = remote_name(remote_path);
         let root = PathBuf::from(snapshot.local_root);
         fs::create_dir_all(&root)
@@ -553,7 +607,7 @@ impl RemoteRuntime {
             .map_err(|_| anyhow!("session manager lock poisoned"))?;
         let session = sessions
             .get(session_id)
-            .with_context(|| format!("session 不存在: {}", session_id.0))?;
+            .with_context(|| format!("session 不存在: {}", session_id.as_uuid()))?;
         let terminal = session
             .terminal
             .as_ref()
@@ -568,7 +622,7 @@ impl RemoteRuntime {
             .map_err(|_| anyhow!("session manager lock poisoned"))?;
         let session = sessions
             .get(session_id)
-            .with_context(|| format!("session 不存在: {}", session_id.0))?;
+            .with_context(|| format!("session 不存在: {}", session_id.as_uuid()))?;
         let terminal = session
             .terminal
             .as_ref()
@@ -655,20 +709,34 @@ impl RemoteRuntime {
     fn download_entry_blocking(
         &self,
         session_id: &SessionId,
-        profile: Profile,
         remote_path: &str,
         local_path: &Path,
     ) -> Result<PathBuf> {
         let remote_path_string = remote_path.to_string();
-        let total_bytes = create_file_client(&profile)
-            .stat(&remote_path_string)
-            .map(|entry| entry.size)
-            .unwrap_or_default();
+        let remote_path_clone = remote_path_string.clone();
+        let local_display = local_path.display().to_string();
+
+        let total_bytes = {
+            let mut sessions = self
+                .sessions
+                .lock()
+                .map_err(|_| anyhow!("session manager lock poisoned"))?;
+            let session = sessions
+                .get_mut(session_id)
+                .with_context(|| format!("session 不存在: {}", session_id.as_uuid()))?;
+            session
+                .file_client
+                .as_mut()
+                .and_then(|client| client.stat(&remote_path_string).ok())
+                .map(|entry| entry.size)
+                .unwrap_or_default()
+        };
+
         let transfer_id = self.transfer_queue.enqueue(
             session_id.clone(),
             TransferDirection::Download,
-            local_path.display().to_string(),
-            remote_path_string.clone(),
+            local_display.clone(),
+            remote_path_clone.clone(),
             total_bytes,
         );
         self.events.emit(RemoteRuntimeEvent::TransfersChanged);
@@ -680,8 +748,21 @@ impl RemoteRuntime {
         }
         self.events.emit(RemoteRuntimeEvent::TransfersChanged);
 
-        let result = create_file_client(&profile)
-            .download(&remote_path_string, &local_path.display().to_string());
+        let result = {
+            let mut sessions = self
+                .sessions
+                .lock()
+                .map_err(|_| anyhow!("session manager lock poisoned"))?;
+            let session = sessions
+                .get_mut(session_id)
+                .with_context(|| format!("session 不存在: {}", session_id.as_uuid()))?;
+            let file_client = session
+                .file_client
+                .as_mut()
+                .context("session 文件客户端未初始化")?;
+            file_client.download(&remote_path_clone, &local_display)
+        };
+
         match result {
             Ok(()) => {
                 let written = fs::metadata(local_path)
@@ -706,7 +787,6 @@ impl RemoteRuntime {
     fn upload_file_blocking(
         &self,
         session_id: &SessionId,
-        profile: Profile,
         local_path: &Path,
         remote_path: &str,
     ) -> Result<()> {
@@ -729,8 +809,22 @@ impl RemoteRuntime {
         }
         self.events.emit(RemoteRuntimeEvent::TransfersChanged);
 
-        let result =
-            create_file_client(&profile).upload(&local_path.display().to_string(), remote_path);
+        let remote = remote_path.to_string();
+        let local_display = local_path.display().to_string();
+        let result = {
+            let mut sessions = self
+                .sessions
+                .lock()
+                .map_err(|_| anyhow!("session manager lock poisoned"))?;
+            let session = sessions
+                .get_mut(session_id)
+                .with_context(|| format!("session 不存在: {}", session_id.as_uuid()))?;
+            let file_client = session
+                .file_client
+                .as_mut()
+                .context("session 文件客户端未初始化")?;
+            file_client.upload(&local_display, &remote)
+        };
         match result {
             Ok(()) => {
                 self.transfer_queue
@@ -761,30 +855,40 @@ impl RemoteRuntime {
     ) {
         let queue = Arc::clone(&self.transfer_queue);
         let events = self.events.clone();
-        thread::spawn(move || {
-            if !queue.wait_and_start(&transfer_id) {
-                queue.finish(&transfer_id, false, String::from("已取消"));
-                events.emit(RemoteRuntimeEvent::TransfersChanged);
-                return;
-            }
-            events.emit(RemoteRuntimeEvent::TransfersChanged);
-            let result = create_file_client(&profile)
-                .download(&remote_path, &local_path.display().to_string());
-            match result {
-                Ok(()) => {
-                    let written = fs::metadata(&local_path)
-                        .map(|meta| meta.len())
-                        .unwrap_or(total_bytes);
-                    queue.mark_progress(&transfer_id, written, Some(written));
-                    queue.finish(&transfer_id, true, String::from("下载完成"));
+        let rt_handle = self.rt.handle().clone();
+        thread::Builder::new()
+            .name(format!("qingqi-download-{}", &format!("{:?}", transfer_id)))
+            .spawn(move || {
+                let _guard = std::panic::AssertUnwindSafe(());
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    if !queue.wait_and_start(&transfer_id) {
+                        queue.finish(&transfer_id, false, String::from("已取消"));
+                        events.emit(RemoteRuntimeEvent::TransfersChanged);
+                        return;
+                    }
+                    events.emit(RemoteRuntimeEvent::TransfersChanged);
+                    let file_client = create_file_client(&profile, rt_handle.clone());
+                    match file_client.download(&remote_path, &local_path.display().to_string()) {
+                        Ok(()) => {
+                            let written = fs::metadata(&local_path)
+                                .map(|meta| meta.len())
+                                .unwrap_or(total_bytes);
+                            queue.mark_progress(&transfer_id, written, Some(written));
+                            queue.finish(&transfer_id, true, String::from("下载完成"));
+                            events.emit(RemoteRuntimeEvent::TransfersChanged);
+                        }
+                        Err(error) => {
+                            queue.finish(&transfer_id, false, format!("下载失败: {error}"));
+                            events.emit(RemoteRuntimeEvent::TransfersChanged);
+                        }
+                    }
+                }));
+                if result.is_err() {
+                    queue.finish(&transfer_id, false, String::from("下载任务异常终止"));
                     events.emit(RemoteRuntimeEvent::TransfersChanged);
                 }
-                Err(error) => {
-                    queue.finish(&transfer_id, false, format!("下载失败: {error}"));
-                    events.emit(RemoteRuntimeEvent::TransfersChanged);
-                }
-            }
-        });
+            })
+            .expect("spawn download task");
     }
 
     fn spawn_upload_task(
@@ -799,43 +903,52 @@ impl RemoteRuntime {
         let sessions = Arc::clone(&self.sessions);
         let queue = Arc::clone(&self.transfer_queue);
         let events = self.events.clone();
-        thread::spawn(move || {
-            if !queue.wait_and_start(&transfer_id) {
-                queue.finish(&transfer_id, false, String::from("已取消"));
-                events.emit(RemoteRuntimeEvent::TransfersChanged);
-                return;
-            }
-            events.emit(RemoteRuntimeEvent::TransfersChanged);
-            let result = create_file_client(&profile)
-                .upload(&local_path.display().to_string(), &remote_path);
-            match result {
-                Ok(()) => {
-                    queue.mark_progress(&transfer_id, total_bytes, Some(total_bytes));
-                    queue.finish(&transfer_id, true, String::from("上传完成"));
-                    events.emit(RemoteRuntimeEvent::TransfersChanged);
-                    let refresh_target = sessions.lock().ok().and_then(|sessions| {
-                        let session = sessions.get(&session_id)?;
-                        Some((
-                            session.profile.clone(),
-                            session.snapshot.remote_root.clone(),
-                        ))
-                    });
-                    if let Some((profile, root)) = refresh_target
-                        && let Ok(entries) = create_file_client(&profile).list(&root)
-                        && let Ok(mut sessions) = sessions.lock()
-                        && let Some(session) = sessions.get_mut(&session_id)
-                    {
-                        session.snapshot.remote_entries = entries;
-                        session.snapshot.summary.status = SessionStatus::Connected;
-                        events.emit(RemoteRuntimeEvent::SessionChanged(session_id.clone()));
+        let rt_handle = self.rt.handle().clone();
+        thread::Builder::new()
+            .name(format!("qingqi-upload-{}", &format!("{:?}", transfer_id)))
+            .spawn(move || {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    if !queue.wait_and_start(&transfer_id) {
+                        queue.finish(&transfer_id, false, String::from("已取消"));
+                        events.emit(RemoteRuntimeEvent::TransfersChanged);
+                        return;
                     }
-                }
-                Err(error) => {
-                    queue.finish(&transfer_id, false, format!("上传失败: {error}"));
+                    events.emit(RemoteRuntimeEvent::TransfersChanged);
+                    let file_client = create_file_client(&profile, rt_handle.clone());
+                    match file_client.upload(&local_path.display().to_string(), &remote_path) {
+                        Ok(()) => {
+                            queue.mark_progress(&transfer_id, total_bytes, Some(total_bytes));
+                            queue.finish(&transfer_id, true, String::from("上传完成"));
+                            events.emit(RemoteRuntimeEvent::TransfersChanged);
+                            let refresh_target = sessions.lock().ok().and_then(|sessions| {
+                                let session = sessions.get(&session_id)?;
+                                Some((
+                                    session.profile.clone(),
+                                    session.snapshot.remote_root.clone(),
+                                ))
+                            });
+                            if let Some((profile, root)) = refresh_target
+                                && let Ok(entries) = create_file_client(&profile, rt_handle.clone()).list(&root)
+                                && let Ok(mut sessions) = sessions.lock()
+                                && let Some(session) = sessions.get_mut(&session_id)
+                            {
+                                session.snapshot.remote_entries = entries;
+                                session.snapshot.summary.status = SessionStatus::Connected;
+                                events.emit(RemoteRuntimeEvent::SessionChanged(session_id.clone()));
+                            }
+                        }
+                        Err(error) => {
+                            queue.finish(&transfer_id, false, format!("上传失败: {error}"));
+                            events.emit(RemoteRuntimeEvent::TransfersChanged);
+                        }
+                    }
+                }));
+                if result.is_err() {
+                    queue.finish(&transfer_id, false, String::from("上传任务异常终止"));
                     events.emit(RemoteRuntimeEvent::TransfersChanged);
                 }
-            }
-        });
+            })
+            .expect("spawn upload task");
     }
 
     fn edit_cache_path(&self, session_id: &SessionId, remote_path: &str) -> Result<PathBuf> {
@@ -843,7 +956,7 @@ impl RemoteRuntime {
             .paths
             .feature_dir(PLUGIN_ID)
             .join("editable")
-            .join(session_id.0.to_string());
+            .join(session_id.as_uuid().to_string());
         fs::create_dir_all(&dir)
             .with_context(|| format!("创建编辑缓存目录失败: {}", dir.display()))?;
         Ok(dir.join(remote_name(remote_path)))
@@ -857,6 +970,7 @@ fn sync_summary_counts(session: &mut SessionRuntime, transfer_queue: &TransferQu
 }
 
 fn spawn_terminal_thread(
+    rt: tokio::runtime::Handle,
     profile: Profile,
     session_id: SessionId,
     engine: Arc<Mutex<TerminalEngine>>,
@@ -867,23 +981,7 @@ fn spawn_terminal_thread(
     thread::Builder::new()
         .name(thread_name)
         .spawn(move || {
-            let runtime = match tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-            {
-                Ok(runtime) => runtime,
-                Err(error) => {
-                    if let Ok(mut terminal) = engine.lock() {
-                        let _ = terminal.feed_bytes(
-                            format!("\r\n[terminal runtime error] {error}\r\n").as_bytes(),
-                        );
-                    }
-                    events.emit(RemoteRuntimeEvent::TerminalChanged(session_id.clone()));
-                    return;
-                }
-            };
-
-            runtime.block_on(async move {
+            rt.block_on(async move {
                 let connection = match connect_ssh(profile.clone()).await {
                     Ok(connection) => connection,
                     Err(error) => {
@@ -1040,31 +1138,6 @@ impl StringEmptyExt for String {
     }
 }
 
-fn remote_parent_dir(path: &str) -> String {
-    let current = normalize_remote_dir(path, RemoteProtocol::Ssh);
-    if current == "~" {
-        return current;
-    }
-    if let Some(rest) = current.strip_prefix("~/") {
-        let mut segments: Vec<&str> = rest.split('/').filter(|part| !part.is_empty()).collect();
-        let _ = segments.pop();
-        if segments.is_empty() {
-            return String::from("~");
-        }
-        return format!("~/{}", segments.join("/"));
-    }
-    if current == "/" {
-        return current;
-    }
-    let mut segments: Vec<&str> = current.split('/').filter(|part| !part.is_empty()).collect();
-    let _ = segments.pop();
-    if segments.is_empty() {
-        String::from("/")
-    } else {
-        format!("/{}", segments.join("/"))
-    }
-}
-
 fn remote_name(path: &str) -> String {
     path.rsplit('/')
         .find(|part| !part.is_empty())
@@ -1084,14 +1157,14 @@ mod tests {
     use anyhow::{Result, anyhow};
 
     use super::{
-        RemoteRuntime, SessionRuntime, SessionSnapshot, expand_local_root, remote_parent_dir,
+        RemoteRuntime, SessionRuntime, SessionSnapshot, expand_local_root,
     };
     use crate::{
         model::{
             AuthConfig, ConnectionLimits, Profile, ProfilePaths, RemoteProtocol, SecurityPolicy,
             SessionId, SessionStatus, SessionSummary,
         },
-        protocols::ConnectionHealth,
+        protocols::{ConnectionHealth, remote_parent_dir},
     };
     use qingqi_plugin::{database::DatabaseService, storage::AppPaths};
 
@@ -1160,6 +1233,7 @@ mod tests {
             profile,
             snapshot,
             terminal: None,
+            file_client: None,
         };
         let mut sessions = runtime
             .sessions

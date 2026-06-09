@@ -108,6 +108,13 @@ SET last_used_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'),
 WHERE id = ?1
 ";
 
+const UPDATE_HOST_KEY: &str = "
+UPDATE remote_profiles_v2
+SET pinned_host_key = ?1,
+    updated_at = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')
+WHERE id = ?2
+";
+
 const COUNT_V2: &str = "SELECT COUNT(*) FROM remote_profiles_v2";
 const COUNT_LEGACY: &str =
     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='remote_file_profiles'";
@@ -264,6 +271,12 @@ impl ProfileStore {
     pub fn update_last_used(&self, id: i64) -> Result<()> {
         let conn = self.connection()?;
         conn.execute(UPDATE_LAST_USED, params![id])?;
+        Ok(())
+    }
+
+    pub fn update_host_key(&self, id: i64, fingerprint: &str) -> Result<()> {
+        let conn = self.connection()?;
+        conn.execute(UPDATE_HOST_KEY, params![fingerprint, id])?;
         Ok(())
     }
 

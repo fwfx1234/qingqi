@@ -1,4 +1,4 @@
-use gpui::SharedString;
+use gpui::{SharedString, Styled, ParentElement, IntoElement};
 use serde::{Deserialize, Serialize};
 
 // ── Shared service/request types ──
@@ -62,6 +62,17 @@ impl gpui_component::select::SelectItem for HttpMethod {
 
     fn title(&self) -> SharedString {
         SharedString::from(self.label())
+    }
+
+    fn display_title(&self) -> Option<gpui::AnyElement> {
+        Some(
+            gpui::div()
+                .font_family("SF Mono")
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(gpui::rgb(self.color()))
+                .child(self.label())
+                .into_any_element(),
+        )
     }
 
     fn value(&self) -> &Self::Value {
