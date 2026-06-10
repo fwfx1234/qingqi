@@ -129,7 +129,7 @@ impl SshService {
         let summary = SessionSummary {
             session_id,
             profile_id,
-            title: format!("{}@{}", profile.name, profile.host),
+            title: format!("{}:{}", profile.host, profile.port),
             endpoint: format!("{}:{}", profile.host, profile.port),
             protocol: profile.protocol.clone(),
             status: SessionStatus::Connecting,
@@ -304,6 +304,70 @@ impl SshService {
     }
 
     // ========== 传输 ==========
+
+    pub fn upload_file(
+        &self,
+        id: &SessionId,
+        local: &std::path::Path,
+        remote: &str,
+    ) -> Result<crate::model::TransferId> {
+        let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let state = sessions
+            .get(id)
+            .ok_or_else(|| anyhow::anyhow!("Session 不存在"))?;
+        let proto = state
+            .protocol
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("未连接"))?;
+        drop(sessions);
+
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let tid = crate::model::TransferId::new();
+        let proto_clone = Arc::clone(&proto);
+        let local_path = local.to_path_buf();
+        let remote_path = remote.to_string();
+
+        tokio::spawn(async move {
+            match proto_clone.upload_file(&local_path, &remote_path, tx).await {
+                Ok(_) => { /* 传输完成 */ }
+                Err(_) => { /* 传输失败 */ }
+            }
+        });
+
+        Ok(tid)
+    }
+
+    pub fn download_file(
+        &self,
+        id: &SessionId,
+        remote: &str,
+        local: &std::path::Path,
+    ) -> Result<crate::model::TransferId> {
+        let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let state = sessions
+            .get(id)
+            .ok_or_else(|| anyhow::anyhow!("Session 不存在"))?;
+        let proto = state
+            .protocol
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("未连接"))?;
+        drop(sessions);
+
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let tid = crate::model::TransferId::new();
+        let proto_clone = Arc::clone(&proto);
+        let local_path = local.to_path_buf();
+        let remote_path = remote.to_string();
+
+        tokio::spawn(async move {
+            match proto_clone.download_file(&remote_path, &local_path, tx).await {
+                Ok(_) => {}
+                Err(_) => {}
+            }
+        });
+
+        Ok(tid)
+    }
 
     pub fn transfer_snapshots(&self, id: &SessionId) -> Vec<crate::model::TransferTask> {
         let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
