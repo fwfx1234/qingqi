@@ -124,8 +124,19 @@ impl RemoteProtocol for SshProtocol {
                         .await
                         .context("SSH 密码认证失败")?;
                 }
-                SshAuthMethod::PrivateKey { .. } => {
-                    return Err(anyhow::anyhow!("SSH 私钥认证: russh 0.54 API 适配中，请使用密码"));
+                SshAuthMethod::PrivateKey { path, passphrase } => {
+                    let key_data = std::fs::read_to_string(path)
+                        .with_context(|| format!("读取私钥文件 {path}"))?;
+                    let pass = if passphrase.is_empty() { None } else { Some(passphrase.as_str()) };
+                    let key = keys::decode_secret_key(&key_data, pass)
+                        .with_context(|| "解析私钥失败")?;
+                    let key_with_hash = keys::PrivateKeyWithHashAlg::new(
+                        std::sync::Arc::new(key), None,
+                    );
+                    handle
+                        .authenticate_publickey(username, key_with_hash)
+                        .await
+                        .context("SSH 公钥认证失败")?;
                 }
                 SshAuthMethod::Agent => {
                     return Err(anyhow::anyhow!("SSH Agent 认证尚未实现"));
