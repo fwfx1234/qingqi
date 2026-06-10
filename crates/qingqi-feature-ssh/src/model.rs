@@ -224,3 +224,51 @@ pub struct SessionSnapshot {
     pub entries: Vec<RemoteEntry>,
     pub remote_cwd: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_session_id_unique() {
+        assert_ne!(SessionId::new(), SessionId::new());
+    }
+
+    #[test]
+    fn test_transfer_id_unique() {
+        assert_ne!(TransferId::new(), TransferId::new());
+    }
+
+    #[test]
+    fn test_protocol_default_port() {
+        assert_eq!(ProtocolType::Ssh.default_port(), 22);
+        assert_eq!(ProtocolType::Ftp.default_port(), 21);
+        assert_eq!(ProtocolType::Ftps.default_port(), 990);
+    }
+
+    #[test]
+    fn test_protocol_supports_terminal() {
+        assert_eq!(ProtocolType::Ssh.supports_terminal(), TerminalKind::Shell);
+        assert_eq!(ProtocolType::Ftp.supports_terminal(), TerminalKind::Log);
+    }
+
+    #[test]
+    fn test_auth_config_json_roundtrip() {
+        let config = AuthConfig::Ssh {
+            method: SshAuthMethod::PrivateKey {
+                path: "/tmp/key".into(),
+                passphrase: "pw".into(),
+            },
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let back: AuthConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(config, back);
+    }
+
+    #[test]
+    fn test_profile_draft_default() {
+        let draft = ProfileDraft::default();
+        assert_eq!(draft.port, 0); // u16::default()
+        assert!(matches!(draft.protocol, ProtocolType::Ssh));
+    }
+}

@@ -367,6 +367,19 @@ mod tests {
     }
 
     #[test]
+    fn test_delete_nonexistent() {
+        let store = temp_store();
+        assert!(!store.delete(999).unwrap());
+    }
+
+    #[test]
+    fn test_list_empty() {
+        let store = temp_store();
+        let profiles = store.list().unwrap();
+        assert!(profiles.is_empty());
+    }
+
+    #[test]
     fn test_ftp_profile_auth_roundtrip() {
         let store = temp_store();
 

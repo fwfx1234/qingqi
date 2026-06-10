@@ -46,7 +46,8 @@ struct SessionState {
 
 pub struct SshService {
     profile_store: Arc<ProfileStore>,
-    cache_dir: PathBuf,
+    #[allow(dead_code)]
+    cache_dir: PathBuf, // 终端历史/临时文件目录
     connection_pool: Arc<ConnectionPool>,
     sessions: Mutex<HashMap<SessionId, SessionState>>,
     event_tx: broadcast::Sender<SshEvent>,

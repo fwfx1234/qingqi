@@ -1,7 +1,6 @@
 //! 文件树面板
 
 use gpui::*;
-use gpui::prelude::*;
 use gpui_component::scroll::ScrollableElement;
 use qingqi_ui::ui;
 

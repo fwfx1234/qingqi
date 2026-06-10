@@ -109,6 +109,7 @@ pub struct SshView {
     generation: u64,
 }
 
+#[allow(dead_code)]
 impl SshView {
     pub fn new(service: Arc<SshService>, cx: &mut Context<Self>) -> Self {
         let mut this = Self {
@@ -152,8 +153,8 @@ impl SshView {
         cx.notify();
     }
 
-    // ===== 用户交互 =====
-
+    // ===== 用户交互（待 GPUI on_click 连线） =====
+    #[allow(dead_code)]
     fn connect_profile(&mut self, profile_id: i64, cx: &mut Context<Self>) {
         self.selected_profile_id = Some(profile_id);
         match self.service.open_session(profile_id) {
@@ -201,7 +202,7 @@ impl SshView {
         self.last_revision = snap.revision;
 
         self.vm = SshViewModel {
-            profiles: Self::build_profiles(&snap.profiles, self.selected_profile_id),
+            profiles: Self::build_profiles(&snap.profiles, &snap.sessions, self.selected_profile_id),
             sessions: Self::build_sessions(&snap.sessions, self.selected_session_id),
             file_tree: Self::build_file_tree(self.selected_session_id.as_ref(), &self.service),
             terminal: Self::build_terminal(self.selected_session_id.as_ref(), &self.service),
@@ -213,17 +214,23 @@ impl SshView {
 
     fn build_profiles(
         profiles: &[crate::model::Profile],
+        sessions: &[crate::model::SessionSummary],
         selected_id: Option<i64>,
     ) -> Vec<ProfileItem> {
         profiles
             .iter()
-            .map(|p| ProfileItem {
-                id: p.id,
-                name: p.name.clone(),
-                endpoint: format!("{}:{}", p.host, p.port),
-                protocol_badge: p.protocol.display().to_string(),
-                is_connected: false,
-                is_selected: selected_id == Some(p.id),
+            .map(|p| {
+                let is_connected = sessions.iter().any(|s| {
+                    s.profile_id == p.id && matches!(s.status, SessionStatus::Connected)
+                });
+                ProfileItem {
+                    id: p.id,
+                    name: p.name.clone(),
+                    endpoint: format!("{}:{}", p.host, p.port),
+                    protocol_badge: p.protocol.display().to_string(),
+                    is_connected,
+                    is_selected: selected_id == Some(p.id),
+                }
             })
             .collect()
     }
