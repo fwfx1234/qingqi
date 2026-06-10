@@ -1,82 +1,90 @@
 # Qingqi
 
-`qingqi` 是一个基于 Rust + GPUI 的桌面工具集合，聚焦“常驻启动器 + 内置高频工具”体验。
+轻量级 Rust + GPUI 桌面工具集，聚焦常驻启动器与高频工具。
 
-项目目标：
-
-- 启动快、交互轻，优先保证启动器和核心功能响应速度。
-- 内置常用工具（剪贴板、应用启动、下载、SFTP/SSH 等）统一入口。
-- 以本地数据和本地执行为主，避免不必要的运行时耦合。
-
-## 核心能力
-
-- 全局启动器：统一搜索命令、插件入口和上下文动作。
-- 应用快速启动：本机应用索引、搜索、启动、使用排序。
-- 剪贴板历史：文本/图片/文件历史管理、筛选、快捷操作。
-- 下载管理：多任务下载、状态追踪与持久化。
-- FTP/SFTP/SSH：连接配置、文件传输、终端与日志视图。
-- 系统设置：主题、行为、缓存与运行参数管理。
-
-## 技术栈
-
-- Rust 2024
-- GPUI `0.2.2`
-- SQLite（本地状态与索引持久化）
-- 平台能力封装（当前位于 `crates/qingqi/src/platform`）
-
-## 项目结构（当前）
-
-- `Cargo.toml`：workspace 根配置，统一依赖版本与 profile。
-- `crates/qingqi`：当前 bin crate，承载 app/core/features/platform 主体代码与打包资源。
-- `crates/qingqi/src/app`：应用入口、启动器、主题、窗口与运行时编排。
-- `crates/qingqi/src/core`：当前宿主实现与迁移中的 core 边界。
-- `crates/qingqi/src/features`：各业务功能模块（内置插件实现）。
-- `crates/qingqi/src/platform`：系统相关能力（应用扫描、剪贴板、shell、tray 等）。
-- `crates/qingqi/assets`：图标与静态资源（`app-icon.svg` / `tray-icon.svg` 为源文件，构建时由 `build.rs` 生成 bundle 所需 PNG）。
-- `crates/qingqi-plugin`：已抽出的插件 SDK crate，承载命令模型、插件契约、事件、存储、快捷键声明类型等。
-
-## 设计与优化文档
-
-- [workspace 拆分主导文档](docs/workspace-split-guide.md)
-- [GPT-5.4 workspace 拆分执行手册](docs/gpt-5.4-workspace-split-execution-plan.md)
-- [工程约定](docs/conventions.md)
-- [插件界面问题清单与优化方案](docs/plugin-ui-optimization-plan.md)
-- [gpui-component 使用指南](docs/gpui-component-guide.md)
-
-## 本地开发
+## 快速开始
 
 ```bash
-cargo check
+# 开发
 cargo run
+
+# 构建
+cargo build --release
 ```
 
-可选：
+## 核心功能
+
+- 🚀 **全局启动器** - 统一搜索命令、插件、应用
+- 📋 **剪贴板历史** - 文本/图片/文件历史管理
+- 📥 **下载管理** - 多任务下载与状态追踪
+- 🔧 **开发工具** - API调试、HTTP抓包、JSON解析
+- 🌐 **远程连接** - FTP/SFTP/SSH 客户端
+- 🖼️ **图像工具** - 压缩、二维码识别/生成
+- ⚙️ **系统设置** - 主题、热键、行为配置
+
+## 技术特点
+
+- **快速响应** - GPUI原生渲染，启动器毫秒级响应
+- **插件化架构** - 13个独立插件，清晰的边界
+- **本地优先** - SQLite持久化，无云依赖
+- **跨平台** - macOS / Linux / Windows
+
+## 系统要求
+
+- Rust 2024 Edition
+- macOS 10.15+ / Windows 10+ / Linux (X11/Wayland)
+
+## 目录结构
+
+```
+qingqi/
+├── crates/              # Workspace（19个crate）
+│   ├── qingqi/          # 主程序（bin）
+│   ├── qingqi-plugin/   # 插件SDK
+│   ├── qingqi-ui/       # UI组件库
+│   └── qingqi-feature-* # 功能插件
+├── docs/                # 架构与规范文档
+└── README.md            # 本文件
+```
+
+## 开发
 
 ```bash
-cargo test
+# 检查
+cargo check --workspace
+
+# 测试
+cargo test --workspace
+
+# 格式化
+cargo fmt --all
+
+# Lint
+cargo clippy --workspace --all-targets
 ```
 
-数据默认写入系统数据目录下的 `qingqi/`，可通过 `QINGQI_DATA_DIR` 覆盖。
+数据目录：`~/Library/Application Support/qingqi` (macOS)
 
-## 日志
+环境变量：
+- `QINGQI_DATA_DIR` - 自定义数据目录
+- `RUST_LOG` - 日志级别（默认 `qingqi=info,warn`）
 
-默认日志级别为 `qingqi=info,warn`。可通过 `RUST_LOG` 调整：
+## 贡献
 
-```bash
-RUST_LOG="qingqi=trace,warn" cargo run
-```
+欢迎提交 Issue 和 PR。开发规范见 `.claude/CLAUDE.md`（AI助手会自动读取）。
 
-## 自动打包
+## 构建发布
 
-项目已配置 GitHub Actions 自动打包工作流：`.github/workflows/release.yml`
+项目配置了 GitHub Actions 自动构建：
 
-- 触发方式：
-  - 推送 tag（如 `v0.1.0`）
-  - 手动触发 `workflow_dispatch`
-- 构建目标：
-  - Linux `x86_64-unknown-linux-gnu`
-  - macOS `aarch64-apple-darwin`
-  - Windows `x86_64-pc-windows-msvc`
-- 产物：
-  - Workflow Artifacts
-  - Tag 场景下自动上传到 GitHub Release
+- 推送 tag（`v0.1.0`）触发自动发布
+- 支持 macOS / Linux / Windows 三平台
+
+## 许可证
+
+MIT License
+
+## 相关链接
+
+- [GPUI](https://github.com/zed-industries/zed) - UI框架
+- [问题反馈](https://github.com/fwfx1234/qingqi/issues)

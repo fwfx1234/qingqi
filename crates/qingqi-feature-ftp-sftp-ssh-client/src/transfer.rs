@@ -42,7 +42,10 @@ impl TransferSnapshot {
         if self.total_bytes == 0 {
             return None;
         }
-        Some(((self.transferred_bytes as f64 / self.total_bytes as f64) * 100.0).clamp(0.0, 100.0) as u8)
+        Some(
+            ((self.transferred_bytes as f64 / self.total_bytes as f64) * 100.0).clamp(0.0, 100.0)
+                as u8,
+        )
     }
 }
 

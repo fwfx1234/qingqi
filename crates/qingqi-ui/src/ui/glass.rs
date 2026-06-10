@@ -3,8 +3,8 @@
 //! 提供统一的玻璃风格 API，用于实现 macOS 毛玻璃效果。
 //! 这些函数返回 Hsla 颜色值，可直接用于 gpui 的 bg、border 等方法。
 
-use gpui::{BoxShadow, Hsla, hsla, point, px};
 use crate::theme::{self, semantic};
+use gpui::{BoxShadow, Hsla, hsla, point, px};
 
 /// 主面板背景色
 pub fn bg(dark: bool) -> Hsla {

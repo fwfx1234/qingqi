@@ -1922,12 +1922,16 @@ impl Render for ApiDebuggerView {
                                                                 let view = entity.clone();
                                                                 move |_, _, cx| {
                                                                     view.update(cx, |view, _cx| {
-                                                                        view.open_collection_menu("新建", None, String::new());
+                                                                        view.open_collection_menu(
+                                                                            "新建",
+                                                                            None,
+                                                                            String::new(),
+                                                                        );
                                                                     });
                                                                 }
                                                             }),
                                                     ),
-                                            )
+                                            ),
                                     )
                                     .child(collection_tree(
                                         entity.clone(),
@@ -1935,7 +1939,7 @@ impl Render for ApiDebuggerView {
                                         selected_request,
                                         selected_scenario,
                                         dark,
-                                    ))
+                                    )),
                             )
                             .child(
                                 div()
@@ -2013,8 +2017,8 @@ impl Render for ApiDebuggerView {
                                                 )),
                                         )
                                     }),
-                            )
-                    )
+                            ),
+                    ),
             )
             .child(if show_collection_menu {
                 context_menu_overlay(
@@ -2528,7 +2532,7 @@ fn open_tabs_bar(
                     .into_any_element()
                 } else {
                     div().into_any_element()
-                })
+                }),
         )
 }
 
@@ -3835,13 +3839,12 @@ fn env_editor_inline(
                                     let view = view.clone();
                                     move |_, _, cx| {
                                         view.update(cx, |view, cx| {
-                                            let current = if view.env_detail_tab
-                                                == EnvDetailTab::Variables
-                                            {
-                                                view.env_variables_input.read(cx).text()
-                                            } else {
-                                                view.env_headers_input.read(cx).text()
-                                            };
+                                            let current =
+                                                if view.env_detail_tab == EnvDetailTab::Variables {
+                                                    view.env_variables_input.read(cx).text()
+                                                } else {
+                                                    view.env_headers_input.read(cx).text()
+                                                };
                                             let appended = if current.trim().is_empty() {
                                                 String::from("KEY=VALUE")
                                             } else {

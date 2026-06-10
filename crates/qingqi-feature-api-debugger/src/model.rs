@@ -1,4 +1,4 @@
-use gpui::{SharedString, Styled, ParentElement, IntoElement};
+use gpui::{IntoElement, ParentElement, SharedString, Styled};
 use serde::{Deserialize, Serialize};
 
 // ── Shared service/request types ──

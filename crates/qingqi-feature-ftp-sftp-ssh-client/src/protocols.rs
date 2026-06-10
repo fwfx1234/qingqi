@@ -76,7 +76,10 @@ pub trait RemoteFileClient: Send + Sync {
     }
 }
 
-pub fn create_file_client(profile: &Profile, rt: tokio::runtime::Handle) -> Box<dyn RemoteFileClient> {
+pub fn create_file_client(
+    profile: &Profile,
+    rt: tokio::runtime::Handle,
+) -> Box<dyn RemoteFileClient> {
     let profile = profile.clone();
     match profile.protocol {
         RemoteProtocol::Ssh | RemoteProtocol::Sftp => {
@@ -362,8 +365,6 @@ impl RemoteFileClient for FtpFileClient {
     }
 }
 
-
-
 struct SftpConnection {
     _session: Handle<HostKeyHandler>,
     sftp: SftpSession,
@@ -506,7 +507,9 @@ impl RemoteFileClient for SftpFileClient {
                     .channel_open_session()
                     .await
                     .context("打开 SFTP 会话通道失败")?;
-                channel.request_subsystem(true, "sftp").await
+                channel
+                    .request_subsystem(true, "sftp")
+                    .await
                     .context("请求 SFTP 子系统失败")?;
                 SftpSession::new(channel.into_stream())
                     .await
@@ -545,11 +548,16 @@ impl RemoteFileClient for SftpFileClient {
             let sftp = if let Some(sftp) = cache.lock().unwrap().take() {
                 sftp
             } else {
-                let channel = handle.channel_open_session().await
+                let channel = handle
+                    .channel_open_session()
+                    .await
                     .context("打开 SFTP 会话通道失败")?;
-                channel.request_subsystem(true, "sftp").await
+                channel
+                    .request_subsystem(true, "sftp")
+                    .await
                     .context("请求 SFTP 子系统失败")?;
-                SftpSession::new(channel.into_stream()).await
+                SftpSession::new(channel.into_stream())
+                    .await
                     .context("初始化 SFTP 客户端失败")?
             };
             let path = resolve_sftp_path(&sftp, &requested_path).await?;
@@ -578,11 +586,16 @@ impl RemoteFileClient for SftpFileClient {
             let sftp = if let Some(sftp) = cache.lock().unwrap().take() {
                 sftp
             } else {
-                let channel = handle.channel_open_session().await
+                let channel = handle
+                    .channel_open_session()
+                    .await
                     .context("打开 SFTP 会话通道失败")?;
-                channel.request_subsystem(true, "sftp").await
+                channel
+                    .request_subsystem(true, "sftp")
+                    .await
                     .context("请求 SFTP 子系统失败")?;
-                SftpSession::new(channel.into_stream()).await
+                SftpSession::new(channel.into_stream())
+                    .await
                     .context("初始化 SFTP 客户端失败")?
             };
             let path = resolve_sftp_parented_path(&sftp, &requested_path).await?;
@@ -605,11 +618,16 @@ impl RemoteFileClient for SftpFileClient {
             let sftp = if let Some(sftp) = cache.lock().unwrap().take() {
                 sftp
             } else {
-                let channel = handle.channel_open_session().await
+                let channel = handle
+                    .channel_open_session()
+                    .await
                     .context("打开 SFTP 会话通道失败")?;
-                channel.request_subsystem(true, "sftp").await
+                channel
+                    .request_subsystem(true, "sftp")
+                    .await
                     .context("请求 SFTP 子系统失败")?;
-                SftpSession::new(channel.into_stream()).await
+                SftpSession::new(channel.into_stream())
+                    .await
                     .context("初始化 SFTP 客户端失败")?
             };
             let from = resolve_sftp_path(&sftp, &from_requested).await?;
@@ -631,11 +649,16 @@ impl RemoteFileClient for SftpFileClient {
             let sftp = if let Some(sftp) = cache.lock().unwrap().take() {
                 sftp
             } else {
-                let channel = handle.channel_open_session().await
+                let channel = handle
+                    .channel_open_session()
+                    .await
                     .context("打开 SFTP 会话通道失败")?;
-                channel.request_subsystem(true, "sftp").await
+                channel
+                    .request_subsystem(true, "sftp")
+                    .await
                     .context("请求 SFTP 子系统失败")?;
-                SftpSession::new(channel.into_stream()).await
+                SftpSession::new(channel.into_stream())
+                    .await
                     .context("初始化 SFTP 客户端失败")?
             };
             let path = resolve_sftp_path(&sftp, &requested_path).await?;
@@ -664,15 +687,19 @@ impl RemoteFileClient for SftpFileClient {
             let sftp = if let Some(sftp) = cache.lock().unwrap().take() {
                 sftp
             } else {
-                let channel = handle.channel_open_session().await
+                let channel = handle
+                    .channel_open_session()
+                    .await
                     .context("打开 SFTP 会话通道失败")?;
-                channel.request_subsystem(true, "sftp").await
+                channel
+                    .request_subsystem(true, "sftp")
+                    .await
                     .context("请求 SFTP 子系统失败")?;
-                SftpSession::new(channel.into_stream()).await
+                SftpSession::new(channel.into_stream())
+                    .await
                     .context("初始化 SFTP 客户端失败")?
             };
-            let remote_path =
-                resolve_sftp_parented_path(&sftp, &requested_remote_path).await?;
+            let remote_path = resolve_sftp_parented_path(&sftp, &requested_remote_path).await?;
             let bytes = fs::read(&local_path)
                 .with_context(|| format!("读取本地文件失败: {}", local_path.display()))?;
             let mut remote = sftp
@@ -706,11 +733,16 @@ impl RemoteFileClient for SftpFileClient {
             let sftp = if let Some(sftp) = cache.lock().unwrap().take() {
                 sftp
             } else {
-                let channel = handle.channel_open_session().await
+                let channel = handle
+                    .channel_open_session()
+                    .await
                     .context("打开 SFTP 会话通道失败")?;
-                channel.request_subsystem(true, "sftp").await
+                channel
+                    .request_subsystem(true, "sftp")
+                    .await
                     .context("请求 SFTP 子系统失败")?;
-                SftpSession::new(channel.into_stream()).await
+                SftpSession::new(channel.into_stream())
+                    .await
                     .context("初始化 SFTP 客户端失败")?
             };
             let remote_path = resolve_sftp_path(&sftp, &requested_remote_path).await?;
@@ -1023,7 +1055,10 @@ pub(crate) async fn connect_ssh(profile: Profile) -> Result<SshConnection> {
     })?
     .map_err(|e| anyhow::anyhow!("无法连接 {}: {e}", endpoint))?;
 
-    let fingerprint = state.lock().map(|s| s.fingerprint_sha256.clone()).unwrap_or_default();
+    let fingerprint = state
+        .lock()
+        .map(|s| s.fingerprint_sha256.clone())
+        .unwrap_or_default();
     debug!(target: "ssh", endpoint = %endpoint, fingerprint = ?fingerprint, "SSH 密钥交换完成，开始认证");
 
     let auth_timeout = Duration::from_secs(profile.limits.connect_timeout_secs.max(10) as u64);
@@ -1115,12 +1150,19 @@ async fn connect_ftp(profile: Profile) -> Result<FtpConnection> {
 
     debug!(target: "ftp", username = %username, "FTP 登录中");
     let login_timeout = Duration::from_secs(profile.limits.connect_timeout_secs.max(15) as u64);
-    tokio_timeout(login_timeout, connection.login(username, profile.auth.password.as_str()))
-        .await
-        .map_err(|_: tokio::time::error::Elapsed| {
-            anyhow::anyhow!("FTP {} 登录超时（{} 秒）", endpoint, login_timeout.as_secs())
-        })?
-        .map_err(|e| anyhow::anyhow!("FTP {} 登录失败 ({}): {e}", endpoint, username))?;
+    tokio_timeout(
+        login_timeout,
+        connection.login(username, profile.auth.password.as_str()),
+    )
+    .await
+    .map_err(|_: tokio::time::error::Elapsed| {
+        anyhow::anyhow!(
+            "FTP {} 登录超时（{} 秒）",
+            endpoint,
+            login_timeout.as_secs()
+        )
+    })?
+    .map_err(|e| anyhow::anyhow!("FTP {} 登录失败 ({}): {e}", endpoint, username))?;
     debug!(target: "ftp", "FTP 登录成功，切换到二进制模式");
     connection
         .transfer_type(FileType::Binary)
@@ -1158,7 +1200,12 @@ async fn authenticate_session(
                 Ok(result) => result.success(),
                 Err(e) => {
                     error!(target: "ssh", username = %username, host = %profile.host, error = %e, "密码认证协议错误");
-                    bail!("{} 在 {}:{} 密码认证出错: {e}", username, profile.host, profile.port);
+                    bail!(
+                        "{} 在 {}:{} 密码认证出错: {e}",
+                        username,
+                        profile.host,
+                        profile.port
+                    );
                 }
             }
         }
@@ -1188,7 +1235,12 @@ async fn authenticate_session(
                     Ok(result) => result.success(),
                     Err(e) => {
                         error!(target: "ssh", username = %username, host = %profile.host, key = %path, error = %e, "私钥认证协议错误");
-                        bail!("{} 在 {}:{} 私钥认证出错 ({e})", username, profile.host, profile.port);
+                        bail!(
+                            "{} 在 {}:{} 私钥认证出错 ({e})",
+                            username,
+                            profile.host,
+                            profile.port
+                        );
                     }
                 }
             } else {
@@ -1467,7 +1519,8 @@ async fn ftp_stat_entry(connection: &mut FtpConnection, path: &str) -> Result<Re
 
 fn ftp_remote_entry_from_item(base: &str, item: FtpListFile) -> RemoteEntry {
     let name = item.name().to_string();
-    let modified_at = item.modified()
+    let modified_at = item
+        .modified()
         .duration_since(std::time::UNIX_EPOCH)
         .ok()
         .map(|d| d.as_secs());
@@ -1481,7 +1534,8 @@ fn ftp_remote_entry_from_item(base: &str, item: FtpListFile) -> RemoteEntry {
 }
 
 fn ftp_remote_entry_exact(path: &str, item: FtpListFile) -> RemoteEntry {
-    let modified_at = item.modified()
+    let modified_at = item
+        .modified()
         .duration_since(std::time::UNIX_EPOCH)
         .ok()
         .map(|d| d.as_secs());

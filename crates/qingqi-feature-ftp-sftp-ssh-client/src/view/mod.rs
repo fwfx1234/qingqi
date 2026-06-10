@@ -10,6 +10,7 @@ use gpui::{
     MouseUpEvent, ParentElement, Render, ScrollDelta, ScrollWheelEvent, StatefulInteractiveElement,
     Styled, Task, Window, div, hsla, prelude::FluentBuilder, px, rgb, uniform_list,
 };
+use gpui_component::input::{Input, InputState};
 use gpui_component::{
     Icon, IconName, Selectable, Sizable, Size as ComponentSize,
     button::{Button, ButtonVariants},
@@ -17,7 +18,6 @@ use gpui_component::{
     tab::{Tab, TabBar},
 };
 use qingqi_plugin::plugin_spec::PluginAccent;
-use gpui_component::input::{Input, InputState};
 use qingqi_ui::{theme, theme_mode, ui};
 
 use crate::{
@@ -203,10 +203,16 @@ impl FtpSftpSshView {
                             let _ = self.refresh_selected_terminal();
                         }
                         crate::model::SessionStatus::Degraded => {
-                            self.notice = format!("{} 部分可用: {}", snapshot.summary.title, snapshot.summary.message);
+                            self.notice = format!(
+                                "{} 部分可用: {}",
+                                snapshot.summary.title, snapshot.summary.message
+                            );
                         }
                         crate::model::SessionStatus::Failed => {
-                            self.notice = format!("{} 连接失败: {}", snapshot.summary.title, snapshot.summary.message);
+                            self.notice = format!(
+                                "{} 连接失败: {}",
+                                snapshot.summary.title, snapshot.summary.message
+                            );
                         }
                         _ => {}
                     }
@@ -795,7 +801,12 @@ impl FtpSftpSshView {
         self.notice = String::from("输入新目录名称");
     }
 
-    fn open_rename_prompt_for_path(&mut self, remote_path: &str, window: &mut Window, cx: &mut Context<Self>) {
+    fn open_rename_prompt_for_path(
+        &mut self,
+        remote_path: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(snapshot) = self.selected_session() else {
             self.notice = String::from("先打开一个 session");
             return;
@@ -1031,7 +1042,12 @@ impl FtpSftpSshView {
         }));
     }
 
-    fn set_editor_protocol(&mut self, protocol: RemoteProtocol, window: &mut Window, cx: &mut Context<Self>) {
+    fn set_editor_protocol(
+        &mut self,
+        protocol: RemoteProtocol,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(editor) = self.editor_mut() else {
             return;
         };
@@ -1097,25 +1113,36 @@ impl FtpSftpSshView {
         draft.name = editor.name_input.read(cx).value().to_string();
         draft.host = editor.host_input.read(cx).value().to_string();
         draft.port = editor
-            .port_input.read(cx).value()
+            .port_input
+            .read(cx)
+            .value()
             .trim()
             .parse::<u16>()
             .unwrap_or(draft.protocol.default_port());
         draft.auth.username = editor.username_input.read(cx).value().to_string();
         draft.auth.password = editor.password_input.read(cx).value().to_string();
         draft.auth.private_key_path = editor.private_key_path_input.read(cx).value().to_string();
-        draft.auth.private_key_passphrase = editor.private_key_passphrase_input.read(cx).value().to_string();
+        draft.auth.private_key_passphrase = editor
+            .private_key_passphrase_input
+            .read(cx)
+            .value()
+            .to_string();
         draft.paths.remote_root = editor.remote_root_input.read(cx).value().to_string();
         draft.paths.local_root = editor.local_root_input.read(cx).value().to_string();
         draft.security.pinned_host_key = editor.pinned_host_key_input.read(cx).value().to_string();
-        draft.security.pinned_tls_sha256 = editor.pinned_tls_sha256_input.read(cx).value().to_string();
+        draft.security.pinned_tls_sha256 =
+            editor.pinned_tls_sha256_input.read(cx).value().to_string();
         draft.limits.connect_timeout_secs = editor
-            .connect_timeout_input.read(cx).value()
+            .connect_timeout_input
+            .read(cx)
+            .value()
             .trim()
             .parse::<u16>()
             .unwrap_or(draft.limits.connect_timeout_secs);
         draft.limits.transfer_concurrency = editor
-            .transfer_concurrency_input.read(cx).value()
+            .transfer_concurrency_input
+            .read(cx)
+            .value()
             .trim()
             .parse::<u16>()
             .unwrap_or(draft.limits.transfer_concurrency);
@@ -4162,7 +4189,11 @@ fn compact_input(
 ) -> Entity<InputState> {
     let value = value.to_string();
     let placeholder = placeholder.to_string();
-    cx.new(|cx| InputState::new(window, cx).placeholder(placeholder).default_value(value))
+    cx.new(|cx| {
+        InputState::new(window, cx)
+            .placeholder(placeholder)
+            .default_value(value)
+    })
 }
 
 fn join_remote_path(parent: &str, child: &str) -> String {

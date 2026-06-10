@@ -13,7 +13,9 @@ use tokio::sync::mpsc as tokio_mpsc;
 use crate::{
     manifest::PLUGIN_ID,
     model::{Profile, ProfileDraft, RemoteProtocol, SessionId, SessionStatus, SessionSummary},
-    protocols::{ConnectionHealth, RemoteEntry, connect_ssh, create_file_client, remote_parent_dir},
+    protocols::{
+        ConnectionHealth, RemoteEntry, connect_ssh, create_file_client, remote_parent_dir,
+    },
     store::ProfileStore,
     terminal::{TerminalEngine, TerminalFrame, TerminalInput},
     transfer::{TransferDirection, TransferQueue, TransferSnapshot},
@@ -100,9 +102,15 @@ struct LiveTerminal {
 }
 
 impl LiveTerminal {
-    fn spawn(rt: tokio::runtime::Handle, profile: Profile, session_id: SessionId, events: RuntimeEventBus) -> Result<Self> {
+    fn spawn(
+        rt: tokio::runtime::Handle,
+        profile: Profile,
+        session_id: SessionId,
+        events: RuntimeEventBus,
+    ) -> Result<Self> {
         let engine = Arc::new(Mutex::new(TerminalEngine::new(profile.name.clone())));
-        let command_tx = spawn_terminal_thread(rt, profile, session_id, Arc::clone(&engine), events)?;
+        let command_tx =
+            spawn_terminal_thread(rt, profile, session_id, Arc::clone(&engine), events)?;
         Ok(Self { engine, command_tx })
     }
 
@@ -272,7 +280,12 @@ impl RemoteRuntime {
         };
 
         let terminal = if profile.protocol.supports_terminal() {
-            match LiveTerminal::spawn(self.rt.handle().clone(), profile.clone(), session_id.clone(), self.events.clone()) {
+            match LiveTerminal::spawn(
+                self.rt.handle().clone(),
+                profile.clone(),
+                session_id.clone(),
+                self.events.clone(),
+            ) {
                 Ok(terminal) => Some(terminal),
                 Err(error) => {
                     session_status = SessionStatus::Degraded;
@@ -928,7 +941,8 @@ impl RemoteRuntime {
                                 ))
                             });
                             if let Some((profile, root)) = refresh_target
-                                && let Ok(entries) = create_file_client(&profile, rt_handle.clone()).list(&root)
+                                && let Ok(entries) =
+                                    create_file_client(&profile, rt_handle.clone()).list(&root)
                                 && let Ok(mut sessions) = sessions.lock()
                                 && let Some(session) = sessions.get_mut(&session_id)
                             {
@@ -1156,9 +1170,7 @@ mod tests {
 
     use anyhow::{Result, anyhow};
 
-    use super::{
-        RemoteRuntime, SessionRuntime, SessionSnapshot, expand_local_root,
-    };
+    use super::{RemoteRuntime, SessionRuntime, SessionSnapshot, expand_local_root};
     use crate::{
         model::{
             AuthConfig, ConnectionLimits, Profile, ProfilePaths, RemoteProtocol, SecurityPolicy,
