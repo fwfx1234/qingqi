@@ -192,35 +192,64 @@ impl RemoteProtocol for FtpProtocol {
 
     async fn upload_file(
         &self, local: &Path, remote: &str,
-        _progress_tx: mpsc::UnboundedSender<TransferProgress>,
+        progress_tx: mpsc::UnboundedSender<TransferProgress>,
     ) -> Result<()> {
         self.log(LogLevel::Sent, &format!("STOR {}", remote));
-        // 使用 suppaftp 的文件上传 API
+        let data = tokio::fs::read(local).await
+            .with_context(|| format!("读取文件 {} 失败", local.display()))?;
+        let size = data.len() as u64;
+
         let mut g = self.stream.lock().await;
         let s = g.as_mut().ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
 
-        let file = tokio::fs::File::open(local).await
-            .with_context(|| format!("打开本地文件 {} 失败", local.display()))?;
-        let meta = file.metadata().await?;
-        let size = meta.len();
+        // 使用 put_with_stream 上传内存数据
+        let mut writer = s.put_with_stream(remote).await
+            .map_err(|e| anyhow::anyhow!("STOR: {e}"))?;
 
-        // TODO: suppaftp async 上传 API 适配
-        let _ = (local, remote);
-        self.log(LogLevel::Info, "FTP 上传 API 适配中...");
+        use tokio::io::AsyncWriteExt;
+        writer.write_all(&data).await?;
+        writer.flush().await?;
+        drop(writer);
+
+        let _ = progress_tx.send(TransferProgress { transferred_bytes: size, total_bytes: size, speed_bytes_per_sec: 0.0 });
+        self.log(LogLevel::Received, "226 Transfer complete");
         Ok(())
     }
 
     async fn download_file(
         &self, remote: &str, local: &Path,
-        _progress_tx: mpsc::UnboundedSender<TransferProgress>,
+        progress_tx: mpsc::UnboundedSender<TransferProgress>,
     ) -> Result<()> {
         self.log(LogLevel::Sent, &format!("RETR {}", remote));
         let mut g = self.stream.lock().await;
         let s = g.as_mut().ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
 
-        // TODO: suppaftp async 下载 API 适配
-        let _ = (remote, local);
-        self.log(LogLevel::Info, "FTP 下载 API 适配中...");
+        // 使用 retr_as_stream 下载
+        let mut stream = s.retr_as_stream(remote).await
+            .map_err(|e| anyhow::anyhow!("下载失败: {e}"))?;
+
+        let mut file = tokio::fs::File::create(local).await
+            .with_context(|| format!("创建本地文件 {} 失败", local.display()))?;
+
+        use tokio::io::AsyncWriteExt;
+        let mut buf = vec![0u8; 65536];
+        let mut total: u64 = 0;
+        let start = std::time::Instant::now();
+        loop {
+            let n = tokio::io::AsyncReadExt::read(&mut stream, &mut buf).await?;
+            if n == 0 { break; }
+            file.write_all(&buf[..n]).await?;
+            total += n as u64;
+            let elapsed = start.elapsed().as_secs_f64();
+            let speed = if elapsed > 0.0 { total as f64 / elapsed } else { 0.0 };
+            let _ = progress_tx.send(TransferProgress {
+                transferred_bytes: total,
+                total_bytes: total.max(1),
+                speed_bytes_per_sec: speed,
+            });
+        }
+
+        self.log(LogLevel::Received, "226 Transfer complete");
         Ok(())
     }
 }
