@@ -23,6 +23,8 @@ tokio.workspace = true
 time.workspace = true
 uuid.workspace = true
 alacritty_terminal.workspace = true
+tokio-rustls.workspace = true
+webpki-roots.workspace = true
 tracing.workspace = true
 
 [lints]
