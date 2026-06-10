@@ -1,0 +1,230 @@
+<h2>SSH 远程管理 — 界面重设计</h2>
+<p class="subtitle">左侧 Profile 卡片 · Session Tab · 文件树+终端 · 整体配色</p>
+
+<div class="section">
+  <h3>一、当前问题总结</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div style="background:#2a1a1a;border-radius:8px;padding:16px;">
+      <h4 style="color:#FF6B6B;">🔴 需改进</h4>
+      <ul style="color:#ccc;font-size:13px;line-height:1.8;padding-left:16px;">
+        <li>Profile 卡片层次感弱，hover 无反馈</li>
+        <li>Session Tab 样式简陋，不像浏览器标签</li>
+        <li>文件树/终端之间无明显视觉分隔</li>
+        <li>缺少圆角、阴影等现代 UI 元素</li>
+        <li>配色平淡，缺少视觉重心</li>
+        <li>协议徽章不突出</li>
+      </ul>
+    </div>
+    <div style="background:#1a2a1a;border-radius:8px;padding:16px;">
+      <h4 style="color:#4ADE80;">🟢 改进方向</h4>
+      <ul style="color:#ccc;font-size:13px;line-height:1.8;padding-left:16px;">
+        <li>毛玻璃卡片 + 微妙边框 + 圆角</li>
+        <li>浏览器风格 Tab（圆角顶部 + 底部无边框）</li>
+        <li>可拖拽分割线分隔文件树/终端</li>
+        <li>状态指示器更精致（脉动动画）</li>
+        <li>统一间距系统（4/8/12/16/24px）</li>
+        <li>hover/active 状态更明显</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>二、整体布局对比</h3>
+
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">当前布局</div>
+      <div class="mockup-body" style="background:#12121a;padding:2px;border-radius:8px;min-height:400px;">
+        <div style="display:flex;height:100%;">
+          <!-- sidebar -->
+          <div style="width:200px;background:#1a1a24;padding:8px;">
+            <div style="height:40px;border-bottom:1px solid #333;padding:8px;color:#777;font-size:11px;">远程管理 [+]</div>
+            <div style="padding:4px;margin:4px 0;border-left:3px solid #4ade80;background:#222;border-radius:2px;">
+              <div style="color:#ccc;font-size:11px;">SSH 开发服务器</div>
+              <div style="color:#666;font-size:9px;">root@192.168.1.1:22</div>
+            </div>
+            <div style="padding:4px;margin:4px 0;border-left:3px solid transparent;background:transparent;border-radius:2px;">
+              <div style="color:#777;font-size:11px;">FTP 文件服务器</div>
+              <div style="color:#555;font-size:9px;">ftp@10.0.0.5:21</div>
+            </div>
+            <div style="position:absolute;bottom:8px;width:180px;text-align:center;color:#555;font-size:10px;border-top:1px solid #333;padding-top:8px;">设置</div>
+          </div>
+          <!-- main -->
+          <div style="flex:1;background:#16162a;padding:0;">
+            <div style="height:36px;border-bottom:1px solid #333;display:flex;align-items:center;padding:0 8px;">
+              <div style="padding:4px 12px;background:#1e1e32;border-radius:4px 4px 0 0;color:#aaa;font-size:10px;">192.168.1.1:22</div>
+              <div style="color:#555;font-size:10px;margin-left:4px;">+</div>
+            </div>
+            <div style="display:flex;height:calc(100% - 36px);">
+              <div style="width:45%;border-right:1px solid #333;padding:8px;">
+                <div style="color:#777;font-size:10px;margin-bottom:4px;">~/project</div>
+                <div style="color:#555;font-size:9px;">📁 src/</div>
+                <div style="color:#555;font-size:9px;">📁 docs/</div>
+                <div style="color:#555;font-size:9px;">📄 README.md</div>
+              </div>
+              <div style="flex:1;padding:8px;">
+                <div style="color:#4ade80;font-size:9px;">$ ssh user@host</div>
+                <div style="color:#aaa;font-size:9px;">Last login: ...</div>
+                <div style="color:#aaa;font-size:9px;">$ _</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mockup">
+      <div class="mockup-header">改进方案</div>
+      <div class="mockup-body" style="background:#0d0d1a;padding:2px;border-radius:8px;min-height:400px;">
+        <div style="display:flex;height:100%;">
+          <!-- sidebar: glass -->
+          <div style="width:200px;background:rgba(255,255,255,0.03);backdrop-filter:blur(20px);padding:8px;border-right:1px solid rgba(255,255,255,0.06);">
+            <div style="height:40px;padding:8px;color:#ccc;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:space-between;">远程管理 <span style="width:22px;height:22px;background:rgba(255,255,255,0.08);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;">+</span></div>
+            <div style="padding:10px;margin:6px 0;border-left:3px solid #4ade80;background:rgba(255,255,255,0.04);border-radius:0 8px 8px 0;box-shadow:0 1px 3px rgba(0,0,0,0.3);">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                <span style="font-size:9px;background:rgba(77,166,255,0.15);color:#4da6ff;padding:1px 6px;border-radius:4px;">SSH</span>
+                <span style="color:#ddd;font-size:12px;font-weight:500;">开发服务器</span>
+              </div>
+              <div style="color:#888;font-size:10px;font-family:monospace;">root@192.168.1.1:22</div>
+            </div>
+            <div style="padding:10px;margin:6px 0;border-left:3px solid transparent;background:transparent;border-radius:0 8px 8px 0;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                <span style="font-size:9px;background:rgba(255,159,67,0.15);color:#ff9f43;padding:1px 6px;border-radius:4px;">FTP</span>
+                <span style="color:#aaa;font-size:12px;">文件服务器</span>
+              </div>
+              <div style="color:#666;font-size:10px;font-family:monospace;">ftp@10.0.0.5:21</div>
+            </div>
+            <div style="position:absolute;bottom:8px;width:180px;text-align:center;padding:8px;border-top:1px solid rgba(255,255,255,0.06);">
+              <span style="color:#777;font-size:11px;cursor:pointer;">⚙ 设置</span>
+            </div>
+          </div>
+          <!-- main -->
+          <div style="flex:1;background:#0f0f1e;padding:0;">
+            <!-- tabs -->
+            <div style="height:38px;display:flex;align-items:flex-end;padding:0 6px;gap:2px;background:#0a0a16;border-bottom:1px solid rgba(255,255,255,0.06);">
+              <div style="padding:6px 14px;background:#14142a;border-radius:8px 8px 0 0;border:1px solid rgba(255,255,255,0.06);border-bottom:none;color:#eee;font-size:11px;display:flex;align-items:center;gap:6px;font-weight:500;">
+                <span style="width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 4px #4ade80;"></span>
+                192.168.1.1
+                <span style="color:#555;font-size:10px;margin-left:2px;">✕</span>
+              </div>
+              <div style="padding:6px 14px;background:transparent;border-radius:8px 8px 0 0;color:#666;font-size:11px;display:flex;align-items:center;gap:6px;">
+                <span style="width:7px;height:7px;border-radius:50%;background:#555;"></span>
+                ftp server
+              </div>
+              <div style="padding:6px 8px;color:#555;font-size:13px;">+</div>
+            </div>
+            <div style="display:flex;height:calc(100% - 38px);">
+              <!-- file tree -->
+              <div style="width:45%;padding:10px;background:#111122;border-right:1px solid rgba(255,255,255,0.05);border-radius:0 0 0 4px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:4px 8px;background:rgba(255,255,255,0.03);border-radius:6px;">
+                  <span style="color:#aaa;font-size:11px;">~/project</span>
+                  <div style="display:flex;gap:4px;">
+                    <span style="color:#666;font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,0.04);">上传</span>
+                    <span style="color:#666;font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,0.04);">新建</span>
+                  </div>
+                </div>
+                <div style="color:#aaa;font-size:11px;padding:4px 8px;border-radius:4px;">📁 <span style="color:#ddd;">src/</span></div>
+                <div style="color:#aaa;font-size:11px;padding:4px 8px;border-radius:4px;">📁 <span style="color:#ddd;">docs/</span></div>
+                <div style="color:#888;font-size:11px;padding:4px 8px;border-radius:4px;">📄 <span style="color:#bbb;">README.md</span> <span style="color:#555;font-size:10px;">2.3KB</span></div>
+              </div>
+              <!-- terminal -->
+              <div style="flex:1;padding:10px;background:#0a0a18;">
+                <div style="color:#4ade80;font-size:10px;margin-bottom:2px;">$ ssh user@host</div>
+                <div style="color:#aaa;font-size:10px;">Last login: ...</div>
+                <div style="color:#aaa;font-size:10px;">$ <span style="animation:blink 1s step-end infinite;color:#4ade80;">█</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>三、设计方向选择 — 哪种风格？</h3>
+  <p class="subtitle">同样的布局，三种不同的视觉风格。选中你喜欢的</p>
+
+  <div class="options" data-multiselect>
+    <div class="option" data-choice="style-minimal" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>极简暗色</h3>
+        <p>深灰基调（#0d0d1a → #1a1a2e），蓝灰色边框，低对比度，专注内容</p>
+        <div style="display:flex;gap:4px;margin-top:8px;">
+          <div style="width:20px;height:20px;border-radius:50%;background:#0d0d1a;border:1px solid #333;"></div>
+          <div style="width:20px;height:20px;border-radius:50%;background:#1a1a2e;border:1px solid #333;"></div>
+          <div style="width:20px;height:20px;border-radius:50%;background:#252540;border:1px solid #444;"></div>
+          <div style="width:20px;height:20px;border-radius:50%;background:#4da6ff;border:1px solid #4da6ff;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="option" data-choice="style-glass" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>毛玻璃质感 (推荐)</h3>
+        <p>透明底 + backdrop-filter blur，半透明卡片叠加层，现代 macOS 风格</p>
+        <div style="display:flex;gap:4px;margin-top:8px;">
+          <div style="width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.05);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);"></div>
+          <div style="width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.08);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.12);"></div>
+          <div style="width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.12);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.15);"></div>
+          <div style="width:20px;height:20px;border-radius:50%;background:rgba(77,166,255,0.2);backdrop-filter:blur(10px);border:1px solid rgba(77,166,255,0.3);"></div>
+        </div>
+      </div>
+    </div>
+    <div class="option" data-choice="style-vibrant" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>高对比振动 (VS Code 风格)</h3>
+        <p>深蓝底 + 青色强调色，高饱和度边框，IDE 风格，信息密度高</p>
+        <div style="display:flex;gap:4px;margin-top:8px;">
+          <div style="width:20px;height:20px;border-radius:50%;background:#1e1e2e;border:1px solid #555;"></div>
+          <div style="width:20px;height:20px;border-radius:50%;background:#2d2d3f;border:1px solid #666;"></div>
+          <div style="width:20px;height:20px;border-radius:50%;background:#3d3d55;border:1px solid #777;"></div>
+          <div style="width:20px;height:20px;border-radius:50%;background:#00d4aa;border:1px solid #00d4aa;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>四、改动范围</h3>
+  <table style="width:100%;border-collapse:collapse;">
+    <tr style="border-bottom:1px solid #333;">
+      <th style="text-align:left;padding:8px;color:#888;">区域</th>
+      <th style="text-align:left;padding:8px;color:#888;">改动</th>
+      <th style="text-align:left;padding:8px;color:#888;">难度</th>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:8px;">Profile 卡片</td>
+      <td style="padding:8px;">圆角 8px、hover 高亮、内边距增大、徽章样式</td>
+      <td style="padding:8px;color:#4ade80;">低</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:8px;">Session Tab</td>
+      <td style="padding:8px;">圆角顶部、发光状态点、关闭按钮 hover、底部无边线</td>
+      <td style="padding:8px;color:#f5bf4f;">中</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:8px;">文件树</td>
+      <td style="padding:8px;">选中行高亮、图标、工具栏圆角、hover 效果</td>
+      <td style="padding:8px;color:#4ade80;">低</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:8px;">终端</td>
+      <td style="padding:8px;">顶栏状态信息、光标脉动、暗底配色</td>
+      <td style="padding:8px;color:#4ade80;">低</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;">全局</td>
+      <td style="padding:8px;">统一圆角/间距/阴影系统、配色变量</td>
+      <td style="padding:8px;color:#f5bf4f;">中</td>
+    </tr>
+  </table>
+</div>
+
+<style>
+@keyframes blink { 50% { opacity: 0; } }
+</style>

@@ -1,0 +1,141 @@
+<h2>SSH 远程管理 — 最终设计方案</h2>
+<p class="subtitle">确认版：Profile 毛玻璃悬浮卡片 + 其他区域白底 + 弹窗模态框</p>
+
+<div class="section">
+  <h3>最终布局</h3>
+  <div class="mockup">
+    <div class="mockup-header">完整窗口（深色模式示意）</div>
+    <div class="mockup-body" style="background:#0d1117;padding:12px;border-radius:12px;min-height:420px;">
+      <div style="display:flex;gap:0;height:100%;">
+
+        <!-- 左侧边栏：毛玻璃底 + 悬浮卡片 -->
+        <div style="width:260px;background:rgba(255,255,255,0.04);backdrop-filter:blur(24px);border-radius:10px;padding:12px;border:1px solid rgba(255,255,255,0.06);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <span style="color:#e6e6e6;font-size:14px;font-weight:600;">远程管理</span>
+            <span style="width:24px;height:24px;border-radius:6px;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;color:#ccc;font-size:14px;cursor:pointer;">+</span>
+          </div>
+
+          <!-- 悬浮卡片 1: 已连接 -->
+          <div style="background:rgba(255,255,255,0.08);border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid rgba(255,255,255,0.1);box-shadow:0 2px 8px rgba(0,0,0,0.3);border-left:3px solid #4ade80;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <span style="font-size:9px;background:rgba(77,166,255,0.2);color:#4da6ff;padding:2px 8px;border-radius:4px;font-weight:600;">SSH</span>
+              <span style="color:#eee;font-size:13px;font-weight:500;">开发服务器</span>
+            </div>
+            <div style="color:#999;font-size:11px;font-family:monospace;">root@192.168.1.1:22</div>
+          </div>
+
+          <!-- 悬浮卡片 2: 未连接 -->
+          <div style="background:rgba(255,255,255,0.06);border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid rgba(255,255,255,0.06);box-shadow:0 1px 4px rgba(0,0,0,0.2);border-left:3px solid transparent;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <span style="font-size:9px;background:rgba(255,159,67,0.15);color:#ff9f43;padding:2px 8px;border-radius:4px;font-weight:600;">FTP</span>
+              <span style="color:#ccc;font-size:13px;">文件服务器</span>
+            </div>
+            <div style="color:#777;font-size:11px;font-family:monospace;">ftp@10.0.0.5:21</div>
+          </div>
+
+          <!-- 悬浮卡片 3 -->
+          <div style="background:rgba(255,255,255,0.06);border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid rgba(255,255,255,0.06);box-shadow:0 1px 4px rgba(0,0,0,0.2);border-left:3px solid transparent;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <span style="font-size:9px;background:rgba(77,166,255,0.15);color:#4da6ff;padding:2px 8px;border-radius:4px;font-weight:600;">SSH</span>
+              <span style="color:#ccc;font-size:13px;">测试环境</span>
+            </div>
+            <div style="color:#777;font-size:11px;font-family:monospace;">admin@10.0.0.99:22</div>
+          </div>
+
+          <div style="margin-top:auto;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);">
+            <span style="color:#888;font-size:12px;cursor:pointer;">⚙ 设置</span>
+          </div>
+        </div>
+
+        <!-- 右侧主区域：白底 -->
+        <div style="flex:1;margin-left:8px;background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid rgba(0,0,0,0.08);display:flex;flex-direction:column;">
+          <!-- Chrome 风 Tab -->
+          <div style="display:flex;align-items:flex-end;gap:0;padding:6px 8px 0 8px;background:#f8f9fa;border-bottom:1px solid #e5e7eb;">
+            <div style="padding:8px 16px;background:#ffffff;border-radius:8px 8px 0 0;border:1px solid #e5e7eb;border-bottom:1px solid #fff;margin-bottom:-1px;font-size:12px;font-weight:500;color:#1a1a2e;display:flex;align-items:center;gap:6px;">
+              <span style="width:7px;height:7px;border-radius:50%;background:#4ade80;"></span>
+              192.168.1.1
+              <span style="color:#bbb;font-size:10px;">✕</span>
+            </div>
+            <div style="padding:8px 16px;background:transparent;border-radius:8px 8px 0 0;font-size:12px;color:#999;">ftp server</div>
+            <div style="padding:6px;color:#bbb;font-size:14px;">+</div>
+          </div>
+
+          <!-- 文件树 + 终端（白底） -->
+          <div style="display:flex;flex:1;">
+            <div style="width:45%;padding:10px;background:#ffffff;border-right:1px solid #f0f0f0;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                <span style="color:#555;font-size:11px;">~/project</span>
+                <div style="display:flex;gap:4px;">
+                  <span style="font-size:10px;color:#888;padding:3px 8px;border-radius:4px;background:#f5f5f5;cursor:pointer;">上传</span>
+                  <span style="font-size:10px;color:#888;padding:3px 8px;border-radius:4px;background:#f5f5f5;cursor:pointer;">新建</span>
+                </div>
+              </div>
+              <div style="padding:5px 8px;border-radius:4px;color:#333;font-size:12px;background:rgba(77,166,255,0.12);font-weight:500;">📁 src/</div>
+              <div style="padding:5px 8px;color:#555;font-size:12px;">📁 docs/</div>
+              <div style="padding:5px 8px;color:#555;font-size:12px;">📄 README.md <span style="color:#bbb;">2.3KB</span></div>
+            </div>
+            <div style="flex:1;padding:10px;background:#fafbfc;">
+              <div style="font-size:10px;color:#999;margin-bottom:4px;">user@192.168.1.1 ~/project</div>
+              <div style="font-size:11px;color:#4caf50;">$ ls -la</div>
+              <div style="font-size:11px;color:#333;">total 24</div>
+              <div style="font-size:11px;color:#333;">drwxr-xr-x  4 user  staff  128 Jun 10 12:00 .</div>
+              <div style="font-size:11px;color:#333;">$ <span style="color:#4caf50;">█</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>设计要点</h3>
+  <table style="width:100%;border-collapse:collapse;">
+    <tr style="border-bottom:1px solid #333;">
+      <th style="text-align:left;padding:8px;color:#888;">区域</th>
+      <th style="text-align:left;padding:8px;color:#888;">背景</th>
+      <th style="text-align:left;padding:8px;color:#888;">风格</th>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:8px;color:#4ade80;">Profile 卡片</td>
+      <td style="padding:8px;">毛玻璃（不透度 +0.08）</td>
+      <td style="padding:8px;">悬浮卡片，独立阴影，hover 上浮</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:8px;color:#fff;">侧边栏底</td>
+      <td style="padding:8px;">毛玻璃（不透度 +0.04）</td>
+      <td style="padding:8px;">统一底色</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:8px;color:#fff;">文件树 + 终端</td>
+      <td style="padding:8px;">#ffffff / #fafbfc</td>
+      <td style="padding:8px;">白底，清爽</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:8px;color:#fff;">Session Tab</td>
+      <td style="padding:8px;">#f8f9fa → 选中 #fff</td>
+      <td style="padding:8px;">Chrome 风，无底边线</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:8px;color:#fff;">设置/添加弹窗</td>
+      <td style="padding:8px;">半透明遮罩 + 白底弹窗</td>
+      <td style="padding:8px;">居中模态框</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;color:#fff;">传输面板</td>
+      <td style="padding:8px;">#ffffff</td>
+      <td style="padding:8px;">白底，可折叠</td>
+    </tr>
+  </table>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="confirm" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content">
+      <h3>确认此方案</h3>
+      <p>Profile 毛玻璃悬浮卡片 + 其他区域白底 + 模态弹窗，开始实现</p>
+    </div>
+  </div>
+</div>

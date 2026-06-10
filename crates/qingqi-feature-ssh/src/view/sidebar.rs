@@ -1,4 +1,4 @@
-//! 左侧 Profile 边栏
+//! 左侧 Profile 边栏 — 毛玻璃底 + 悬浮卡片
 
 use gpui::*;
 use gpui_component::scroll::ScrollableElement;
@@ -12,27 +12,27 @@ pub fn render_sidebar(
     selected_id: Option<i64>,
     cx: &mut Context<super::SshView>,
 ) -> impl IntoElement {
-    let dark = true;
     div()
-        .w(px(280.0)).h_full().flex().flex_col()
-        .bg(glass::panel(dark))
-        .border_r_1().border_color(glass::border(dark))
-        .child(render_top_bar(dark, cx))
+        .w(px(272.0)).h_full().flex().flex_col()
+        .bg(glass::bg(true))
+        .border_r_1().border_color(ui::border_light())
+        .child(render_top_bar(cx))
         .child(render_profile_list(profiles, selected_id, cx))
         .child(render_bottom_bar(cx))
 }
 
-fn render_top_bar(dark: bool, cx: &mut Context<super::SshView>) -> impl IntoElement {
+fn render_top_bar(cx: &mut Context<super::SshView>) -> impl IntoElement {
     div()
-        .h(px(52.0)).flex().items_center().px_3()
-        .border_b_1().border_color(glass::border(dark))
-        .child(div().text_size(px(15.0)).font_weight(FontWeight::SEMIBOLD).child("远程管理"))
+        .h(px(48.0)).flex().items_center().px_3()
+        .child(div().text_size(px(14.0)).font_weight(FontWeight::SEMIBOLD).child("远程管理"))
         .child(div().flex_1())
         .child(
             div()
                 .id("btn-new-profile")
-                .px_2().py_1().rounded_md().cursor_pointer()
-                .hover(|s| s.bg(glass::hover_bg(dark)))
+                .size(px(28.0)).flex().items_center().justify_center()
+                .rounded(px(6.0)).cursor_pointer()
+                .bg(glass::hover_bg(true))
+                .hover(|s| s.bg(hsla(1.0, 1.0, 1.0, 0.12)))
                 .on_click(cx.listener(|view, _: &ClickEvent, _w, cx| view.toggle_settings(cx)))
                 .child("+"),
         )
@@ -40,50 +40,52 @@ fn render_top_bar(dark: bool, cx: &mut Context<super::SshView>) -> impl IntoElem
 
 fn render_profile_list(
     profiles: &[ProfileItem],
-    selected_id: Option<i64>,
+    _selected_id: Option<i64>,
     cx: &mut Context<super::SshView>,
 ) -> impl IntoElement {
     let count = profiles.len();
     if count > 20 {
         let items: Vec<_> = profiles.iter().map(|p| {
-            (p.name.clone(), p.endpoint.clone(), p.protocol_badge.clone(), p.is_connected, selected_id == Some(p.id))
+            (p.name.clone(), p.endpoint.clone(), p.protocol_badge.clone())
         }).collect();
         uniform_list("ssh-profile-list", count, move |range, _w, _cx| {
-            items[range].iter().map(|(name, endpoint, badge, connected, _sel)| {
+            items[range].iter().map(|(name, endpoint, badge)| {
                 div()
-                    .p_2().mb_1().rounded_md()
-                    .bg(if *connected { glass::bg(true) } else { hsla(0.0, 0.0, 0.0, 0.0) })
-                    .border_l_3()
-                    .border_color(if *connected { hsla(0.4, 0.8, 0.5, 1.0) } else { hsla(0.0, 0.0, 0.0, 0.0) })
-                    .child(div().flex().flex_col().gap(px(2.0))
+                    .mx(px(8.0)).mb(px(6.0))
+                    .p_3().rounded(px(8.0))
+                    .bg(glass::bg(true))
+                    .border_1().border_color(ui::border_light())
+                    .shadow_md()
+                    .child(div().flex().flex_col().gap(px(4.0))
                         .child(div().flex().items_center().gap(px(6.0))
-                            .child(div().text_size(px(10.0)).px(px(4.0)).py(px(1.0)).rounded_sm()
-                                .bg(hsla(0.55, 0.5, 0.6, 0.2)).text_color(hsla(0.55, 0.5, 0.5, 1.0))
+                            .child(div().text_size(px(10.0)).px(px(6.0)).py(px(2.0)).rounded(px(4.0))
+                                .bg(hsla(0.55, 0.5, 0.6, 0.15)).text_color(hsla(0.55, 0.5, 0.5, 1.0))
                                 .child(badge.clone()))
                             .child(div().text_size(px(13.0)).font_weight(FontWeight::MEDIUM).child(name.clone())))
-                        .child(div().text_size(px(11.0)).text_color(ui::text_secondary()).child(endpoint.clone())))
+                        .child(div().text_size(px(11.0)).text_color(ui::text_secondary()).font_family("Menlo").child(endpoint.clone())))
                     .into_any_element()
             }).collect::<Vec<_>>()
-        }).flex_1().p_2().into_any_element()
+        }).flex_1().py(px(4.0)).into_any_element()
     } else {
         div()
-            .flex_1().overflow_y_scrollbar().p_2()
+            .flex_1().overflow_y_scrollbar().py(px(4.0))
             .children(profiles.iter().map(|p| {
                 let pid = p.id;
                 div()
                     .id(("ssh-profile", pid as u64))
-                    .p_2().mb_1().rounded_md().cursor_pointer()
-                    .bg(if p.is_connected { glass::bg(true) } else { hsla(0.0, 0.0, 0.0, 0.0) })
-                    .border_l_3()
-                    .border_color(if p.is_connected { hsla(0.4, 0.8, 0.5, 1.0) } else { hsla(0.0, 0.0, 0.0, 0.0) })
+                    .mx(px(8.0)).mb(px(6.0)).p_3().rounded(px(8.0)).cursor_pointer()
+                    .bg(glass::bg(true))
+                    .border_1().border_color(ui::border_light())
+                    .shadow_md()
+                    .hover(|s| s.shadow_lg())
                     .on_click(cx.listener(move |view, _: &ClickEvent, _w, cx| view.connect_profile(pid, cx)))
-                    .child(div().flex().flex_col().gap(px(2.0))
+                    .child(div().flex().flex_col().gap(px(4.0))
                         .child(div().flex().items_center().gap(px(6.0))
-                            .child(div().text_size(px(10.0)).px(px(4.0)).py(px(1.0)).rounded_sm()
-                                .bg(hsla(0.55, 0.5, 0.6, 0.2)).text_color(hsla(0.55, 0.5, 0.5, 1.0))
+                            .child(div().text_size(px(10.0)).px(px(6.0)).py(px(2.0)).rounded(px(4.0))
+                                .bg(hsla(0.55, 0.5, 0.6, 0.15)).text_color(hsla(0.55, 0.5, 0.5, 1.0))
                                 .child(p.protocol_badge.clone()))
                             .child(div().text_size(px(13.0)).font_weight(FontWeight::MEDIUM).child(p.name.clone())))
-                        .child(div().text_size(px(11.0)).text_color(ui::text_secondary()).child(p.endpoint.clone())))
+                        .child(div().text_size(px(11.0)).text_color(ui::text_secondary()).font_family("Menlo").child(p.endpoint.clone())))
             }))
             .into_any_element()
     }
@@ -91,8 +93,8 @@ fn render_profile_list(
 
 fn render_bottom_bar(cx: &mut Context<super::SshView>) -> impl IntoElement {
     div()
-        .h(px(48.0)).flex().items_center().justify_center()
-        .border_t_1().border_color(glass::border(true))
+        .h(px(44.0)).flex().items_center().justify_center()
+        .border_t_1().border_color(ui::border_light())
         .child(
             div()
                 .id("btn-settings")
