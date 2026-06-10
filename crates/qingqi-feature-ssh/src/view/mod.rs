@@ -109,7 +109,6 @@ pub struct SshView {
     form_name: Entity<TextInput>,
     form_host: Entity<TextInput>,
     form_port: Entity<TextInput>,
-    form_username: Entity<TextInput>,
 
     event_task: Option<Task<()>>,
     last_revision: u64,
@@ -129,7 +128,6 @@ impl SshView {
             form_name: cx.new(|cx| TextInput::new(cx, "名称", "")),
             form_host: cx.new(|cx| TextInput::new(cx, "主机地址", "")),
             form_port: cx.new(|cx| TextInput::new(cx, "端口", "22")),
-            form_username: cx.new(|cx| TextInput::new(cx, "用户名", "root")),
             event_task: None,
             last_revision: 0,
             generation: 0,
@@ -493,7 +491,6 @@ impl Render for SshView {
                     name: self.form_name.clone(),
                     host: self.form_host.clone(),
                     port: self.form_port.clone(),
-                    username: self.form_username.clone(),
                 };
                 move |root| {
                     root.child(settings_dialog::render_profile_editor(overlay_handle.clone(), &inputs))

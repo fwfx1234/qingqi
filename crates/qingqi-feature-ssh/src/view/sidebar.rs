@@ -3,6 +3,7 @@
 use gpui::*;
 use gpui_component::scroll::ScrollableElement;
 use qingqi_ui::ui;
+use qingqi_ui::ui::glass;
 
 use super::ProfileItem;
 
@@ -11,36 +12,30 @@ pub fn render_sidebar(
     selected_id: Option<i64>,
     cx: &mut Context<super::SshView>,
 ) -> impl IntoElement {
+    let dark = true;
     div()
         .w(px(280.0)).h_full().flex().flex_col()
-        .bg(ui::bg_surface()).border_r_1().border_color(ui::border_light())
-        .child(render_top_bar(cx))
+        .bg(glass::panel(dark))
+        .border_r_1().border_color(glass::border(dark))
+        .child(render_top_bar(dark, cx))
         .child(render_profile_list(profiles, selected_id, cx))
         .child(render_bottom_bar(cx))
 }
 
-fn render_top_bar(cx: &mut Context<super::SshView>) -> impl IntoElement {
+fn render_top_bar(dark: bool, cx: &mut Context<super::SshView>) -> impl IntoElement {
     div()
         .h(px(52.0)).flex().items_center().px_3()
-        .border_b_1().border_color(ui::border_light())
-        .child(mac_traffic_lights())
-        .child(div().ml_2().text_size(px(15.0)).font_weight(FontWeight::SEMIBOLD).child("远程管理"))
+        .border_b_1().border_color(glass::border(dark))
+        .child(div().text_size(px(15.0)).font_weight(FontWeight::SEMIBOLD).child("远程管理"))
         .child(div().flex_1())
         .child(
             div()
                 .id("btn-new-profile")
                 .px_2().py_1().rounded_md().cursor_pointer()
-                .hover(|s| s.bg(ui::bg_hover()))
+                .hover(|s| s.bg(glass::hover_bg(dark)))
                 .on_click(cx.listener(|view, _: &ClickEvent, _w, cx| view.toggle_settings(cx)))
                 .child("+"),
         )
-}
-
-pub fn mac_traffic_lights() -> impl IntoElement {
-    div().flex().gap(px(8.0)).px(px(4.0))
-        .child(div().size(px(12.0)).rounded_full().bg(rgb(0xED6A5E)))
-        .child(div().size(px(12.0)).rounded_full().bg(rgb(0xF5BF4F)))
-        .child(div().size(px(12.0)).rounded_full().bg(rgb(0x61C554)))
 }
 
 fn render_profile_list(
@@ -54,10 +49,10 @@ fn render_profile_list(
             (p.name.clone(), p.endpoint.clone(), p.protocol_badge.clone(), p.is_connected, selected_id == Some(p.id))
         }).collect();
         uniform_list("ssh-profile-list", count, move |range, _w, _cx| {
-            items[range].iter().map(|(name, endpoint, badge, connected, sel)| {
+            items[range].iter().map(|(name, endpoint, badge, connected, _sel)| {
                 div()
                     .p_2().mb_1().rounded_md()
-                    .bg(if *sel { hsla(0.55, 0.3, 0.5, 0.15) } else { hsla(0.0, 0.0, 0.0, 0.0) })
+                    .bg(if *connected { glass::bg(true) } else { hsla(0.0, 0.0, 0.0, 0.0) })
                     .border_l_3()
                     .border_color(if *connected { hsla(0.4, 0.8, 0.5, 1.0) } else { hsla(0.0, 0.0, 0.0, 0.0) })
                     .child(div().flex().flex_col().gap(px(2.0))
@@ -78,7 +73,7 @@ fn render_profile_list(
                 div()
                     .id(("ssh-profile", pid as u64))
                     .p_2().mb_1().rounded_md().cursor_pointer()
-                    .bg(if selected_id == Some(p.id) { hsla(0.55, 0.3, 0.5, 0.15) } else { hsla(0.0, 0.0, 0.0, 0.0) })
+                    .bg(if p.is_connected { glass::bg(true) } else { hsla(0.0, 0.0, 0.0, 0.0) })
                     .border_l_3()
                     .border_color(if p.is_connected { hsla(0.4, 0.8, 0.5, 1.0) } else { hsla(0.0, 0.0, 0.0, 0.0) })
                     .on_click(cx.listener(move |view, _: &ClickEvent, _w, cx| view.connect_profile(pid, cx)))
@@ -97,7 +92,7 @@ fn render_profile_list(
 fn render_bottom_bar(cx: &mut Context<super::SshView>) -> impl IntoElement {
     div()
         .h(px(48.0)).flex().items_center().justify_center()
-        .border_t_1().border_color(ui::border_light())
+        .border_t_1().border_color(glass::border(true))
         .child(
             div()
                 .id("btn-settings")

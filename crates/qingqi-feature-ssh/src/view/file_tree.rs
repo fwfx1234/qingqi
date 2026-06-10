@@ -9,6 +9,7 @@ use super::FileTreeViewModel;
 pub fn render_file_tree(tree: &FileTreeViewModel) -> impl IntoElement {
     div()
         .flex_1().flex().flex_col()
+        .bg(ui::bg_surface())
         .border_r_1().border_color(ui::border_light())
         .child(render_toolbar(tree))
         .child(render_entry_list(tree))

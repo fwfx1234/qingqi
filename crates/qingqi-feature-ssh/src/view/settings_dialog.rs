@@ -1,4 +1,7 @@
 //! Profile 编辑弹窗 (Overlay)
+//!
+//! 关键设计：遮罩层和弹窗内容区是同级元素（非嵌套），
+//! 避免 GPUI 点击事件冒泡导致弹窗误关闭。
 
 use gpui::*;
 use qingqi_ui::ui;
@@ -8,7 +11,6 @@ pub struct ProfileFormInputs {
     pub name: Entity<TextInput>,
     pub host: Entity<TextInput>,
     pub port: Entity<TextInput>,
-    pub username: Entity<TextInput>,
 }
 
 pub fn render_profile_editor(
@@ -16,23 +18,40 @@ pub fn render_profile_editor(
     inputs: &ProfileFormInputs,
 ) -> impl IntoElement {
     let h = handle.clone();
+    let h_close = handle.clone();
+    let h_save = handle.clone();
+    let name = inputs.name.clone();
+    let host = inputs.host.clone();
+    let port = inputs.port.clone();
+
+    // 使用容器 div 包裹遮罩和弹窗（同级元素）
     div()
-        .id("settings-overlay")
-        .absolute().size_full().top_0().left_0()
-        .bg(hsla(0.0, 0.0, 0.0, 0.4))
-        .flex().items_center().justify_center()
-        .on_click(move |_, _, cx| {
-            cx.update_entity(&h, |view, cx| view.toggle_settings(cx));
-        })
+        .size_full().relative()
+        // 遮罩层：点击关闭
         .child(
             div()
-                .id("settings-dialog")
-                .w(px(520.0)).rounded_lg().bg(ui::bg_surface()).shadow_lg()
-                .flex().flex_col()
-                .on_click(|_, _, _| {})
-                .child(render_dialog_header(handle.clone()))
-                .child(render_dialog_body(inputs))
-                .child(render_dialog_footer(handle)),
+                .id("settings-overlay")
+                .absolute().size_full().top_0().left_0()
+                .bg(hsla(0.0, 0.0, 0.0, 0.4))
+                .on_click(move |_, _, cx| {
+                    cx.update_entity(&h_close, |view, cx| view.toggle_settings(cx));
+                }),
+        )
+        // 弹窗内容区：独立定位，无关闭事件
+        .child(
+            div()
+                .absolute()
+                .top(px(80.0))
+                .left_0().right_0()
+                .flex().justify_center()
+                .child(
+                    div()
+                        .w(px(480.0)).rounded_lg().bg(ui::bg_surface()).shadow_lg()
+                        .flex().flex_col()
+                        .child(render_dialog_header(handle))
+                        .child(render_dialog_body(name, host, port))
+                        .child(render_dialog_footer(h_save, h)),
+                ),
         )
 }
 
@@ -49,51 +68,46 @@ fn render_dialog_header(handle: Entity<super::SshView>) -> impl IntoElement {
         )
 }
 
-fn render_dialog_body(inputs: &ProfileFormInputs) -> impl IntoElement {
+fn render_dialog_body(
+    name_input: Entity<TextInput>,
+    host_input: Entity<TextInput>,
+    port_input: Entity<TextInput>,
+) -> impl IntoElement {
     div().flex_1().flex().flex_col().gap(px(12.0)).p_4()
-        .child(render_text_input("名称", inputs.name.clone()))
-        .child(render_text_input("主机", inputs.host.clone()))
-        .child(render_text_input("端口", inputs.port.clone()))
-        .child(render_text_input("用户名", inputs.username.clone()))
-        .child(render_static_field("认证方式", "密码"))
-        .child(render_static_field("远程根目录", "~"))
-        .child(render_static_field("本地下载目录", "~/Downloads"))
+        .child(render_field("名称", name_input))
+        .child(render_field("主机", host_input))
+        .child(render_field("端口", port_input))
 }
 
-fn render_text_input(label: &str, input: Entity<TextInput>) -> impl IntoElement {
+fn render_field(label: &str, input: Entity<TextInput>) -> impl IntoElement {
     div().flex().flex_col().gap(px(4.0))
         .child(div().text_size(px(12.0)).text_color(ui::text_secondary()).child(label.to_string()))
-        .child(div().h(px(32.0)).flex().items_center().px_2().rounded_md()
-            .border_1().border_color(ui::border_light())
-            .child(input))
+        .child(input)
 }
 
-fn render_static_field(label: &str, value: &str) -> impl IntoElement {
-    div().flex().flex_col().gap(px(4.0))
-        .child(div().text_size(px(12.0)).text_color(ui::text_secondary()).child(label.to_string()))
-        .child(div().h(px(32.0)).flex().items_center().px_3().rounded_md()
-            .border_1().border_color(ui::border_light())
-            .text_size(px(13.0)).child(value.to_string()))
-}
-
-fn render_dialog_footer(handle: Entity<super::SshView>) -> impl IntoElement {
-    let h = handle.clone();
+fn render_dialog_footer(
+    save_handle: Entity<super::SshView>,
+    cancel_handle: Entity<super::SshView>,
+) -> impl IntoElement {
     div()
         .h(px(56.0)).flex().items_center().justify_end().gap(px(8.0)).px_4()
         .border_t_1().border_color(ui::border_light())
-        .child(div().px_4().py_2().rounded_md().text_size(px(13.0)).cursor_pointer()
-            .hover(|s| s.bg(ui::bg_hover())).child("测试连接"))
         .child(
             div().id("btn-save-profile")
-                .px_4().py_2().rounded_md().text_size(px(13.0))
+                .px_4().py(px(6.0)).rounded_md().text_size(px(13.0))
                 .bg(hsla(0.55, 0.7, 0.5, 1.0)).text_color(hsla(0.0, 0.0, 1.0, 1.0)).cursor_pointer()
                 .hover(|s| s.bg(hsla(0.55, 0.7, 0.5, 0.8)))
-                .on_click(move |_, _, cx| { cx.update_entity(&h, |v, cx| v.create_profile_from_form(cx)); })
+                .on_click(move |_, _, cx| {
+                    cx.update_entity(&save_handle, |v, cx| v.create_profile_from_form(cx));
+                })
                 .child("保存"),
         )
-        .child(div().id("btn-cancel")
-            .px_4().py_2().rounded_md().text_size(px(13.0)).cursor_pointer()
-            .hover(|s| s.bg(ui::bg_hover()))
-            .on_click(move |_, _, cx| { cx.update_entity(&handle, |v, cx| v.toggle_settings(cx)); })
-            .child("取消"))
+        .child(
+            div().id("btn-cancel").px_4().py(px(6.0)).rounded_md().text_size(px(13.0)).cursor_pointer()
+                .hover(|s| s.bg(ui::bg_hover()))
+                .on_click(move |_, _, cx| {
+                    cx.update_entity(&cancel_handle, |v, cx| v.toggle_settings(cx));
+                })
+                .child("取消"),
+        )
 }

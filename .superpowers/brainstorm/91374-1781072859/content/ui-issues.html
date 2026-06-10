@@ -1,0 +1,157 @@
+<h2>当前界面问题 & 修复方案</h2>
+<p class="subtitle">左侧边栏 + Profile 编辑弹窗 — 问题诊断与修复对比</p>
+
+<div class="section">
+  <h3>问题 1：双交通灯</h3>
+  <p>PluginWindowMode::Window 提供原生标题栏交通灯 + 我们手绘的交通灯 → 出现两套</p>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">❌ 当前（两套交通灯）</div>
+      <div class="mockup-body" style="background:#1a1a2e;padding:16px;border-radius:8px;">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #333;margin-bottom:12px;">
+          <div style="display:flex;gap:8px;padding:0 4px;">
+            <div style="width:12px;height:12px;border-radius:50%;background:#ED6A5E;"></div>
+            <div style="width:12px;height:12px;border-radius:50%;background:#F5BF4F;"></div>
+            <div style="width:12px;height:12px;border-radius:50%;background:#61C554;"></div>
+          </div>
+          <span style="color:#ccc;font-size:13px;margin-left:8px;">远程管理</span>
+          <div style="flex:1;"></div>
+          <span style="color:#888;font-size:13px;">+</span>
+        </div>
+        <div style="color:#aaa;font-size:12px;padding:8px;">Profile 卡片列表...</div>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">✅ 修复后（仅原生交通灯）</div>
+      <div class="mockup-body" style="background:#1a1a2e;padding:16px;border-radius:8px;">
+        <div style="display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #333;margin-bottom:12px;">
+          <span style="color:#ccc;font-size:13px;">远程管理</span>
+          <div style="flex:1;"></div>
+          <span style="color:#888;font-size:13px;">+</span>
+        </div>
+        <div style="color:#aaa;font-size:12px;padding:8px;">Profile 卡片列表...</div>
+      </div>
+    </div>
+  </div>
+  <p style="color:#888;font-size:12px;margin-top:8px;">🔧 修复：从 sidebar.rs 移除 mac_traffic_lights()，保留原生窗口标题栏交通灯</p>
+</div>
+
+<div class="section">
+  <h3>问题 2：弹窗点击即关闭 — 无法操作输入框</h3>
+  <p>遮罩层的 on_click 关闭事件冒泡到弹窗内容区，GPUI 0.2.2 无法通过空 on_click 阻止冒泡</p>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">❌ 当前（点击弹窗任何位置 = 关闭）</div>
+      <div class="mockup-body" style="background:rgba(0,0,0,0.4);padding:40px;border-radius:8px;text-align:center;">
+        <div style="background:#1e1e2e;border-radius:12px;padding:24px;max-width:400px;margin:0 auto;">
+          <div style="color:#ff6b6b;font-size:13px;margin-bottom:8px;">⚠ 点击这里也会关闭！</div>
+          <div class="mock-input" style="margin:4px 0;">名称：________</div>
+          <div class="mock-input" style="margin:4px 0;">主机：________</div>
+          <div style="color:#888;font-size:11px;margin-top:12px;">输入框收不到焦点 → 无法打字</div>
+        </div>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">✅ 修复后（弹窗内容区不关闭）</div>
+      <div class="mockup-body" style="background:rgba(0,0,0,0.4);padding:40px;border-radius:8px;text-align:center;">
+        <div style="background:#1e1e2e;border-radius:12px;padding:24px;max-width:400px;margin:0 auto;border:2px solid #61C554;">
+          <div style="color:#61C554;font-size:13px;margin-bottom:8px;">✓ 弹窗内容区域安全</div>
+          <div class="mock-input" style="margin:4px 0;background:#2a2a3e;border:1px solid #555;">名称：我的服务器</div>
+          <div class="mock-input" style="margin:4px 0;background:#2a2a3e;border:1px solid #555;">主机：192.168.1.1</div>
+          <div style="color:#aaa;font-size:11px;margin-top:12px;">输入框正常获得焦点 → 可以打字</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="color:#888;font-size:12px;margin-top:8px;">🔧 修复：遮罩层用 on_click 关闭，但弹窗内容区改为独立 Div，不使用事件冒泡阻止</p>
+</div>
+
+<div class="section">
+  <h3>问题 3：Profile 卡片 + 文件列表样式互换</h3>
+  <p>目前 Profile 卡片无毛玻璃效果，文件列表反而是毛玻璃。需要互换</p>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">❌ 当前</div>
+      <div class="mockup-body" style="padding:16px;border-radius:8px;">
+        <div style="padding:12px;border-radius:8px;margin-bottom:8px;background:#1e1e2e;border-left:3px solid #4ade80;">
+          <div style="color:#ccc;font-size:13px;">SSH · 开发服务器</div>
+          <div style="color:#888;font-size:11px;">root@192.168.1.100:22</div>
+        </div>
+        <div style="padding:12px;border-radius:8px;background:rgba(255,255,255,0.05);border-left:3px solid transparent;backdrop-filter:blur(12px);margin-top:8px;">
+          <div style="color:#ccc;font-size:13px;">FTP · 文件服务器</div>
+          <div style="color:#888;font-size:11px;">ftp@10.0.0.5:21</div>
+        </div>
+        <div style="color:#888;font-size:11px;margin-top:8px;">Profile = 普通背景 / 文件列表 = 毛玻璃 ❌</div>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">✅ 修复后（互换）</div>
+      <div class="mockup-body" style="padding:16px;border-radius:8px;">
+        <div style="padding:12px;border-radius:8px;margin-bottom:8px;background:rgba(255,255,255,0.06);backdrop-filter:blur(12px);border-left:3px solid #4ade80;">
+          <div style="color:#ccc;font-size:13px;">SSH · 开发服务器</div>
+          <div style="color:#888;font-size:11px;">root@192.168.1.100:22</div>
+        </div>
+        <div style="padding:12px;border-radius:8px;background:rgba(255,255,255,0.06);backdrop-filter:blur(12px);border-left:3px solid transparent;margin-top:8px;">
+          <div style="color:#ccc;font-size:13px;">FTP · 文件服务器</div>
+          <div style="color:#888;font-size:11px;">ftp@10.0.0.5:21</div>
+        </div>
+        <div style="color:#888;font-size:11px;margin-top:8px;">Profile = 毛玻璃 ✓ / 文件列表 = 白底 ✓</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>优先修复顺序</h3>
+  <p>用户要求：<strong>第一步先打通"添加Profile → 连接"这条链路</strong>，才能继续测试</p>
+
+  <table style="width:100%;border-collapse:collapse;">
+    <tr style="border-bottom:1px solid #333;">
+      <th style="text-align:left;padding:8px;color:#888;">步骤</th>
+      <th style="text-align:left;padding:8px;color:#888;">修复项</th>
+      <th style="text-align:left;padding:8px;color:#888;">影响</th>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:8px;">1</td>
+      <td style="padding:8px;">去掉手绘交通灯</td>
+      <td style="padding:8px;">视觉修复</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:8px;">2</td>
+      <td style="padding:8px;">弹窗遮罩/内容区分离</td>
+      <td style="padding:8px;">🔴 阻塞：弹窗打不开/无法输入</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:8px;">3</td>
+      <td style="padding:8px;">TextInput 样式修复 + 焦点</td>
+      <td style="padding:8px;">🔴 阻塞：无法填写 Profile</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:8px;">4</td>
+      <td style="padding:8px;">Profile 卡片毛玻璃 + 文件列表白底</td>
+      <td style="padding:8px;">视觉修复</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;">5</td>
+      <td style="padding:8px;">点击 Profile 卡片 → 连接</td>
+      <td style="padding:8px;">🔴 阻塞：无法测试连接</td>
+    </tr>
+  </table>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>按上述顺序全部修复</h3>
+      <p>一次性完成 5 步修复，打通"添加 Profile → 连接"整条链路</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>先修 1+2+3（弹窗可用），再修 4+5</h3>
+      <p>分两批，先确保弹窗能打开和输入，再处理样式和连接逻辑</p>
+    </div>
+  </div>
+</div>
