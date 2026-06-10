@@ -5713,6 +5713,7 @@ dependencies = [
  "qingqi-feature-json-parser",
  "qingqi-feature-qr-code",
  "qingqi-feature-quick-launch",
+ "qingqi-feature-ssh",
  "qingqi-feature-system-settings",
  "qingqi-plugin",
  "resvg",
@@ -5966,6 +5967,31 @@ dependencies = [
  "serde_json",
  "time",
  "tokio",
+]
+
+[[package]]
+name = "qingqi-feature-ssh"
+version = "0.1.0"
+dependencies = [
+ "alacritty_terminal",
+ "anyhow",
+ "async-trait",
+ "gpui",
+ "gpui-component",
+ "qingqi-plugin",
+ "qingqi-ui",
+ "rusqlite",
+ "russh",
+ "russh-sftp",
+ "serde",
+ "serde_json",
+ "suppaftp",
+ "time",
+ "tokio",
+ "tokio-rustls",
+ "tracing",
+ "uuid",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]

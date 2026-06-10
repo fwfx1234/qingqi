@@ -153,6 +153,47 @@ impl SshView {
         cx.notify();
     }
 
+    // ===== 用户交互 =====
+
+    fn connect_profile(&mut self, profile_id: i64, cx: &mut Context<Self>) {
+        self.selected_profile_id = Some(profile_id);
+        match self.service.open_session(profile_id) {
+            Ok(session_id) => {
+                self.selected_session_id = Some(session_id);
+            }
+            Err(e) => {
+                tracing::error!("连接失败: {e}");
+            }
+        }
+        self.rebuild_view_model();
+        cx.notify();
+    }
+
+    fn select_session(&mut self, session_id: SessionId, cx: &mut Context<Self>) {
+        self.selected_session_id = Some(session_id);
+        self.rebuild_view_model();
+        cx.notify();
+    }
+
+    fn close_session(&mut self, session_id: SessionId, cx: &mut Context<Self>) {
+        if self.selected_session_id == Some(session_id) {
+            self.selected_session_id = None;
+        }
+        let _ = self.service.close_session(&session_id);
+        self.rebuild_view_model();
+        cx.notify();
+    }
+
+    fn toggle_transfer_panel(&mut self, cx: &mut Context<Self>) {
+        self.transfer_panel_expanded = !self.transfer_panel_expanded;
+        cx.notify();
+    }
+
+    fn toggle_settings(&mut self, cx: &mut Context<Self>) {
+        self.show_settings = !self.show_settings;
+        cx.notify();
+    }
+
     fn rebuild_view_model(&mut self) {
         let snap = self.service.snapshot();
         if snap.revision == self.last_revision {
@@ -363,7 +404,7 @@ impl SshViewModel {
 // ========== Render ==========
 
 impl Render for SshView {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .size_full()
             .flex()
@@ -371,7 +412,7 @@ impl Render for SshView {
             .child(sidebar::render_sidebar(
                 &self.vm.profiles,
                 self.selected_profile_id,
-                _cx,
+                cx,
             ))
             // 右侧列
             .child(
