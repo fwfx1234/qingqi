@@ -1,18 +1,23 @@
-//! SshView 主视图 + ViewModel + 布局渲染
+//! SshView 主视图 + ViewModel + 布局
+
+mod sidebar;
+mod session_tabs;
+mod file_tree;
+mod terminal_pane;
+mod transfer_panel;
+mod settings_dialog;
 
 use std::sync::Arc;
 
 use gpui::*;
 use gpui::prelude::FluentBuilder;
-use gpui_component::scroll::ScrollableElement;
 
 use crate::model::{SessionId, SessionStatus, TerminalKind};
 use crate::service::{SshEvent, SshService};
 use crate::terminal::TerminalLine;
 use crate::transfer;
-use qingqi_ui::ui;
 
-// ========== ViewModel ==========
+// ========== ViewModel (render-ready 纯数据) ==========
 
 #[derive(Clone, Debug)]
 pub struct ProfileItem {
@@ -98,6 +103,7 @@ pub struct SshView {
     selected_profile_id: Option<i64>,
     selected_session_id: Option<SessionId>,
     transfer_panel_expanded: bool,
+    show_settings: bool,
 
     event_task: Option<Task<()>>,
     last_revision: u64,
@@ -113,6 +119,7 @@ impl SshView {
             selected_profile_id: None,
             selected_session_id: None,
             transfer_panel_expanded: false,
+            show_settings: false,
             event_task: None,
             last_revision: 0,
             generation: 0,
@@ -161,6 +168,8 @@ impl SshView {
             transfers: Self::build_transfers(self.selected_session_id.as_ref(), &self.service),
         };
     }
+
+    // ===== Build Functions =====
 
     fn build_profiles(
         profiles: &[crate::model::Profile],
@@ -358,31 +367,20 @@ impl Render for SshView {
         div()
             .size_full()
             .flex()
+            // 左侧列
+            .child(sidebar::render_sidebar(
+                &self.vm.profiles,
+                self.selected_profile_id,
+                _cx,
+            ))
+            // 右侧列
             .child(
-                // 左侧列
-                div()
-                    .w(px(280.0))
-                    .h_full()
-                    .flex()
-                    .flex_col()
-                    .bg(ui::bg_surface())
-                    .border_r_1()
-                    .border_color(ui::border_light())
-                    .child(render_sidebar_top(&self.vm.profiles))
-                    .child(render_profile_list(
-                        &self.vm.profiles,
-                        self.selected_profile_id,
-                    ))
-                    .child(render_sidebar_bottom()),
-            )
-            .child(
-                // 右侧列
                 div()
                     .flex_1()
                     .h_full()
                     .flex()
                     .flex_col()
-                    .child(render_session_tabs(&self.vm.sessions))
+                    .child(session_tabs::render_session_tabs(&self.vm.sessions))
                     .child(
                         div()
                             .flex_1()
@@ -394,15 +392,19 @@ impl Render for SshView {
                                     .flex_1()
                                     .flex()
                                     .min_h(px(0.0))
-                                    .child(render_file_tree_pane(&self.vm.file_tree))
-                                    .child(render_terminal_pane(&self.vm.terminal)),
+                                    .child(file_tree::render_file_tree(&self.vm.file_tree))
+                                    .child(terminal_pane::render_terminal(&self.vm.terminal)),
                             )
-                            .child(render_transfer_panel(
+                            .child(transfer_panel::render_transfer_panel(
                                 &self.vm.transfers,
                                 self.transfer_panel_expanded,
                             )),
                     ),
             )
+            // Overlay
+            .when(self.show_settings, |root| {
+                root.child(settings_dialog::render_profile_editor(true))
+            })
     }
 }
 
@@ -410,262 +412,4 @@ impl Focusable for SshView {
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
-}
-
-// ========== 子组件渲染 ==========
-
-fn render_sidebar_top(_profiles: &[ProfileItem]) -> impl IntoElement {
-    div()
-        .h(px(52.0))
-        .flex()
-        .items_center()
-        .px_3()
-        .border_b_1()
-        .border_color(ui::border_light())
-        .child(mac_traffic_lights())
-        .child(
-            div()
-                .ml_2()
-                .text_size(px(15.0))
-                .font_weight(FontWeight::SEMIBOLD)
-                .child("远程管理"),
-        )
-        .child(div().flex_1())
-        .child(div().child("+"))
-}
-
-fn mac_traffic_lights() -> impl IntoElement {
-    div()
-        .flex()
-        .gap(px(8.0))
-        .px(px(4.0))
-        .child(div().size(px(12.0)).rounded_full().bg(rgb(0xED6A5E)))
-        .child(div().size(px(12.0)).rounded_full().bg(rgb(0xF5BF4F)))
-        .child(div().size(px(12.0)).rounded_full().bg(rgb(0x61C554)))
-}
-
-fn render_profile_list(
-    profiles: &[ProfileItem],
-    selected_id: Option<i64>,
-) -> impl IntoElement {
-    div()
-        .flex_1()
-        .overflow_y_scrollbar()
-        .p_2()
-        .children(profiles.iter().map(|p| {
-            render_profile_card(p, selected_id == Some(p.id))
-        }))
-}
-
-fn render_profile_card(profile: &ProfileItem, is_selected: bool) -> impl IntoElement {
-    div()
-        .p_2()
-        .mb_1()
-        .rounded_md()
-        .bg(if is_selected {
-            hsla(0.55, 0.3, 0.5, 0.15)
-        } else {
-            hsla(0.0, 0.0, 0.0, 0.0)
-        })
-        .border_l_3()
-        .border_color(if profile.is_connected {
-            hsla(0.4, 0.8, 0.5, 1.0)
-        } else {
-            hsla(0.0, 0.0, 0.0, 0.0)
-        })
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(2.0))
-                .child(
-                    div()
-                        .text_size(px(13.0))
-                        .font_weight(FontWeight::MEDIUM)
-                        .child(profile.name.clone()),
-                )
-                .child(
-                    div()
-                        .text_size(px(11.0))
-                        .text_color(ui::text_secondary())
-                        .child(profile.endpoint.clone()),
-                ),
-        )
-}
-
-fn render_sidebar_bottom() -> impl IntoElement {
-    div()
-        .h(px(48.0))
-        .flex()
-        .items_center()
-        .justify_center()
-        .border_t_1()
-        .border_color(ui::border_light())
-        .child("设置")
-}
-
-fn render_session_tabs(sessions: &[SessionTabItem]) -> impl IntoElement {
-    div()
-        .h(px(44.0))
-        .flex()
-        .items_center()
-        .px_2()
-        .bg(ui::bg_surface())
-        .border_b_1()
-        .border_color(ui::border_light())
-        .children(sessions.iter().map(|s| {
-            div()
-                .px_3()
-                .py_1()
-                .mr_1()
-                .rounded_t_md()
-                .bg(if s.is_selected {
-                    hsla(0.55, 0.05, 0.35, 0.5)
-                } else {
-                    hsla(0.0, 0.0, 0.0, 0.0)
-                })
-                .border_b_2()
-                .border_color(if s.is_selected { s.status_color } else { hsla(0.0, 0.0, 0.0, 0.0) })
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(6.0))
-                        .child(div().size(px(8.0)).rounded_full().bg(s.status_color))
-                        .child(div().text_size(px(12.0)).child(s.title.clone())),
-                )
-        }))
-        .child(div().ml_2().child("+"))
-}
-
-fn render_file_tree_pane(tree: &FileTreeViewModel) -> impl IntoElement {
-    div()
-        .flex_1()
-        .flex()
-        .flex_col()
-        .border_r_1()
-        .border_color(ui::border_light())
-        .child(
-            div()
-                .h(px(36.0))
-                .flex()
-                .items_center()
-                .px_2()
-                .border_b_1()
-                .border_color(ui::border_light())
-                .child(
-                    div()
-                        .text_size(px(12.0))
-                        .text_color(ui::text_secondary())
-                        .child(tree.current_path.clone()),
-                ),
-        )
-        .child(
-            div().flex_1().overflow_y_scrollbar().children(
-                tree.entries.iter().map(|e| {
-                    div()
-                        .h(px(28.0))
-                        .flex()
-                        .items_center()
-                        .px_2()
-                        .text_size(px(12.0))
-                        .bg(if e.is_selected {
-                            hsla(0.55, 0.3, 0.5, 0.15)
-                        } else {
-                            hsla(0.0, 0.0, 0.0, 0.0)
-                        })
-                        .child(e.name.clone())
-                }),
-            ),
-        )
-}
-
-fn render_terminal_pane(term: &TerminalViewModel) -> impl IntoElement {
-    div()
-        .flex_1()
-        .flex()
-        .flex_col()
-        .bg(ui::bg_surface())
-        .child(
-            div()
-                .h(px(28.0))
-                .flex()
-                .items_center()
-                .px_2()
-                .border_b_1()
-                .border_color(ui::border_light())
-                .child(
-                    div()
-                        .text_size(px(11.0))
-                        .text_color(ui::text_secondary())
-                        .child(term.status.clone()),
-                ),
-        )
-        .child(
-            div()
-                .flex_1()
-                .overflow_y_scrollbar()
-                .p_2()
-                .font_family("Menlo")
-                .children(term.lines.iter().map(|line| {
-                    let mut el = div().text_size(px(12.0)).child(line.text.clone());
-                    if let Some(color) = line.fg_color {
-                        el = el.text_color(hsla(color[0], color[1], color[2], color[3]));
-                    }
-                    el
-                })),
-        )
-}
-
-fn render_transfer_panel(
-    transfers: &TransferPanelViewModel,
-    expanded: bool,
-) -> impl IntoElement {
-    div()
-        .w_full()
-        .border_t_1()
-        .border_color(ui::border_light())
-        .bg(ui::bg_surface())
-        .child(
-            div()
-                .h(px(36.0))
-                .flex()
-                .items_center()
-                .px_3()
-                .justify_between()
-                .child(
-                    div()
-                        .text_size(px(11.0))
-                        .text_color(ui::text_secondary())
-                        .child(format!(
-                            "传输记录 ({} 进行中, {} 已完成, {} 失败)",
-                            transfers.active_count,
-                            transfers.completed_count,
-                            transfers.failed_count,
-                        )),
-                )
-                .child(if expanded { "收起 ▲" } else { "展开 ▼" }),
-        )
-        .when(expanded, |root| {
-            root.child(
-                div().h(px(200.0)).overflow_y_scrollbar().children(
-                    transfers.rows.iter().map(|row| {
-                        div()
-                            .h(px(32.0))
-                            .flex()
-                            .items_center()
-                            .px_3()
-                            .text_size(px(12.0))
-                            .child(div().mr_2().child(row.direction_icon))
-                            .child(div().flex_1().child(row.file_name.clone()))
-                            .child(
-                                div()
-                                    .mr_2()
-                                    .text_color(row.status_color)
-                                    .child(row.status_text.clone()),
-                            )
-                    }),
-                ),
-            )
-        })
 }
