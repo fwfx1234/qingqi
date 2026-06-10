@@ -35,19 +35,12 @@ impl Plugin for SshPlugin {
     }
 
     fn open(&mut self, cx: &mut PluginCx<'_>) -> Result<PluginView> {
-        let view = cx
-            .app
-            .new(|cx| SshView::new(Arc::clone(&self.service), cx));
+        let view = cx.app.new(|cx| SshView::new(Arc::clone(&self.service), cx));
 
         Ok(PluginView::Window(Box::new(SshWindowView { view })))
     }
 
-    fn start_background(
-        &mut self,
-        _events: qingqi_plugin::events::AppEventBus,
-        _cx: &mut App,
-    ) {
-    }
+    fn start_background(&mut self, _events: qingqi_plugin::events::AppEventBus, _cx: &mut App) {}
 }
 
 struct SshWindowView {

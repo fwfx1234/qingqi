@@ -55,7 +55,7 @@ pub fn hover_bg(dark: bool) -> Hsla {
 /// 子面板背景色
 pub fn panel(dark: bool) -> Hsla {
     if dark {
-        theme::rgba_with_alpha(semantic().bg_elevated, 0.18)
+        theme::rgba_with_alpha(semantic().bg_elevated, 0.55)
     } else {
         theme::rgba_with_alpha(theme::white(), 0.78)
     }
@@ -67,6 +67,15 @@ pub fn inset(dark: bool) -> Hsla {
         hsla(225.0 / 360.0, 0.18, 0.10, 0.18)
     } else {
         theme::rgba_with_alpha(theme::white(), 0.50)
+    }
+}
+
+/// 侧栏背景色（macOS Source List 区域）
+pub fn sidebar(dark: bool) -> Hsla {
+    if dark {
+        theme::rgba_with_alpha(semantic().bg_elevated, 0.40)
+    } else {
+        theme::rgba_with_alpha(theme::slate_100(), 0.88)
     }
 }
 

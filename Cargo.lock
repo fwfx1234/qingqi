@@ -5717,6 +5717,7 @@ dependencies = [
  "qingqi-plugin",
  "resvg",
  "tiny-skia",
+ "tokio",
  "usvg",
 ]
 

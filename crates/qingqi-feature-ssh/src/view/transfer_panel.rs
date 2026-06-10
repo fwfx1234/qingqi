@@ -1,7 +1,7 @@
 //! 传输记录面板
 
-use gpui::*;
 use gpui::prelude::FluentBuilder;
+use gpui::*;
 use gpui_component::scroll::ScrollableElement;
 use qingqi_ui::ui;
 
@@ -21,7 +21,10 @@ fn render_transfer_panel_inner(
     cx: &mut Context<super::SshView>,
 ) -> impl IntoElement {
     div()
-        .w_full().border_t_1().border_color(ui::border_light()).bg(ui::bg_surface())
+        .w_full()
+        .border_t_1()
+        .border_color(ui::border_light())
+        .bg(ui::bg_surface())
         .child(render_control_bar(transfers, expanded, cx))
         .when(expanded, |root| root.child(render_transfer_list(transfers)))
 }
@@ -33,8 +36,13 @@ fn render_control_bar(
 ) -> impl IntoElement {
     div()
         .id("transfer-toggle")
-        .h(px(36.0)).flex().items_center().px_3().justify_between()
-        .cursor_pointer().hover(|s| s.bg(ui::bg_hover()))
+        .h(px(36.0))
+        .flex()
+        .items_center()
+        .px_3()
+        .justify_between()
+        .cursor_pointer()
+        .hover(|s| s.bg(ui::bg_hover()))
         .on_click(cx.listener(|view, _: &ClickEvent, _w, cx| view.toggle_transfer_panel(cx)))
         .child(
             div()
@@ -42,9 +50,7 @@ fn render_control_bar(
                 .text_color(ui::text_secondary())
                 .child(format!(
                     "传输记录 ({} 进行中, {} 已完成, {} 失败)",
-                    transfers.active_count,
-                    transfers.completed_count,
-                    transfers.failed_count,
+                    transfers.active_count, transfers.completed_count, transfers.failed_count,
                 )),
         )
         .child(
@@ -75,9 +81,7 @@ fn render_transfer_list(transfers: &TransferPanelViewModel) -> impl IntoElement 
         .into_any_element()
 }
 
-fn render_transfer_row(
-    row: &super::TransferRowViewModel,
-) -> impl IntoElement {
+fn render_transfer_row(row: &super::TransferRowViewModel) -> impl IntoElement {
     div()
         .h(px(32.0))
         .flex()
@@ -85,17 +89,8 @@ fn render_transfer_row(
         .px_3()
         .text_size(px(12.0))
         .hover(|s| s.bg(ui::bg_hover()))
-        .child(
-            div()
-                .mr_2()
-                .text_size(px(14.0))
-                .child(row.direction_icon),
-        )
-        .child(
-            div()
-                .flex_1()
-                .child(row.file_name.clone()),
-        )
+        .child(div().mr_2().text_size(px(14.0)).child(row.direction_icon))
+        .child(div().flex_1().child(row.file_name.clone()))
         .child(render_progress_bar(row))
         .child(
             div()
@@ -107,9 +102,7 @@ fn render_transfer_row(
         )
 }
 
-fn render_progress_bar(
-    row: &super::TransferRowViewModel,
-) -> impl IntoElement {
+fn render_progress_bar(row: &super::TransferRowViewModel) -> impl IntoElement {
     div()
         .w(px(120.0))
         .h(px(6.0))

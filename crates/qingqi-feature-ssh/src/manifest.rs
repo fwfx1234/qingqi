@@ -17,7 +17,15 @@ pub fn manifest() -> Manifest {
         name: "远程管理".into(),
         description: "SSH/SFTP/FTP/FTPS 远程连接管理。多标签页终端与文件传输。".into(),
         keywords: [
-            "ssh", "sftp", "ftp", "ftps", "远程", "终端", "文件", "传输", "服务器",
+            "ssh",
+            "sftp",
+            "ftp",
+            "ftps",
+            "远程",
+            "终端",
+            "文件",
+            "传输",
+            "服务器",
         ]
         .into_iter()
         .map(Into::into)

@@ -1,20 +1,36 @@
 //! SSH 远程管理插件 — 库入口
 
+mod log_util;
+pub mod connection;
 pub mod manifest;
 pub mod model;
 pub mod plugin;
-pub mod store;
-pub mod service;
-pub mod connection;
 pub mod protocol;
+pub mod service;
+pub mod store;
 pub mod terminal;
 pub mod transfer;
 pub mod view;
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use anyhow::Result;
 use qingqi_plugin::database::{DatabaseService, DatabaseSpec};
+
+/// 全局 tokio runtime 句柄，由 main.rs 初始化
+static TOKIO_RT: OnceLock<tokio::runtime::Handle> = OnceLock::new();
+
+/// 由 main.rs 在启动时调用，存储 tokio runtime 句柄供 service 层使用
+pub fn init_tokio_runtime(handle: tokio::runtime::Handle) {
+    let _ = TOKIO_RT.set(handle);
+}
+
+/// 获取全局 tokio runtime 句柄
+pub(crate) fn tokio_handle() -> &'static tokio::runtime::Handle {
+    TOKIO_RT
+        .get()
+        .expect("tokio runtime 未初始化，main.rs 需要先调用 init_tokio_runtime")
+}
 
 pub fn databases() -> Vec<DatabaseSpec> {
     vec![DatabaseSpec::feature("ssh", "profiles", "ssh_profiles.db")]

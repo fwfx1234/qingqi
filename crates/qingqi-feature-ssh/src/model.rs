@@ -7,6 +7,13 @@ use uuid::Uuid;
 
 // ============ 协议类型 ============
 
+/// SSH 连接角色：终端与 SFTP 使用独立 TCP 会话，避免 channel 数据串扰
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SshRole {
+    Terminal,
+    Sftp,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ProtocolType {
     #[default]
@@ -48,20 +55,51 @@ impl ProtocolType {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AuthConfig {
     Ssh {
+        #[serde(default = "default_ssh_username")]
+        username: String,
         method: SshAuthMethod,
     },
-    Ftp {
-        username: String,
-        password: String,
-    },
+    Ftp { username: String, password: String },
+}
+
+fn default_ssh_username() -> String {
+    "root".into()
 }
 
 impl Default for AuthConfig {
     fn default() -> Self {
         Self::Ssh {
+            username: default_ssh_username(),
             method: SshAuthMethod::Password {
                 password: String::new(),
             },
+        }
+    }
+}
+
+// ============ 高级配置 ============
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProfileAdvanced {
+    #[serde(default = "default_connection_timeout")]
+    pub connection_timeout_secs: u32,
+    #[serde(default = "default_keepalive_interval")]
+    pub keepalive_interval_secs: u32,
+}
+
+fn default_connection_timeout() -> u32 {
+    30
+}
+
+fn default_keepalive_interval() -> u32 {
+    60
+}
+
+impl Default for ProfileAdvanced {
+    fn default() -> Self {
+        Self {
+            connection_timeout_secs: default_connection_timeout(),
+            keepalive_interval_secs: default_keepalive_interval(),
         }
     }
 }
@@ -101,6 +139,7 @@ pub struct Profile {
     pub port: u16,
     pub auth: AuthConfig,
     pub paths: PathConfig,
+    pub advanced: ProfileAdvanced,
     pub note: String,
     pub created_at: String,
     pub updated_at: String,
@@ -114,6 +153,7 @@ pub struct ProfileDraft {
     pub port: u16,
     pub auth: AuthConfig,
     pub paths: PathConfig,
+    pub advanced: ProfileAdvanced,
     pub note: String,
 }
 
@@ -126,6 +166,7 @@ impl Default for ProfileDraft {
             port: ProtocolType::default().default_port(),
             auth: AuthConfig::default(),
             paths: PathConfig::default(),
+            advanced: ProfileAdvanced::default(),
             note: String::new(),
         }
     }
@@ -281,6 +322,7 @@ mod tests {
     #[test]
     fn test_auth_config_json_roundtrip() {
         let config = AuthConfig::Ssh {
+            username: "root".into(),
             method: SshAuthMethod::PrivateKey {
                 path: "/tmp/key".into(),
                 passphrase: "pw".into(),

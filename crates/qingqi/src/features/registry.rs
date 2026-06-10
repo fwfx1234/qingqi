@@ -10,13 +10,13 @@ use qingqi_feature_anti_peeping as feature_anti_peeping;
 use qingqi_feature_api_debugger as feature_api_debugger;
 use qingqi_feature_clipboard as feature_clipboard;
 use qingqi_feature_download_manager as feature_download_manager;
-use qingqi_feature_ssh as feature_ssh;
 use qingqi_feature_gpui_demo as feature_gpui_demo;
 use qingqi_feature_http_capture as feature_http_capture;
 use qingqi_feature_image_compress as feature_image_compress;
 use qingqi_feature_json_parser as feature_json_parser;
 use qingqi_feature_qr_code as feature_qr_code;
 use qingqi_feature_quick_launch as feature_quick_launch;
+use qingqi_feature_ssh as feature_ssh;
 use qingqi_feature_system_settings as feature_system_settings;
 
 pub fn register_builtin_plugins(host: &mut AppHost) -> Result<()> {

@@ -48,16 +48,16 @@ impl TransferQueue {
     }
 
     pub fn snapshot(&self) -> Vec<TransferTask> {
-        self.tasks
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.tasks.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// 取出下一个排队中的任务，标记为 Running
     pub fn dequeue_next(&self) -> Option<TransferTask> {
         let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(idx) = tasks.iter().position(|t| t.status == TransferStatus::Queued) {
+        if let Some(idx) = tasks
+            .iter()
+            .position(|t| t.status == TransferStatus::Queued)
+        {
             let mut task = tasks[idx].clone();
             task.status = TransferStatus::Running;
             let now = Self::now_str();
@@ -83,19 +83,15 @@ impl TransferQueue {
     pub fn cancel(&self, id: &TransferId) {
         let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(t) = tasks.iter_mut().find(|t| &t.id == id)
-            && matches!(t.status, TransferStatus::Queued | TransferStatus::Running) {
-                t.status = TransferStatus::Cancelled;
-                let now = Self::now_str();
-                t.logs.push(format!("{now} [WARN] 已取消"));
-            }
+            && matches!(t.status, TransferStatus::Queued | TransferStatus::Running)
+        {
+            t.status = TransferStatus::Cancelled;
+            let now = Self::now_str();
+            t.logs.push(format!("{now} [WARN] 已取消"));
+        }
     }
 
-    pub fn update_progress(
-        &self,
-        id: &TransferId,
-        transferred_bytes: u64,
-        total_bytes: u64,
-    ) {
+    pub fn update_progress(&self, id: &TransferId, transferred_bytes: u64, total_bytes: u64) {
         let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(t) = tasks.iter_mut().find(|t| &t.id == id) {
             t.transferred_bytes = transferred_bytes;
@@ -138,8 +134,7 @@ impl TransferQueue {
         if let Some(t) = tasks.iter_mut().find(|t| &t.id == id) {
             t.status = TransferStatus::Failed;
             let now = Self::now_str();
-            t.logs
-                .push(format!("{now} [ERROR] 失败: {error}"));
+            t.logs.push(format!("{now} [ERROR] 失败: {error}"));
         }
     }
 
@@ -147,11 +142,25 @@ impl TransferQueue {
         time::OffsetDateTime::now_local()
             .unwrap_or_else(|_| time::OffsetDateTime::now_utc())
             .format(
-                &time::format_description::parse("[hour]:[minute]:[second]")
-                    .expect("时间格式常量"),
+                &time::format_description::parse("[hour]:[minute]:[second]").expect("时间格式常量"),
             )
             .unwrap_or_else(|_| "00:00:00".into())
     }
+}
+
+/// 将 Unix 时间戳或已有字符串格式化为 `MM-DD HH:mm`
+pub fn format_modified(raw: &str) -> String {
+    if let Ok(secs) = raw.parse::<i64>() {
+        let dt = time::OffsetDateTime::from_unix_timestamp(secs)
+            .unwrap_or_else(|_| time::OffsetDateTime::UNIX_EPOCH);
+        return dt
+            .format(
+                &time::format_description::parse("[month repr:numerical]-[day] [hour]:[minute]")
+                    .expect("时间格式常量"),
+            )
+            .unwrap_or_else(|_| raw.to_string());
+    }
+    raw.to_string()
 }
 
 pub fn format_size(bytes: u64) -> String {

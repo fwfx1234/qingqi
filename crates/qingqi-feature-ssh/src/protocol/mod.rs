@@ -75,6 +75,11 @@ pub trait RemoteProtocol: Send + Sync {
     /// 列出目录内容
     async fn list_directory(&self, path: &str) -> Result<Vec<RemoteEntry>>;
 
+    /// 最近一次 `list_directory` 实际使用的远程路径（如 `~` 已展开）
+    fn last_list_path(&self) -> Option<String> {
+        None
+    }
+
     /// 创建目录
     async fn create_directory(&self, path: &str) -> Result<()>;
 
@@ -106,8 +111,7 @@ pub trait RemoteProtocol: Send + Sync {
 
 // ============ ProtocolRegistry ============
 
-pub type ProtocolFactory =
-    Box<dyn Fn(&Profile) -> Result<Box<dyn RemoteProtocol>> + Send + Sync>;
+pub type ProtocolFactory = Box<dyn Fn(&Profile) -> Result<Box<dyn RemoteProtocol>> + Send + Sync>;
 
 pub struct ProtocolRegistry {
     factories: std::collections::HashMap<ProtocolType, ProtocolFactory>,
@@ -140,5 +144,5 @@ impl Default for ProtocolRegistry {
 }
 
 // 子模块
-pub mod ssh;
 pub mod ftp;
+pub mod ssh;

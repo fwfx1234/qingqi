@@ -135,7 +135,12 @@ pub fn font_ui() -> &'static str {
 
 /// Monospace font for code / logs / hex / mono blocks.
 pub fn font_mono() -> &'static str {
-    "SF Mono"
+    "SF Mono, Menlo, Monaco, Courier New, monospace"
+}
+
+/// Terminal panel font (macOS default).
+pub fn font_terminal() -> &'static str {
+    "Menlo"
 }
 
 // ── Shared UI Components ─────────────────────────────────────────────────

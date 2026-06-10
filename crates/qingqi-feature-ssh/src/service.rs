@@ -7,11 +7,12 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use tokio::sync::broadcast;
+use tracing::{debug, warn};
 
-use crate::connection::{default_registry, ConnectionPool};
+use crate::connection::ConnectionPool;
 use crate::model::{
-    Profile, ProfileDraft, RemoteEntry, SessionId, SessionSnapshot, SessionStatus,
-    SessionSummary, SshSnapshot,
+    Profile, ProfileDraft, RemoteEntry, SessionId, SessionSnapshot, SessionStatus, SessionSummary,
+    SshRole, SshSnapshot,
 };
 use crate::store::ProfileStore;
 use crate::terminal::{TerminalEngine, TerminalFrame};
@@ -36,7 +37,8 @@ pub enum SshEvent {
 struct SessionState {
     profile_id: i64,
     summary: SessionSummary,
-    protocol: Option<Arc<dyn crate::protocol::RemoteProtocol>>,
+    terminal_protocol: Option<Arc<dyn crate::protocol::RemoteProtocol>>,
+    sftp_protocol: Option<Arc<dyn crate::protocol::RemoteProtocol>>,
     terminal: Option<Arc<TerminalEngine>>,
     entries: Vec<RemoteEntry>,
     remote_cwd: String,
@@ -61,13 +63,12 @@ impl SshService {
         profile_store: Arc<ProfileStore>,
         cache_dir: PathBuf,
     ) -> Self {
-        let registry = default_registry();
         let (event_tx, _) = broadcast::channel(256);
 
         Self {
             profile_store,
             cache_dir,
-            connection_pool: Arc::new(ConnectionPool::new(registry)),
+            connection_pool: Arc::new(ConnectionPool::new()),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             event_tx,
             revision: AtomicU64::new(0),
@@ -80,7 +81,14 @@ impl SshService {
 
     fn emit(&self, event: SshEvent) {
         self.bump();
+        debug!(target: "qingqi_ssh", ?event, revision = self.revision.load(Ordering::SeqCst), "service: emit");
         let _ = self.event_tx.send(event);
+    }
+
+    /// 异步任务内通知 UI（不 bump revision，View 已不再依赖 revision）
+    fn notify_async(event: SshEvent, tx: &broadcast::Sender<SshEvent>) {
+        debug!(target: "qingqi_ssh", ?event, "service: notify_async");
+        let _ = tx.send(event);
     }
 
     // ========== Profile CRUD ==========
@@ -119,9 +127,27 @@ impl SshService {
     // ========== Session 管理 ==========
 
     pub fn open_session(&self, profile_id: i64) -> Result<SessionId> {
+        debug!(
+            target: "qingqi_ssh",
+            profile_id,
+            "open_session: 加载 Profile"
+        );
         let profile = self
             .get_profile(profile_id)?
             .ok_or_else(|| anyhow::anyhow!("Profile {profile_id} 不存在"))?;
+
+        debug!(
+            target: "qingqi_ssh",
+            profile_id,
+            name = %profile.name,
+            protocol = %profile.protocol.display(),
+            host = %profile.host,
+            port = profile.port,
+            remote_root = %profile.paths.remote_root,
+            timeout_secs = profile.advanced.connection_timeout_secs,
+            keepalive_secs = profile.advanced.keepalive_interval_secs,
+            "open_session: Profile 已加载，创建 Session"
+        );
 
         let session_id = SessionId::new();
         let terminal_kind = profile.protocol.supports_terminal();
@@ -129,7 +155,7 @@ impl SshService {
         let summary = SessionSummary {
             session_id,
             profile_id,
-            title: format!("{}:{}", profile.host, profile.port),
+            title: profile.name.clone(),
             endpoint: format!("{}:{}", profile.host, profile.port),
             protocol: profile.protocol.clone(),
             status: SessionStatus::Connecting,
@@ -144,7 +170,8 @@ impl SshService {
             SessionState {
                 profile_id,
                 summary: summary.clone(),
-                protocol: None,
+                terminal_protocol: None,
+                sftp_protocol: None,
                 terminal: None,
                 entries: Vec::new(),
                 remote_cwd: profile.paths.remote_root.clone(),
@@ -154,6 +181,12 @@ impl SshService {
         drop(sessions);
 
         self.emit(SshEvent::SessionOpened(session_id));
+        debug!(
+            target: "qingqi_ssh",
+            profile_id,
+            session_id = %session_id.0,
+            "open_session: Session 已创建，开始异步连接"
+        );
 
         // 异步连接
         let pool = Arc::clone(&self.connection_pool);
@@ -161,39 +194,138 @@ impl SshService {
         let tx = self.event_tx.clone();
         let sid = session_id;
         let p = profile;
-        tokio::spawn(async move {
-            match pool.get_or_connect(&p).await {
-                Ok(proto) => {
-                    // 打开终端
-                    let term = match proto.open_terminal().await {
+        crate::tokio_handle().spawn(async move {
+            debug!(
+                target: "qingqi_ssh",
+                profile_id = p.id,
+                session_id = %sid.0,
+                endpoint = %format!("{}:{}", p.host, p.port),
+                "connect_task: 开始协议连接"
+            );
+            let term_result = pool.get_or_connect(&p, SshRole::Terminal).await;
+            let sftp_result = pool.get_or_connect(&p, SshRole::Sftp).await;
+
+            match (term_result, sftp_result) {
+                (Ok(terminal_proto), Ok(sftp_proto)) => {
+                    debug!(
+                        target: "qingqi_ssh",
+                        profile_id = p.id,
+                        session_id = %sid.0,
+                        "connect_task: 终端/SFTP 双连接就绪"
+                    );
+                    // 打开终端（独立 SSH 会话）
+                    let term = match terminal_proto.open_terminal().await {
                         Ok(rx) => {
-                            let engine = Arc::new(TerminalEngine::new(p.protocol.supports_terminal()));
+                            debug!(
+                                target: "qingqi_ssh",
+                                profile_id = p.id,
+                                session_id = %sid.0,
+                                "connect_task: 终端通道已打开"
+                            );
+                            let engine =
+                                Arc::new(TerminalEngine::new(p.protocol.supports_terminal()));
                             engine.set_status(&format!("{}@{}:{}", p.name, p.host, p.port));
-                            TerminalEngine::start_processing(engine.clone(), rx);
+                            let tx_term = tx.clone();
+                            let sid_term = sid;
+                            TerminalEngine::start_processing_with_notify(
+                                engine.clone(),
+                                rx,
+                                Some(Box::new(move || {
+                                    Self::notify_async(
+                                        SshEvent::SessionDataChanged(sid_term),
+                                        &tx_term,
+                                    );
+                                })),
+                            );
                             Some(engine)
                         }
-                        Err(_) => None,
+                        Err(e) => {
+                            debug!(
+                                target: "qingqi_ssh",
+                                profile_id = p.id,
+                                session_id = %sid.0,
+                                error = %e,
+                                "connect_task: 打开终端失败，继续无终端模式"
+                            );
+                            None
+                        }
+                    };
+
+                    // 拉取初始目录列表
+                    let remote_root = p.paths.remote_root.clone();
+                    debug!(
+                        target: "qingqi_ssh",
+                        profile_id = p.id,
+                        session_id = %sid.0,
+                        remote_root = %remote_root,
+                        "connect_task: 拉取初始目录"
+                    );
+                    let list_result = sftp_proto.list_directory(&remote_root).await;
+                    let resolved_root = sftp_proto
+                        .last_list_path()
+                        .unwrap_or_else(|| remote_root.clone());
+                    let entries = match list_result {
+                        Ok(entries) => {
+                            debug!(
+                                target: "qingqi_ssh",
+                                profile_id = p.id,
+                                session_id = %sid.0,
+                                remote_root = %remote_root,
+                                resolved_root = %resolved_root,
+                                entry_count = entries.len(),
+                                "connect_task: 初始目录加载完成"
+                            );
+                            entries
+                        }
+                        Err(e) => {
+                            debug!(
+                                target: "qingqi_ssh",
+                                profile_id = p.id,
+                                session_id = %sid.0,
+                                remote_root = %remote_root,
+                                error = %e,
+                                "connect_task: 加载初始目录失败"
+                            );
+                            Vec::new()
+                        }
                     };
 
                     // 更新 session 状态
                     let mut sessions_guard = sessions.lock().unwrap_or_else(|e| e.into_inner());
                     if let Some(state) = sessions_guard.get_mut(&sid) {
-                        state.protocol = Some(proto);
+                        state.terminal_protocol = Some(terminal_proto);
+                        state.sftp_protocol = Some(sftp_proto);
                         state.terminal = term;
+                        state.entries = entries;
+                        state.remote_cwd = resolved_root;
                         state.summary.status = SessionStatus::Connected;
                         state.summary.message = "已连接".into();
                     }
                     drop(sessions_guard);
-                    let _ = tx.send(SshEvent::SessionConnected(sid));
+                    debug!(
+                        target: "qingqi_ssh",
+                        profile_id = p.id,
+                        session_id = %sid.0,
+                        "connect_task: Session 已连接"
+                    );
+                    Self::notify_async(SshEvent::SessionConnected(sid), &tx);
                 }
-                Err(e) => {
+                (Err(e), _) | (_, Err(e)) => {
+                    warn!(
+                        target: "qingqi_ssh",
+                        profile_id = p.id,
+                        session_id = %sid.0,
+                        error = %e,
+                        "connect_task: 连接失败"
+                    );
+                    pool.disconnect_all(p.id).await;
                     let mut sessions_guard = sessions.lock().unwrap_or_else(|e| e.into_inner());
                     if let Some(state) = sessions_guard.get_mut(&sid) {
                         state.summary.status = SessionStatus::Failed;
                         state.summary.message = format!("连接失败: {e}");
                     }
                     drop(sessions_guard);
-                    let _ = tx.send(SshEvent::SessionDataChanged(sid));
+                    Self::notify_async(SshEvent::SessionDataChanged(sid), &tx);
                 }
             }
         });
@@ -206,8 +338,8 @@ impl SshService {
         if let Some(state) = sessions.remove(id) {
             let pool = Arc::clone(&self.connection_pool);
             let profile_id = state.profile_id;
-            tokio::spawn(async move {
-                pool.disconnect(profile_id).await;
+            crate::tokio_handle().spawn(async move {
+                pool.disconnect_all(profile_id).await;
             });
         }
         drop(sessions);
@@ -251,10 +383,10 @@ impl SshService {
         let state = sessions
             .get(id)
             .ok_or_else(|| anyhow::anyhow!("Session 不存在"))?;
-        if let Some(proto) = &state.protocol {
+        if let Some(proto) = &state.terminal_protocol {
             let proto = Arc::clone(proto);
             let data = data.to_vec();
-            tokio::spawn(async move {
+            crate::tokio_handle().spawn(async move {
                 let _ = proto.send_terminal_input(&data).await;
             });
         }
@@ -269,20 +401,19 @@ impl SshService {
             .get(id)
             .ok_or_else(|| anyhow::anyhow!("Session 不存在"))?;
         let proto = state
-            .protocol
+            .sftp_protocol
             .clone()
-            .ok_or_else(|| anyhow::anyhow!("未连接"))?;
-        // 需要在锁外调用 async，先克隆 protocol
+            .ok_or_else(|| anyhow::anyhow!("SFTP 未连接"))?;
         drop(sessions);
 
-        let entries = tokio::runtime::Handle::current()
-            .block_on(async { proto.list_directory(path).await })?;
+        let entries = crate::tokio_handle().block_on(async { proto.list_directory(path).await })?;
+        let resolved = proto.last_list_path().unwrap_or_else(|| path.to_string());
 
         // 更新缓存
         let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(state) = sessions.get_mut(id) {
             state.entries = entries.clone();
-            state.remote_cwd = path.to_string();
+            state.remote_cwd = resolved;
         }
         Ok(entries)
     }
@@ -293,6 +424,16 @@ impl SshService {
             .get(id)
             .map(|s| s.entries.clone())
             .unwrap_or_default()
+    }
+
+    pub fn create_remote_directory(&self, id: &SessionId, path: &str) -> Result<()> {
+        let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let proto = sessions
+            .get(id)
+            .and_then(|s| s.sftp_protocol.clone())
+            .ok_or_else(|| anyhow::anyhow!("SFTP 未连接"))?;
+        drop(sessions);
+        crate::tokio_handle().block_on(async { proto.create_directory(path).await })
     }
 
     pub fn session_cwd(&self, id: &SessionId) -> String {
@@ -316,9 +457,9 @@ impl SshService {
             .get(id)
             .ok_or_else(|| anyhow::anyhow!("Session 不存在"))?;
         let proto = state
-            .protocol
+            .sftp_protocol
             .clone()
-            .ok_or_else(|| anyhow::anyhow!("未连接"))?;
+            .ok_or_else(|| anyhow::anyhow!("SFTP 未连接"))?;
         drop(sessions);
 
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
@@ -327,7 +468,7 @@ impl SshService {
         let local_path = local.to_path_buf();
         let remote_path = remote.to_string();
 
-        tokio::spawn(async move {
+        crate::tokio_handle().spawn(async move {
             match proto_clone.upload_file(&local_path, &remote_path, tx).await {
                 Ok(_) => { /* 传输完成 */ }
                 Err(_) => { /* 传输失败 */ }
@@ -348,9 +489,9 @@ impl SshService {
             .get(id)
             .ok_or_else(|| anyhow::anyhow!("Session 不存在"))?;
         let proto = state
-            .protocol
+            .sftp_protocol
             .clone()
-            .ok_or_else(|| anyhow::anyhow!("未连接"))?;
+            .ok_or_else(|| anyhow::anyhow!("SFTP 未连接"))?;
         drop(sessions);
 
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
@@ -359,8 +500,11 @@ impl SshService {
         let local_path = local.to_path_buf();
         let remote_path = remote.to_string();
 
-        tokio::spawn(async move {
-            match proto_clone.download_file(&remote_path, &local_path, tx).await {
+        crate::tokio_handle().spawn(async move {
+            match proto_clone
+                .download_file(&remote_path, &local_path, tx)
+                .await
+            {
                 Ok(_) => {}
                 Err(_) => {}
             }
@@ -397,9 +541,15 @@ mod tests {
         let database = Arc::new(qingqi_plugin::database::DatabaseService::new(paths));
         let db_path = dir.join("test.db");
         database
-            .register_database(qingqi_plugin::database::DatabaseSpec::path("ssh/profiles", db_path.clone()))
+            .register_database(qingqi_plugin::database::DatabaseSpec::path(
+                "ssh/profiles",
+                db_path.clone(),
+            ))
             .unwrap();
-        let store = Arc::new(crate::store::ProfileStore::new(Arc::clone(&database), db_path));
+        let store = Arc::new(crate::store::ProfileStore::new(
+            Arc::clone(&database),
+            db_path,
+        ));
         store.init().unwrap();
         SshService::new(database, store, dir.join("cache"))
     }

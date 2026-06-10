@@ -411,7 +411,9 @@ fn resolve_log_filter() -> tracing_subscriber::EnvFilter {
 
     // 3. 编译时默认
     if cfg!(debug_assertions) {
-        tracing_subscriber::EnvFilter::new("debug")
+        tracing_subscriber::EnvFilter::new(
+            "debug,qingqi_ssh=debug,russh=debug,russh_sftp=debug,suppaftp=debug",
+        )
     } else {
         tracing_subscriber::EnvFilter::new("warn,qingqi=info")
     }

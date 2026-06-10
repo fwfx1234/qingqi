@@ -5,45 +5,97 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use tokio::sync::Mutex as TokioMutex;
+use tracing::debug;
 
-use crate::model::{Profile, ProtocolType};
-use crate::protocol::{ProtocolRegistry, RemoteProtocol};
+use crate::model::{Profile, ProtocolType, SshRole};
+use crate::protocol::ftp::FtpProtocol;
+use crate::protocol::ssh::SshProtocol;
+use crate::protocol::RemoteProtocol;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct ConnectionKey {
+    profile_id: i64,
+    role: SshRole,
+}
 
 pub struct ConnectionPool {
-    registry: ProtocolRegistry,
-    connections: TokioMutex<HashMap<i64, Arc<dyn RemoteProtocol>>>,
+    connections: TokioMutex<HashMap<ConnectionKey, Arc<dyn RemoteProtocol>>>,
 }
 
 impl ConnectionPool {
-    pub fn new(registry: ProtocolRegistry) -> Self {
+    pub fn new() -> Self {
         Self {
-            registry,
             connections: TokioMutex::new(HashMap::new()),
         }
     }
 
-    pub async fn get_or_connect(&self, profile: &Profile) -> Result<Arc<dyn RemoteProtocol>> {
+    fn pool_key(profile: &Profile, role: SshRole) -> ConnectionKey {
+        ConnectionKey {
+            profile_id: profile.id,
+            role: match profile.protocol {
+                ProtocolType::Ssh => role,
+                // FTP/FTPS 单连接复用
+                ProtocolType::Ftp | ProtocolType::Ftps => SshRole::Sftp,
+            },
+        }
+    }
+
+    fn create_protocol(profile: &Profile, role: SshRole) -> Result<Box<dyn RemoteProtocol>> {
+        match profile.protocol {
+            ProtocolType::Ssh => Ok(Box::new(SshProtocol::new(profile, role)?)),
+            ProtocolType::Ftp | ProtocolType::Ftps => Ok(Box::new(FtpProtocol::new(profile)?)),
+        }
+    }
+
+    pub async fn get_or_connect(
+        &self,
+        profile: &Profile,
+        role: SshRole,
+    ) -> Result<Arc<dyn RemoteProtocol>> {
+        let key = Self::pool_key(profile, role);
         let mut conns = self.connections.lock().await;
 
-        if let Some(existing) = conns.get(&profile.id) {
+        if let Some(existing) = conns.get(&key) {
             if existing.is_connected() {
+                debug!(
+                    target: "qingqi_ssh",
+                    profile_id = profile.id,
+                    ?role,
+                    "connection_pool: 复用已有连接"
+                );
                 return Ok(Arc::clone(existing));
             }
-            conns.remove(&profile.id);
+            conns.remove(&key);
         }
 
-        let protocol = self.registry.create(profile)?;
+        debug!(
+            target: "qingqi_ssh",
+            profile_id = profile.id,
+            ?role,
+            host = %profile.host,
+            port = profile.port,
+            "connection_pool: 创建新连接"
+        );
+        let protocol = Self::create_protocol(profile, role)?;
         protocol.connect().await?;
 
         let arc_proto: Arc<dyn RemoteProtocol> = Arc::from(protocol);
-        conns.insert(profile.id, Arc::clone(&arc_proto));
+        conns.insert(key, Arc::clone(&arc_proto));
         Ok(arc_proto)
     }
 
-    pub async fn disconnect(&self, profile_id: i64) {
+    pub async fn disconnect(&self, profile_id: i64, role: SshRole) {
+        let key = ConnectionKey { profile_id, role };
         let mut conns = self.connections.lock().await;
-        if let Some(proto) = conns.remove(&profile_id) {
+        if let Some(proto) = conns.remove(&key) {
+            debug!(target: "qingqi_ssh", profile_id, ?role, "connection_pool: 断开");
             proto.disconnect().await;
+        }
+    }
+
+    pub async fn disconnect_all(&self, profile_id: i64) {
+        for role in [SshRole::Terminal, SshRole::Sftp] {
+            self.disconnect(profile_id, role).await;
         }
     }
 
@@ -58,24 +110,8 @@ impl ConnectionPool {
     }
 }
 
-/// 构建默认的 ProtocolRegistry（注册 SSH + FTP + FTPS 工厂）
-pub fn default_registry() -> ProtocolRegistry {
-    use crate::protocol::ssh::SshProtocol;
-    use crate::protocol::ftp::FtpProtocol;
-
-    let mut registry = ProtocolRegistry::new();
-
-    registry.register(ProtocolType::Ssh, Box::new(|profile| {
-        Ok(Box::new(SshProtocol::new(profile)?))
-    }));
-
-    registry.register(ProtocolType::Ftp, Box::new(|profile| {
-        Ok(Box::new(FtpProtocol::new(profile)?))
-    }));
-
-    registry.register(ProtocolType::Ftps, Box::new(|profile| {
-        Ok(Box::new(FtpProtocol::new(profile)?))
-    }));
-
-    registry
+impl Default for ConnectionPool {
+    fn default() -> Self {
+        Self::new()
+    }
 }
