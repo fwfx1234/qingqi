@@ -36,6 +36,7 @@ pub enum SshEvent {
 struct SessionState {
     profile_id: i64,
     summary: SessionSummary,
+    protocol: Option<Arc<dyn crate::protocol::RemoteProtocol>>,
     terminal: Option<Arc<TerminalEngine>>,
     entries: Vec<RemoteEntry>,
     remote_cwd: String,
@@ -49,7 +50,7 @@ pub struct SshService {
     #[allow(dead_code)]
     cache_dir: PathBuf, // 终端历史/临时文件目录
     connection_pool: Arc<ConnectionPool>,
-    sessions: Mutex<HashMap<SessionId, SessionState>>,
+    sessions: Arc<Mutex<HashMap<SessionId, SessionState>>>,
     event_tx: broadcast::Sender<SshEvent>,
     revision: AtomicU64,
 }
@@ -67,7 +68,7 @@ impl SshService {
             profile_store,
             cache_dir,
             connection_pool: Arc::new(ConnectionPool::new(registry)),
-            sessions: Mutex::new(HashMap::new()),
+            sessions: Arc::new(Mutex::new(HashMap::new())),
             event_tx,
             revision: AtomicU64::new(0),
         }
@@ -143,6 +144,7 @@ impl SshService {
             SessionState {
                 profile_id,
                 summary: summary.clone(),
+                protocol: None,
                 terminal: None,
                 entries: Vec::new(),
                 remote_cwd: profile.paths.remote_root.clone(),
@@ -155,15 +157,42 @@ impl SshService {
 
         // 异步连接
         let pool = Arc::clone(&self.connection_pool);
+        let sessions = Arc::clone(&self.sessions);
         let tx = self.event_tx.clone();
         let sid = session_id;
         let p = profile;
         tokio::spawn(async move {
             match pool.get_or_connect(&p).await {
-                Ok(_proto) => {
+                Ok(proto) => {
+                    // 打开终端
+                    let term = match proto.open_terminal().await {
+                        Ok(rx) => {
+                            let engine = Arc::new(TerminalEngine::new(p.protocol.supports_terminal()));
+                            engine.set_status(&format!("{}@{}:{}", p.name, p.host, p.port));
+                            TerminalEngine::start_processing(engine.clone(), rx);
+                            Some(engine)
+                        }
+                        Err(_) => None,
+                    };
+
+                    // 更新 session 状态
+                    let mut sessions_guard = sessions.lock().unwrap_or_else(|e| e.into_inner());
+                    if let Some(state) = sessions_guard.get_mut(&sid) {
+                        state.protocol = Some(proto);
+                        state.terminal = term;
+                        state.summary.status = SessionStatus::Connected;
+                        state.summary.message = "已连接".into();
+                    }
+                    drop(sessions_guard);
                     let _ = tx.send(SshEvent::SessionConnected(sid));
                 }
-                Err(_e) => {
+                Err(e) => {
+                    let mut sessions_guard = sessions.lock().unwrap_or_else(|e| e.into_inner());
+                    if let Some(state) = sessions_guard.get_mut(&sid) {
+                        state.summary.status = SessionStatus::Failed;
+                        state.summary.message = format!("连接失败: {e}");
+                    }
+                    drop(sessions_guard);
                     let _ = tx.send(SshEvent::SessionDataChanged(sid));
                 }
             }
@@ -222,18 +251,41 @@ impl SshService {
         let state = sessions
             .get(id)
             .ok_or_else(|| anyhow::anyhow!("Session 不存在"))?;
-        // 终端输入由 protocol 层处理（异步）
-        let handle = self.connection_pool.clone();
-        let profile_id = state.profile_id;
-        let data = data.to_vec();
-        tokio::spawn(async move {
-            // 注：send_terminal_input 需要 protocol handle，此处简化
-            let _ = (handle, profile_id, data);
-        });
+        if let Some(proto) = &state.protocol {
+            let proto = Arc::clone(proto);
+            let data = data.to_vec();
+            tokio::spawn(async move {
+                let _ = proto.send_terminal_input(&data).await;
+            });
+        }
         Ok(())
     }
 
     // ========== 文件操作 ==========
+
+    pub fn list_directory(&self, id: &SessionId, path: &str) -> Result<Vec<RemoteEntry>> {
+        let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let state = sessions
+            .get(id)
+            .ok_or_else(|| anyhow::anyhow!("Session 不存在"))?;
+        let proto = state
+            .protocol
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("未连接"))?;
+        // 需要在锁外调用 async，先克隆 protocol
+        drop(sessions);
+
+        let entries = tokio::runtime::Handle::current()
+            .block_on(async { proto.list_directory(path).await })?;
+
+        // 更新缓存
+        let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(state) = sessions.get_mut(id) {
+            state.entries = entries.clone();
+            state.remote_cwd = path.to_string();
+        }
+        Ok(entries)
+    }
 
     pub fn session_entries(&self, id: &SessionId) -> Vec<RemoteEntry> {
         let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
