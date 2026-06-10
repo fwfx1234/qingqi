@@ -195,9 +195,71 @@ render 方法严格只读 `self.vm`，不做任何 IO、锁操作、计算或排
 
 ---
 
-## 六、GUI 实现要点总结
+## 六、性能优化铁律
 
-### 6.1 分离式顶栏实现
+这是对编码层面的硬性约束，任何违反都会导致 UI 卡顿，code review 时必须拒绝。
+
+### 6.1 View-Model 模式
+
+数据变化时在事件回调中计算一次 view-model，render 只读不计算。
+
+- **正确做法**：收到 SshEvent 后调用 `rebuild_view_model()` 从 service snapshot 重建 `self.vm`，然后 `cx.notify()`。render 方法直接使用 `self.vm.profiles`、`self.vm.file_tree` 等字段。
+- **禁止**：在 render 中调用 `self.service.list_profiles()`、排序数组、格式化字符串、过滤集合。所有计算必须在 rebuild 阶段完成。
+
+### 6.2 虚拟化列表
+
+超过一屏的列表必须使用 `uniform_list` 而非全量渲染。
+
+- Profile 列表（左侧边栏）— 超过 20 个时虚拟化
+- 文件树列表 — 文件数超过一屏时虚拟化，1000+ 文件不能卡顿
+- 传输任务列表 — 超过 20 条时虚拟化
+- **禁止**：`div().children(profiles.iter().map(...))` 直接全量渲染
+
+### 6.3 无锁 render
+
+render 方法中禁止任何形式的锁操作。
+
+- **禁止**：`self.service.sessions.lock()`、`self.service.sessions.lock().unwrap()`、`mutex.lock()`
+- **原因**：render 在主线程执行，持锁可能阻塞整个 UI。数据应已在 view-model 中就绪。
+
+### 6.4 精准 notify
+
+- 使用 `cx.notify()` 只标脏当前 view，触发局部重绘
+- 禁止 `window.refresh()` 全局重绘（仅确需时用）
+- 每个子 view 的变化只 notify 自己，不通知父级
+
+### 6.5 实体只创建一次
+
+TextInput、FocusHandle 等实体在 SshView 构造函数中 `cx.new()` 一次，存储在 struct 字段中。render 方法复用已有实体。
+
+- **禁止**：在 render 中 `cx.new(TextInput::new())`，每次重绘都会泄漏实体
+- Profile 编辑弹窗中的输入框在弹窗打开时创建，关闭时销毁
+
+### 6.6 异步 Generation Guard
+
+所有 `cx.spawn` 异步操作必须带 generation guard，防止回调时 view 状态已过期。
+
+- 在 spawn 前递增 `self.generation`（wrapping_add），保存到局部变量
+- 在 `view.update` 回调中首先检查 `view.generation == gen`，不匹配则直接 return
+- 适用场景：`open_session` 的连接等待、文件上传下载的进度回调、终端输出的流式读取
+
+### 6.7 语义化样式
+
+- 禁止硬编码颜色：`rgb(0x...)`、`hsla(...)`
+- 使用语义化 token：`ui::bg_surface()`、`ui::text_primary()`、`ui::border()`、`ui::text_secondary()`
+- 禁止硬编码字体：`font_family("PingFang SC")`，用 `ui::font_ui()` 等 token
+
+### 6.8 布局防溢出
+
+- 弹性区域使用 `flex_1()` + `min_h(px(0.0))`，防止内容撑破容器
+- 固定高度区域明确指定 `h(px(N))`，不依赖内容撑高
+- 终端面板和文件树使用 `flex_1()` 自动填充剩余空间
+
+---
+
+## 七、GUI 实现要点总结
+
+### 7.1 分离式顶栏实现
 
 - 顶层使用水平 flex（不是 flex_col）
 - 左侧：独立自包含列（w(280px), h_full, flex_col）
@@ -205,21 +267,21 @@ render 方法严格只读 `self.vm`，不做任何 IO、锁操作、计算或排
 - 左右各自拥有顶部区域，两者顶部之间自然形成竖直分隔线
 - macOS 交通灯用三个 12px 圆形 div 表示
 
-### 6.2 传输面板位置
+### 7.2 传输面板位置
 
 传输面板在右侧列的 Tab 内容区域内（文件树/终端的下方），不横跨全窗口。每个 Session 的传输记录独立。默认收缩为单行控制栏，展开后撑起约 200px 高度。
 
-### 6.3 FTP 日志终端
+### 7.3 FTP 日志终端
 
 TerminalPane 对 SSH/FTP 透明。FTP 模式下，终端内容为带颜色的命令响应日志（发送=青色，接收=灰色，错误=红色），底部有 FTP 原生命令输入行。终端顶部状态栏正常显示连接信息。
 
-### 6.4 Profile 编辑弹窗
+### 7.4 Profile 编辑弹窗
 
 Overlay 模式：半透明遮罩 + 居中模态表单。认证方式区域根据 protocol 选择动态切换显示内容（SSH 三种认证选项，FTP 用户名密码）。
 
 ---
 
-## 七、关键决策记录
+## 八、关键决策记录
 
 | 决策 | 结论 | 日期 |
 |------|------|------|
@@ -234,7 +296,7 @@ Overlay 模式：半透明遮罩 + 居中模态表单。认证方式区域根据
 
 ---
 
-## 八、Crate 目录结构
+## 九、Crate 目录结构
 
 ```
 crates/qingqi-feature-ssh/
@@ -263,7 +325,7 @@ crates/qingqi-feature-ssh/
         └── settings_dialog.rs  # 设置弹窗
 ```
 
-## 九、迁移路径
+## 十、迁移路径
 
 1. 新建 `crates/qingqi-feature-ssh/`，添加 workspace 成员
 2. 并行开发，旧插件 `qingqi-feature-ftp-sftp-ssh-client` 保持运行
