@@ -109,6 +109,10 @@ pub struct SshView {
     form_name: Entity<TextInput>,
     form_host: Entity<TextInput>,
     form_port: Entity<TextInput>,
+    form_username: Entity<TextInput>,
+    form_password: Entity<TextInput>,
+    form_remote_root: Entity<TextInput>,
+    form_local_root: Entity<TextInput>,
 
     event_task: Option<Task<()>>,
     last_revision: u64,
@@ -128,6 +132,10 @@ impl SshView {
             form_name: cx.new(|cx| TextInput::new(cx, "名称", "")),
             form_host: cx.new(|cx| TextInput::new(cx, "主机地址", "")),
             form_port: cx.new(|cx| TextInput::new(cx, "端口", "22")),
+            form_username: cx.new(|cx| TextInput::new(cx, "用户名", "root")),
+            form_password: cx.new(|cx| TextInput::new(cx, "密码", "")),
+            form_remote_root: cx.new(|cx| TextInput::new(cx, "远程目录", "~")),
+            form_local_root: cx.new(|cx| TextInput::new(cx, "本地目录", "~/Downloads")),
             event_task: None,
             last_revision: 0,
             generation: 0,
@@ -207,13 +215,25 @@ impl SshView {
         let name = self.form_name.read(cx).text();
         let host = self.form_host.read(cx).text();
         let port: u16 = self.form_port.read(cx).text().parse().unwrap_or(22);
+        let _username = self.form_username.read(cx).text(); // SSH 连接时使用，暂存
+        let password = self.form_password.read(cx).text();
+        let remote_root = self.form_remote_root.read(cx).text();
+        let local_root = self.form_local_root.read(cx).text();
+
         if name.is_empty() || host.is_empty() {
             return;
         }
+        let auth = if password.is_empty() {
+            crate::model::AuthConfig::Ssh { method: crate::model::SshAuthMethod::Agent }
+        } else {
+            crate::model::AuthConfig::Ssh { method: crate::model::SshAuthMethod::Password { password } }
+        };
         let draft = crate::model::ProfileDraft {
             name,
             host,
             port,
+            auth,
+            paths: crate::model::PathConfig { remote_root, local_root },
             ..Default::default()
         };
         match self.service.create_profile(draft) {
@@ -491,6 +511,10 @@ impl Render for SshView {
                     name: self.form_name.clone(),
                     host: self.form_host.clone(),
                     port: self.form_port.clone(),
+                    username: self.form_username.clone(),
+                    password: self.form_password.clone(),
+                    remote_root: self.form_remote_root.clone(),
+                    local_root: self.form_local_root.clone(),
                 };
                 move |root| {
                     root.child(settings_dialog::render_profile_editor(overlay_handle.clone(), &inputs))
