@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use gpui::*;
 use gpui::prelude::FluentBuilder;
+use qingqi_ui::text_input::TextInput;
 use crate::model::{SessionId, SessionStatus, TerminalKind};
 use crate::service::{SshEvent, SshService};
 use crate::terminal::TerminalLine;
@@ -104,6 +105,12 @@ pub struct SshView {
     transfer_panel_expanded: bool,
     show_settings: bool,
 
+    // 设置表单输入框
+    form_name: Entity<TextInput>,
+    form_host: Entity<TextInput>,
+    form_port: Entity<TextInput>,
+    form_username: Entity<TextInput>,
+
     event_task: Option<Task<()>>,
     last_revision: u64,
     generation: u64,
@@ -119,6 +126,10 @@ impl SshView {
             selected_session_id: None,
             transfer_panel_expanded: false,
             show_settings: false,
+            form_name: cx.new(|cx| TextInput::new(cx, "名称", "")),
+            form_host: cx.new(|cx| TextInput::new(cx, "主机地址", "")),
+            form_port: cx.new(|cx| TextInput::new(cx, "端口", "22")),
+            form_username: cx.new(|cx| TextInput::new(cx, "用户名", "root")),
             event_task: None,
             last_revision: 0,
             generation: 0,
@@ -191,6 +202,32 @@ impl SshView {
     fn toggle_settings(&mut self, cx: &mut Context<Self>) {
         self.show_settings = !self.show_settings;
         cx.notify();
+    }
+
+    #[allow(dead_code)]
+    fn create_profile_from_form(&mut self, cx: &mut Context<Self>) {
+        let name = self.form_name.read(cx).text();
+        let host = self.form_host.read(cx).text();
+        let port: u16 = self.form_port.read(cx).text().parse().unwrap_or(22);
+        if name.is_empty() || host.is_empty() {
+            return;
+        }
+        let draft = crate::model::ProfileDraft {
+            name,
+            host,
+            port,
+            ..Default::default()
+        };
+        match self.service.create_profile(draft) {
+            Ok(_) => {
+                self.show_settings = false;
+                self.rebuild_view_model();
+                cx.notify();
+            }
+            Err(e) => {
+                tracing::error!("创建 Profile 失败: {e}");
+            }
+        }
     }
 
     fn rebuild_view_model(&mut self) {
@@ -441,7 +478,7 @@ impl Render for SshView {
                                     .flex()
                                     .min_h(px(0.0))
                                     .child(file_tree::render_file_tree(&self.vm.file_tree))
-                                    .child(terminal_pane::render_terminal(&self.vm.terminal)),
+                                    .child(terminal_pane::render_terminal(&self.vm.terminal, cx)),
                             )
                             .child(transfer_panel::render_transfer_panel(
                                 &self.vm.transfers,
@@ -451,8 +488,16 @@ impl Render for SshView {
                     ),
             )
             // Overlay
-            .when(self.show_settings, move |root| {
-                root.child(settings_dialog::render_profile_editor(overlay_handle))
+            .when(self.show_settings, {
+                let inputs = settings_dialog::ProfileFormInputs {
+                    name: self.form_name.clone(),
+                    host: self.form_host.clone(),
+                    port: self.form_port.clone(),
+                    username: self.form_username.clone(),
+                };
+                move |root| {
+                    root.child(settings_dialog::render_profile_editor(overlay_handle.clone(), &inputs))
+                }
             })
     }
 }

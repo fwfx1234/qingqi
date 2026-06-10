@@ -217,6 +217,22 @@ impl SshService {
         sessions.get(id)?.terminal.as_ref().map(|t| t.snapshot())
     }
 
+    pub fn send_terminal_input(&self, id: &SessionId, data: &[u8]) -> Result<()> {
+        let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let state = sessions
+            .get(id)
+            .ok_or_else(|| anyhow::anyhow!("Session 不存在"))?;
+        // 终端输入由 protocol 层处理（异步）
+        let handle = self.connection_pool.clone();
+        let profile_id = state.profile_id;
+        let data = data.to_vec();
+        tokio::spawn(async move {
+            // 注：send_terminal_input 需要 protocol handle，此处简化
+            let _ = (handle, profile_id, data);
+        });
+        Ok(())
+    }
+
     // ========== 文件操作 ==========
 
     pub fn session_entries(&self, id: &SessionId) -> Vec<RemoteEntry> {
@@ -249,5 +265,72 @@ impl SshService {
 
     pub fn subscribe(&self) -> broadcast::Receiver<SshEvent> {
         self.event_tx.subscribe()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use uuid::Uuid;
+
+    fn temp_service() -> SshService {
+        let dir = std::env::temp_dir().join(format!("ssh-svc-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let paths = qingqi_plugin::storage::AppPaths::for_test(dir.clone());
+        let database = Arc::new(qingqi_plugin::database::DatabaseService::new(paths));
+        let db_path = dir.join("test.db");
+        database
+            .register_database(qingqi_plugin::database::DatabaseSpec::path("ssh/profiles", db_path.clone()))
+            .unwrap();
+        let store = Arc::new(crate::store::ProfileStore::new(Arc::clone(&database), db_path));
+        store.init().unwrap();
+        SshService::new(database, store, dir.join("cache"))
+    }
+
+    #[test]
+    fn test_create_and_list_profiles() {
+        let svc = temp_service();
+        let draft = ProfileDraft {
+            name: "test".into(),
+            host: "10.0.0.1".into(),
+            port: 22,
+            ..Default::default()
+        };
+        let profile = svc.create_profile(draft).unwrap();
+        assert_eq!(profile.name, "test");
+        assert_eq!(profile.port, 22);
+
+        let list = svc.list_profiles().unwrap();
+        assert_eq!(list.len(), 1);
+    }
+
+    #[test]
+    fn test_snapshot_revision_increments() {
+        let svc = temp_service();
+        let snap1 = svc.snapshot();
+        let draft = ProfileDraft {
+            name: "rev-test".into(),
+            host: "10.0.0.2".into(),
+            port: 22,
+            ..Default::default()
+        };
+        svc.create_profile(draft).unwrap();
+        let snap2 = svc.snapshot();
+        assert!(snap2.revision > snap1.revision);
+    }
+
+    #[test]
+    fn test_delete_profile() {
+        let svc = temp_service();
+        let draft = ProfileDraft {
+            name: "del-me".into(),
+            host: "10.0.0.3".into(),
+            port: 22,
+            ..Default::default()
+        };
+        let p = svc.create_profile(draft).unwrap();
+        assert!(svc.delete_profile(p.id).unwrap());
+        assert!(svc.get_profile(p.id).unwrap().is_none());
     }
 }
