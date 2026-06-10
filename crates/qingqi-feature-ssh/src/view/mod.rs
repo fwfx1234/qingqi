@@ -11,7 +11,6 @@ use std::sync::Arc;
 
 use gpui::*;
 use gpui::prelude::FluentBuilder;
-
 use crate::model::{SessionId, SessionStatus, TerminalKind};
 use crate::service::{SshEvent, SshService};
 use crate::terminal::TerminalLine;
