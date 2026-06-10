@@ -55,6 +55,7 @@ pub struct SshProtocol {
     handle: TokioMutex<Option<client::Handle<Handler>>>,
     sftp: TokioMutex<Option<SftpSession>>,
     terminal_tx: Mutex<Option<mpsc::UnboundedSender<TerminalOutput>>>,
+    pty_writer: TokioMutex<Option<russh::Channel<client::Msg>>>,
 }
 
 impl SshProtocol {
@@ -66,6 +67,7 @@ impl SshProtocol {
             handle: TokioMutex::new(None),
             sftp: TokioMutex::new(None),
             terminal_tx: Mutex::new(None),
+            pty_writer: TokioMutex::new(None),
         })
     }
 
@@ -157,6 +159,10 @@ impl RemoteProtocol for SshProtocol {
             *g = None;
         }
         {
+            let mut w = self.pty_writer.lock().await;
+            *w = None;
+        }
+        {
             let mut g = self.sftp.lock().await;
             *g = None;
         }
@@ -193,9 +199,26 @@ impl RemoteProtocol for SshProtocol {
             .await
             .context("请求 shell 失败")?;
 
+        // 保存 channel 用于写入（send_terminal_input）
+        {
+            let mut w = self.pty_writer.lock().await;
+            *w = Some(channel);
+        }
+
+        // 重新获取 channel 用于读取（需要重新 open session）
+        let read_ch = {
+            let mut h = self.handle.lock().await;
+            let handle = h.as_mut().ok_or_else(|| anyhow::anyhow!("SSH 未连接"))?;
+            let ch = handle.channel_open_session().await
+                .context("打开读取 channel 失败")?;
+            ch.request_pty(true, "xterm-256color", 120, 40, 0, 0, &[]).await?;
+            ch.request_shell(true).await?;
+            ch
+        };
+
         let (tx, rx) = mpsc::unbounded_channel();
         let tx2 = tx.clone();
-        let mut stream = channel.into_stream();
+        let mut stream = read_ch.into_stream();
 
         tokio::spawn(async move {
             let mut buf = vec![0u8; 4096];
@@ -217,8 +240,15 @@ impl RemoteProtocol for SshProtocol {
         Ok(rx)
     }
 
-    async fn send_terminal_input(&self, _data: &[u8]) -> Result<()> {
-        Err(anyhow::anyhow!("终端输入通道待实现（需保存 PTY writer）"))
+    async fn send_terminal_input(&self, data: &[u8]) -> Result<()> {
+        let mut w = self.pty_writer.lock().await;
+        let channel = w
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("终端未打开"))?;
+        let mut writer = channel.make_writer();
+        tokio::io::AsyncWriteExt::write_all(&mut writer, data).await?;
+        tokio::io::AsyncWriteExt::flush(&mut writer).await?;
+        Ok(())
     }
 
     // ===== SFTP =====
