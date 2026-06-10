@@ -10,7 +10,7 @@ use super::ProfileItem;
 pub fn render_sidebar(
     profiles: &[ProfileItem],
     selected_id: Option<i64>,
-    _cx: &mut Context<super::SshView>,
+    cx: &mut Context<super::SshView>,
 ) -> impl IntoElement {
     div()
         .w(px(280.0))
@@ -21,7 +21,7 @@ pub fn render_sidebar(
         .border_r_1()
         .border_color(ui::border_light())
         .child(render_top_bar())
-        .child(render_profile_list(profiles, selected_id))
+        .child(render_profile_list(profiles, selected_id, cx))
         .child(render_bottom_bar())
 }
 
@@ -66,14 +66,60 @@ pub fn mac_traffic_lights() -> impl IntoElement {
 fn render_profile_list(
     profiles: &[ProfileItem],
     selected_id: Option<i64>,
+    _cx: &mut Context<super::SshView>,
+) -> impl IntoElement {
+    let count = profiles.len();
+    if count > 20 {
+        let items: Vec<_> = profiles.iter().map(|p| {
+            (p.name.clone(), p.endpoint.clone(), p.protocol_badge.clone(), p.is_connected, selected_id == Some(p.id))
+        }).collect();
+        uniform_list("ssh-profile-list", count, move |range, _w, _cx| {
+            items[range]
+                .iter()
+                .map(|(name, endpoint, badge, connected, sel)| {
+                    render_profile_card_simple(name, endpoint, badge, *connected, *sel).into_any_element()
+                })
+                .collect::<Vec<_>>()
+        })
+        .flex_1()
+        .p_2()
+        .into_any_element()
+    } else {
+        div()
+            .flex_1()
+            .overflow_y_scrollbar()
+            .p_2()
+            .children(profiles.iter().map(|p| {
+                render_profile_card(p, selected_id == Some(p.id))
+            }))
+            .into_any_element()
+    }
+}
+
+fn render_profile_card_simple(
+    name: &str,
+    endpoint: &str,
+    badge: &str,
+    is_connected: bool,
+    is_selected: bool,
 ) -> impl IntoElement {
     div()
-        .flex_1()
-        .overflow_y_scrollbar()
         .p_2()
-        .children(profiles.iter().map(|p| {
-            render_profile_card(p, selected_id == Some(p.id))
-        }))
+        .mb_1()
+        .rounded_md()
+        .cursor_pointer()
+        .bg(if is_selected { hsla(0.55, 0.3, 0.5, 0.15) } else { hsla(0.0, 0.0, 0.0, 0.0) })
+        .hover(|s| { if !is_selected { s.bg(ui::bg_hover()) } else { s } })
+        .border_l_3()
+        .border_color(if is_connected { hsla(0.4, 0.8, 0.5, 1.0) } else { hsla(0.0, 0.0, 0.0, 0.0) })
+        .child(
+            div().flex().flex_col().gap(px(2.0))
+                .child(div().flex().items_center().gap(px(6.0))
+                    .child(div().text_size(px(10.0)).px(px(4.0)).py(px(1.0)).rounded_sm()
+                        .bg(hsla(0.55, 0.5, 0.6, 0.2)).text_color(hsla(0.55, 0.5, 0.5, 1.0))
+                        .child(badge.to_string()))
+                    .child(div().text_size(px(13.0)).font_weight(FontWeight::MEDIUM).child(name.to_string())))
+                .child(div().text_size(px(11.0)).text_color(ui::text_secondary()).child(endpoint.to_string())))
 }
 
 fn render_profile_card(
