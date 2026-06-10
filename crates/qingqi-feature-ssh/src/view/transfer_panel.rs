@@ -10,28 +10,32 @@ use super::TransferPanelViewModel;
 pub fn render_transfer_panel(
     transfers: &TransferPanelViewModel,
     expanded: bool,
+    cx: &mut Context<super::SshView>,
+) -> impl IntoElement {
+    render_transfer_panel_inner(transfers, expanded, cx)
+}
+
+fn render_transfer_panel_inner(
+    transfers: &TransferPanelViewModel,
+    expanded: bool,
+    cx: &mut Context<super::SshView>,
 ) -> impl IntoElement {
     div()
-        .w_full()
-        .border_t_1()
-        .border_color(ui::border_light())
-        .bg(ui::bg_surface())
-        .child(render_control_bar(transfers, expanded))
+        .w_full().border_t_1().border_color(ui::border_light()).bg(ui::bg_surface())
+        .child(render_control_bar(transfers, expanded, cx))
         .when(expanded, |root| root.child(render_transfer_list(transfers)))
 }
 
 fn render_control_bar(
     transfers: &TransferPanelViewModel,
     expanded: bool,
+    cx: &mut Context<super::SshView>,
 ) -> impl IntoElement {
     div()
-        .h(px(36.0))
-        .flex()
-        .items_center()
-        .px_3()
-        .justify_between()
-        .cursor_pointer()
-        .hover(|s| s.bg(ui::bg_hover()))
+        .id("transfer-toggle")
+        .h(px(36.0)).flex().items_center().px_3().justify_between()
+        .cursor_pointer().hover(|s| s.bg(ui::bg_hover()))
+        .on_click(cx.listener(|view, _: &ClickEvent, _w, cx| view.toggle_transfer_panel(cx)))
         .child(
             div()
                 .text_size(px(11.0))

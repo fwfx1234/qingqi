@@ -109,7 +109,6 @@ pub struct SshView {
     generation: u64,
 }
 
-#[allow(dead_code)]
 impl SshView {
     pub fn new(service: Arc<SshService>, cx: &mut Context<Self>) -> Self {
         let mut this = Self {
@@ -411,6 +410,8 @@ impl SshViewModel {
 
 impl Render for SshView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let handle = cx.entity().clone();
+        let overlay_handle = handle.clone();
         div()
             .size_full()
             .flex()
@@ -427,7 +428,7 @@ impl Render for SshView {
                     .h_full()
                     .flex()
                     .flex_col()
-                    .child(session_tabs::render_session_tabs(&self.vm.sessions))
+                    .child(session_tabs::render_session_tabs(&self.vm.sessions, cx))
                     .child(
                         div()
                             .flex_1()
@@ -445,12 +446,13 @@ impl Render for SshView {
                             .child(transfer_panel::render_transfer_panel(
                                 &self.vm.transfers,
                                 self.transfer_panel_expanded,
+                                cx,
                             )),
                     ),
             )
             // Overlay
-            .when(self.show_settings, |root| {
-                root.child(settings_dialog::render_profile_editor(true))
+            .when(self.show_settings, move |root| {
+                root.child(settings_dialog::render_profile_editor(overlay_handle))
             })
     }
 }
