@@ -106,7 +106,7 @@ pub struct Profile {
     pub updated_at: String,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ProfileDraft {
     pub name: String,
     pub protocol: ProtocolType,
@@ -117,10 +117,30 @@ pub struct ProfileDraft {
     pub note: String,
 }
 
+impl Default for ProfileDraft {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            protocol: ProtocolType::default(),
+            host: String::new(),
+            port: ProtocolType::default().default_port(),
+            auth: AuthConfig::default(),
+            paths: PathConfig::default(),
+            note: String::new(),
+        }
+    }
+}
+
 // ============ Session ============
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SessionId(pub Uuid);
+
+impl Default for SessionId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl SessionId {
     pub fn new() -> Self {
@@ -171,6 +191,12 @@ pub struct RemoteEntry {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TransferId(pub Uuid);
+
+impl Default for TransferId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl TransferId {
     pub fn new() -> Self {
@@ -268,7 +294,7 @@ mod tests {
     #[test]
     fn test_profile_draft_default() {
         let draft = ProfileDraft::default();
-        assert_eq!(draft.port, 0); // u16::default()
+        assert_eq!(draft.port, 22); // SSH 默认端口
         assert!(matches!(draft.protocol, ProtocolType::Ssh));
     }
 }

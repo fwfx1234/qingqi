@@ -82,13 +82,12 @@ impl TransferQueue {
 
     pub fn cancel(&self, id: &TransferId) {
         let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(t) = tasks.iter_mut().find(|t| &t.id == id) {
-            if matches!(t.status, TransferStatus::Queued | TransferStatus::Running) {
+        if let Some(t) = tasks.iter_mut().find(|t| &t.id == id)
+            && matches!(t.status, TransferStatus::Queued | TransferStatus::Running) {
                 t.status = TransferStatus::Cancelled;
                 let now = Self::now_str();
                 t.logs.push(format!("{now} [WARN] 已取消"));
             }
-        }
     }
 
     pub fn update_progress(
@@ -147,7 +146,10 @@ impl TransferQueue {
     fn now_str() -> String {
         time::OffsetDateTime::now_local()
             .unwrap_or_else(|_| time::OffsetDateTime::now_utc())
-            .format(&time::format_description::parse("[hour]:[minute]:[second]").unwrap())
+            .format(
+                &time::format_description::parse("[hour]:[minute]:[second]")
+                    .expect("时间格式常量"),
+            )
             .unwrap_or_else(|_| "00:00:00".into())
     }
 }

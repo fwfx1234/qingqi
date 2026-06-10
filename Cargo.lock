@@ -5706,7 +5706,6 @@ dependencies = [
  "qingqi-feature-api-debugger",
  "qingqi-feature-clipboard",
  "qingqi-feature-download-manager",
- "qingqi-feature-ftp-sftp-ssh-client",
  "qingqi-feature-gpui-demo",
  "qingqi-feature-http-capture",
  "qingqi-feature-image-compress",
@@ -5839,36 +5838,6 @@ dependencies = [
  "tracing",
  "urlencoding",
  "uuid",
-]
-
-[[package]]
-name = "qingqi-feature-ftp-sftp-ssh-client"
-version = "0.1.0"
-dependencies = [
- "alacritty_terminal",
- "anyhow",
- "async-trait",
- "dirs 6.0.0",
- "gpui",
- "gpui-component",
- "qingqi-platform",
- "qingqi-plugin",
- "qingqi-ui",
- "rfd",
- "rusqlite",
- "russh",
- "russh-sftp",
- "rustls-native-certs",
- "serde",
- "serde_json",
- "sha2",
- "suppaftp",
- "time",
- "tokio",
- "tokio-rustls",
- "tracing",
- "uuid",
- "webpki-roots 0.26.11",
 ]
 
 [[package]]

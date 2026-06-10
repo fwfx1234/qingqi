@@ -13,7 +13,7 @@ pub fn render_profile_editor(
         .bg(hsla(0.0, 0.0, 0.0, 0.4))
         .flex().items_center().justify_center()
         .on_click(move |_, _, cx| {
-            let _ = cx.update_entity(&h, |view, cx| view.toggle_settings(cx));
+            cx.update_entity(&h, |view, cx| view.toggle_settings(cx));
         })
         .child(
             div()
@@ -35,7 +35,7 @@ fn render_dialog_header(handle: Entity<super::SshView>) -> impl IntoElement {
         .child(
             div().id("settings-close").size(px(24.0)).flex().items_center().justify_center()
                 .rounded_md().cursor_pointer().hover(|s| s.bg(ui::bg_hover()))
-                .on_click(move |_, _, cx| { let _ = cx.update_entity(&handle, |v, cx| v.toggle_settings(cx)); })
+                .on_click(move |_, _, cx| { cx.update_entity(&handle, |v, cx| v.toggle_settings(cx)); })
                 .child("✕"),
         )
 }

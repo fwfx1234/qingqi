@@ -86,10 +86,11 @@ impl ProfileStore {
              FROM remote_profiles_v2 ORDER BY id ASC"
         )?;
 
-        let old_rows: Vec<(
+        type OldRow = (
             i64, String, String, String, u16, String, String, String,
             String, String, String, String, String,
-        )> = stmt
+        );
+        let old_rows: Vec<OldRow> = stmt
             .query_map([], |row| {
                 Ok((
                     row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?,
@@ -186,12 +187,7 @@ impl ProfileStore {
             })
         })?;
 
-        let mut profiles = Vec::new();
-        for r in rows {
-            if let Ok(p) = r {
-                profiles.push(p);
-            }
-        }
+        let profiles: Vec<_> = rows.filter_map(|r| r.ok()).collect();
         Ok(profiles)
     }
 

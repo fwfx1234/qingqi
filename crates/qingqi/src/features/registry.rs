@@ -10,7 +10,6 @@ use qingqi_feature_anti_peeping as feature_anti_peeping;
 use qingqi_feature_api_debugger as feature_api_debugger;
 use qingqi_feature_clipboard as feature_clipboard;
 use qingqi_feature_download_manager as feature_download_manager;
-use qingqi_feature_ftp_sftp_ssh_client as feature_ftp_sftp_ssh_client;
 use qingqi_feature_ssh as feature_ssh;
 use qingqi_feature_gpui_demo as feature_gpui_demo;
 use qingqi_feature_http_capture as feature_http_capture;
@@ -101,11 +100,6 @@ pub fn register_builtin_plugins(host: &mut AppHost) -> Result<()> {
     registry.register(
         PluginDescriptor::builtin(feature_gpui_demo::manifest::manifest()),
         |_| feature_gpui_demo::build(),
-    );
-    registry.register(
-        PluginDescriptor::builtin(feature_ftp_sftp_ssh_client::manifest::manifest())
-            .with_databases(feature_ftp_sftp_ssh_client::databases()),
-        |cx| feature_ftp_sftp_ssh_client::build(Arc::clone(&cx.database), cx.paths.clone()),
     );
     registry.register(
         PluginDescriptor::builtin(feature_ssh::manifest::manifest())

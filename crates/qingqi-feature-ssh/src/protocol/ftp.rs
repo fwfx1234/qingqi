@@ -41,11 +41,10 @@ impl FtpProtocol {
     }
 
     fn log(&self, level: LogLevel, text: &str) {
-        if let Ok(g) = self.log_tx.lock() {
-            if let Some(tx) = g.as_ref() {
+        if let Ok(g) = self.log_tx.lock()
+            && let Some(tx) = g.as_ref() {
                 let _ = tx.send(TerminalOutput::LogLine { level, text: text.into() });
             }
-        }
     }
 }
 

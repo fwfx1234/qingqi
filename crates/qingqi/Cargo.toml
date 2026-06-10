@@ -16,7 +16,6 @@ qingqi-feature-anti-peeping = { path = "../qingqi-feature-anti-peeping" }
 qingqi-feature-api-debugger = { path = "../qingqi-feature-api-debugger" }
 qingqi-feature-clipboard = { path = "../qingqi-feature-clipboard" }
 qingqi-feature-download-manager = { path = "../qingqi-feature-download-manager" }
-qingqi-feature-ftp-sftp-ssh-client = { path = "../qingqi-feature-ftp-sftp-ssh-client" }
 qingqi-feature-ssh = { path = "../qingqi-feature-ssh" }
 qingqi-feature-gpui-demo = { path = "../qingqi-feature-gpui-demo" }
 qingqi-feature-http-capture = { path = "../qingqi-feature-http-capture" }
