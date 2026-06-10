@@ -22,7 +22,7 @@ pub fn databases() -> Vec<DatabaseSpec> {
 
 pub fn build(
     database: Arc<DatabaseService>,
-    paths: Arc<qingqi_plugin::storage::AppPaths>,
+    paths: qingqi_plugin::storage::AppPaths,
 ) -> Result<Box<dyn qingqi_plugin::plugin::Plugin>> {
     let profile_db_path = database.path_for_key("ssh/profiles")?;
     let profile_store = Arc::new(store::ProfileStore::new(
