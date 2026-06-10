@@ -54,6 +54,32 @@ impl TransferQueue {
             .clone()
     }
 
+    /// 取出下一个排队中的任务，标记为 Running
+    pub fn dequeue_next(&self) -> Option<TransferTask> {
+        let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(idx) = tasks.iter().position(|t| t.status == TransferStatus::Queued) {
+            let mut task = tasks[idx].clone();
+            task.status = TransferStatus::Running;
+            let now = Self::now_str();
+            task.started_at = Some(now.clone());
+            task.logs.push(format!("{now} [INFO] 开始传输"));
+            tasks[idx] = task.clone();
+            Some(task)
+        } else {
+            None
+        }
+    }
+
+    /// 判断是否有空闲槽位（Running < MAX_CONCURRENT）
+    pub fn has_capacity(&self) -> bool {
+        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
+        let running = tasks
+            .iter()
+            .filter(|t| t.status == TransferStatus::Running)
+            .count();
+        running < MAX_CONCURRENT
+    }
+
     pub fn cancel(&self, id: &TransferId) {
         let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(t) = tasks.iter_mut().find(|t| &t.id == id) {
