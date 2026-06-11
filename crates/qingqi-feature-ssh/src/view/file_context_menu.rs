@@ -19,11 +19,7 @@ enum FileMenuAction {
 }
 
 /// 根据右键目标构建菜单（列表区域唯一入口）
-pub fn build(
-    menu: PopupMenu,
-    target: Option<FileEntryRow>,
-    handle: Entity<SshView>,
-) -> PopupMenu {
+pub fn build(menu: PopupMenu, target: Option<FileEntryRow>, handle: Entity<SshView>) -> PopupMenu {
     match target {
         Some(entry) => entry_menu(menu, entry, handle),
         None => blank_menu(menu, handle),
@@ -171,10 +167,6 @@ trait PopupMenuExt {
 
 impl PopupMenuExt for PopupMenu {
     fn when(self, condition: bool, f: impl FnOnce(Self) -> Self) -> Self {
-        if condition {
-            f(self)
-        } else {
-            self
-        }
+        if condition { f(self) } else { self }
     }
 }

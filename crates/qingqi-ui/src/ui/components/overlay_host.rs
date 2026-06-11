@@ -1,6 +1,4 @@
-use gpui::{
-    InteractiveElement, IntoElement, ParentElement, Styled, div,
-};
+use gpui::{InteractiveElement, IntoElement, ParentElement, Styled, div};
 
 use crate::ui;
 

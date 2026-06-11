@@ -319,8 +319,7 @@ impl SshService {
                             if let Some(ref term) = engine {
                                 Self::patch_session(&sessions, sid, |state| {
                                     state.terminal = Some(Arc::clone(term));
-                                    state.terminal_protocol =
-                                        Some(Arc::clone(&terminal_proto));
+                                    state.terminal_protocol = Some(Arc::clone(&terminal_proto));
                                 });
                                 Self::notify_async(SshEvent::SessionDataChanged(sid), &tx);
                             }
@@ -577,11 +576,8 @@ impl SshService {
         let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         let profile_id = sessions.get(id).map(|state| state.profile_id);
         sessions.remove(id);
-        let should_disconnect = profile_id.is_some_and(|pid| {
-            !sessions
-                .values()
-                .any(|state| state.profile_id == pid)
-        });
+        let should_disconnect =
+            profile_id.is_some_and(|pid| !sessions.values().any(|state| state.profile_id == pid));
         drop(sessions);
 
         if should_disconnect {
@@ -632,11 +628,16 @@ impl SshService {
         sessions.get(id)?.terminal.as_ref().map(|t| t.snapshot())
     }
 
-    fn terminal_protocol(&self, id: &SessionId) -> Option<Arc<dyn crate::protocol::RemoteProtocol>> {
+    fn terminal_protocol(
+        &self,
+        id: &SessionId,
+    ) -> Option<Arc<dyn crate::protocol::RemoteProtocol>> {
         let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
-        sessions.get(id)?.terminal_protocol.as_ref().and_then(|proto| {
-            proto.is_connected().then(|| Arc::clone(proto))
-        })
+        sessions
+            .get(id)?
+            .terminal_protocol
+            .as_ref()
+            .and_then(|proto| proto.is_connected().then(|| Arc::clone(proto)))
     }
 
     pub fn send_terminal_input(self: &Arc<Self>, id: &SessionId, data: &[u8]) -> Result<()> {
@@ -702,13 +703,9 @@ impl SshService {
         let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(state) = sessions.get(id) {
             if let Some(engine) = &state.terminal {
-                let offset_before = engine
-                    .snapshot()
-                    .display_offset;
+                let offset_before = engine.snapshot().display_offset;
                 engine.scroll_to_bottom();
-                let offset_after = engine
-                    .snapshot()
-                    .display_offset;
+                let offset_after = engine.snapshot().display_offset;
                 debug!(
                     target: "qingqi_ssh",
                     session_id = %id.0,
@@ -841,10 +838,7 @@ impl SshService {
             let state = sessions
                 .get(id)
                 .ok_or_else(|| anyhow::anyhow!("Session 不存在"))?;
-            (
-                state.terminal.clone(),
-                self.event_tx.clone(),
-            )
+            (state.terminal.clone(), self.event_tx.clone())
         };
         let Some(engine) = engine else {
             return Ok(());
@@ -864,11 +858,12 @@ impl SshService {
     // ========== 文件操作 ==========
 
     pub fn list_directory(&self, id: &SessionId, path: &str) -> Result<Vec<RemoteEntry>> {
-        let proto =
-            crate::tokio_handle().block_on(async { self.ensure_sftp_protocol(id).await })?;
-        let entries =
-            crate::tokio_handle().block_on(async { proto.list_directory(path).await })?;
-        let resolved = proto.last_list_path().unwrap_or_else(|| path.to_string());
+        let entries = self.peek_directory(id, path)?;
+        let resolved = {
+            let proto =
+                crate::tokio_handle().block_on(async { self.ensure_sftp_protocol(id).await })?;
+            proto.last_list_path().unwrap_or_else(|| path.to_string())
+        };
 
         let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(state) = sessions.get_mut(id) {
@@ -876,6 +871,13 @@ impl SshService {
             state.remote_cwd = resolved;
         }
         Ok(entries)
+    }
+
+    /// 列出远程目录但不修改 Session 当前路径/缓存（用于冲突检测等）。
+    pub fn peek_directory(&self, id: &SessionId, path: &str) -> Result<Vec<RemoteEntry>> {
+        let proto =
+            crate::tokio_handle().block_on(async { self.ensure_sftp_protocol(id).await })?;
+        crate::tokio_handle().block_on(async { proto.list_directory(path).await })
     }
 
     pub fn session_entries(&self, id: &SessionId) -> Vec<RemoteEntry> {
@@ -893,12 +895,7 @@ impl SshService {
     }
 
     pub fn remote_entry_exists(&self, id: &SessionId, remote: &str) -> Result<bool> {
-        let remote = remote.trim_end_matches('/');
-        let Some((parent, name)) = crate::upload::split_remote_parent(remote) else {
-            return Ok(false);
-        };
-        let entries = self.list_directory(id, &parent)?;
-        Ok(entries.iter().any(|entry| entry.name == name))
+        crate::upload::remote_entry_exists(self, id, remote)
     }
 
     pub fn ensure_remote_directory(&self, id: &SessionId, path: &str) -> Result<()> {
@@ -929,7 +926,12 @@ impl SshService {
         self.ensure_remote_directory(id, &parent)
     }
 
-    pub fn rename_remote_entry(&self, id: &SessionId, old_path: &str, new_path: &str) -> Result<()> {
+    pub fn rename_remote_entry(
+        &self,
+        id: &SessionId,
+        old_path: &str,
+        new_path: &str,
+    ) -> Result<()> {
         let proto =
             crate::tokio_handle().block_on(async { self.ensure_sftp_protocol(id).await })?;
         crate::tokio_handle().block_on(async { proto.rename_entry(old_path, new_path).await })
@@ -952,10 +954,12 @@ impl SshService {
         const MAX_BYTES: usize = 512 * 1024;
         let proto =
             crate::tokio_handle().block_on(async { self.ensure_sftp_protocol(id).await })?;
-        let data =
-            crate::tokio_handle().block_on(async { proto.read_file(path).await })?;
+        let data = crate::tokio_handle().block_on(async { proto.read_file(path).await })?;
         if data.len() > MAX_BYTES {
-            anyhow::bail!("文件过大（{}），暂不支持在线编辑", crate::transfer::format_size(data.len() as u64));
+            anyhow::bail!(
+                "文件过大（{}），暂不支持在线编辑",
+                crate::transfer::format_size(data.len() as u64)
+            );
         }
         String::from_utf8(data).map_err(|_| anyhow::anyhow!("文件不是有效的 UTF-8 文本"))
     }
@@ -987,8 +991,7 @@ impl SshService {
         }
         let proto =
             crate::tokio_handle().block_on(async { self.ensure_sftp_protocol(id).await })?;
-        let (tx, _rx) =
-            tokio::sync::mpsc::unbounded_channel::<crate::protocol::TransferProgress>();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel::<crate::protocol::TransferProgress>();
         crate::tokio_handle().block_on(async { proto.download_file(remote, local, tx).await })
     }
 
@@ -1020,19 +1023,32 @@ impl SshService {
         F: FnOnce(
                 Arc<dyn crate::protocol::RemoteProtocol>,
                 tokio::sync::mpsc::UnboundedSender<crate::protocol::TransferProgress>,
-            ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>
+            )
+                -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>
             + Send
             + 'static,
     {
-        let proto =
-            crate::tokio_handle().block_on(async { self.ensure_sftp_protocol(id).await })?;
         let (session_id, queue, event_tx) = self.session_transfer_context(id)?;
         let local_display = local_path.to_string_lossy().into_owned();
         let tid = queue.enqueue(direction, local_display, remote_path, total_bytes);
         self.emit(SshEvent::TransferChanged(session_id, tid));
 
+        let sessions = Arc::clone(&self.sessions);
+        let pool = Arc::clone(&self.connection_pool);
+        let profile_store = Arc::clone(&self.profile_store);
+        let sid = *id;
         let queue_run = Arc::clone(&queue);
         crate::tokio_handle().spawn(async move {
+            let proto = match Self::ensure_sftp_shared(&sessions, &pool, &profile_store, &sid).await
+            {
+                Ok(proto) => proto,
+                Err(error) => {
+                    queue_run.mark_failed(&tid, &error.to_string());
+                    let _ = event_tx.send(SshEvent::TransferChanged(session_id, tid));
+                    return;
+                }
+            };
+
             queue_run.mark_running(&tid);
             let _ = event_tx.send(SshEvent::TransferChanged(session_id, tid));
 
@@ -1060,6 +1076,49 @@ impl SshService {
         Ok(tid)
     }
 
+    async fn ensure_sftp_shared(
+        sessions: &Arc<Mutex<HashMap<SessionId, SessionState>>>,
+        pool: &Arc<ConnectionPool>,
+        profile_store: &Arc<ProfileStore>,
+        id: &SessionId,
+    ) -> Result<Arc<dyn crate::protocol::RemoteProtocol>> {
+        let (profile_id, cached) = {
+            let guard = sessions.lock().unwrap_or_else(|e| e.into_inner());
+            let state = guard
+                .get(id)
+                .ok_or_else(|| anyhow::anyhow!("Session 不存在"))?;
+            (
+                state.profile_id,
+                state.sftp_protocol.clone().filter(|p| p.is_connected()),
+            )
+        };
+        if let Some(proto) = cached {
+            return Ok(proto);
+        }
+
+        let profile = profile_store
+            .get(profile_id)?
+            .ok_or_else(|| anyhow::anyhow!("Profile {profile_id} 不存在"))?;
+        let proto = pool.get_or_connect(&profile, SshRole::Sftp).await?;
+        Self::restore_session_protocol_shared(sessions, id, SshRole::Sftp, Arc::clone(&proto));
+        Ok(proto)
+    }
+
+    fn restore_session_protocol_shared(
+        sessions: &Arc<Mutex<HashMap<SessionId, SessionState>>>,
+        id: &SessionId,
+        role: SshRole,
+        proto: Arc<dyn crate::protocol::RemoteProtocol>,
+    ) {
+        let mut guard = sessions.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(state) = guard.get_mut(id) {
+            match role {
+                SshRole::Terminal => state.terminal_protocol = Some(Arc::clone(&proto)),
+                SshRole::Sftp => state.sftp_protocol = Some(proto),
+            }
+        }
+    }
+
     // ========== 传输 ==========
 
     pub fn upload_file(
@@ -1068,9 +1127,7 @@ impl SshService {
         local: &std::path::Path,
         remote: &str,
     ) -> Result<crate::model::TransferId> {
-        let total_bytes = std::fs::metadata(local)
-            .map(|meta| meta.len())
-            .unwrap_or(0);
+        let total_bytes = std::fs::metadata(local).map(|meta| meta.len()).unwrap_or(0);
         let local_path = local.to_path_buf();
         let remote_path = remote.to_string();
         self.spawn_transfer(
@@ -1080,7 +1137,11 @@ impl SshService {
             remote_path.clone(),
             total_bytes,
             move |proto, progress_tx| {
-                Box::pin(async move { proto.upload_file(&local_path, &remote_path, progress_tx).await })
+                Box::pin(async move {
+                    proto
+                        .upload_file(&local_path, &remote_path, progress_tx)
+                        .await
+                })
             },
         )
     }

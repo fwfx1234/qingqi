@@ -198,7 +198,12 @@ impl TextInput {
         }));
     }
 
-    fn sync_pending(&mut self, state: &Entity<InputState>, window: &mut Window, cx: &mut Context<Self>) {
+    fn sync_pending(
+        &mut self,
+        state: &Entity<InputState>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if let Some(placeholder) = self.pending_placeholder.take() {
             state.update(cx, |input, cx| {
                 input.set_placeholder(placeholder, window, cx);

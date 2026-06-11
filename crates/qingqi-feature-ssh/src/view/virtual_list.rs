@@ -24,12 +24,9 @@ pub fn vertical_fixed(
     scroll: UniformListScrollHandle,
     build: impl Fn(Range<usize>, &mut Window, &mut App) -> Vec<AnyElement> + 'static,
 ) -> impl IntoElement {
-    div()
-        .h(height)
-        .w_full()
-        .child(
-            uniform_list(id, count, build)
-                .track_scroll(scroll)
-                .size_full(),
-        )
+    div().h(height).w_full().child(
+        uniform_list(id, count, build)
+            .track_scroll(scroll)
+            .size_full(),
+    )
 }

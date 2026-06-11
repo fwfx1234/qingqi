@@ -59,7 +59,10 @@ pub enum AuthConfig {
         username: String,
         method: SshAuthMethod,
     },
-    Ftp { username: String, password: String },
+    Ftp {
+        username: String,
+        password: String,
+    },
 }
 
 fn default_ssh_username() -> String {

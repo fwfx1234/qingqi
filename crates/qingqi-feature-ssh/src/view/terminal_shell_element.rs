@@ -48,13 +48,7 @@ impl IntoElement for TerminalShellElement {
 
 impl Element for TerminalShellElement {
     type RequestLayoutState = ();
-    type PrepaintState = (
-        Bounds<Pixels>,
-        usize,
-        usize,
-        Option<String>,
-        Pixels,
-    );
+    type PrepaintState = (Bounds<Pixels>, usize, usize, Option<String>, Pixels);
 
     fn id(&self) -> Option<ElementId> {
         None
@@ -186,10 +180,7 @@ impl Element for TerminalShellElement {
             None,
         );
 
-        let ime_background_bounds = Bounds::new(
-            ime_position,
-            size(shaped_line.width, prepaint.4),
-        );
+        let ime_background_bounds = Bounds::new(ime_position, size(shaped_line.width, prepaint.4));
         window.paint_quad(fill(ime_background_bounds, default_bg()));
         let _ = shaped_line.paint(ime_position, prepaint.4, window, cx);
     }
@@ -228,7 +219,10 @@ struct TerminalInputHandler {
 
 impl TerminalInputHandler {
     fn new(view: Entity<TerminalPaneView>, cursor_bounds: Option<Bounds<Pixels>>) -> Self {
-        Self { view, cursor_bounds }
+        Self {
+            view,
+            cursor_bounds,
+        }
     }
 }
 

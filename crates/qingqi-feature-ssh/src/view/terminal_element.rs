@@ -116,11 +116,7 @@ struct StyleKey {
 }
 
 fn cell_display_width(ch: char) -> usize {
-    if ch.is_ascii() {
-        1
-    } else {
-        2
-    }
+    if ch.is_ascii() { 1 } else { 2 }
 }
 
 fn row_display_width(cells: &[TerminalCell]) -> usize {
@@ -145,7 +141,11 @@ fn grid_col_to_byte_offset(cells: &[TerminalCell], target_col: usize) -> usize {
     bytes
 }
 
-fn grid_col_range_to_byte_range(cells: &[TerminalCell], col_start: usize, col_end: usize) -> Range<usize> {
+fn grid_col_range_to_byte_range(
+    cells: &[TerminalCell],
+    col_start: usize,
+    col_end: usize,
+) -> Range<usize> {
     let start = grid_col_to_byte_offset(cells, col_start);
     let end = grid_col_to_byte_offset(cells, col_end.saturating_add(1));
     start..end
@@ -215,7 +215,11 @@ impl TerminalRowCache {
         cells: &[TerminalCell],
     ) -> (String, Vec<(Range<usize>, HighlightStyle)>) {
         let fp = row_fingerprint(cells);
-        if self.rows.get(row_idx).is_some_and(|e| e.fingerprint == fp && !e.text.is_empty()) {
+        if self
+            .rows
+            .get(row_idx)
+            .is_some_and(|e| e.fingerprint == fp && !e.text.is_empty())
+        {
             let entry = &self.rows[row_idx];
             return (entry.text.clone(), entry.highlights.clone());
         }
@@ -437,10 +441,7 @@ impl Element for TerminalSelectionOverlay {
             let y = bounds.origin.y + px(row_idx as f32 * line_h);
             let w = px(((col_end + 1).saturating_sub(col_start)) as f32 * char_width);
             let h = px(line_h);
-            window.paint_quad(fill(
-                Bounds::new(point(x, y), size(w, h)),
-                bg,
-            ));
+            window.paint_quad(fill(Bounds::new(point(x, y), size(w, h)), bg));
         }
         let _ = cx;
     }
@@ -480,7 +481,9 @@ pub fn render_shell_grid(
     selection: Option<TerminalSelection>,
 ) -> AnyElement {
     let line_height = (font_size * LINE_HEIGHT_RATIO).max(15.0);
-    let cols = term.cols.max(term.grid.first().map(|r| r.len()).unwrap_or(80));
+    let cols = term
+        .cols
+        .max(term.grid.first().map(|r| r.len()).unwrap_or(80));
     let viewport_rows = term.rows.max(term.grid.len()).max(1);
     let blank = empty_row(cols);
     cache.prepare(viewport_rows);
@@ -508,7 +511,8 @@ pub fn render_shell_grid(
             .map(|r| r.as_slice())
             .unwrap_or(blank.as_slice());
         row_elements.push(
-            render_grid_row_cached(cells, row_idx, cache, font_size, line_height).into_any_element(),
+            render_grid_row_cached(cells, row_idx, cache, font_size, line_height)
+                .into_any_element(),
         );
     }
 
@@ -546,7 +550,7 @@ pub fn render_shell_grid(
 
 #[cfg(test)]
 mod tests {
-    use super::{grid_col_to_byte_offset, grid_col_range_to_byte_range, sanitize_highlights};
+    use super::{grid_col_range_to_byte_range, grid_col_to_byte_offset, sanitize_highlights};
     use crate::terminal::TerminalCell;
 
     fn cell(ch: char) -> TerminalCell {
@@ -565,7 +569,10 @@ mod tests {
         assert_eq!(grid_col_to_byte_offset(&row, 0), 0);
         assert_eq!(grid_col_to_byte_offset(&row, 1), '中'.len_utf8());
         assert_eq!(grid_col_to_byte_offset(&row, 2), '中'.len_utf8());
-        assert_eq!(grid_col_to_byte_offset(&row, 3), ('中'.to_string() + "a").len());
+        assert_eq!(
+            grid_col_to_byte_offset(&row, 3),
+            ('中'.to_string() + "a").len()
+        );
     }
 
     #[test]
@@ -580,10 +587,7 @@ mod tests {
     #[test]
     fn sanitize_highlights_clamps_invalid_ranges() {
         let text = "中文ab";
-        let highlights = sanitize_highlights(
-            text,
-            vec![(1..2, gpui::HighlightStyle::default())],
-        );
+        let highlights = sanitize_highlights(text, vec![(1..2, gpui::HighlightStyle::default())]);
         for (range, _) in highlights {
             assert!(text.is_char_boundary(range.start));
             assert!(text.is_char_boundary(range.end));

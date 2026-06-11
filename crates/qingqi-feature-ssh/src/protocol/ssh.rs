@@ -16,7 +16,7 @@ use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, warn};
 
 use super::{
-    ProtocolCapability, PtyOutputHub, PTY_CHANNEL_BUFFER_MSGS, RemoteProtocol,
+    PTY_CHANNEL_BUFFER_MSGS, ProtocolCapability, PtyOutputHub, RemoteProtocol,
     TerminalOutputSource, TransferProgress,
 };
 use crate::log_util::bytes_preview;
@@ -142,9 +142,7 @@ impl client::Handler for Handler {
             ?reason,
             "russh: 连接断开"
         );
-        let _ = self
-            .disconnect_tx
-            .send((self.profile_id, self.role));
+        let _ = self.disconnect_tx.send((self.profile_id, self.role));
         Ok(())
     }
 }
@@ -600,10 +598,7 @@ impl RemoteProtocol for SshProtocol {
     }
 
     fn last_list_path(&self) -> Option<String> {
-        self.last_list_path
-            .try_lock()
-            .ok()
-            .and_then(|g| g.clone())
+        self.last_list_path.try_lock().ok().and_then(|g| g.clone())
     }
 
     async fn list_directory(&self, path: &str) -> Result<Vec<RemoteEntry>> {

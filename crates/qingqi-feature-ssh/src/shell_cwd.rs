@@ -24,7 +24,11 @@ pub fn resolve_cd_command(command: &str, current_dir: &str) -> Option<String> {
         return Some(arg.to_string());
     }
 
-    let base = if current_dir.is_empty() { "/" } else { current_dir };
+    let base = if current_dir.is_empty() {
+        "/"
+    } else {
+        current_dir
+    };
     Some(normalize_remote_path(&join_remote_path(base, arg)))
 }
 

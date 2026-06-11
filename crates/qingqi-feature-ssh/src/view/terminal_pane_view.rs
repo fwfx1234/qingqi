@@ -2,22 +2,22 @@
 
 use std::sync::Arc;
 
-use gpui::*;
-use tracing::debug;
 use gpui::prelude::FluentBuilder;
+use gpui::*;
 use gpui_component::scroll::ScrollableElement;
 use qingqi_ui::{theme, ui};
+use tracing::debug;
 
 use super::terminal_element::{
-    cell_at, copy_selection_text, render_shell_grid, TerminalRowCache, TerminalSelection,
+    TerminalRowCache, TerminalSelection, cell_at, copy_selection_text, render_shell_grid,
 };
 use super::terminal_input::{
     encode_sgr_mouse, encode_sgr_wheel, keystroke_to_bytes, mouse_button_code, paste_text_to_bytes,
     wrap_bracketed_paste,
 };
 use super::terminal_pane::{
-    render_log_body, render_status_bar, scroll_delta_from_wheel,
-    CHAR_WIDTH_RATIO, LINE_HEIGHT_RATIO, TERM_PADDING,
+    CHAR_WIDTH_RATIO, LINE_HEIGHT_RATIO, TERM_PADDING, render_log_body, render_status_bar,
+    scroll_delta_from_wheel,
 };
 use super::terminal_shell_element::TerminalShellElement;
 use super::{SshTerminalShiftTab, SshTerminalTab, SshView, TerminalViewModel};
@@ -129,8 +129,8 @@ impl TerminalPaneView {
     }
 
     pub fn set_grid_layout(&mut self, bounds: Bounds<Pixels>, cx: &mut Context<Self>) {
-        let bounds_changed = self.content_bounds != Some(bounds)
-            || self.measured_grid_size != Some(bounds.size);
+        let bounds_changed =
+            self.content_bounds != Some(bounds) || self.measured_grid_size != Some(bounds.size);
         self.content_bounds = Some(bounds);
         self.measured_grid_size = Some(bounds.size);
         if bounds_changed || self.needs_grid_resize() {
@@ -162,10 +162,7 @@ impl TerminalPaneView {
         }
         let (cols, rows, _, _) =
             super::terminal_element::estimate_grid_size(size, self.font_size, 0.0);
-        if self.last_grid == Some((cols, rows))
-            && self.vm.rows == rows
-            && self.vm.cols == cols
-        {
+        if self.last_grid == Some((cols, rows)) && self.vm.rows == rows && self.vm.cols == cols {
             return;
         }
         if self.service.resize_terminal(&sid, cols, rows).is_ok() {
@@ -188,7 +185,9 @@ impl TerminalPaneView {
     }
 
     pub fn marked_text_range(&self) -> Option<std::ops::Range<usize>> {
-        self.ime_state.as_ref().map(|s| 0..s.marked_text.encode_utf16().count())
+        self.ime_state
+            .as_ref()
+            .map(|s| 0..s.marked_text.encode_utf16().count())
     }
 
     pub fn set_marked_text(&mut self, text: String, cx: &mut Context<Self>) {
@@ -308,7 +307,10 @@ impl TerminalPaneView {
         (rows, cols)
     }
 
-    fn cell_from_event(&self, position: Point<Pixels>) -> Option<super::terminal_element::GridPoint> {
+    fn cell_from_event(
+        &self,
+        position: Point<Pixels>,
+    ) -> Option<super::terminal_element::GridPoint> {
         let origin = self.content_bounds?.origin;
         let (char_width, line_height) = self.char_metrics();
         let (rows, cols) = self.grid_dims();
@@ -332,7 +334,6 @@ impl TerminalPaneView {
         );
         cx.notify();
     }
-
 }
 
 impl Render for TerminalPaneView {
@@ -427,49 +428,53 @@ impl Render for TerminalPaneView {
                     cx.notify();
                 }),
             )
-            .on_mouse_move(cx.listener(move |view, event: &MouseMoveEvent, _window, cx| {
-                if mouse_active {
-                    if modes.mouse_motion || modes.mouse_drag {
-                        if let Some(point) = view.cell_from_event(event.position) {
-                            if view.last_mouse_cell != Some(point) {
-                                let btn = mouse_button_code(MouseButton::Left) | 32;
-                                let seq = encode_sgr_mouse(btn, point.col, point.row, false);
-                                view.submit_mouse(seq, cx);
-                                view.last_mouse_cell = Some(point);
+            .on_mouse_move(
+                cx.listener(move |view, event: &MouseMoveEvent, _window, cx| {
+                    if mouse_active {
+                        if modes.mouse_motion || modes.mouse_drag {
+                            if let Some(point) = view.cell_from_event(event.position) {
+                                if view.last_mouse_cell != Some(point) {
+                                    let btn = mouse_button_code(MouseButton::Left) | 32;
+                                    let seq = encode_sgr_mouse(btn, point.col, point.row, false);
+                                    view.submit_mouse(seq, cx);
+                                    view.last_mouse_cell = Some(point);
+                                }
                             }
                         }
+                        return;
                     }
-                    return;
-                }
-                if !view.selecting {
-                    return;
-                }
-                if let Some(point) = view.cell_from_event(event.position) {
-                    if let Some(sel) = view.selection.as_mut() {
-                        sel.head = point;
-                        cx.notify();
+                    if !view.selecting {
+                        return;
                     }
-                }
-            }))
-            .on_scroll_wheel(cx.listener(move |view, event: &ScrollWheelEvent, _window, cx| {
-                if is_log {
-                    return;
-                }
-                if mouse_active {
-                    let col = (term_cols / 2).min(term_cols.saturating_sub(1));
-                    let row = (term_rows / 2).min(term_rows.saturating_sub(1));
-                    let up = scroll_delta_from_wheel(event, line_height) < 0;
-                    let seq = encode_sgr_wheel(up, col, row);
-                    view.submit_mouse(seq, cx);
-                    cx.stop_propagation();
-                    return;
-                }
-                let delta = scroll_delta_from_wheel(event, line_height);
-                if delta != 0 {
-                    cx.stop_propagation();
-                    view.scroll(delta, cx);
-                }
-            }))
+                    if let Some(point) = view.cell_from_event(event.position) {
+                        if let Some(sel) = view.selection.as_mut() {
+                            sel.head = point;
+                            cx.notify();
+                        }
+                    }
+                }),
+            )
+            .on_scroll_wheel(
+                cx.listener(move |view, event: &ScrollWheelEvent, _window, cx| {
+                    if is_log {
+                        return;
+                    }
+                    if mouse_active {
+                        let col = (term_cols / 2).min(term_cols.saturating_sub(1));
+                        let row = (term_rows / 2).min(term_rows.saturating_sub(1));
+                        let up = scroll_delta_from_wheel(event, line_height) < 0;
+                        let seq = encode_sgr_wheel(up, col, row);
+                        view.submit_mouse(seq, cx);
+                        cx.stop_propagation();
+                        return;
+                    }
+                    let delta = scroll_delta_from_wheel(event, line_height);
+                    if delta != 0 {
+                        cx.stop_propagation();
+                        view.scroll(delta, cx);
+                    }
+                }),
+            )
             .on_key_down(cx.listener(move |view, event: &KeyDownEvent, window, cx| {
                 window.focus(&view.focus_handle);
                 let ks = &event.keystroke;

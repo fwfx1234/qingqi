@@ -8,9 +8,9 @@ use tokio::sync::{Mutex as TokioMutex, broadcast};
 use tracing::debug;
 
 use crate::model::{Profile, ProtocolType, SshRole};
+use crate::protocol::RemoteProtocol;
 use crate::protocol::ftp::FtpProtocol;
 use crate::protocol::ssh::SshProtocol;
-use crate::protocol::RemoteProtocol;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct ConnectionKey {

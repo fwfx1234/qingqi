@@ -20,17 +20,21 @@ pub fn button(
     _dark: bool,
 ) -> gpui::Div {
     let label = label.into();
-    let accent_color = accent.unwrap_or(PluginAccent::Blue);
+    let semantic = theme::semantic();
     let (bg, text, border): (gpui::Hsla, gpui::Hsla, gpui::Hsla) = match variant {
         ButtonVariant::Primary => {
-            let accent: gpui::Hsla = ui::accent_color(accent_color).into();
+            let primary = if let Some(accent) = accent {
+                ui::accent_color(accent).into()
+            } else {
+                semantic.primary.into()
+            };
             let white: gpui::Hsla = ui::white().into();
-            (accent, white, accent)
+            (primary, white, primary)
         }
         ButtonVariant::Secondary => (
-            ui::bg_surface().into(),
-            ui::text_primary().into(),
-            ui::border_light(),
+            semantic.bg_surface.into(),
+            semantic.text_primary.into(),
+            semantic.border_default.into(),
         ),
         ButtonVariant::Ghost => {
             let transparent = hsla(0.0, 0.0, 0.0, 0.0);

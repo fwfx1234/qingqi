@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use async_trait::async_trait;
-use tokio::sync::{mpsc, Notify};
+use tokio::sync::{Notify, mpsc};
 use tracing::debug;
 
 use crate::model::{Profile, ProtocolType, RemoteEntry};

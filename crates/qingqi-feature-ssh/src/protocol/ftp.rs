@@ -8,12 +8,12 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use suppaftp::Status;
 use suppaftp::tokio::{AsyncFtpStream, AsyncRustlsConnector, AsyncRustlsFtpStream};
 use suppaftp::types::{Features, FtpError, Mode, Response};
-use suppaftp::Status;
-use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio::sync::{Mutex, mpsc};
 use tokio_rustls::TlsConnector;
+use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tracing::debug;
 
 use super::{
@@ -171,7 +171,10 @@ impl FtpStreamHandle {
         };
         match result {
             Ok(features) => {
-                log.log(LogLevel::Info, &format!("FEAT: 服务器支持 {} 项能力", features.len()));
+                log.log(
+                    LogLevel::Info,
+                    &format!("FEAT: 服务器支持 {} 项能力", features.len()),
+                );
                 for (name, value) in &features {
                     let line = match value {
                         Some(v) => format!("  {name} {v}"),
@@ -205,7 +208,6 @@ impl FtpStreamHandle {
             }
         }
     }
-
 }
 
 pub struct FtpProtocol {
@@ -247,7 +249,9 @@ impl FtpProtocol {
         let config = ClientConfig::builder()
             .with_root_certificates(roots)
             .with_no_client_auth();
-        Ok(AsyncRustlsConnector::from(TlsConnector::from(Arc::new(config))))
+        Ok(AsyncRustlsConnector::from(TlsConnector::from(Arc::new(
+            config,
+        ))))
     }
 
     fn log(&self, level: LogLevel, text: &str) {
@@ -380,12 +384,8 @@ impl RemoteProtocol for FtpProtocol {
             let domain = self.host.clone();
             if self.port == ProtocolType::Ftps.default_port() {
                 self.log(LogLevel::Info, "suppaftp: connect_secure_implicit()");
-                let result = AsyncRustlsFtpStream::connect_secure_implicit(
-                    &addr,
-                    connector,
-                    &domain,
-                )
-                .await;
+                let result =
+                    AsyncRustlsFtpStream::connect_secure_implicit(&addr, connector, &domain).await;
                 let stream = match result {
                     Ok(s) => s,
                     Err(err) => {
@@ -402,7 +402,10 @@ impl RemoteProtocol for FtpProtocol {
                     anyhow::anyhow!("FTP 连接 {addr} 失败: {err}")
                 })?;
                 self.log_welcome(plain.get_welcome_msg());
-                self.log(LogLevel::Info, "suppaftp: into_secure(AUTH TLS, PBSZ 0, PROT P)");
+                self.log(
+                    LogLevel::Info,
+                    "suppaftp: into_secure(AUTH TLS, PBSZ 0, PROT P)",
+                );
                 let secured = plain.into_secure(connector, &domain).await.map_err(|err| {
                     self.log_ftp_error("into_secure", &err);
                     anyhow::anyhow!("FTPS TLS 握手失败: {err}")
@@ -525,10 +528,7 @@ impl RemoteProtocol for FtpProtocol {
                 self.log(LogLevel::Received, "[214] 支持: PWD, NOOP, FEAT, HELP");
             }
             _ => {
-                self.log(
-                    LogLevel::Error,
-                    &format!("本地终端不支持命令: {cmd}"),
-                );
+                self.log(LogLevel::Error, &format!("本地终端不支持命令: {cmd}"));
             }
         }
         Ok(())
@@ -540,7 +540,9 @@ impl RemoteProtocol for FtpProtocol {
 
         let timeout = self.data_timeout();
         let mut guard = self.stream.lock().await;
-        let stream = guard.as_mut().ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
+        let stream = guard
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
         self.log(
             LogLevel::Info,
             &format!("suppaftp: list() 数据连接 → {resolved}"),
@@ -603,16 +605,15 @@ impl RemoteProtocol for FtpProtocol {
     }
 
     fn last_list_path(&self) -> Option<String> {
-        self.last_list_path
-            .try_lock()
-            .ok()
-            .and_then(|g| g.clone())
+        self.last_list_path.try_lock().ok().and_then(|g| g.clone())
     }
 
     async fn create_directory(&self, path: &str) -> Result<()> {
         self.log(LogLevel::Sent, &format!("MKD {}", path));
         let mut guard = self.stream.lock().await;
-        let stream = guard.as_mut().ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
+        let stream = guard
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
         stream
             .mkdir(path)
             .await
@@ -624,7 +625,9 @@ impl RemoteProtocol for FtpProtocol {
     async fn rename_entry(&self, old: &str, new: &str) -> Result<()> {
         self.log(LogLevel::Sent, &format!("RNFR {} -> {}", old, new));
         let mut guard = self.stream.lock().await;
-        let stream = guard.as_mut().ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
+        let stream = guard
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
         stream
             .rename(old, new)
             .await
@@ -636,7 +639,9 @@ impl RemoteProtocol for FtpProtocol {
     async fn remove_file(&self, path: &str) -> Result<()> {
         self.log(LogLevel::Sent, &format!("DELE {}", path));
         let mut guard = self.stream.lock().await;
-        let stream = guard.as_mut().ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
+        let stream = guard
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
         stream
             .rm(path)
             .await
@@ -648,7 +653,9 @@ impl RemoteProtocol for FtpProtocol {
     async fn remove_directory(&self, path: &str) -> Result<()> {
         self.log(LogLevel::Sent, &format!("RMD {}", path));
         let mut guard = self.stream.lock().await;
-        let stream = guard.as_mut().ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
+        let stream = guard
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
         stream
             .rmdir(path)
             .await
@@ -670,7 +677,9 @@ impl RemoteProtocol for FtpProtocol {
         let size = data.len() as u64;
 
         let mut guard = self.stream.lock().await;
-        let stream = guard.as_mut().ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
+        let stream = guard
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
 
         use tokio::io::AsyncWriteExt;
         match stream {
@@ -709,7 +718,9 @@ impl RemoteProtocol for FtpProtocol {
     ) -> Result<()> {
         self.log(LogLevel::Sent, &format!("RETR {}", remote));
         let mut guard = self.stream.lock().await;
-        let stream = guard.as_mut().ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
+        let stream = guard
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
 
         let mut file = tokio::fs::File::create(local)
             .await
@@ -779,7 +790,9 @@ impl RemoteProtocol for FtpProtocol {
     async fn read_file(&self, remote: &str) -> Result<Vec<u8>> {
         self.log(LogLevel::Sent, &format!("RETR {}", remote));
         let mut guard = self.stream.lock().await;
-        let stream = guard.as_mut().ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
+        let stream = guard
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
         let mut data = Vec::new();
         let mut buf = vec![0u8; 65536];
         match stream {
@@ -817,7 +830,9 @@ impl RemoteProtocol for FtpProtocol {
     async fn write_file(&self, remote: &str, data: &[u8]) -> Result<()> {
         self.log(LogLevel::Sent, &format!("STOR {}", remote));
         let mut guard = self.stream.lock().await;
-        let stream = guard.as_mut().ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
+        let stream = guard
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("FTP 未连接"))?;
         use tokio::io::AsyncWriteExt;
         match stream {
             FtpStreamHandle::Standard(s) => {

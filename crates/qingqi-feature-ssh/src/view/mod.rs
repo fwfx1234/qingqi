@@ -6,8 +6,8 @@ mod context_menu;
 mod file_context_menu;
 mod file_edit_confirm;
 mod file_rename;
-mod file_upload_overwrite;
 mod file_tree;
+mod file_upload_overwrite;
 mod profile_editor;
 mod session_tabs;
 mod sidebar;
@@ -24,17 +24,22 @@ use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use std::time::SystemTime;
 
-use crate::model::{AuthConfig, ProtocolType, SessionId, SessionStatus, SshAuthMethod, TerminalKind};
+use crate::model::{
+    AuthConfig, ProtocolType, SessionId, SessionStatus, SshAuthMethod, TerminalKind, TransferId,
+    TransferStatus,
+};
 use crate::service::{SshEvent, SshService};
 use crate::terminal::{TerminalCell, TerminalLine, TerminalModes};
-use terminal_input::terminal_editing_key;
-use terminal_pane_view::TerminalPaneView;
 use crate::transfer;
 use crate::upload::{self, UploadItem};
 use gpui::prelude::FluentBuilder;
 use gpui::*;
+use gpui_component::WindowExt;
+use gpui_component::notification::Notification;
 use qingqi_ui::text_input::{TextInput, TextInputStyle};
 use qingqi_ui::theme;
+use terminal_input::terminal_editing_key;
+use terminal_pane_view::TerminalPaneView;
 
 actions!(ssh_terminal, [SshTerminalTab, SshTerminalShiftTab]);
 
@@ -160,6 +165,7 @@ pub struct SshView {
     selected_profile_id: Option<i64>,
     selected_session_id: Option<SessionId>,
     transfer_panel_expanded: bool,
+    host_window_handle: Option<AnyWindowHandle>,
     profile_editor_window: Option<AnyWindowHandle>,
     app_settings_window: Option<AnyWindowHandle>,
     editing_profile_id: Option<i64>, // None=新建, Some(id)=编辑
@@ -261,13 +267,7 @@ impl SshView {
         let ssh_entity = cx.entity().clone();
         let terminal_focus = cx.focus_handle().tab_stop(false);
         let terminal_pane = cx.new(|cx| {
-            TerminalPaneView::new(
-                ssh_entity,
-                service_for_pane,
-                12.0,
-                terminal_focus,
-                cx,
-            )
+            TerminalPaneView::new(ssh_entity, service_for_pane, 12.0, terminal_focus, cx)
         });
         let mut this = Self {
             service: Arc::clone(&service),
@@ -277,6 +277,7 @@ impl SshView {
             selected_profile_id: None,
             selected_session_id: None,
             transfer_panel_expanded: false,
+            host_window_handle: None,
             profile_editor_window: None,
             app_settings_window: None,
             editing_profile_id: None,
@@ -303,7 +304,9 @@ impl SshView {
             selected_file_path: None,
             terminal_font_size: 12.0,
             form_protocol: ProtocolType::Ssh,
-            form_auth_method: SshAuthMethod::Password { password: String::new() },
+            form_auth_method: SshAuthMethod::Password {
+                password: String::new(),
+            },
             form_name: cx.new(|cx| form_input(cx, "连接名称", "")),
             form_host: cx.new(|cx| form_input(cx, "主机地址或 IP", "")),
             form_port: cx.new(|cx| form_input(cx, "22", "22")),
@@ -432,7 +435,10 @@ impl SshView {
             cx.notify();
             return;
         }
-        if events.iter().any(|event| matches!(event, SshEvent::TransferChanged(_, _))) {
+        if events
+            .iter()
+            .any(|event| matches!(event, SshEvent::TransferChanged(_, _)))
+        {
             self.rebuild_view_model(cx);
             cx.notify();
             return;
@@ -720,7 +726,9 @@ impl SshView {
                 self.sync_file_path_input(cx, path);
                 self.refresh_ui(cx);
             }
-            Err(error) => tracing::warn!(target: "qingqi_ssh", path, error = %error, "跳转目录失败"),
+            Err(error) => {
+                tracing::warn!(target: "qingqi_ssh", path, error = %error, "跳转目录失败")
+            }
         }
     }
 
@@ -842,45 +850,39 @@ impl SshView {
         let Some(sid) = self.selected_session_id else {
             return;
         };
-        if entry.is_dir && !entry.is_parent {
-            let local_dir = self.local_download_path(cx).join(&entry.name);
-            match crate::download::collect_download_items(
-                &self.service,
-                &sid,
-                &entry.path,
-                &local_dir,
-            ) {
-                Ok(items) if items.is_empty() => {}
-                Ok(items) => {
-                    for item in items {
-                        if let Err(error) =
-                            self.service.download_file(&sid, &item.remote, &item.local)
-                        {
-                            tracing::warn!(
-                                target: "qingqi_ssh",
-                                remote = %item.remote,
-                                error = %error,
-                                "下载失败"
-                            );
-                        }
-                    }
-                    self.transfer_panel_expanded = true;
-                    self.refresh_ui(cx);
-                }
-                Err(error) => {
-                    tracing::warn!(target: "qingqi_ssh", error = %error, "收集下载任务失败")
-                }
-            }
+        if entry.is_parent {
             return;
         }
+        let entry = entry.clone();
         let local = self.local_download_path(cx).join(&entry.name);
-        match self.service.download_file(&sid, &entry.path, &local) {
-            Ok(_) => {
-                self.transfer_panel_expanded = true;
-                self.refresh_ui(cx);
-            }
-            Err(error) => tracing::warn!(target: "qingqi_ssh", error = %error, "下载失败"),
-        }
+        let is_dir = entry.is_dir;
+        let service = Arc::clone(&self.service);
+        cx.spawn(async move |view, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    crate::download::enqueue_download_entry(
+                        &service,
+                        &sid,
+                        &entry.path,
+                        &local,
+                        is_dir,
+                    )
+                })
+                .await;
+
+            let _ = view.update(cx, |view, cx| match result {
+                Ok(ids) if !ids.is_empty() => {
+                    view.transfer_panel_expanded = true;
+                    view.refresh_ui(cx);
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(target: "qingqi_ssh", error = %error, "下载失败");
+                }
+            });
+        })
+        .detach();
     }
 
     pub(crate) fn upload_local_paths(&mut self, paths: &[PathBuf], cx: &mut Context<Self>) {
@@ -922,27 +924,22 @@ impl SshView {
                 })
                 .await;
 
-            let _ = view.update(cx, |view, cx| {
-                match conflicts {
-                    Ok(conflicts) if conflicts.is_empty() => {
-                        view.run_upload_batch(sid, items, HashSet::new(), true, cx);
-                    }
-                    Ok(conflicts) => {
-                        let conflict_remotes = conflicts
-                            .into_iter()
-                            .map(|item| item.remote)
-                            .collect();
-                        view.pending_upload_batch = Some(PendingUploadBatch {
-                            session_id: sid,
-                            items,
-                            conflict_remotes,
-                        });
-                        view.show_upload_overwrite_confirm = true;
-                        cx.notify();
-                    }
-                    Err(error) => {
-                        tracing::warn!(target: "qingqi_ssh", error = %error, "检测上传冲突失败");
-                    }
+            let _ = view.update(cx, |view, cx| match conflicts {
+                Ok(conflicts) if conflicts.is_empty() => {
+                    view.run_upload_batch(sid, items, HashSet::new(), true, cx);
+                }
+                Ok(conflicts) => {
+                    let conflict_remotes = conflicts.into_iter().map(|item| item.remote).collect();
+                    view.pending_upload_batch = Some(PendingUploadBatch {
+                        session_id: sid,
+                        items,
+                        conflict_remotes,
+                    });
+                    view.show_upload_overwrite_confirm = true;
+                    cx.notify();
+                }
+                Err(error) => {
+                    tracing::warn!(target: "qingqi_ssh", error = %error, "检测上传冲突失败");
                 }
             });
         })
@@ -956,7 +953,9 @@ impl SshView {
         match qingqi_platform::shell::choose_file("选择要上传的文件") {
             Ok(Some(path)) => self.upload_local_paths(&[path], cx),
             Ok(None) => {}
-            Err(error) => tracing::warn!(target: "qingqi_ssh", error = %error, "打开文件选择器失败"),
+            Err(error) => {
+                tracing::warn!(target: "qingqi_ssh", error = %error, "打开文件选择器失败")
+            }
         }
     }
 
@@ -967,11 +966,17 @@ impl SshView {
         match qingqi_platform::shell::choose_directory("选择要上传的文件夹") {
             Ok(Some(path)) => self.upload_local_paths(&[path], cx),
             Ok(None) => {}
-            Err(error) => tracing::warn!(target: "qingqi_ssh", error = %error, "打开文件夹选择器失败"),
+            Err(error) => {
+                tracing::warn!(target: "qingqi_ssh", error = %error, "打开文件夹选择器失败")
+            }
         }
     }
 
-    pub(crate) fn confirm_pending_upload(&mut self, replace_existing: bool, cx: &mut Context<Self>) {
+    pub(crate) fn confirm_pending_upload(
+        &mut self,
+        replace_existing: bool,
+        cx: &mut Context<Self>,
+    ) {
         let Some(batch) = self.pending_upload_batch.take() else {
             self.show_upload_overwrite_confirm = false;
             cx.notify();
@@ -985,6 +990,7 @@ impl SshView {
             replace_existing,
             cx,
         );
+        cx.notify();
     }
 
     pub(crate) fn cancel_pending_upload(&mut self, cx: &mut Context<Self>) {
@@ -1001,40 +1007,165 @@ impl SshView {
         replace_existing: bool,
         cx: &mut Context<Self>,
     ) {
-        let mut started = false;
-        for item in items {
-            if !replace_existing && conflict_remotes.contains(&item.remote) {
-                continue;
-            }
-            if let Err(error) = self
-                .service
-                .ensure_remote_parent_dirs(&session_id, &item.remote)
-            {
-                tracing::warn!(
-                    target: "qingqi_ssh",
-                    remote = %item.remote,
-                    error = %error,
-                    "创建远程目录失败"
-                );
-                continue;
-            }
-            match self.service.upload_file(&session_id, &item.local, &item.remote) {
-                Ok(_) => started = true,
-                Err(error) => tracing::warn!(
-                    target: "qingqi_ssh",
-                    path = %item.local.display(),
-                    error = %error,
-                    "上传失败"
-                ),
-            }
+        let upload_items: Vec<UploadItem> = items
+            .into_iter()
+            .filter(|item| replace_existing || !conflict_remotes.contains(&item.remote))
+            .collect();
+        if upload_items.is_empty() {
+            return;
         }
-        if started {
-            self.transfer_panel_expanded = true;
-            let cwd = self.service.session_cwd(&session_id);
-            if !cwd.is_empty() {
-                let _ = self.service.list_directory(&session_id, &cwd);
+
+        let window_handle = self.host_window_handle;
+        let cwd = self.service.session_cwd(&session_id);
+        self.transfer_panel_expanded = true;
+        self.refresh_ui(cx);
+
+        let service = Arc::clone(&self.service);
+        cx.spawn(async move |view, cx| {
+            let service_enqueue = Arc::clone(&service);
+            let (transfer_ids, prep_failures) = cx
+                .background_executor()
+                .spawn(async move {
+                    upload::enqueue_upload_batch(&service_enqueue, &session_id, &upload_items, &cwd)
+                })
+                .await;
+
+            let _ = view.update(cx, |view, cx| {
+                view.transfer_panel_expanded = true;
+                view.refresh_ui(cx);
+            });
+
+            if transfer_ids.is_empty() {
+                Self::schedule_upload_notification(
+                    window_handle,
+                    cx,
+                    0,
+                    prep_failures,
+                    prep_failures,
+                );
+                return;
             }
-            self.refresh_ui(cx);
+
+            let (completed, failed) = Self::wait_upload_transfers(
+                cx.background_executor(),
+                Arc::clone(&service),
+                session_id,
+                &transfer_ids,
+            )
+            .await;
+
+            let refresh_cwd = cx
+                .background_executor()
+                .spawn({
+                    let service = Arc::clone(&service);
+                    async move {
+                        let cwd = service.session_cwd(&session_id);
+                        if !cwd.is_empty() {
+                            let _ = service.list_directory(&session_id, &cwd);
+                        }
+                    }
+                })
+                .await;
+
+            let _ = refresh_cwd;
+            let _ = view.update(cx, |view, cx| view.refresh_ui(cx));
+
+            Self::schedule_upload_notification(
+                window_handle,
+                cx,
+                completed,
+                failed + prep_failures,
+                prep_failures,
+            );
+        })
+        .detach();
+    }
+
+    async fn wait_upload_transfers(
+        executor: &BackgroundExecutor,
+        service: Arc<SshService>,
+        session_id: SessionId,
+        transfer_ids: &[TransferId],
+    ) -> (usize, usize) {
+        let transfer_ids: Vec<TransferId> = transfer_ids.to_vec();
+        for _ in 0..600 {
+            let snapshots = service.transfer_snapshots(&session_id);
+            let all_settled = transfer_ids.iter().all(|tid| {
+                snapshots
+                    .iter()
+                    .find(|task| &task.id == tid)
+                    .map(|task| {
+                        matches!(
+                            task.status,
+                            TransferStatus::Completed
+                                | TransferStatus::Failed
+                                | TransferStatus::Cancelled
+                        )
+                    })
+                    .unwrap_or(false)
+            });
+            if all_settled {
+                break;
+            }
+            executor.timer(std::time::Duration::from_millis(200)).await;
+        }
+
+        let snapshots = service.transfer_snapshots(&session_id);
+        transfer_ids
+            .iter()
+            .fold((0usize, 0usize), |(ok, fail), tid| {
+                let Some(task) = snapshots.iter().find(|task| &task.id == tid) else {
+                    return (ok, fail + 1);
+                };
+                match task.status {
+                    TransferStatus::Completed => (ok + 1, fail),
+                    TransferStatus::Failed | TransferStatus::Cancelled => (ok, fail + 1),
+                    _ => (ok, fail + 1),
+                }
+            })
+    }
+
+    fn schedule_upload_notification(
+        window_handle: Option<AnyWindowHandle>,
+        cx: &mut AsyncApp,
+        completed: usize,
+        failed: usize,
+        skipped: usize,
+    ) {
+        let Some(handle) = window_handle else {
+            return;
+        };
+        let _ = handle.update(cx, |_, window, cx| {
+            Self::emit_upload_notification(window, cx, completed, failed, skipped);
+        });
+    }
+
+    fn emit_upload_notification(
+        window: &mut Window,
+        cx: &mut App,
+        completed: usize,
+        failed: usize,
+        skipped: usize,
+    ) {
+        if completed > 0 && failed == 0 {
+            let message = if completed == 1 {
+                "文件上传成功".into()
+            } else {
+                format!("已上传 {completed} 个文件")
+            };
+            window.push_notification(Notification::success(message), cx);
+        } else if failed > 0 && completed == 0 {
+            let message = if skipped > 0 {
+                format!("上传失败（{skipped} 个文件未能开始传输）")
+            } else {
+                "上传失败".into()
+            };
+            window.push_notification(Notification::error(message), cx);
+        } else if failed > 0 {
+            window.push_notification(
+                Notification::warning(format!("上传完成：{completed} 成功，{failed} 失败")),
+                cx,
+            );
         }
     }
 
@@ -1060,7 +1191,12 @@ impl SshView {
             self.close_file_rename(cx);
             return;
         };
-        let new_name = self.file_rename_input.read(cx).current_text(cx).trim().to_string();
+        let new_name = self
+            .file_rename_input
+            .read(cx)
+            .current_text(cx)
+            .trim()
+            .to_string();
         if new_name.is_empty() || new_name == entry.name {
             self.close_file_rename(cx);
             return;
@@ -1078,7 +1214,10 @@ impl SshView {
         } else {
             format!("{parent}/{new_name}")
         };
-        match self.service.rename_remote_entry(&sid, &entry.path, &new_path) {
+        match self
+            .service
+            .rename_remote_entry(&sid, &entry.path, &new_path)
+        {
             Ok(()) => {
                 let cwd = self.service.session_cwd(&sid);
                 if !cwd.is_empty() {
@@ -1373,8 +1512,10 @@ impl SshView {
     }
 
     fn fill_form_from_profile(&mut self, profile: &crate::model::Profile, cx: &mut Context<Self>) {
-        self.form_name.update(cx, |input, cx| input.set_text(&profile.name, cx));
-        self.form_host.update(cx, |input, cx| input.set_text(&profile.host, cx));
+        self.form_name
+            .update(cx, |input, cx| input.set_text(&profile.name, cx));
+        self.form_host
+            .update(cx, |input, cx| input.set_text(&profile.host, cx));
         self.form_port.update(cx, |input, cx| {
             input.set_text(&profile.port.to_string(), cx)
         });
@@ -1384,18 +1525,13 @@ impl SshView {
         self.form_local_root.update(cx, |input, cx| {
             input.set_text(&profile.paths.local_root, cx)
         });
-        self.form_note.update(cx, |input, cx| input.set_text(&profile.note, cx));
+        self.form_note
+            .update(cx, |input, cx| input.set_text(&profile.note, cx));
         self.form_connection_timeout.update(cx, |input, cx| {
-            input.set_text(
-                &profile.advanced.connection_timeout_secs.to_string(),
-                cx,
-            )
+            input.set_text(&profile.advanced.connection_timeout_secs.to_string(), cx)
         });
         self.form_keepalive_interval.update(cx, |input, cx| {
-            input.set_text(
-                &profile.advanced.keepalive_interval_secs.to_string(),
-                cx,
-            )
+            input.set_text(&profile.advanced.keepalive_interval_secs.to_string(), cx)
         });
         self.form_keepalive_max.update(cx, |input, cx| {
             input.set_text(&profile.advanced.keepalive_max.to_string(), cx)
@@ -1406,28 +1542,28 @@ impl SshView {
         self.form_protocol = profile.protocol.clone();
         self.form_auth_method = match &profile.auth {
             AuthConfig::Ssh { username, method } => {
-                self.form_username.update(cx, |input, cx| input.set_text(username, cx));
+                self.form_username
+                    .update(cx, |input, cx| input.set_text(username, cx));
                 match method {
                     SshAuthMethod::Password { password } => {
-                        self.form_password.update(cx, |input, cx| {
-                            input.set_text(password, cx)
-                        });
+                        self.form_password
+                            .update(cx, |input, cx| input.set_text(password, cx));
                     }
                     SshAuthMethod::PrivateKey { path, passphrase } => {
-                        self.form_private_key_path.update(cx, |input, cx| {
-                            input.set_text(path, cx)
-                        });
-                        self.form_private_key_passphrase.update(cx, |input, cx| {
-                            input.set_text(passphrase, cx)
-                        });
+                        self.form_private_key_path
+                            .update(cx, |input, cx| input.set_text(path, cx));
+                        self.form_private_key_passphrase
+                            .update(cx, |input, cx| input.set_text(passphrase, cx));
                     }
                     SshAuthMethod::Agent => {}
                 }
                 method.clone()
             }
             AuthConfig::Ftp { username, password } => {
-                self.form_username.update(cx, |input, cx| input.set_text(username, cx));
-                self.form_password.update(cx, |input, cx| input.set_text(password, cx));
+                self.form_username
+                    .update(cx, |input, cx| input.set_text(username, cx));
+                self.form_password
+                    .update(cx, |input, cx| input.set_text(password, cx));
                 SshAuthMethod::Password {
                     password: password.clone(),
                 }
@@ -1437,22 +1573,35 @@ impl SshView {
 
     fn reset_form(&mut self, cx: &mut Context<Self>) {
         self.form_protocol = ProtocolType::Ssh;
-        self.form_auth_method = SshAuthMethod::Password { password: String::new() };
-        self.form_name.update(cx, |input, cx| input.set_text("", cx));
-        self.form_host.update(cx, |input, cx| input.set_text("", cx));
-        self.form_port.update(cx, |input, cx| input.set_text("22", cx));
-        self.form_username.update(cx, |input, cx| input.set_text("root", cx));
-        self.form_password.update(cx, |input, cx| input.set_text("", cx));
-        self.form_remote_root.update(cx, |input, cx| input.set_text("~", cx));
-        self.form_local_root.update(cx, |input, cx| input.set_text("~/Downloads", cx));
-        self.form_private_key_path.update(cx, |input, cx| {
-            input.set_text("~/.ssh/id_rsa", cx)
-        });
-        self.form_private_key_passphrase.update(cx, |input, cx| input.set_text("", cx));
-        self.form_note.update(cx, |input, cx| input.set_text("", cx));
-        self.form_connection_timeout.update(cx, |input, cx| input.set_text("0", cx));
-        self.form_keepalive_interval.update(cx, |input, cx| input.set_text("60", cx));
-        self.form_keepalive_max.update(cx, |input, cx| input.set_text("3", cx));
+        self.form_auth_method = SshAuthMethod::Password {
+            password: String::new(),
+        };
+        self.form_name
+            .update(cx, |input, cx| input.set_text("", cx));
+        self.form_host
+            .update(cx, |input, cx| input.set_text("", cx));
+        self.form_port
+            .update(cx, |input, cx| input.set_text("22", cx));
+        self.form_username
+            .update(cx, |input, cx| input.set_text("root", cx));
+        self.form_password
+            .update(cx, |input, cx| input.set_text("", cx));
+        self.form_remote_root
+            .update(cx, |input, cx| input.set_text("~", cx));
+        self.form_local_root
+            .update(cx, |input, cx| input.set_text("~/Downloads", cx));
+        self.form_private_key_path
+            .update(cx, |input, cx| input.set_text("~/.ssh/id_rsa", cx));
+        self.form_private_key_passphrase
+            .update(cx, |input, cx| input.set_text("", cx));
+        self.form_note
+            .update(cx, |input, cx| input.set_text("", cx));
+        self.form_connection_timeout
+            .update(cx, |input, cx| input.set_text("0", cx));
+        self.form_keepalive_interval
+            .update(cx, |input, cx| input.set_text("60", cx));
+        self.form_keepalive_max
+            .update(cx, |input, cx| input.set_text("3", cx));
         self.form_tcp_nodelay = false;
         self.form_ftp_passive_mode = true;
         self.form_ftp_passive_nat_workaround = true;
@@ -1525,12 +1674,8 @@ impl SshView {
         let remote_root = field(&self.form_remote_root);
         let local_root = field(&self.form_local_root);
         let note = field(&self.form_note);
-        let connection_timeout_secs = field(&self.form_connection_timeout)
-            .parse()
-            .unwrap_or(0);
-        let keepalive_interval_secs = field(&self.form_keepalive_interval)
-            .parse()
-            .unwrap_or(60);
+        let connection_timeout_secs = field(&self.form_connection_timeout).parse().unwrap_or(0);
+        let keepalive_interval_secs = field(&self.form_keepalive_interval).parse().unwrap_or(60);
         let keepalive_max = field(&self.form_keepalive_max).parse().unwrap_or(3);
         let mut advanced = crate::model::ProfileAdvanced {
             connection_timeout_secs,
@@ -1584,7 +1729,8 @@ impl SshView {
         };
 
         let result = if let Some(id) = editing_id {
-            self.service.update_profile(id, draft)
+            self.service
+                .update_profile(id, draft)
                 .map(|_| ())
                 .map_err(|e| anyhow::anyhow!("{e}"))
         } else {
@@ -1620,10 +1766,7 @@ impl SshView {
         self.load_profiles_cache();
         let sessions = self.service.session_summaries();
         self.vm = SshViewModel {
-            profiles: Self::build_profiles(
-                &self.profiles_cache,
-                self.selected_profile_id,
-            ),
+            profiles: Self::build_profiles(&self.profiles_cache, self.selected_profile_id),
             sessions: Self::build_sessions(&sessions, self.selected_session_id),
             file_tree: Self::build_file_tree(
                 self.selected_session_id.as_ref(),
@@ -1758,7 +1901,10 @@ impl SshView {
         }
     }
 
-    pub(crate) fn build_terminal(session_id: Option<&SessionId>, service: &SshService) -> TerminalViewModel {
+    pub(crate) fn build_terminal(
+        session_id: Option<&SessionId>,
+        service: &SshService,
+    ) -> TerminalViewModel {
         let Some(id) = session_id else {
             return Self::empty_terminal_vm("未连接", TerminalKind::Shell);
         };
@@ -1900,7 +2046,8 @@ impl SshViewModel {
 // ========== Render ==========
 
 impl Render for SshView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.host_window_handle = Some(window.window_handle());
         let handle = cx.entity().clone();
         div()
             .size_full()
@@ -1969,11 +2116,12 @@ impl Render for SshView {
             )
             .when(self.show_upload_overwrite_confirm, {
                 let confirm_handle = handle.clone();
-                let (count, sample) = self
+                let (total_items, conflict_count, sample) = self
                     .pending_upload_batch
                     .as_ref()
                     .map(|batch| {
-                        let count = batch.conflict_remotes.len();
+                        let conflict_count = batch.conflict_remotes.len();
+                        let total_items = batch.items.len();
                         let sample = batch
                             .conflict_remotes
                             .iter()
@@ -1981,13 +2129,14 @@ impl Render for SshView {
                             .and_then(|path| path.rsplit('/').next())
                             .unwrap_or("文件")
                             .to_string();
-                        (count, sample)
+                        (total_items, conflict_count, sample)
                     })
-                    .unwrap_or((0, String::from("文件")));
+                    .unwrap_or((0, 0, String::from("文件")));
                 move |root| {
                     root.child(file_upload_overwrite::render_upload_overwrite_overlay(
                         confirm_handle.clone(),
-                        count,
+                        total_items,
+                        conflict_count,
                         &sample,
                     ))
                 }

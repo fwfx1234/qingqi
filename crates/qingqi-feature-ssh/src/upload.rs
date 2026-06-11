@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use crate::model::SessionId;
+use crate::model::{RemoteEntry, SessionId, TransferId};
 use crate::service::SshService;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -16,17 +16,17 @@ pub struct UploadItem {
 
 /// 将拖入/选择的本地路径展开为上传任务（支持文件与文件夹递归）。
 pub fn collect_upload_items(local_paths: &[PathBuf], remote_base: &str) -> Result<Vec<UploadItem>> {
-    let base = remote_base.trim_end_matches('/');
+    let base = normalize_remote_dir(remote_base);
     let mut items = Vec::new();
     for path in local_paths {
         if path.is_file() {
-            push_file(path, base, &mut items)?;
+            push_file(path, &base, &mut items)?;
         } else if path.is_dir() {
             let name = path
                 .file_name()
                 .and_then(|n| n.to_str())
                 .with_context(|| format!("无法读取目录名 {}", path.display()))?;
-            walk_dir(path, &join_remote(base, name), &mut items)?;
+            walk_dir(path, &join_remote(&base, name), &mut items)?;
         }
     }
     Ok(items)
@@ -38,26 +38,103 @@ pub fn find_upload_conflicts(
     session_id: &SessionId,
     items: &[UploadItem],
 ) -> Result<Vec<UploadItem>> {
-    let mut cache = RemoteListingCache::new(service, *session_id);
+    let cwd = normalize_remote_dir(&service.session_cwd(session_id));
+    let cwd_entries = service.session_entries(session_id);
+    let mut cache = RemoteListingCache::new(service, *session_id, cwd, cwd_entries);
     let mut conflicts = Vec::new();
     for item in items {
-        if cache.entry_exists(&item.remote)? {
+        let uploading_file = item.local.is_file();
+        if cache.entry_conflicts(&item.remote, uploading_file)? {
             conflicts.push(item.clone());
         }
     }
     Ok(conflicts)
 }
 
+/// 在后台线程入队上传任务（含远程目录准备）。
+pub fn enqueue_upload_batch(
+    service: &SshService,
+    session_id: &SessionId,
+    items: &[UploadItem],
+    cwd: &str,
+) -> (Vec<TransferId>, usize) {
+    let cwd = normalize_remote_dir(cwd);
+    let mut transfer_ids = Vec::new();
+    let mut failures = 0usize;
+    for item in items {
+        let parent = remote_parent(&item.remote).unwrap_or_default();
+        let needs_parent = !parent.is_empty() && parent != "/" && !remote_dirs_match(&parent, &cwd);
+        if needs_parent {
+            if let Err(error) = service.ensure_remote_parent_dirs(session_id, &item.remote) {
+                tracing::warn!(
+                    target: "qingqi_ssh",
+                    remote = %item.remote,
+                    error = %error,
+                    "创建远程目录失败"
+                );
+                failures += 1;
+                continue;
+            }
+        }
+        match service.upload_file(session_id, &item.local, &item.remote) {
+            Ok(tid) => transfer_ids.push(tid),
+            Err(error) => {
+                failures += 1;
+                tracing::warn!(
+                    target: "qingqi_ssh",
+                    path = %item.local.display(),
+                    error = %error,
+                    "上传入队失败"
+                );
+            }
+        }
+    }
+    (transfer_ids, failures)
+}
+
+/// 判断远程路径是否已存在（不修改 Session 当前目录）。
+pub fn remote_entry_exists(
+    service: &SshService,
+    session_id: &SessionId,
+    remote: &str,
+) -> Result<bool> {
+    let cwd = normalize_remote_dir(&service.session_cwd(session_id));
+    let cwd_entries = service.session_entries(session_id);
+    let mut cache = RemoteListingCache::new(service, *session_id, cwd, cwd_entries);
+    cache.entry_exists(remote)
+}
+
 pub fn join_remote(base: &str, rel: &str) -> String {
-    let base = base.trim_end_matches('/');
+    let base = normalize_remote_dir(base);
     let rel = rel.trim_start_matches('/');
-    if base.is_empty() {
-        rel.to_string()
+    if base.is_empty() || base == "/" {
+        if rel.is_empty() {
+            "/".to_string()
+        } else if rel.starts_with('/') {
+            rel.to_string()
+        } else {
+            format!("/{rel}")
+        }
     } else if rel.is_empty() {
-        base.to_string()
+        base
     } else {
         format!("{base}/{rel}")
     }
+}
+
+fn normalize_remote_dir(path: &str) -> String {
+    let path = path.trim();
+    if path.is_empty() {
+        return String::new();
+    }
+    if path == "/" {
+        return "/".to_string();
+    }
+    path.trim_end_matches('/').to_string()
+}
+
+pub fn remote_dirs_match(a: &str, b: &str) -> bool {
+    normalize_remote_dir(a) == normalize_remote_dir(b)
 }
 
 fn push_file(local: &Path, remote_base: &str, items: &mut Vec<UploadItem>) -> Result<()> {
@@ -98,14 +175,23 @@ fn walk_dir(local_dir: &Path, remote_dir: &str, items: &mut Vec<UploadItem>) -> 
 struct RemoteListingCache<'a> {
     service: &'a SshService,
     session_id: SessionId,
-    listings: HashMap<String, Vec<crate::model::RemoteEntry>>,
+    cwd: String,
+    cwd_entries: Vec<RemoteEntry>,
+    listings: HashMap<String, Vec<RemoteEntry>>,
 }
 
 impl<'a> RemoteListingCache<'a> {
-    fn new(service: &'a SshService, session_id: SessionId) -> Self {
+    fn new(
+        service: &'a SshService,
+        session_id: SessionId,
+        cwd: String,
+        cwd_entries: Vec<RemoteEntry>,
+    ) -> Self {
         Self {
             service,
             session_id,
+            cwd,
+            cwd_entries,
             listings: HashMap::new(),
         }
     }
@@ -115,18 +201,43 @@ impl<'a> RemoteListingCache<'a> {
         let Some((parent, name)) = split_remote_parent(remote) else {
             return Ok(false);
         };
+        if name.is_empty() || name == "." || name == ".." {
+            return Ok(false);
+        }
+        let matches = |entry: &RemoteEntry| entry.name == name;
+        if remote_dirs_match(&parent, &self.cwd) {
+            return Ok(self.cwd_entries.iter().any(matches));
+        }
         let entries = self.listings(&parent)?;
-        Ok(entries.iter().any(|entry| entry.name == name))
+        Ok(entries.iter().any(matches))
     }
 
-    fn listings(&mut self, parent: &str) -> Result<&Vec<crate::model::RemoteEntry>> {
-        if !self.listings.contains_key(parent) {
-            let entries = self
-                .service
-                .list_directory(&self.session_id, parent)?;
-            self.listings.insert(parent.to_string(), entries);
+    fn entry_conflicts(&mut self, remote: &str, uploading_file: bool) -> Result<bool> {
+        let remote = remote.trim_end_matches('/');
+        let Some((parent, name)) = split_remote_parent(remote) else {
+            return Ok(false);
+        };
+        if name.is_empty() || name == "." || name == ".." {
+            return Ok(false);
         }
-        Ok(self.listings.get(parent).expect("listing cached"))
+        let matches = |entry: &RemoteEntry| entry.name == name && entry.is_dir != uploading_file;
+        if remote_dirs_match(&parent, &self.cwd) {
+            return Ok(self.cwd_entries.iter().any(matches));
+        }
+        let entries = self.listings(&parent)?;
+        Ok(entries.iter().any(matches))
+    }
+
+    fn listings(&mut self, parent: &str) -> Result<&Vec<RemoteEntry>> {
+        let key = normalize_remote_dir(parent);
+        if !self.listings.contains_key(&key) {
+            let entries = self.service.peek_directory(&self.session_id, &key)?;
+            self.listings.insert(key, entries);
+        }
+        Ok(self
+            .listings
+            .get(&normalize_remote_dir(parent))
+            .expect("listing cached"))
     }
 }
 
@@ -161,7 +272,8 @@ mod tests {
     fn join_remote_paths() {
         assert_eq!(join_remote("/a/b", "c"), "/a/b/c");
         assert_eq!(join_remote("/a/b/", "/c"), "/a/b/c");
-        assert_eq!(join_remote("", "file"), "file");
+        assert_eq!(join_remote("", "file"), "/file");
+        assert_eq!(join_remote("/var/www", "index.html"), "/var/www/index.html");
     }
 
     #[test]

@@ -286,9 +286,8 @@ impl WindowController {
         let window_started = Instant::now();
         match cx.open_window(options, move |window, cx| {
             window.set_window_title(&title);
-            let plugin = cx.new(|_| {
-                PluginWindow::new(Arc::clone(&controller_for_window), view, client_drawn)
-            });
+            let plugin = cx
+                .new(|_| PluginWindow::new(Arc::clone(&controller_for_window), view, client_drawn));
             cx.new(|cx| Root::new(plugin, window, cx))
         }) {
             Ok(handle) => {
@@ -561,9 +560,8 @@ impl WindowController {
         let window_started = Instant::now();
         match cx.open_window(options, move |window, cx| {
             window.set_window_title(&title);
-            let plugin = cx.new(|_| {
-                PluginWindow::new(Arc::clone(&controller_for_window), view, client_drawn)
-            });
+            let plugin = cx
+                .new(|_| PluginWindow::new(Arc::clone(&controller_for_window), view, client_drawn));
             cx.new(|cx| Root::new(plugin, window, cx))
         }) {
             Ok(handle) => {
@@ -957,6 +955,8 @@ impl Render for PluginWindow {
             .map(|view| view.render(window, cx))
             .unwrap_or_else(|| div().child("插件已关闭").into_any_element());
 
+        let notification_layer = Root::render_notification_layer(window, cx);
+
         div()
             .size_full()
             .relative()
@@ -979,6 +979,7 @@ impl Render for PluginWindow {
                     .right(px(6.0))
                     .child(ui::window_close_button())
             }))
+            .children(notification_layer)
     }
 }
 

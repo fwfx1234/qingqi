@@ -55,7 +55,12 @@ pub fn render_file_tree(
         .on_drop(cx.listener(|view, paths: &ExternalPaths, _, cx| {
             view.upload_local_paths(paths.paths(), cx);
         }))
-        .child(render_toolbar(path_input, follow_terminal, can_follow_terminal, cx))
+        .child(render_toolbar(
+            path_input,
+            follow_terminal,
+            can_follow_terminal,
+            cx,
+        ))
         .child(render_list_header())
         .child(render_entry_list(tree, tree_id, list_scroll, handle))
 }
@@ -239,10 +244,7 @@ fn render_entry_list(
 }
 
 /// 文件列表唯一右键菜单入口，避免父子元素重复挂载导致菜单叠影。
-fn file_list_shell(
-    handle: Entity<super::SshView>,
-    child: impl IntoElement,
-) -> impl IntoElement {
+fn file_list_shell(handle: Entity<super::SshView>, child: impl IntoElement) -> impl IntoElement {
     let menu_handle = handle.clone();
     div()
         .id("ssh-file-list-area")
@@ -255,8 +257,7 @@ fn file_list_shell(
             }
         })
         .context_menu(move |menu, _window, cx| {
-            let target =
-                menu_handle.update(cx, |view, _| view.take_file_context_target());
+            let target = menu_handle.update(cx, |view, _| view.take_file_context_target());
             file_context_menu::build(menu, target, menu_handle.clone())
         })
         .child(child)

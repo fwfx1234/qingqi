@@ -2,12 +2,9 @@
 
 use gpui::prelude::*;
 use gpui::*;
-use qingqi_plugin::plugin_spec::PluginAccent;
-use qingqi_ui::{theme, theme_mode, ui};
 use qingqi_ui::ui::components::button::{ButtonVariant, button};
 use qingqi_ui::ui::glass;
-
-const ACCENT: PluginAccent = PluginAccent::Cyan;
+use qingqi_ui::{theme, theme_mode, ui};
 
 pub fn render_file_edit_confirm_overlay(
     handle: Entity<super::SshView>,
@@ -72,7 +69,7 @@ pub fn render_file_edit_confirm_overlay(
                         .gap_2()
                         .child({
                             let h = handle.clone();
-                            button("不上传", ButtonVariant::Secondary, Some(ACCENT), dark)
+                            button("不上传", ButtonVariant::Secondary, None, dark)
                                 .id("file-edit-confirm-cancel")
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.cancel_external_edit(cx));
@@ -80,7 +77,7 @@ pub fn render_file_edit_confirm_overlay(
                         })
                         .child({
                             let h = handle;
-                            button("上传", ButtonVariant::Primary, Some(ACCENT), dark)
+                            button("上传", ButtonVariant::Primary, None, dark)
                                 .id("file-edit-confirm-upload")
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.confirm_upload_external_edit(cx));

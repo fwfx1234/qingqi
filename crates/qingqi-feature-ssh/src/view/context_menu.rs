@@ -23,7 +23,12 @@ pub fn profile_menu(menu: PopupMenu, profile_id: i64, handle: Entity<super::SshV
         profile_id,
         ProfileAction::Edit,
     ))
-    .item(action_item("删除", handle, profile_id, ProfileAction::Delete))
+    .item(action_item(
+        "删除",
+        handle,
+        profile_id,
+        ProfileAction::Delete,
+    ))
 }
 
 fn action_item(

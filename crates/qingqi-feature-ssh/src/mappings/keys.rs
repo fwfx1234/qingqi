@@ -243,7 +243,10 @@ mod tests {
         assert_eq!(to_esc_str(&end, true, false), Some("\x1bOF".into()));
 
         let shift_up = Keystroke::parse("shift-up").unwrap();
-        assert_eq!(to_esc_str(&shift_up, false, false), Some("\x1b[1;2A".into()));
+        assert_eq!(
+            to_esc_str(&shift_up, false, false),
+            Some("\x1b[1;2A".into())
+        );
     }
 
     #[test]
@@ -269,7 +272,10 @@ mod tests {
         let shift_enter = Keystroke::parse("shift-enter").unwrap();
         let regular_enter = Keystroke::parse("enter").unwrap();
         assert_eq!(to_esc_str(&shift_enter, false, false), Some("\x0a".into()));
-        assert_eq!(to_esc_str(&regular_enter, false, false), Some("\x0d".into()));
+        assert_eq!(
+            to_esc_str(&regular_enter, false, false),
+            Some("\x0d".into())
+        );
     }
 
     #[test]

@@ -2,13 +2,10 @@
 
 use gpui::prelude::*;
 use gpui::*;
-use qingqi_plugin::plugin_spec::PluginAccent;
 use qingqi_ui::text_input::TextInput;
-use qingqi_ui::{theme, theme_mode, ui};
 use qingqi_ui::ui::components::button::{ButtonVariant, button};
 use qingqi_ui::ui::glass;
-
-const ACCENT: PluginAccent = PluginAccent::Cyan;
+use qingqi_ui::{theme, theme_mode, ui};
 
 pub fn render_file_rename_overlay(
     handle: Entity<super::SshView>,
@@ -71,7 +68,7 @@ pub fn render_file_rename_overlay(
                         .gap_2()
                         .child({
                             let h = handle.clone();
-                            button("取消", ButtonVariant::Secondary, Some(ACCENT), dark)
+                            button("取消", ButtonVariant::Secondary, None, dark)
                                 .id("file-rename-cancel")
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.close_file_rename(cx));
@@ -79,7 +76,7 @@ pub fn render_file_rename_overlay(
                         })
                         .child({
                             let h = handle;
-                            button("确定", ButtonVariant::Primary, Some(ACCENT), dark)
+                            button("确定", ButtonVariant::Primary, None, dark)
                                 .id("file-rename-ok")
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.confirm_file_rename(cx));

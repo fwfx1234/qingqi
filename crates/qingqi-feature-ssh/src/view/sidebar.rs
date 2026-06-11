@@ -7,8 +7,8 @@ use gpui_component::menu::ContextMenuExt;
 use super::context_menu;
 use super::virtual_list;
 use qingqi_plugin::plugin_spec::PluginAccent;
-use qingqi_ui::{theme, theme_mode, ui};
 use qingqi_ui::ui::glass;
+use qingqi_ui::{theme, theme_mode, ui};
 
 use super::ProfileItem;
 
@@ -73,9 +73,9 @@ fn render_top_bar(dark: bool, cx: &mut Context<super::SshView>) -> impl IntoElem
                     s.bg(glass::hover_bg(dark))
                         .text_color(ui::accent_color(ACCENT))
                 })
-                .on_click(cx.listener(|view, _: &ClickEvent, _w, cx| {
-                    view.open_profile_editor(None, cx)
-                }))
+                .on_click(
+                    cx.listener(|view, _: &ClickEvent, _w, cx| view.open_profile_editor(None, cx)),
+                )
                 .child("+"),
         )
 }
@@ -138,7 +138,9 @@ fn profile_list_item(
     )
     .id(("ssh-profile", pid as u64))
     .cursor_pointer()
-    .when(!profile.is_selected, |row| row.hover(|s| s.bg(glass::hover_bg(dark))))
+    .when(!profile.is_selected, |row| {
+        row.hover(|s| s.bg(glass::hover_bg(dark)))
+    })
     .on_click({
         let h = handle.clone();
         move |event: &ClickEvent, _: &mut Window, cx: &mut App| {
@@ -232,13 +234,8 @@ fn render_bottom_bar(dark: bool, cx: &mut Context<super::SshView>) -> impl IntoE
                 .cursor_pointer()
                 .text_size(theme::font_size_caption())
                 .text_color(ui::text_tertiary())
-                .hover(|s| {
-                    s.bg(glass::hover_bg(dark))
-                        .text_color(ui::text_primary())
-                })
-                .on_click(cx.listener(|view, _: &ClickEvent, _w, cx| {
-                    view.open_app_settings(cx)
-                }))
+                .hover(|s| s.bg(glass::hover_bg(dark)).text_color(ui::text_primary()))
+                .on_click(cx.listener(|view, _: &ClickEvent, _w, cx| view.open_app_settings(cx)))
                 .child("设置"),
         )
 }

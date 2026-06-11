@@ -30,13 +30,7 @@ pub(crate) fn render_status_bar(term: &TerminalViewModel) -> impl IntoElement {
         .bg(hsla(0.0, 0.0, 0.97, 1.0))
         .border_b_1()
         .border_color(ui::border_light())
-        .child(
-            div()
-                .size(px(6.0))
-                .rounded_full()
-                .bg(ui::success())
-                .mr_2(),
-        )
+        .child(div().size(px(6.0)).rounded_full().bg(ui::success()).mr_2())
         .child(
             div()
                 .text_size(px(11.0))
@@ -55,11 +49,7 @@ pub(crate) fn scroll_delta_from_wheel(event: &ScrollWheelEvent, line_height: f32
     }
     let lines = (f32::from(pixel_delta.y) / f32::from(line_height_px)).round() as i32;
     if lines == 0 {
-        if pixel_delta.y > px(0.0) {
-            1
-        } else {
-            -1
-        }
+        if pixel_delta.y > px(0.0) { 1 } else { -1 }
     } else {
         lines
     }

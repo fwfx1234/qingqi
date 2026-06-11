@@ -4,14 +4,19 @@ use gpui::prelude::*;
 use gpui::*;
 use gpui_component::Root;
 
+use super::SshView;
 use super::app_settings;
 use super::profile_editor;
-use super::SshView;
 
 const PROFILE_EDITOR_SIZE: (f32, f32) = (480.0, 560.0);
 const APP_SETTINGS_SIZE: (f32, f32) = (380.0, 280.0);
 
-pub fn dialog_window_options(title: impl Into<SharedString>, width: f32, height: f32, cx: &App) -> WindowOptions {
+pub fn dialog_window_options(
+    title: impl Into<SharedString>,
+    width: f32,
+    height: f32,
+    cx: &App,
+) -> WindowOptions {
     let bounds = Bounds::centered(None, size(px(width), px(height)), cx);
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -103,7 +108,9 @@ impl ProfileEditorWindow {
         let view = ssh_view.clone();
         window.on_window_should_close(cx, move |window, cx| {
             let handle = window.window_handle();
-            let _ = view.update(cx, |ssh, cx| ssh.on_profile_editor_window_closed(handle, cx));
+            let _ = view.update(cx, |ssh, cx| {
+                ssh.on_profile_editor_window_closed(handle, cx)
+            });
             true
         });
         Self {

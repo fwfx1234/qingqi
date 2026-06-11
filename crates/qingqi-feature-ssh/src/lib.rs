@@ -1,9 +1,10 @@
 //! SSH 远程管理插件 — 库入口
 
-mod log_util;
-mod mappings;
 pub mod connection;
+pub mod download;
+mod log_util;
 pub mod manifest;
+mod mappings;
 pub mod model;
 pub mod plugin;
 pub mod protocol;
@@ -12,7 +13,6 @@ pub mod shell_cwd;
 pub mod store;
 pub mod terminal;
 pub mod transfer;
-pub mod download;
 pub mod upload;
 pub mod view;
 

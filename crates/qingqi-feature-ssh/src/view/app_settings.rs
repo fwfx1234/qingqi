@@ -2,13 +2,10 @@
 
 use gpui::prelude::*;
 use gpui::*;
-use qingqi_plugin::plugin_spec::PluginAccent;
 use qingqi_ui::text_input::TextInput;
-use qingqi_ui::{theme, theme_mode, ui};
 use qingqi_ui::ui::components::button::{ButtonVariant, button};
 use qingqi_ui::ui::glass;
-
-const ACCENT: PluginAccent = PluginAccent::Cyan;
+use qingqi_ui::{theme, theme_mode, ui};
 
 pub struct AppSettingsInputs {
     pub terminal_font_size: Entity<TextInput>,
@@ -95,7 +92,7 @@ fn render_footer(handle: &Entity<super::SshView>, dark: bool) -> impl IntoElemen
                 }),
         )
         .child(
-            button("保存", ButtonVariant::Primary, Some(ACCENT), dark)
+            button("保存", ButtonVariant::Primary, None, dark)
                 .id("app-settings-save")
                 .cursor_pointer()
                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {

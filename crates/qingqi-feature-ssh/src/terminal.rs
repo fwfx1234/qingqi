@@ -6,10 +6,10 @@ use alacritty_terminal::event::VoidListener;
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::grid::Scroll;
 use alacritty_terminal::index::{Column, Line, Point};
-use alacritty_terminal::term::viewport_to_point;
 use alacritty_terminal::term::cell::{Cell, Flags, LineLength};
 use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::term::test::TermSize;
+use alacritty_terminal::term::viewport_to_point;
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::Processor;
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
@@ -203,11 +203,7 @@ impl ShellTerm {
             grid.push(row_cells);
         }
 
-        let cursor_visible = self
-            .term
-            .mode()
-            .contains(TermMode::SHOW_CURSOR)
-            && cursor_in_view;
+        let cursor_visible = self.term.mode().contains(TermMode::SHOW_CURSOR) && cursor_in_view;
 
         let cursor_col = cursor.point.column.0;
         (
@@ -289,24 +285,96 @@ fn rgb_to_hsla(rgb: Rgb) -> [f32; 4] {
 fn default_named_rgb(named: NamedColor) -> Option<Rgb> {
     Some(match named {
         NamedColor::Black => Rgb { r: 0, g: 0, b: 0 },
-        NamedColor::Red => Rgb { r: 0xcd, g: 0x00, b: 0x00 },
-        NamedColor::Green => Rgb { r: 0x00, g: 0xcd, b: 0x00 },
-        NamedColor::Yellow => Rgb { r: 0xcd, g: 0xcd, b: 0x00 },
-        NamedColor::Blue => Rgb { r: 0x00, g: 0x00, b: 0xcd },
-        NamedColor::Magenta => Rgb { r: 0xcd, g: 0x00, b: 0xcd },
-        NamedColor::Cyan => Rgb { r: 0x00, g: 0xcd, b: 0xcd },
-        NamedColor::White => Rgb { r: 0xe5, g: 0xe5, b: 0xe5 },
-        NamedColor::BrightBlack => Rgb { r: 0x4d, g: 0x4d, b: 0x4d },
-        NamedColor::BrightRed => Rgb { r: 0xff, g: 0x00, b: 0x00 },
-        NamedColor::BrightGreen => Rgb { r: 0x00, g: 0xff, b: 0x00 },
-        NamedColor::BrightYellow => Rgb { r: 0xff, g: 0xff, b: 0x00 },
-        NamedColor::BrightBlue => Rgb { r: 0x46, g: 0x6d, b: 0xff },
-        NamedColor::BrightMagenta => Rgb { r: 0xff, g: 0x00, b: 0xff },
-        NamedColor::BrightCyan => Rgb { r: 0x00, g: 0xff, b: 0xff },
-        NamedColor::BrightWhite => Rgb { r: 0xff, g: 0xff, b: 0xff },
-        NamedColor::Foreground => Rgb { r: 0x1e, g: 0x1e, b: 0x1e },
-        NamedColor::Background => Rgb { r: 0xfc, g: 0xfc, b: 0xfc },
-        NamedColor::Cursor => Rgb { r: 0x1e, g: 0x1e, b: 0x1e },
+        NamedColor::Red => Rgb {
+            r: 0xcd,
+            g: 0x00,
+            b: 0x00,
+        },
+        NamedColor::Green => Rgb {
+            r: 0x00,
+            g: 0xcd,
+            b: 0x00,
+        },
+        NamedColor::Yellow => Rgb {
+            r: 0xcd,
+            g: 0xcd,
+            b: 0x00,
+        },
+        NamedColor::Blue => Rgb {
+            r: 0x00,
+            g: 0x00,
+            b: 0xcd,
+        },
+        NamedColor::Magenta => Rgb {
+            r: 0xcd,
+            g: 0x00,
+            b: 0xcd,
+        },
+        NamedColor::Cyan => Rgb {
+            r: 0x00,
+            g: 0xcd,
+            b: 0xcd,
+        },
+        NamedColor::White => Rgb {
+            r: 0xe5,
+            g: 0xe5,
+            b: 0xe5,
+        },
+        NamedColor::BrightBlack => Rgb {
+            r: 0x4d,
+            g: 0x4d,
+            b: 0x4d,
+        },
+        NamedColor::BrightRed => Rgb {
+            r: 0xff,
+            g: 0x00,
+            b: 0x00,
+        },
+        NamedColor::BrightGreen => Rgb {
+            r: 0x00,
+            g: 0xff,
+            b: 0x00,
+        },
+        NamedColor::BrightYellow => Rgb {
+            r: 0xff,
+            g: 0xff,
+            b: 0x00,
+        },
+        NamedColor::BrightBlue => Rgb {
+            r: 0x46,
+            g: 0x6d,
+            b: 0xff,
+        },
+        NamedColor::BrightMagenta => Rgb {
+            r: 0xff,
+            g: 0x00,
+            b: 0xff,
+        },
+        NamedColor::BrightCyan => Rgb {
+            r: 0x00,
+            g: 0xff,
+            b: 0xff,
+        },
+        NamedColor::BrightWhite => Rgb {
+            r: 0xff,
+            g: 0xff,
+            b: 0xff,
+        },
+        NamedColor::Foreground => Rgb {
+            r: 0x1e,
+            g: 0x1e,
+            b: 0x1e,
+        },
+        NamedColor::Background => Rgb {
+            r: 0xfc,
+            g: 0xfc,
+            b: 0xfc,
+        },
+        NamedColor::Cursor => Rgb {
+            r: 0x1e,
+            g: 0x1e,
+            b: 0x1e,
+        },
         _ => return None,
     })
 }
@@ -516,13 +584,7 @@ impl TerminalEngine {
                     term.write(data);
                     engine.sync_cursor_from_shell(term);
                     let (row, col, _) = term.cursor_viewport();
-                    (
-                        term.rows(),
-                        term.cols(),
-                        row,
-                        col,
-                        term.display_offset(),
-                    )
+                    (term.rows(), term.cols(), row, col, term.display_offset())
                 } else {
                     debug!(
                         target: "qingqi_ssh",

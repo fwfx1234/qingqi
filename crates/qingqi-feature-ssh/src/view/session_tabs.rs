@@ -89,7 +89,11 @@ fn tab_strip(
                 .gap(px(5.0))
                 .cursor_pointer()
                 .border_b(if is_selected { px(2.0) } else { px(0.0) })
-                .border_color(if is_selected { accent } else { hsla(0.0, 0.0, 0.0, 0.0) })
+                .border_color(if is_selected {
+                    accent
+                } else {
+                    hsla(0.0, 0.0, 0.0, 0.0)
+                })
                 .when(!is_selected, |tab| tab.hover(|s| s.bg(ui::bg_hover())))
                 .on_click(
                     cx.listener(move |view, _: &ClickEvent, _w, cx| view.select_session(sid, cx)),
@@ -118,11 +122,7 @@ fn tab_strip(
 }
 
 fn status_dot(color: Hsla) -> impl IntoElement {
-    div()
-        .flex_shrink_0()
-        .size(px(6.0))
-        .rounded_full()
-        .bg(color)
+    div().flex_shrink_0().size(px(6.0)).rounded_full().bg(color)
 }
 
 fn close_button(

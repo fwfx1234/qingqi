@@ -3,15 +3,13 @@
 use gpui::prelude::*;
 use gpui::{point, *};
 use gpui_component::scroll::ScrollableElement;
-use qingqi_plugin::plugin_spec::PluginAccent;
 use qingqi_ui::text_input::TextInput;
-use qingqi_ui::{theme, theme_mode, ui};
 use qingqi_ui::ui::components::button::{ButtonVariant, button};
 use qingqi_ui::ui::glass;
+use qingqi_ui::{theme, theme_mode, ui};
 
 use crate::model::{ProtocolType, SshAuthMethod};
 
-const ACCENT: PluginAccent = PluginAccent::Cyan;
 const FIELD_LABEL_WIDTH: f32 = 88.0;
 const FIELD_ROW_MIN_HEIGHT: f32 = 36.0;
 const FIELD_INPUT_HEIGHT: f32 = 32.0;
@@ -86,85 +84,72 @@ pub fn render_profile_editor_panel(
                 .child(render_protocol_selector(&handle, &proto, dark)),
         )
         .child(
-            div()
-                .flex_1()
-                .min_h(px(0.0))
-                .overflow_hidden()
-                .child(
-                    div()
-                        .id("profile-editor-scroll")
-                        .size_full()
-                        .overflow_y_scrollbar()
-                        .px(theme::space_4())
-                        .py(theme::space_3())
-                        .flex()
-                        .flex_col()
-                        .gap(theme::space_3())
-                        .child(section_block(
-                            "基本信息",
-                            settings_group(dark)
-                                .child(group_row(group_field("名称", &name, true), true))
-                                .child(group_row(group_field("主机", &host, true), true))
-                                .child(group_row(group_field("端口", &port, false), false)),
+            div().flex_1().min_h(px(0.0)).overflow_hidden().child(
+                div()
+                    .id("profile-editor-scroll")
+                    .size_full()
+                    .overflow_y_scrollbar()
+                    .px(theme::space_4())
+                    .py(theme::space_3())
+                    .flex()
+                    .flex_col()
+                    .gap(theme::space_3())
+                    .child(section_block(
+                        "基本信息",
+                        settings_group(dark)
+                            .child(group_row(group_field("名称", &name, true), true))
+                            .child(group_row(group_field("主机", &host, true), true))
+                            .child(group_row(group_field("端口", &port, false), false)),
+                    ))
+                    .when(matches!(proto, ProtocolType::Ssh), |el| {
+                        el.child(section_block(
+                            "认证",
+                            render_auth_selector(
+                                &handle,
+                                &auth,
+                                &username,
+                                &password,
+                                &private_key_path,
+                                &private_key_passphrase,
+                                dark,
+                            ),
                         ))
-                        .when(
-                            matches!(proto, ProtocolType::Ssh),
-                            |el| {
-                                el.child(section_block(
-                                    "认证",
-                                    render_auth_selector(
-                                        &handle,
-                                        &auth,
-                                        &username,
-                                        &password,
-                                        &private_key_path,
-                                        &private_key_passphrase,
-                                        dark,
-                                    ),
-                                ))
-                            },
-                        )
-                        .when(
-                            matches!(proto, ProtocolType::Ftp | ProtocolType::Ftps),
-                            |el| {
-                                el.child(section_block(
-                                    "FTP 认证",
-                                    settings_group(dark)
-                                        .child(group_row(
-                                            group_field("用户名", &username, false),
-                                            true,
-                                        ))
-                                        .child(group_row(
-                                            group_field("密码", &password, false),
-                                            false,
-                                        )),
-                                ))
-                            },
-                        )
-                        .child(section_block(
-                            "路径",
-                            settings_group(dark)
-                                .child(group_row(
-                                    group_field("远程根目录", &remote_root, false),
-                                    true,
-                                ))
-                                .child(group_row(
-                                    group_field("本地下载", &local_root, false),
-                                    false,
-                                )),
-                        ))
-                        .child(render_advanced_section(
-                            &handle,
-                            &proto,
-                            advanced_expanded,
-                            advanced,
-                            &note,
-                            &connection_timeout,
-                            &keepalive_interval,
-                            &keepalive_max,
-                            dark,
-                        )),
-                ),
+                    })
+                    .when(
+                        matches!(proto, ProtocolType::Ftp | ProtocolType::Ftps),
+                        |el| {
+                            el.child(section_block(
+                                "FTP 认证",
+                                settings_group(dark)
+                                    .child(group_row(group_field("用户名", &username, false), true))
+                                    .child(group_row(group_field("密码", &password, false), false)),
+                            ))
+                        },
+                    )
+                    .child(section_block(
+                        "路径",
+                        settings_group(dark)
+                            .child(group_row(
+                                group_field("远程根目录", &remote_root, false),
+                                true,
+                            ))
+                            .child(group_row(
+                                group_field("本地下载", &local_root, false),
+                                false,
+                            )),
+                    ))
+                    .child(render_advanced_section(
+                        &handle,
+                        &proto,
+                        advanced_expanded,
+                        advanced,
+                        &note,
+                        &connection_timeout,
+                        &keepalive_interval,
+                        &keepalive_max,
+                        dark,
+                    )),
+            ),
         )
         .child(render_footer(&handle, is_edit, dark))
 }
@@ -206,10 +191,7 @@ fn render_advanced_section(
                 .text_size(theme::font_size_body())
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(ui::text_secondary())
-                .hover(|s| {
-                    s.bg(glass::hover_bg(dark))
-                        .text_color(ui::text_primary())
-                })
+                .hover(|s| s.bg(glass::hover_bg(dark)).text_color(ui::text_primary()))
                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                     cx.stop_propagation();
                     h.update(cx, |v, cx| v.toggle_form_advanced(cx));
@@ -243,8 +225,8 @@ fn render_advanced_fields(
     keepalive_max: &Entity<TextInput>,
     dark: bool,
 ) -> impl IntoElement {
-    let mut group = settings_group(dark)
-        .child(group_row(group_field_multiline("备注", note, false), true));
+    let mut group =
+        settings_group(dark).child(group_row(group_field_multiline("备注", note, false), true));
 
     if is_ssh {
         group = group
@@ -337,7 +319,9 @@ fn group_row(content: impl IntoElement, show_divider: bool) -> impl IntoElement 
         .min_h(px(FIELD_ROW_MIN_HEIGHT))
         .px(theme::space_3())
         .py(px(6.0))
-        .when(show_divider, |el| el.border_b_1().border_color(s.border_default))
+        .when(show_divider, |el| {
+            el.border_b_1().border_color(s.border_default)
+        })
         .flex()
         .items_center()
         .gap(theme::space_3())
@@ -376,7 +360,11 @@ fn group_field(label: &str, input: &Entity<TextInput>, required: bool) -> impl I
         .child(input_slot(input, FIELD_INPUT_HEIGHT))
 }
 
-fn group_field_multiline(label: &str, input: &Entity<TextInput>, required: bool) -> impl IntoElement {
+fn group_field_multiline(
+    label: &str,
+    input: &Entity<TextInput>,
+    required: bool,
+) -> impl IntoElement {
     let label_text = if required {
         format!("{label} *")
     } else {
@@ -387,9 +375,7 @@ fn group_field_multiline(label: &str, input: &Entity<TextInput>, required: bool)
         .flex()
         .items_start()
         .gap(theme::space_3())
-        .child(
-            field_label(&label_text).pt(px(6.0)),
-        )
+        .child(field_label(&label_text).pt(px(6.0)))
         .child(input_slot(input, FIELD_TEXTAREA_HEIGHT))
 }
 
@@ -451,14 +437,28 @@ fn bool_toggle(
     segmented_control(dark)
         .w(px(120.0))
         .flex_shrink_0()
-        .child(segment_btn(id_prefix, "开启", 0, enabled, dark, move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
-            cx.stop_propagation();
-            h_on.update(cx, |v, cx| set_value(v, true, cx));
-        }))
-        .child(segment_btn(id_prefix, "关闭", 1, !enabled, dark, move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
-            cx.stop_propagation();
-            h_off.update(cx, |v, cx| set_value(v, false, cx));
-        }))
+        .child(segment_btn(
+            id_prefix,
+            "开启",
+            0,
+            enabled,
+            dark,
+            move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
+                cx.stop_propagation();
+                h_on.update(cx, |v, cx| set_value(v, true, cx));
+            },
+        ))
+        .child(segment_btn(
+            id_prefix,
+            "关闭",
+            1,
+            !enabled,
+            dark,
+            move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
+                cx.stop_propagation();
+                h_off.update(cx, |v, cx| set_value(v, false, cx));
+            },
+        ))
 }
 
 fn field_label(text: &str) -> Div {
@@ -543,9 +543,33 @@ fn render_protocol_selector(
     dark: bool,
 ) -> impl IntoElement {
     segmented_control(dark)
-        .child(proto_segment(handle, "profile-protocol", "SSH", 0, ProtocolType::Ssh, current, dark))
-        .child(proto_segment(handle, "profile-protocol", "FTP", 1, ProtocolType::Ftp, current, dark))
-        .child(proto_segment(handle, "profile-protocol", "FTPS", 2, ProtocolType::Ftps, current, dark))
+        .child(proto_segment(
+            handle,
+            "profile-protocol",
+            "SSH",
+            0,
+            ProtocolType::Ssh,
+            current,
+            dark,
+        ))
+        .child(proto_segment(
+            handle,
+            "profile-protocol",
+            "FTP",
+            1,
+            ProtocolType::Ftp,
+            current,
+            dark,
+        ))
+        .child(proto_segment(
+            handle,
+            "profile-protocol",
+            "FTPS",
+            2,
+            ProtocolType::Ftps,
+            current,
+            dark,
+        ))
 }
 
 fn proto_segment(
@@ -559,9 +583,16 @@ fn proto_segment(
 ) -> impl IntoElement {
     let selected = std::mem::discriminant(&proto) == std::mem::discriminant(current);
     let h = handle.clone();
-    segment_btn(id_prefix, label, idx, selected, dark, move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
-        h.update(cx, |v, cx| v.set_form_protocol(proto.clone(), cx));
-    })
+    segment_btn(
+        id_prefix,
+        label,
+        idx,
+        selected,
+        dark,
+        move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
+            h.update(cx, |v, cx| v.set_form_protocol(proto.clone(), cx));
+        },
+    )
 }
 
 fn render_auth_selector(
@@ -579,63 +610,73 @@ fn render_auth_selector(
 
     settings_group(dark)
         .child(
-            div()
-                .p(theme::space_2())
-                .child(
-                    segmented_control(dark)
-                        .child(auth_segment(
-                            handle,
-                            "profile-auth",
-                            "密码",
-                            0,
-                            is_password,
-                            SshAuthMethod::Password {
-                                password: String::new(),
-                            },
-                            dark,
-                        ))
-                        .child(auth_segment(
-                            handle,
-                            "profile-auth",
-                            "私钥",
-                            1,
-                            is_key,
-                            SshAuthMethod::PrivateKey {
-                                path: String::new(),
-                                passphrase: String::new(),
-                            },
-                            dark,
-                        ))
-                        .child(auth_segment(
-                            handle,
-                            "profile-auth",
-                            "Agent",
-                            2,
-                            is_agent,
-                            SshAuthMethod::Agent,
-                            dark,
-                        )),
-                ),
+            div().p(theme::space_2()).child(
+                segmented_control(dark)
+                    .child(auth_segment(
+                        handle,
+                        "profile-auth",
+                        "密码",
+                        0,
+                        is_password,
+                        SshAuthMethod::Password {
+                            password: String::new(),
+                        },
+                        dark,
+                    ))
+                    .child(auth_segment(
+                        handle,
+                        "profile-auth",
+                        "私钥",
+                        1,
+                        is_key,
+                        SshAuthMethod::PrivateKey {
+                            path: String::new(),
+                            passphrase: String::new(),
+                        },
+                        dark,
+                    ))
+                    .child(auth_segment(
+                        handle,
+                        "profile-auth",
+                        "Agent",
+                        2,
+                        is_agent,
+                        SshAuthMethod::Agent,
+                        dark,
+                    )),
+            ),
         )
         .when(is_password, |el| {
-            el.child(group_row(group_field("用户名", username_input, false), true))
-                .child(group_row(group_field("密码", password_input, false), false))
+            el.child(group_row(
+                group_field("用户名", username_input, false),
+                true,
+            ))
+            .child(group_row(group_field("密码", password_input, false), false))
         })
         .when(is_key, |el| {
-            el.child(group_row(group_field("用户名", username_input, false), true))
-                .child(group_row(group_field("私钥路径", key_path, false), true))
-                .child(group_row(group_field("私钥密码", key_passphrase, false), false))
+            el.child(group_row(
+                group_field("用户名", username_input, false),
+                true,
+            ))
+            .child(group_row(group_field("私钥路径", key_path, false), true))
+            .child(group_row(
+                group_field("私钥密码", key_passphrase, false),
+                false,
+            ))
         })
         .when(is_agent, |el| {
-            el.child(group_row(group_field("用户名", username_input, false), true))
-                .child(
-                    div()
-                        .px(theme::space_3())
-                        .py(theme::space_2())
-                        .text_size(theme::font_size_caption())
-                        .text_color(ui::text_tertiary())
-                        .child("使用系统 SSH Agent 认证，无需配置密码或私钥"),
-                )
+            el.child(group_row(
+                group_field("用户名", username_input, false),
+                true,
+            ))
+            .child(
+                div()
+                    .px(theme::space_3())
+                    .py(theme::space_2())
+                    .text_size(theme::font_size_caption())
+                    .text_color(ui::text_tertiary())
+                    .child("使用系统 SSH Agent 认证，无需配置密码或私钥"),
+            )
         })
 }
 
@@ -649,9 +690,16 @@ fn auth_segment(
     dark: bool,
 ) -> impl IntoElement {
     let h = handle.clone();
-    segment_btn(id_prefix, label, idx, selected, dark, move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
-        h.update(cx, |v, cx| v.set_form_auth_method(method.clone(), cx));
-    })
+    segment_btn(
+        id_prefix,
+        label,
+        idx,
+        selected,
+        dark,
+        move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
+            h.update(cx, |v, cx| v.set_form_auth_method(method.clone(), cx));
+        },
+    )
 }
 
 fn render_footer(handle: &Entity<super::SshView>, is_edit: bool, dark: bool) -> impl IntoElement {
@@ -698,7 +746,7 @@ fn render_footer(handle: &Entity<super::SshView>, is_edit: bool, dark: bool) -> 
                         }),
                 )
                 .child(
-                    button("保存", ButtonVariant::Primary, Some(ACCENT), dark)
+                    button("保存", ButtonVariant::Primary, None, dark)
                         .id("btn-save-profile")
                         .cursor_pointer()
                         .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {

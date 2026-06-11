@@ -355,8 +355,7 @@ impl ProfileStore {
 
     fn row_to_profile(row: &rusqlite::Row<'_>, auth: AuthConfig) -> rusqlite::Result<Profile> {
         let advanced_json: String = row.get(9).unwrap_or_else(|_| "{}".into());
-        let advanced: ProfileAdvanced =
-            serde_json::from_str(&advanced_json).unwrap_or_default();
+        let advanced: ProfileAdvanced = serde_json::from_str(&advanced_json).unwrap_or_default();
         let protocol = Self::parse_protocol(&row.get::<_, String>(2)?);
         Ok(Profile {
             id: row.get(0)?,

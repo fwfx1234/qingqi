@@ -30,7 +30,9 @@ fn render_transfer_panel_inner(
         .border_color(ui::border_light())
         .bg(ui::bg_surface())
         .child(render_control_bar(transfers, expanded, cx))
-        .when(expanded, |root| root.child(render_transfer_list(transfers, list_scroll)))
+        .when(expanded, |root| {
+            root.child(render_transfer_list(transfers, list_scroll))
+        })
 }
 
 fn render_control_bar(

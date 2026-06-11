@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use crate::model::SessionId;
+use crate::model::{SessionId, TransferId};
 use crate::service::SshService;
 use crate::upload::join_remote;
 
@@ -24,6 +24,38 @@ pub fn collect_download_items(
     let mut items = Vec::new();
     walk_remote(service, session_id, remote_dir, local_dir, &mut items)?;
     Ok(items)
+}
+
+/// 在后台线程入队下载任务（单文件或目录递归）。
+pub fn enqueue_download_entry(
+    service: &SshService,
+    session_id: &SessionId,
+    remote_path: &str,
+    local_path: &Path,
+    is_dir: bool,
+) -> Result<Vec<TransferId>> {
+    if is_dir {
+        let items = collect_download_items(service, session_id, remote_path, local_path)?;
+        let mut transfer_ids = Vec::with_capacity(items.len());
+        for item in items {
+            match service.download_file(session_id, &item.remote, &item.local) {
+                Ok(tid) => transfer_ids.push(tid),
+                Err(error) => {
+                    tracing::warn!(
+                        target: "qingqi_ssh",
+                        remote = %item.remote,
+                        error = %error,
+                        "下载入队失败"
+                    );
+                }
+            }
+        }
+        Ok(transfer_ids)
+    } else {
+        service
+            .download_file(session_id, remote_path, local_path)
+            .map(|tid| vec![tid])
+    }
 }
 
 fn walk_remote(
