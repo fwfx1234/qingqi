@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
-use tokio::sync::Mutex as TokioMutex;
+use tokio::sync::{Mutex as TokioMutex, broadcast};
 use tracing::debug;
 
 use crate::model::{Profile, ProtocolType, SshRole};
@@ -20,12 +20,14 @@ struct ConnectionKey {
 
 pub struct ConnectionPool {
     connections: TokioMutex<HashMap<ConnectionKey, Arc<dyn RemoteProtocol>>>,
+    disconnect_tx: broadcast::Sender<(i64, SshRole)>,
 }
 
 impl ConnectionPool {
-    pub fn new() -> Self {
+    pub fn new(disconnect_tx: broadcast::Sender<(i64, SshRole)>) -> Self {
         Self {
             connections: TokioMutex::new(HashMap::new()),
+            disconnect_tx,
         }
     }
 
@@ -40,11 +42,43 @@ impl ConnectionPool {
         }
     }
 
-    fn create_protocol(profile: &Profile, role: SshRole) -> Result<Box<dyn RemoteProtocol>> {
+    pub fn create_arc(&self, profile: &Profile, role: SshRole) -> Result<Arc<dyn RemoteProtocol>> {
+        Ok(Arc::from(self.create_protocol(profile, role)?))
+    }
+
+    fn create_protocol(&self, profile: &Profile, role: SshRole) -> Result<Box<dyn RemoteProtocol>> {
         match profile.protocol {
-            ProtocolType::Ssh => Ok(Box::new(SshProtocol::new(profile, role)?)),
+            ProtocolType::Ssh => Ok(Box::new(SshProtocol::new(
+                profile,
+                role,
+                self.disconnect_tx.clone(),
+            )?)),
             ProtocolType::Ftp | ProtocolType::Ftps => Ok(Box::new(FtpProtocol::new(profile)?)),
         }
+    }
+
+    pub async fn get_connected(
+        &self,
+        profile: &Profile,
+        role: SshRole,
+    ) -> Option<Arc<dyn RemoteProtocol>> {
+        let key = Self::pool_key(profile, role);
+        let conns = self.connections.lock().await;
+        conns
+            .get(&key)
+            .filter(|proto| proto.is_connected())
+            .cloned()
+    }
+
+    pub async fn register_connected(
+        &self,
+        profile: &Profile,
+        role: SshRole,
+        proto: Arc<dyn RemoteProtocol>,
+    ) {
+        let key = Self::pool_key(profile, role);
+        let mut conns = self.connections.lock().await;
+        conns.insert(key, proto);
     }
 
     pub async fn get_or_connect(
@@ -76,7 +110,7 @@ impl ConnectionPool {
             port = profile.port,
             "connection_pool: 创建新连接"
         );
-        let protocol = Self::create_protocol(profile, role)?;
+        let protocol = self.create_protocol(profile, role)?;
         protocol.connect().await?;
 
         let arc_proto: Arc<dyn RemoteProtocol> = Arc::from(protocol);
@@ -112,6 +146,7 @@ impl ConnectionPool {
 
 impl Default for ConnectionPool {
     fn default() -> Self {
-        Self::new()
+        let (tx, _) = broadcast::channel(64);
+        Self::new(tx)
     }
 }

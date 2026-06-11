@@ -1,142 +1,180 @@
-//! 文件列表右键菜单
+//! 文件列表右键菜单（gpui-component PopupMenu）
 
-use gpui::prelude::*;
-use gpui::*;
-use qingqi_ui::{theme, theme_mode, ui};
-use qingqi_ui::ui::glass;
+use gpui::Entity;
+use gpui_component::menu::{PopupMenu, PopupMenuItem};
 
-use super::FileEntryRow;
+use super::{FileEntryRow, SshView};
 
-pub fn render_file_context_menu(
-    handle: Entity<super::SshView>,
-    entry: Option<FileEntryRow>,
-    position: Point<Pixels>,
-) -> impl IntoElement {
-    let dark = theme_mode::is_dark();
-    let backdrop = handle.clone();
-    let menu_x = position.x.max(px(8.0));
-    let menu_y = position.y.max(px(8.0));
-
-    div()
-        .size_full()
-        .absolute()
-        .top_0()
-        .left_0()
-        .child(
-            div()
-                .id("file-menu-backdrop")
-                .size_full()
-                .absolute()
-                .bg(hsla(0.0, 0.0, 0.0, 0.001))
-                .on_click({
-                    let h = backdrop.clone();
-                    move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
-                        h.update(cx, |v, cx| v.close_file_context_menu(cx));
-                    }
-                }),
-        )
-        .child(
-            div()
-                .absolute()
-                .top(menu_y)
-                .left(menu_x)
-                .w(px(176.0))
-                .rounded(theme::radius_md())
-                .border_1()
-                .border_color(glass::border(dark))
-                .bg(theme::semantic().bg_elevated)
-                .shadow_lg()
-                .overflow_hidden()
-                .flex()
-                .flex_col()
-                .py(px(4.0))
-                .children(menu_items(handle, entry, dark)),
-        )
+#[derive(Clone, Copy)]
+enum FileMenuAction {
+    Open,
+    Edit,
+    Download,
+    Rename,
+    Delete,
+    Refresh,
+    UploadFile,
+    UploadFolder,
+    Mkdir,
 }
 
-fn menu_items(
-    handle: Entity<super::SshView>,
-    entry: Option<FileEntryRow>,
-    dark: bool,
-) -> Vec<AnyElement> {
-    let mut items: Vec<AnyElement> = Vec::new();
-
-    if let Some(ref e) = entry {
-        if e.is_dir || e.is_parent {
-            items.push(
-                menu_item(handle.clone(), 0, "open", "打开", false, dark, Some(e.clone()))
-                    .into_any_element(),
-            );
-        }
+/// 根据右键目标构建菜单（列表区域唯一入口）
+pub fn build(
+    menu: PopupMenu,
+    target: Option<FileEntryRow>,
+    handle: Entity<SshView>,
+) -> PopupMenu {
+    match target {
+        Some(entry) => entry_menu(menu, entry, handle),
+        None => blank_menu(menu, handle),
     }
-
-    items.push(
-        menu_item(handle.clone(), 1, "refresh", "刷新", false, dark, entry.clone())
-            .into_any_element(),
-    );
-
-    if entry.is_none() {
-        items.push(
-            menu_item(handle.clone(), 2, "mkdir", "新建文件夹", false, dark, None)
-                .into_any_element(),
-        );
-    }
-
-    if let Some(ref e) = entry {
-        if !e.is_dir && !e.is_parent {
-            items.push(
-                menu_item(handle, 3, "download", "下载", false, dark, Some(e.clone()))
-                    .into_any_element(),
-            );
-        }
-    }
-
-    items
 }
 
-fn menu_item(
-    handle: Entity<super::SshView>,
-    idx: u32,
-    action: &'static str,
+/// 文件/目录项右键菜单
+pub fn entry_menu(menu: PopupMenu, entry: FileEntryRow, handle: Entity<SshView>) -> PopupMenu {
+    let mut menu = menu;
+    if entry.is_dir || entry.is_parent {
+        menu = menu.item(action_item(
+            "打开",
+            handle.clone(),
+            Some(entry.clone()),
+            FileMenuAction::Open,
+        ));
+        if entry.is_dir && !entry.is_parent {
+            menu = menu.item(action_item(
+                "下载",
+                handle.clone(),
+                Some(entry.clone()),
+                FileMenuAction::Download,
+            ));
+        }
+    } else {
+        menu = menu
+            .item(action_item(
+                "编辑",
+                handle.clone(),
+                Some(entry.clone()),
+                FileMenuAction::Edit,
+            ))
+            .item(action_item(
+                "下载",
+                handle.clone(),
+                Some(entry.clone()),
+                FileMenuAction::Download,
+            ));
+    }
+    menu.separator()
+        .item(action_item(
+            "重命名",
+            handle.clone(),
+            Some(entry.clone()),
+            FileMenuAction::Rename,
+        ))
+        .when(!entry.is_parent, |menu| {
+            menu.item(action_item(
+                "删除",
+                handle.clone(),
+                Some(entry.clone()),
+                FileMenuAction::Delete,
+            ))
+        })
+        .separator()
+        .item(action_item(
+            "刷新",
+            handle,
+            Some(entry),
+            FileMenuAction::Refresh,
+        ))
+}
+
+/// 空白区域右键菜单
+pub fn blank_menu(menu: PopupMenu, handle: Entity<SshView>) -> PopupMenu {
+    menu.item(action_item(
+        "上传文件",
+        handle.clone(),
+        None,
+        FileMenuAction::UploadFile,
+    ))
+    .item(action_item(
+        "上传文件夹",
+        handle.clone(),
+        None,
+        FileMenuAction::UploadFolder,
+    ))
+    .item(action_item(
+        "新建文件夹",
+        handle.clone(),
+        None,
+        FileMenuAction::Mkdir,
+    ))
+    .separator()
+    .item(action_item("刷新", handle, None, FileMenuAction::Refresh))
+}
+
+fn action_item(
     label: &'static str,
-    danger: bool,
-    dark: bool,
+    handle: Entity<SshView>,
     entry: Option<FileEntryRow>,
-) -> impl IntoElement {
-    let h = handle.clone();
-    div()
-        .id(("file-menu", idx))
-        .h(px(28.0))
-        .px(px(12.0))
-        .flex()
-        .items_center()
-        .text_size(theme::font_size_body())
-        .text_color(if danger {
-            ui::danger()
+    action: FileMenuAction,
+) -> PopupMenuItem {
+    PopupMenuItem::new(label).on_click(move |_, _, cx| {
+        handle.update(cx, |view, cx| {
+            dispatch(view, cx, action, entry.as_ref());
+        });
+    })
+}
+
+fn dispatch(
+    view: &mut SshView,
+    cx: &mut gpui::Context<SshView>,
+    action: FileMenuAction,
+    entry: Option<&FileEntryRow>,
+) {
+    match action {
+        FileMenuAction::Open => {
+            if let Some(entry) = entry {
+                view.open_file_entry(entry, cx);
+            }
+        }
+        FileMenuAction::Edit => {
+            if let Some(entry) = entry {
+                view.open_file_editor(entry, cx);
+            }
+        }
+        FileMenuAction::Download => {
+            if let Some(entry) = entry {
+                view.download_file_entry(entry, cx);
+            }
+        }
+        FileMenuAction::Rename => {
+            if let Some(entry) = entry {
+                view.open_file_rename(entry, cx);
+            }
+        }
+        FileMenuAction::Delete => {
+            if let Some(entry) = entry {
+                view.delete_file_entry(entry, cx);
+            }
+        }
+        FileMenuAction::Refresh => view.refresh_file_tree(cx),
+        FileMenuAction::UploadFile => view.pick_and_upload_files(cx),
+        FileMenuAction::UploadFolder => view.pick_and_upload_folder(cx),
+        FileMenuAction::Mkdir => view.create_directory_in_cwd(cx),
+    }
+}
+
+trait PopupMenuExt {
+    fn when(self, condition: bool, f: impl FnOnce(Self) -> Self) -> Self
+    where
+        Self: Sized;
+}
+
+impl PopupMenuExt for PopupMenu {
+    fn when(self, condition: bool, f: impl FnOnce(Self) -> Self) -> Self {
+        if condition {
+            f(self)
         } else {
-            ui::text_primary()
-        })
-        .cursor_pointer()
-        .hover(|s| s.bg(glass::hover_bg(dark)))
-        .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
-            h.update(cx, |v, cx| {
-                match action {
-                    "open" => {
-                        if let Some(ref e) = entry {
-                            v.open_file_entry(e, cx);
-                        }
-                    }
-                    "refresh" => v.refresh_file_tree(cx),
-                    "mkdir" => v.create_directory_in_cwd(cx),
-                    "download" => {
-                        if let Some(ref e) = entry {
-                            v.download_file_entry(e, cx);
-                        }
-                    }
-                    _ => {}
-                }
-                v.close_file_context_menu(cx);
-            });
-        })
-        .child(label)
+            self
+        }
+    }
 }

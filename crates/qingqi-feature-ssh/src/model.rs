@@ -81,18 +81,40 @@ impl Default for AuthConfig {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProfileAdvanced {
+    /// SSH 无活动超时（秒），0 表示不限制
     #[serde(default = "default_connection_timeout")]
     pub connection_timeout_secs: u32,
+    /// SSH 保活间隔（秒），0 表示关闭
     #[serde(default = "default_keepalive_interval")]
     pub keepalive_interval_secs: u32,
+    /// SSH 保活无响应最大次数，超过后断开
+    #[serde(default = "default_keepalive_max")]
+    pub keepalive_max: u32,
+    /// SSH TCP_NODELAY，降低交互延迟
+    #[serde(default)]
+    pub tcp_nodelay: bool,
+    /// FTP 被动模式（PASV），关闭则使用主动模式（PORT）
+    #[serde(default = "default_true")]
+    pub ftp_passive_mode: bool,
+    /// FTP 被动模式 NAT 穿透修正（云服务器 PASV 常返回内网 IP）
+    #[serde(default = "default_true")]
+    pub ftp_passive_nat_workaround: bool,
 }
 
 fn default_connection_timeout() -> u32 {
-    30
+    0
 }
 
 fn default_keepalive_interval() -> u32 {
     60
+}
+
+fn default_keepalive_max() -> u32 {
+    3
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for ProfileAdvanced {
@@ -100,6 +122,22 @@ impl Default for ProfileAdvanced {
         Self {
             connection_timeout_secs: default_connection_timeout(),
             keepalive_interval_secs: default_keepalive_interval(),
+            keepalive_max: default_keepalive_max(),
+            tcp_nodelay: false,
+            ftp_passive_mode: true,
+            ftp_passive_nat_workaround: true,
+        }
+    }
+}
+
+impl ProfileAdvanced {
+    /// 保活间隔须小于无活动超时，否则 russh 会在首次保活前断开连接。
+    pub fn normalize_keepalive(&mut self) {
+        if self.connection_timeout_secs > 0
+            && self.keepalive_interval_secs > 0
+            && self.keepalive_interval_secs >= self.connection_timeout_secs
+        {
+            self.keepalive_interval_secs = (self.connection_timeout_secs / 2).max(1);
         }
     }
 }
@@ -193,6 +231,7 @@ impl SessionId {
 pub enum SessionStatus {
     Connecting,
     Connected,
+    Disconnected,
     Failed,
 }
 
@@ -338,5 +377,35 @@ mod tests {
         let draft = ProfileDraft::default();
         assert_eq!(draft.port, 22); // SSH 默认端口
         assert!(matches!(draft.protocol, ProtocolType::Ssh));
+    }
+
+    #[test]
+    fn test_profile_advanced_normalize_keepalive() {
+        let mut advanced = ProfileAdvanced {
+            connection_timeout_secs: 30,
+            keepalive_interval_secs: 60,
+            ..ProfileAdvanced::default()
+        };
+        advanced.normalize_keepalive();
+        assert_eq!(advanced.keepalive_interval_secs, 15);
+    }
+
+    #[test]
+    fn test_profile_advanced_json_roundtrip_and_defaults() {
+        let advanced = ProfileAdvanced::default();
+        assert_eq!(advanced.connection_timeout_secs, 0);
+        let json = serde_json::to_string(&advanced).unwrap();
+        let back: ProfileAdvanced = serde_json::from_str(&json).unwrap();
+        assert_eq!(advanced, back);
+
+        let legacy: ProfileAdvanced =
+            serde_json::from_str(r#"{"connection_timeout_secs":15,"keepalive_interval_secs":45}"#)
+                .unwrap();
+        assert_eq!(legacy.connection_timeout_secs, 15);
+        assert_eq!(legacy.keepalive_interval_secs, 45);
+        assert_eq!(legacy.keepalive_max, 3);
+        assert!(!legacy.tcp_nodelay);
+        assert!(legacy.ftp_passive_mode);
+        assert!(legacy.ftp_passive_nat_workaround);
     }
 }

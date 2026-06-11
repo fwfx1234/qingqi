@@ -1,15 +1,19 @@
 //! SSH 远程管理插件 — 库入口
 
 mod log_util;
+mod mappings;
 pub mod connection;
 pub mod manifest;
 pub mod model;
 pub mod plugin;
 pub mod protocol;
 pub mod service;
+pub mod shell_cwd;
 pub mod store;
 pub mod terminal;
 pub mod transfer;
+pub mod download;
+pub mod upload;
 pub mod view;
 
 use std::sync::{Arc, OnceLock};
@@ -17,19 +21,33 @@ use std::sync::{Arc, OnceLock};
 use anyhow::Result;
 use qingqi_plugin::database::{DatabaseService, DatabaseSpec};
 
-/// 全局 tokio runtime 句柄，由 main.rs 初始化
-static TOKIO_RT: OnceLock<tokio::runtime::Handle> = OnceLock::new();
-
-/// 由 main.rs 在启动时调用，存储 tokio runtime 句柄供 service 层使用
-pub fn init_tokio_runtime(handle: tokio::runtime::Handle) {
-    let _ = TOKIO_RT.set(handle);
+/// 插件私有 tokio 运行时：在后台线程保持存活，不干扰 GPUI 主线程事件循环。
+struct TokioRuntime {
+    handle: tokio::runtime::Handle,
+    _thread: std::thread::JoinHandle<()>,
 }
 
-/// 获取全局 tokio runtime 句柄
+static TOKIO_RT: OnceLock<TokioRuntime> = OnceLock::new();
+
+fn ensure_tokio_runtime() -> &'static tokio::runtime::Handle {
+    &TOKIO_RT
+        .get_or_init(|| {
+            let rt = tokio::runtime::Runtime::new().expect("创建 tokio 运行时失败");
+            let handle = rt.handle().clone();
+            let thread = std::thread::spawn(move || {
+                rt.block_on(std::future::pending::<()>());
+            });
+            TokioRuntime {
+                handle,
+                _thread: thread,
+            }
+        })
+        .handle
+}
+
+/// 获取插件 tokio runtime 句柄
 pub(crate) fn tokio_handle() -> &'static tokio::runtime::Handle {
-    TOKIO_RT
-        .get()
-        .expect("tokio runtime 未初始化，main.rs 需要先调用 init_tokio_runtime")
+    ensure_tokio_runtime()
 }
 
 pub fn databases() -> Vec<DatabaseSpec> {

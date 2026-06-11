@@ -153,24 +153,31 @@ impl ProfileStore {
                 _ => ProtocolType::Ssh,
             };
 
-            let auth = match auth_method.as_str() {
-                "private_key" => AuthConfig::Ssh {
+            let auth = if matches!(proto, ProtocolType::Ftp | ProtocolType::Ftps) {
+                AuthConfig::Ftp {
                     username: _username.clone(),
-                    method: SshAuthMethod::PrivateKey {
-                        path: private_key_path.clone(),
-                        passphrase: private_key_passphrase.clone(),
+                    password: password.clone(),
+                }
+            } else {
+                match auth_method.as_str() {
+                    "private_key" => AuthConfig::Ssh {
+                        username: _username.clone(),
+                        method: SshAuthMethod::PrivateKey {
+                            path: private_key_path.clone(),
+                            passphrase: private_key_passphrase.clone(),
+                        },
                     },
-                },
-                "agent" => AuthConfig::Ssh {
-                    username: _username.clone(),
-                    method: SshAuthMethod::Agent,
-                },
-                _ => AuthConfig::Ssh {
-                    username: _username.clone(),
-                    method: SshAuthMethod::Password {
-                        password: password.clone(),
+                    "agent" => AuthConfig::Ssh {
+                        username: _username.clone(),
+                        method: SshAuthMethod::Agent,
                     },
-                },
+                    _ => AuthConfig::Ssh {
+                        username: _username.clone(),
+                        method: SshAuthMethod::Password {
+                            password: password.clone(),
+                        },
+                    },
+                }
             };
 
             let paths = PathConfig {
@@ -325,17 +332,39 @@ impl ProfileStore {
         }
     }
 
+    fn normalize_auth(protocol: &ProtocolType, auth: AuthConfig) -> AuthConfig {
+        match (protocol, &auth) {
+            (
+                ProtocolType::Ftp | ProtocolType::Ftps,
+                AuthConfig::Ssh {
+                    username,
+                    method: SshAuthMethod::Password { password },
+                },
+            ) => AuthConfig::Ftp {
+                username: username.clone(),
+                password: password.clone(),
+            },
+            (ProtocolType::Ftp | ProtocolType::Ftps, AuthConfig::Ftp { .. }) => auth,
+            (ProtocolType::Ftp | ProtocolType::Ftps, _) => AuthConfig::Ftp {
+                username: String::new(),
+                password: String::new(),
+            },
+            _ => auth,
+        }
+    }
+
     fn row_to_profile(row: &rusqlite::Row<'_>, auth: AuthConfig) -> rusqlite::Result<Profile> {
         let advanced_json: String = row.get(9).unwrap_or_else(|_| "{}".into());
         let advanced: ProfileAdvanced =
             serde_json::from_str(&advanced_json).unwrap_or_default();
+        let protocol = Self::parse_protocol(&row.get::<_, String>(2)?);
         Ok(Profile {
             id: row.get(0)?,
             name: row.get(1)?,
-            protocol: Self::parse_protocol(&row.get::<_, String>(2)?),
+            protocol: protocol.clone(),
             host: row.get(3)?,
             port: row.get(4)?,
-            auth,
+            auth: Self::normalize_auth(&protocol, auth),
             paths: PathConfig {
                 remote_root: row.get(6)?,
                 local_root: row.get(7)?,
@@ -380,6 +409,7 @@ mod tests {
             host: "192.168.1.1".into(),
             port: 22,
             auth: AuthConfig::Ssh {
+                username: "root".into(),
                 method: SshAuthMethod::Password {
                     password: "secret".into(),
                 },

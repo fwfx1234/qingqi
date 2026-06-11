@@ -41,6 +41,10 @@ impl Plugin for SshPlugin {
     }
 
     fn start_background(&mut self, _events: qingqi_plugin::events::AppEventBus, _cx: &mut App) {}
+
+    fn shutdown(&mut self) {
+        self.service.shutdown_all();
+    }
 }
 
 struct SshWindowView {

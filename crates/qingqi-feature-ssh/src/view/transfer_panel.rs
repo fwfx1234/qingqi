@@ -2,22 +2,26 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::*;
-use gpui_component::scroll::ScrollableElement;
 use qingqi_ui::ui;
 
-use super::TransferPanelViewModel;
+use super::virtual_list;
+
+const ROW_HEIGHT: f32 = 32.0;
+const LIST_HEIGHT: f32 = 200.0;
 
 pub fn render_transfer_panel(
-    transfers: &TransferPanelViewModel,
+    transfers: &super::TransferPanelViewModel,
     expanded: bool,
+    list_scroll: UniformListScrollHandle,
     cx: &mut Context<super::SshView>,
 ) -> impl IntoElement {
-    render_transfer_panel_inner(transfers, expanded, cx)
+    render_transfer_panel_inner(transfers, expanded, list_scroll, cx)
 }
 
 fn render_transfer_panel_inner(
-    transfers: &TransferPanelViewModel,
+    transfers: &super::TransferPanelViewModel,
     expanded: bool,
+    list_scroll: UniformListScrollHandle,
     cx: &mut Context<super::SshView>,
 ) -> impl IntoElement {
     div()
@@ -26,11 +30,11 @@ fn render_transfer_panel_inner(
         .border_color(ui::border_light())
         .bg(ui::bg_surface())
         .child(render_control_bar(transfers, expanded, cx))
-        .when(expanded, |root| root.child(render_transfer_list(transfers)))
+        .when(expanded, |root| root.child(render_transfer_list(transfers, list_scroll)))
 }
 
 fn render_control_bar(
-    transfers: &TransferPanelViewModel,
+    transfers: &super::TransferPanelViewModel,
     expanded: bool,
     cx: &mut Context<super::SshView>,
 ) -> impl IntoElement {
@@ -61,10 +65,13 @@ fn render_control_bar(
         )
 }
 
-fn render_transfer_list(transfers: &TransferPanelViewModel) -> impl IntoElement {
+fn render_transfer_list(
+    transfers: &super::TransferPanelViewModel,
+    list_scroll: UniformListScrollHandle,
+) -> impl IntoElement {
     if transfers.rows.is_empty() {
         return div()
-            .h(px(200.0))
+            .h(px(LIST_HEIGHT))
             .flex()
             .items_center()
             .justify_center()
@@ -74,16 +81,26 @@ fn render_transfer_list(transfers: &TransferPanelViewModel) -> impl IntoElement 
             .into_any_element();
     }
 
-    div()
-        .h(px(200.0))
-        .overflow_y_scrollbar()
-        .children(transfers.rows.iter().map(render_transfer_row))
-        .into_any_element()
+    let rows: Vec<super::TransferRowViewModel> = transfers.rows.clone();
+    let count = rows.len();
+
+    virtual_list::vertical_fixed(
+        "ssh-transfer-list",
+        count,
+        px(LIST_HEIGHT),
+        list_scroll,
+        move |range, _window, _cx| {
+            range
+                .map(|i| render_transfer_row(&rows[i]).into_any_element())
+                .collect()
+        },
+    )
+    .into_any_element()
 }
 
 fn render_transfer_row(row: &super::TransferRowViewModel) -> impl IntoElement {
     div()
-        .h(px(32.0))
+        .h(px(ROW_HEIGHT))
         .flex()
         .items_center()
         .px_3()
@@ -99,6 +116,12 @@ fn render_transfer_row(row: &super::TransferRowViewModel) -> impl IntoElement {
                 .text_size(px(11.0))
                 .text_color(row.status_color)
                 .child(row.status_text.clone()),
+        )
+        .child(
+            div()
+                .text_size(px(10.0))
+                .text_color(ui::text_tertiary())
+                .child(row.speed_text.clone()),
         )
 }
 

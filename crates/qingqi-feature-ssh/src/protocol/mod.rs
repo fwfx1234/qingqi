@@ -1,12 +1,21 @@
 //! 协议抽象层
 
+use std::collections::VecDeque;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use async_trait::async_trait;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Notify};
+use tracing::debug;
 
 use crate::model::{Profile, ProtocolType, RemoteEntry};
+
+/// SSH PTY 输出缓冲上限（字节），超出后丢弃最旧数据。
+pub const PTY_OUTPUT_BUFFER_CAP_BYTES: usize = 10 * 1024 * 1024;
+
+/// russh 每 channel 未处理消息条数上限。
+pub const PTY_CHANNEL_BUFFER_MSGS: usize = 8192;
 
 // ============ 协议能力 ============
 
@@ -36,6 +45,66 @@ pub enum LogLevel {
     Error,
 }
 
+/// SSH 有界 PTY 缓冲：消费慢时丢弃最旧输出，避免无限堆积。
+pub struct PtyOutputHub {
+    inner: Mutex<PtyOutputHubInner>,
+    notify: Arc<Notify>,
+}
+
+struct PtyOutputHubInner {
+    chunks: VecDeque<Vec<u8>>,
+    total_bytes: usize,
+}
+
+impl PtyOutputHub {
+    pub fn new() -> Self {
+        Self {
+            inner: Mutex::new(PtyOutputHubInner {
+                chunks: VecDeque::new(),
+                total_bytes: 0,
+            }),
+            notify: Arc::new(Notify::new()),
+        }
+    }
+
+    pub fn push(&self, data: Vec<u8>) {
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        inner.total_bytes += data.len();
+        inner.chunks.push_back(data);
+        while inner.total_bytes > PTY_OUTPUT_BUFFER_CAP_BYTES {
+            let Some(old) = inner.chunks.pop_front() else {
+                break;
+            };
+            inner.total_bytes -= old.len();
+            debug!(
+                target: "qingqi_ssh",
+                dropped = old.len(),
+                remaining = inner.total_bytes,
+                cap = PTY_OUTPUT_BUFFER_CAP_BYTES,
+                "term_diag: pty_output 丢弃旧数据"
+            );
+        }
+        self.notify.notify_waiters();
+    }
+
+    pub fn drain(&self) -> Vec<Vec<u8>> {
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let drained: Vec<_> = inner.chunks.drain(..).collect();
+        inner.total_bytes = 0;
+        drained
+    }
+
+    pub fn notify(&self) -> Arc<Notify> {
+        Arc::clone(&self.notify)
+    }
+}
+
+/// 终端输出来源：FTP 用 channel，SSH 用有界 PTY hub。
+pub enum TerminalOutputSource {
+    Channel(mpsc::UnboundedReceiver<TerminalOutput>),
+    PtyHub(Arc<PtyOutputHub>),
+}
+
 // ============ 传输进度 ============
 
 #[derive(Clone, Debug)]
@@ -62,7 +131,7 @@ pub trait RemoteProtocol: Send + Sync {
     fn capabilities(&self) -> Vec<ProtocolCapability>;
 
     /// 打开终端通道
-    async fn open_terminal(&self) -> Result<mpsc::UnboundedReceiver<TerminalOutput>>;
+    async fn open_terminal(&self) -> Result<TerminalOutputSource>;
 
     /// 发送终端输入
     async fn send_terminal_input(&self, data: &[u8]) -> Result<()>;
@@ -107,6 +176,12 @@ pub trait RemoteProtocol: Send + Sync {
         local: &Path,
         progress_tx: mpsc::UnboundedSender<TransferProgress>,
     ) -> Result<()>;
+
+    /// 读取远程文件内容（用于在线编辑）
+    async fn read_file(&self, remote: &str) -> Result<Vec<u8>>;
+
+    /// 写入远程文件内容（用于保存编辑）
+    async fn write_file(&self, remote: &str, data: &[u8]) -> Result<()>;
 }
 
 // ============ ProtocolRegistry ============

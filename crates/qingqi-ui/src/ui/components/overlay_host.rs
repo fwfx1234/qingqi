@@ -1,5 +1,5 @@
 use gpui::{
-    InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement, Styled, div,
+    InteractiveElement, IntoElement, ParentElement, Styled, div,
 };
 
 use crate::ui;
@@ -16,15 +16,20 @@ pub fn overlay_host(
         .absolute()
         .top_0()
         .left_0()
+        .occlude()
         .child(
             div()
                 .size_full()
                 .absolute()
                 .top_0()
                 .left_0()
+                .occlude()
                 .bg(ui::overlay_backdrop())
                 .id(backdrop_id)
-                .on_click(move |event, window, cx| on_close(event, window, cx)),
+                .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
+                    cx.stop_propagation();
+                    on_close(&gpui::ClickEvent::default(), window, cx);
+                }),
         )
         .child(
             div()
@@ -32,16 +37,17 @@ pub fn overlay_host(
                 .absolute()
                 .top_0()
                 .left_0()
-                .id("overlay-content")
-                .on_click(|_, _, cx| {
-                    cx.stop_propagation();
-                })
+                .flex()
+                .items_center()
+                .justify_center()
+                .occlude()
                 .child(
                     div()
-                        .size_full()
-                        .flex()
-                        .items_center()
-                        .justify_center()
+                        .id("overlay-content")
+                        .occlude()
+                        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
+                            cx.stop_propagation();
+                        })
                         .child(content),
                 ),
         )

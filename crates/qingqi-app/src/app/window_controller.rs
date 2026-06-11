@@ -9,6 +9,7 @@ use gpui::{
     TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds, WindowDecorations,
     WindowKind, WindowOptions, div, prelude::*, px, size,
 };
+use gpui_component::Root;
 
 use crate::app::{app_catalog::AppCatalog, launcher::Launcher};
 use qingqi_core::lock_or_recover;
@@ -105,23 +106,18 @@ impl WindowController {
         let stored_window_handle =
             { lock_or_recover(&controller, "window_controller").launcher_window };
         if let Some(window_handle) = stored_window_handle {
-            if let Some(handle) = window_handle.downcast::<Launcher>() {
-                match handle.update(cx, |launcher, window, cx| {
-                    launcher.cleanup_before_close(window, cx);
-                    window.defer(cx, |window, _cx| window.remove_window());
-                }) {
-                    Ok(_) => {
-                        lock_or_recover(&controller, "window_controller").launcher_window = None;
-                        return;
-                    }
-                    Err(error) => {
-                        tracing::warn!(error = %error, "toggle existing launcher window failed");
-                        lock_or_recover(&controller, "window_controller").launcher_window = None;
-                    }
+            match update_launcher(window_handle, cx, |launcher, window, cx| {
+                launcher.cleanup_before_close(window, cx);
+                window.defer(cx, |window, _cx| window.remove_window());
+            }) {
+                Ok(_) => {
+                    lock_or_recover(&controller, "window_controller").launcher_window = None;
+                    return;
                 }
-            } else {
-                tracing::warn!("stored launcher window handle had unexpected root type");
-                lock_or_recover(&controller, "window_controller").launcher_window = None;
+                Err(error) => {
+                    tracing::warn!(error = %error, "toggle existing launcher window failed");
+                    lock_or_recover(&controller, "window_controller").launcher_window = None;
+                }
             }
         }
 
@@ -132,28 +128,23 @@ impl WindowController {
         let stored_window_handle =
             { lock_or_recover(&controller, "window_controller").launcher_window };
         if let Some(window_handle) = stored_window_handle {
-            if let Some(handle) = window_handle.downcast::<Launcher>() {
-                match handle.update(cx, |launcher, window, cx| {
-                    cx.activate(true);
-                    window.activate_window();
-                    launcher.refresh_on_show(cx);
-                }) {
-                    Ok(_) => {
-                        // 在独立的 update 中设置焦点，确保 refresh_on_show
-                        // 触发的重渲染完成后再请求焦点
-                        let _ = handle.update(cx, |launcher, window, cx| {
-                            launcher.focus_query_input(window, cx);
-                        });
-                        return;
-                    }
-                    Err(error) => {
-                        tracing::warn!(error = %error, "activate existing launcher window failed");
-                        lock_or_recover(&controller, "window_controller").launcher_window = None;
-                    }
+            match update_launcher(window_handle, cx, |launcher, window, cx| {
+                cx.activate(true);
+                window.activate_window();
+                launcher.refresh_on_show(cx);
+            }) {
+                Ok(_) => {
+                    // 在独立的 update 中设置焦点，确保 refresh_on_show
+                    // 触发的重渲染完成后再请求焦点
+                    let _ = update_launcher(window_handle, cx, |launcher, window, cx| {
+                        launcher.focus_query_input(window, cx);
+                    });
+                    return;
                 }
-            } else {
-                tracing::warn!("stored launcher window handle had unexpected root type");
-                lock_or_recover(&controller, "window_controller").launcher_window = None;
+                Err(error) => {
+                    tracing::warn!(error = %error, "activate existing launcher window failed");
+                    lock_or_recover(&controller, "window_controller").launcher_window = None;
+                }
             }
         }
 
@@ -212,12 +203,12 @@ impl WindowController {
                 launcher.initialize_async(events, launcher_cx);
             });
             window.focus(&query_input.focus_handle(cx));
-            launcher
+            cx.new(|cx| Root::new(launcher, window, cx))
         }) {
             Ok(handle) => {
                 lock_or_recover(&controller, "window_controller").launcher_window =
                     Some(handle.into());
-                let _ = handle.update(cx, |launcher, window, cx| {
+                let _ = update_launcher(handle.into(), cx, |launcher, window, cx| {
                     cx.activate(true);
                     window.activate_window();
                     launcher.focus_query_input(window, cx);
@@ -295,7 +286,10 @@ impl WindowController {
         let window_started = Instant::now();
         match cx.open_window(options, move |window, cx| {
             window.set_window_title(&title);
-            cx.new(|_| PluginWindow::new(Arc::clone(&controller_for_window), view, client_drawn))
+            let plugin = cx.new(|_| {
+                PluginWindow::new(Arc::clone(&controller_for_window), view, client_drawn)
+            });
+            cx.new(|cx| Root::new(plugin, window, cx))
         }) {
             Ok(handle) => {
                 log_plugin_window_step(&plugin_id, "open plugin window", window_started, trace);
@@ -332,48 +326,33 @@ impl WindowController {
                 .copied()
         };
         if let Some(window_handle) = stored_window_handle {
-            if let Some(handle) = window_handle.downcast::<PluginWindow>() {
-                match handle.update(cx, |plugin_window, window, cx| {
+            match update_plugin_window(window_handle, cx, |plugin_window, window, cx| {
+                cx.activate(true);
+                plugin_window.reopen(window, cx);
+                window.activate_window();
+            }) {
+                Ok(_) => {
                     cx.activate(true);
-                    plugin_window.reopen(window, cx);
-                    window.activate_window();
-                }) {
-                    Ok(_) => {
-                        cx.activate(true);
-                        return true;
-                    }
-                    Err(error) => {
-                        tracing::warn!(
-                            plugin_id,
-                            error = %error,
-                            "activate existing plugin window failed"
-                        );
-                        lock_or_recover(&controller, "window_controller")
-                            .clear_plugin_window(plugin_id);
-                    }
+                    return true;
                 }
-            } else {
-                tracing::warn!(
-                    plugin_id,
-                    "stored plugin window handle had unexpected root type"
-                );
-                lock_or_recover(&controller, "window_controller").clear_plugin_window(plugin_id);
+                Err(error) => {
+                    tracing::warn!(
+                        plugin_id,
+                        error = %error,
+                        "activate existing plugin window failed"
+                    );
+                    lock_or_recover(&controller, "window_controller")
+                        .clear_plugin_window(plugin_id);
+                }
             }
         }
 
         for window_handle in cx.windows() {
-            let Some(handle) = window_handle.downcast::<PluginWindow>() else {
-                continue;
-            };
-            let is_same_plugin = handle
-                .read(cx)
-                .map(|plugin_window| plugin_window.plugin_id == plugin_id)
-                .unwrap_or(false);
-            if !is_same_plugin {
+            if plugin_id_from_handle(window_handle, cx).as_deref() != Some(plugin_id) {
                 continue;
             }
 
-            let _ = handle.update(cx, |plugin_window, window, cx| {
+            let _ = update_plugin_window(window_handle, cx, |plugin_window, window, cx| {
                 cx.activate(true);
                 plugin_window.reopen(window, cx);
                 window.activate_window();
@@ -399,51 +378,35 @@ impl WindowController {
                 .copied()
         };
         if let Some(window_handle) = stored_window_handle {
-            if let Some(handle) = window_handle.downcast::<PluginWindow>() {
-                match handle.update(cx, |_, window, cx| {
-                    window.defer(cx, |window, _cx| window.remove_window());
-                }) {
-                    Ok(_) => {
-                        lock_or_recover(&controller, "window_controller")
-                            .clear_plugin_window(plugin_id);
-                        return true;
-                    }
-                    Err(error) => {
-                        tracing::warn!(
-                            plugin_id,
-                            error = %error,
-                            "close existing plugin window failed"
-                        );
-                        lock_or_recover(&controller, "window_controller")
-                            .clear_plugin_window(plugin_id);
-                    }
+            match update_plugin_window(window_handle, cx, |_, window, cx| {
+                window.defer(cx, |window, _cx| window.remove_window());
+            }) {
+                Ok(_) => {
+                    lock_or_recover(&controller, "window_controller")
+                        .clear_plugin_window(plugin_id);
+                    return true;
                 }
-            } else {
-                tracing::warn!(
-                    plugin_id,
-                    "stored plugin window handle had unexpected root type"
-                );
-                lock_or_recover(&controller, "window_controller").clear_plugin_window(plugin_id);
+                Err(error) => {
+                    tracing::warn!(
+                        plugin_id,
+                        error = %error,
+                        "close existing plugin window failed"
+                    );
+                    lock_or_recover(&controller, "window_controller")
+                        .clear_plugin_window(plugin_id);
+                }
             }
         }
 
         for window_handle in cx.windows() {
-            let Some(handle) = window_handle.downcast::<PluginWindow>() else {
-                continue;
-            };
-            let is_same_plugin = handle
-                .read(cx)
-                .map(|plugin_window| plugin_window.plugin_id == plugin_id)
-                .unwrap_or(false);
-            if !is_same_plugin {
+            if plugin_id_from_handle(window_handle, cx).as_deref() != Some(plugin_id) {
                 continue;
             }
 
-            let closed = handle
-                .update(cx, |_, window, cx| {
-                    window.defer(cx, |window, _cx| window.remove_window());
-                })
-                .is_ok();
+            let closed = update_plugin_window(window_handle, cx, |_, window, cx| {
+                window.defer(cx, |window, _cx| window.remove_window());
+            })
+            .is_ok();
             lock_or_recover(&controller, "window_controller").clear_plugin_window(plugin_id);
             if closed {
                 return true;
@@ -598,7 +561,10 @@ impl WindowController {
         let window_started = Instant::now();
         match cx.open_window(options, move |window, cx| {
             window.set_window_title(&title);
-            cx.new(|_| PluginWindow::new(Arc::clone(&controller_for_window), view, client_drawn))
+            let plugin = cx.new(|_| {
+                PluginWindow::new(Arc::clone(&controller_for_window), view, client_drawn)
+            });
+            cx.new(|cx| Root::new(plugin, window, cx))
         }) {
             Ok(handle) => {
                 log_plugin_window_step(&plugin_id, "open plugin window", window_started, trace);
@@ -636,53 +602,38 @@ impl WindowController {
                 .copied()
         };
         if let Some(window_handle) = stored_window_handle {
-            if let Some(handle) = window_handle.downcast::<PluginWindow>() {
-                match handle.update(cx, |plugin_window, window, cx| {
-                    cx.activate(true);
-                    plugin_window.reopen(window, cx);
-                    if let Some(input) = launch_input
-                        && !input.trim().is_empty()
-                    {
-                        plugin_window.input_changed(input, cx);
-                    }
-                    window.activate_window();
-                }) {
-                    Ok(_) => {
-                        cx.activate(true);
-                        return true;
-                    }
-                    Err(error) => {
-                        tracing::warn!(
-                            plugin_id,
-                            error = %error,
-                            "activate existing plugin window failed"
-                        );
-                        lock_or_recover(&controller, "window_controller")
-                            .clear_plugin_window(plugin_id);
-                    }
+            match update_plugin_window(window_handle, cx, |plugin_window, window, cx| {
+                cx.activate(true);
+                plugin_window.reopen(window, cx);
+                if let Some(input) = launch_input
+                    && !input.trim().is_empty()
+                {
+                    plugin_window.input_changed(input, cx);
                 }
-            } else {
-                tracing::warn!(
-                    plugin_id,
-                    "stored plugin window handle had unexpected root type"
-                );
-                lock_or_recover(&controller, "window_controller").clear_plugin_window(plugin_id);
+                window.activate_window();
+            }) {
+                Ok(_) => {
+                    cx.activate(true);
+                    return true;
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        plugin_id,
+                        error = %error,
+                        "activate existing plugin window failed"
+                    );
+                    lock_or_recover(&controller, "window_controller")
+                        .clear_plugin_window(plugin_id);
+                }
             }
         }
 
         for window_handle in cx.windows() {
-            let Some(handle) = window_handle.downcast::<PluginWindow>() else {
-                continue;
-            };
-            let is_same_plugin = handle
-                .read(cx)
-                .map(|plugin_window| plugin_window.plugin_id == plugin_id)
-                .unwrap_or(false);
-            if !is_same_plugin {
+            if plugin_id_from_handle(window_handle, cx).as_deref() != Some(plugin_id) {
                 continue;
             }
 
-            let _ = handle.update(cx, |plugin_window, window, cx| {
+            let _ = update_plugin_window(window_handle, cx, |plugin_window, window, cx| {
                 cx.activate(true);
                 plugin_window.reopen(window, cx);
                 if let Some(input) = launch_input
@@ -891,6 +842,73 @@ impl Render for KeepAliveWindow {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div().size_full()
     }
+}
+
+fn update_launcher<R>(
+    window_handle: AnyWindowHandle,
+    cx: &mut App,
+    f: impl FnOnce(&mut Launcher, &mut Window, &mut Context<Launcher>) -> R,
+) -> Result<R, anyhow::Error> {
+    if let Some(handle) = window_handle.downcast::<Launcher>() {
+        return handle.update(cx, f);
+    }
+    let root_handle = window_handle
+        .downcast::<Root>()
+        .ok_or_else(|| anyhow::anyhow!("unexpected window root"))?;
+    root_handle
+        .update(cx, |root, window, cx| -> Result<R, anyhow::Error> {
+            let launcher = root
+                .view()
+                .clone()
+                .downcast::<Launcher>()
+                .map_err(|_| anyhow::anyhow!("Root does not wrap Launcher"))?;
+            Ok(launcher.update(cx, |launcher, cx| f(launcher, window, cx)))
+        })
+        .map_err(|error| anyhow::anyhow!("{error}"))?
+}
+
+fn plugin_id_from_handle(window_handle: AnyWindowHandle, cx: &mut App) -> Option<String> {
+    if let Some(handle) = window_handle.downcast::<PluginWindow>() {
+        return handle
+            .update(cx, |plugin, _, _| plugin.plugin_id.clone())
+            .ok();
+    }
+    window_handle
+        .downcast::<Root>()
+        .and_then(|root| {
+            root.update(cx, |root, _, cx| {
+                root.view()
+                    .clone()
+                    .downcast::<PluginWindow>()
+                    .ok()
+                    .map(|entity| entity.read(cx).plugin_id.clone())
+            })
+            .ok()
+        })
+        .flatten()
+}
+
+fn update_plugin_window<R>(
+    window_handle: AnyWindowHandle,
+    cx: &mut App,
+    f: impl FnOnce(&mut PluginWindow, &mut Window, &mut Context<PluginWindow>) -> R,
+) -> Result<R, anyhow::Error> {
+    if let Some(handle) = window_handle.downcast::<PluginWindow>() {
+        return handle.update(cx, f);
+    }
+    let root_handle = window_handle
+        .downcast::<Root>()
+        .ok_or_else(|| anyhow::anyhow!("unexpected window root"))?;
+    root_handle
+        .update(cx, |root, window, cx| -> Result<R, anyhow::Error> {
+            let plugin = root
+                .view()
+                .clone()
+                .downcast::<PluginWindow>()
+                .map_err(|_| anyhow::anyhow!("Root does not wrap PluginWindow"))?;
+            Ok(plugin.update(cx, |plugin, cx| f(plugin, window, cx)))
+        })
+        .map_err(|error| anyhow::anyhow!("{error}"))?
 }
 
 struct PluginWindow {

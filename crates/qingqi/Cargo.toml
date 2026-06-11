@@ -8,7 +8,6 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-tokio.workspace = true
 qingqi-plugin = { path = "../qingqi-plugin" }
 qingqi-core = { path = "../qingqi-core" }
 qingqi-app = { path = "../qingqi-app" }

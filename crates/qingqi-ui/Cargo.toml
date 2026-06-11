@@ -11,7 +11,6 @@ gpui.workspace = true
 gpui-component.workspace = true
 qingqi-plugin = { path = "../qingqi-plugin" }
 tracing.workspace = true
-unicode-segmentation.workspace = true
 
 [lints]
 workspace = true

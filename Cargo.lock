@@ -5717,7 +5717,6 @@ dependencies = [
  "qingqi-plugin",
  "resvg",
  "tiny-skia",
- "tokio",
  "usvg",
 ]
 
@@ -5948,6 +5947,7 @@ dependencies = [
  "async-trait",
  "gpui",
  "gpui-component",
+ "qingqi-platform",
  "qingqi-plugin",
  "qingqi-ui",
  "rusqlite",
@@ -6021,7 +6021,6 @@ dependencies = [
  "gpui-component",
  "qingqi-plugin",
  "tracing",
- "unicode-segmentation",
 ]
 
 [[package]]

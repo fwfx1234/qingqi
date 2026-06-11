@@ -374,14 +374,14 @@ fn init_tracing(logs_dir: &Path) -> Option<tracing_appender::non_blocking::Worke
         .with_ansi(false)
         .with_target(true)
         .with_writer(non_blocking)
-        .with_filter(env_filter);
+        .with_filter(env_filter.clone());
 
-    // stderr layer：精简格式，仅 WARN 及以上，避免干扰终端
+    // stderr layer：精简格式，与文件 layer 共用 RUST_LOG 过滤
     let stderr_layer = tracing_subscriber::fmt::layer()
         .compact()
         .with_target(false)
         .with_writer(io::stderr)
-        .with_filter(tracing_subscriber::EnvFilter::new("warn"));
+        .with_filter(env_filter);
 
     tracing_subscriber::registry()
         .with(file_layer)
@@ -394,22 +394,13 @@ fn init_tracing(logs_dir: &Path) -> Option<tracing_appender::non_blocking::Worke
     Some(guard)
 }
 
-/// 解析日志级别过滤，优先级：QINGQI_LOG > RUST_LOG > 编译时默认
+/// 解析日志级别过滤：RUST_LOG 环境变量，未设置时使用编译时默认
 fn resolve_log_filter() -> tracing_subscriber::EnvFilter {
-    // 1. QINGQI_LOG 环境变量（最高优先级）
-    if let Ok(val) = std::env::var("QINGQI_LOG") {
-        if let Ok(filter) = val.parse() {
-            return filter;
-        }
-        eprintln!("[qingqi] QINGQI_LOG 值无效: {val}，使用默认值");
-    }
-
-    // 2. RUST_LOG 环境变量（兼容）
     if let Ok(filter) = tracing_subscriber::EnvFilter::try_from_default_env() {
         return filter;
     }
 
-    // 3. 编译时默认
+    // 编译时默认
     if cfg!(debug_assertions) {
         tracing_subscriber::EnvFilter::new(
             "debug,qingqi_ssh=debug,russh=debug,russh_sftp=debug,suppaftp=debug",
