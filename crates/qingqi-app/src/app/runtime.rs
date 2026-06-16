@@ -232,14 +232,10 @@ pub fn run(host: AppHost) -> Result<()> {
         }
 
         // 应用已保存的主题
-        let initial_theme = theme_store
+        let (initial_theme, initial_mode) = theme_store
             .read()
-            .map(|s| s.theme().to_string())
-            .unwrap_or_else(|_| "Default".to_string());
-        let initial_mode = theme_store
-            .read()
-            .map(|s| s.mode())
-            .unwrap_or_default();
+            .map(|s| (s.theme().to_string(), s.mode()))
+            .unwrap_or_else(|_| ("Default".to_string(), qingqi_plugin::theme::ThemeMode::default()));
         ThemeService::apply_theme(&initial_theme, initial_mode, cx);
 
         qingqi_ui::text_input::TextInput::register_bindings(cx);

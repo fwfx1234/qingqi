@@ -55,12 +55,20 @@ impl ThemeService {
         Ok(())
     }
 
+    /// 获取所有可用主题名（去除 Light/Dark 后缀，去重排序）
     pub fn theme_names(cx: &App) -> Vec<String> {
         let registry = ThemeRegistry::global(cx);
         let mut names: Vec<String> = registry
             .themes()
             .values()
-            .map(|c| c.name.to_string())
+            .map(|c| {
+                let n = c.name.as_ref();
+                // "XXX Light" -> "XXX", "XXX Dark" -> "XXX"
+                n.strip_suffix(" Light")
+                    .or_else(|| n.strip_suffix(" Dark"))
+                    .unwrap_or(n)
+                    .to_string()
+            })
             .collect();
         names.sort();
         names.dedup();
@@ -92,20 +100,21 @@ impl ThemeService {
         let registry = ThemeRegistry::global(cx);
         let themes = registry.themes();
 
+        // 精确匹配：theme_name + " Light" 或 theme_name + " Dark"
+        let variant_name = format!(
+            "{} {}",
+            theme_name,
+            if effective_dark { "Dark" } else { "Light" }
+        );
+
         let config = themes
             .values()
-            .find(|c| {
-                let name_matches = c.name.as_ref() == theme_name
-                    || c.name.as_ref().starts_with(theme_name);
-                name_matches && c.mode == target_mode
+            .find(|c| c.name.as_ref() == variant_name)
+            .or_else(|| {
+                // fallback: 精确匹配 theme_name（某些主题可能就叫一个词不带后缀）
+                themes.values().find(|c| c.name.as_ref() == theme_name)
             })
             .cloned()
-            .or_else(|| {
-                themes.values().find(|c| {
-                    c.name.as_ref() == theme_name
-                        || c.name.as_ref().starts_with(theme_name)
-                }).cloned()
-            })
             .or_else(|| {
                 if effective_dark {
                     Some(registry.default_dark_theme().clone())

@@ -16,7 +16,7 @@
         "border": "#D2D2D2",
         "ring": "#0060de",
         "danger.foreground": "#FFFFFF",
-        "list.active.background": "#0060de15",
+        "list.active.background": "#00000000",
         "list.active.border": "#0060de",
         "list.even.background": "#EFEFEF",
         "list.hover.background": "#E7E7E7",
