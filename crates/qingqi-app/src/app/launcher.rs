@@ -16,9 +16,10 @@ use gpui::{
     size, uniform_list,
 };
 use gpui_component::scroll::Scrollbar;
+use gpui_component::theme::Theme;
 use qingqi_ui::{
     text_input::{TextInput, TextInputStyle},
-    theme, theme_mode, ui,
+    theme, ui,
 };
 
 use crate::{
@@ -299,9 +300,10 @@ impl Launcher {
             cx,
         );
         input.set_chrome(false, cx);
+        let t = Theme::global(cx);
         input.set_text_colors(
-            theme::rgba_with_alpha(theme::launcher_title_text(), 1.0),
-            theme::rgba_with_alpha(theme::launcher_faint_text(), 1.0),
+            t.foreground,
+            t.muted_foreground,
             cx,
         );
     }
@@ -1090,7 +1092,14 @@ impl Render for Launcher {
             self.last_window_height = desired_height;
         }
 
-        let dark = theme_mode::is_dark();
+        let t = Theme::global(cx);
+        let dark = t.is_dark();
+        let title_color = t.foreground;
+        let placeholder_color = t.muted_foreground;
+        let launcher_glass = theme::rgba_with_alpha(t.background.into(), if dark { 0.3 } else { 0.98 });
+        let soft_line = theme::rgba_with_alpha(t.border.into(), if dark { 0.04 } else { 0.9 });
+        let keycap_bg = t.muted;
+        let muted_fg = t.muted_foreground;
         let handle = Some(cx.entity());
         let query_input = self.query_input.clone();
         let query = self.query(cx);
@@ -1106,12 +1115,6 @@ impl Render for Launcher {
             LauncherMode::ListPlugin { selected, .. } => *selected,
             _ => 0,
         };
-        let title_color = if dark {
-            theme::launcher_title_text()
-        } else {
-            theme::launcher_title_text()
-        };
-        let placeholder_color = theme::launcher_faint_text();
         log_slow_launcher_interaction(
             "render prepare",
             render_started,
@@ -1123,7 +1126,7 @@ impl Render for Launcher {
 
         div()
             .size_full()
-            .bg(theme::launcher_glass())
+            .bg(launcher_glass)
             .font_family(ui::font_ui())
             .text_color(title_color)
             .relative()
@@ -1139,7 +1142,7 @@ impl Render for Launcher {
                     .w_full()
                     .px(px(20.0))
                     .border_b_1()
-                    .border_color(theme::launcher_soft_line())
+                    .border_color(soft_line)
                     .flex()
                     .items_center()
                     .gap(px(10.0))
@@ -1147,12 +1150,12 @@ impl Render for Launcher {
                         div()
                             .size(px(24.0))
                             .rounded(px(8.0))
-                            .bg(theme::keycap_bg())
+                            .bg(keycap_bg)
                             .flex()
                             .items_center()
                             .justify_center()
                             .text_size(px(13.0))
-                            .text_color(theme::launcher_muted_text())
+                            .text_color(muted_fg)
                             .child("⌥"),
                     )
                     .child(
@@ -1199,7 +1202,7 @@ impl Render for Launcher {
                                 .items_center()
                                 .justify_center()
                                 .text_size(px(13.0))
-                                .text_color(theme::launcher_muted_text())
+                                .text_color(muted_fg)
                                 .child("未找到匹配的功能"),
                         )
                     }
@@ -1213,7 +1216,8 @@ impl Render for Launcher {
                                 uniform_list(
                                     "launcher-results",
                                     results_count,
-                                    move |range, _window, _cx| {
+                                    move |range, _window, rcx| {
+                                        let t_results = Theme::global(rcx);
                                         range
                                             .map(|idx| {
                                                 let item = results_clone[idx].clone();
@@ -1226,6 +1230,7 @@ impl Render for Launcher {
                                                         item,
                                                         idx == sel,
                                                         idx,
+                                                        t_results,
                                                     ))
                                             })
                                             .collect::<Vec<_>>()
@@ -1278,7 +1283,7 @@ impl Render for Launcher {
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .text_color(theme::launcher_faint_text())
+                                    .text_color(muted_fg)
                                     .child("插件渲染出错")
                                     .into_any_element()
                             }
@@ -1308,6 +1313,7 @@ impl Render for Launcher {
                     list_items,
                     list_selected,
                     query,
+                    muted_fg,
                 ))
             })
     }
@@ -1319,6 +1325,7 @@ fn plugin_list(
     items: Rc<Vec<PluginListItem>>,
     selected: usize,
     query: String,
+    muted_foreground: gpui::Hsla,
 ) -> impl IntoElement {
     let count = items.len();
     if count == 0 {
@@ -1337,7 +1344,7 @@ fn plugin_list(
                     .items_center()
                     .justify_center()
                     .text_size(px(13.0))
-                    .text_color(theme::launcher_muted_text())
+                    .text_color(muted_foreground)
                     .child(if query.trim().is_empty() {
                         "暂无内容"
                     } else {
@@ -1361,7 +1368,7 @@ fn plugin_list(
                     .items_center()
                     .justify_center()
                     .text_size(px(13.0))
-                    .text_color(theme::launcher_muted_text())
+                    .text_color(muted_foreground)
                     .child("启动器尚未完成初始化"),
             )
             .into_any_element();
@@ -1371,10 +1378,11 @@ fn plugin_list(
         .h(px(Launcher::results_height_for_count(count)))
         .max_h(px(RESULTS_MAX_HEIGHT))
         .child(
-            uniform_list("launcher-plugin-list", count, move |range, _window, cx| {
-                cx.update_entity(&list_handle, |launcher, cx| {
-                    launcher.maybe_prefetch_plugin_items(range.end, cx);
+            uniform_list("launcher-plugin-list", count, move |range, _window, lcx| {
+                lcx.update_entity(&list_handle, |launcher, lcx| {
+                    launcher.maybe_prefetch_plugin_items(range.end, lcx);
                 });
+                let t_closure = Theme::global(lcx);
                 range
                     .map(|idx| {
                         let item = items[idx].clone();
@@ -1382,7 +1390,7 @@ fn plugin_list(
                             .h(px(ROW_SLOT))
                             .flex_none()
                             .pb(px(ROW_GAP))
-                            .child(plugin_list_row(handle.clone(), item, idx == selected, idx))
+                            .child(plugin_list_row(handle.clone(), item, idx == selected, idx, t_closure))
                     })
                     .collect::<Vec<_>>()
             })
@@ -1419,36 +1427,33 @@ fn plugin_list_row(
     item: PluginListItem,
     selected: bool,
     index: usize,
+    t: &Theme,
 ) -> impl IntoElement {
-    let dark = theme_mode::is_dark();
+    let dark = t.is_dark();
     let item_for_click = item.clone();
-    let accent = theme::launcher_accent();
+    let accent = t.blue;
     let row_bg = if selected {
-        theme::rgba_with_alpha(accent, if dark { 0.12 } else { 0.08 })
+        theme::rgba_with_alpha(accent.into(), if dark { 0.12 } else { 0.08 })
     } else {
-        theme::launcher_transparent()
+        gpui::hsla(0., 0., 0., 0.)
     };
     let title_color = if selected {
         accent
-    } else if dark {
-        theme::launcher_title_text()
     } else {
-        theme::launcher_title_text()
+        t.foreground
     };
-    let subtitle_color = theme::launcher_faint_text();
+    let subtitle_color = t.muted_foreground;
     let icon_surface = if selected {
-        theme::launcher_icon_surface_selected()
+        theme::rgba_with_alpha(t.list.into(), if dark { 0.15 } else { 0.9 })
     } else if dark {
-        theme::launcher_badge_bg()
+        theme::rgba_with_alpha(t.muted.into(), 0.03)
     } else {
-        theme::launcher_icon_surface()
+        theme::rgba_with_alpha(t.list.into(), 0.78)
     };
     let icon_border = if selected {
-        theme::launcher_icon_border_selected()
-    } else if dark {
-        theme::launcher_icon_border()
+        theme::rgba_with_alpha(t.border.into(), if dark { 0.2 } else { 0.9 })
     } else {
-        theme::launcher_icon_border()
+        theme::rgba_with_alpha(t.border.into(), if dark { 0.04 } else { 0.72 })
     };
     div()
         .id(("launcher-plugin-row", index))
@@ -1515,7 +1520,7 @@ fn plugin_list_row(
                         .child("↗")
                         .into_any_element()
                 } else {
-                    ui::icon_element(icon.as_str(), accent, 28.0).into_any_element()
+                    ui::icon_element(icon.as_str(), accent.into(), 28.0).into_any_element()
                 })
                 .into_any_element()
         })
@@ -1577,60 +1582,53 @@ fn result_row(
     item: Command,
     selected: bool,
     index: usize,
+    t: &Theme,
 ) -> impl IntoElement {
-    let dark = theme_mode::is_dark();
+    let dark = t.is_dark();
     let item_for_click = item.clone();
-    let accent = theme::launcher_accent();
+    let accent = t.blue;
 
     let icon_surface = if selected {
-        theme::launcher_icon_surface_selected()
+        theme::rgba_with_alpha(t.list.into(), if dark { 0.15 } else { 0.9 })
     } else if dark {
-        theme::launcher_badge_bg()
+        theme::rgba_with_alpha(t.muted.into(), 0.03)
     } else {
-        theme::launcher_icon_surface()
+        theme::rgba_with_alpha(t.list.into(), 0.78)
     };
     let icon_border = if selected {
-        theme::launcher_icon_border_selected()
-    } else if dark {
-        theme::launcher_icon_border()
+        theme::rgba_with_alpha(t.border.into(), if dark { 0.2 } else { 0.9 })
     } else {
-        theme::launcher_icon_border()
+        theme::rgba_with_alpha(t.border.into(), if dark { 0.04 } else { 0.72 })
     };
 
-    let (badge_label, badge_bg, badge_fg) = result_badge(&item);
+    let (badge_label, badge_bg, badge_fg) = result_badge(&item, t);
 
     let row_bg = if selected {
         if dark {
-            theme::rgba_with_alpha(accent, 0.12)
+            theme::rgba_with_alpha(accent.into(), 0.12)
         } else {
-            gpui::Hsla::from(theme::launcher_row_bg_selected_light())
+            theme::rgba_with_alpha(t.list_active.into(), 0.96)
         }
     } else {
-        theme::launcher_transparent()
+        gpui::hsla(0., 0., 0., 0.)
     };
     let row_border = if selected {
         if dark {
-            theme::rgba_with_alpha(accent, 0.2)
+            theme::rgba_with_alpha(accent.into(), 0.2)
         } else {
-            gpui::Hsla::from(theme::launcher_row_border_selected_light())
+            theme::rgba_with_alpha(t.list_active_border.into(), 0.95)
         }
     } else {
-        theme::launcher_transparent()
+        gpui::hsla(0., 0., 0., 0.)
     };
 
     let title_color = if selected {
         accent
-    } else if dark {
-        theme::launcher_title_text()
     } else {
-        theme::launcher_title_text()
+        t.foreground
     };
-    let subtitle_color = theme::launcher_faint_text();
-    let hover_bg = if dark {
-        theme::launcher_row_hover()
-    } else {
-        theme::launcher_row_hover()
-    };
+    let subtitle_color = t.muted_foreground;
+    let hover_bg = t.list_hover;
 
     div()
         .id(("launcher-row", index))
@@ -1644,7 +1642,7 @@ fn result_row(
         .border_color(row_border)
         .when(selected && dark, |row| {
             row.shadow(vec![BoxShadow {
-                color: theme::launcher_row_glow_dark(),
+                color: gpui::hsla(0.72, 0.72, 0.56, 0.04),
                 offset: point(px(0.0), px(0.0)),
                 blur_radius: px(30.0),
                 spread_radius: px(0.0),
@@ -1679,7 +1677,7 @@ fn result_row(
             &item,
             icon_surface,
             icon_border,
-            launcher_icon_tint(&item.plugin_id),
+            launcher_icon_tint(&item.plugin_id, t),
         ))
         .child(
             div()
@@ -1753,8 +1751,31 @@ fn launcher_icon(
         })
 }
 
-fn launcher_icon_tint(plugin_id: &str) -> gpui::Rgba {
-    theme::launcher_plugin_icon_tint(plugin_id)
+fn launcher_icon_tint(plugin_id: &str, t: &Theme) -> gpui::Rgba {
+    let dark = t.is_dark();
+    if dark {
+        match plugin_id {
+            "api-debugger" => gpui::rgb(0xc8b8ff),
+            "clipboard" => gpui::rgb(0x88dd88),
+            "http-capture" => gpui::rgb(0xff8888),
+            "image-compress" => gpui::rgb(0xffcc44),
+            "json-parser" => gpui::rgb(0xaaccff),
+            "ftp-sftp-ssh-client" => gpui::rgb(0x88ddff),
+            "system-settings" => gpui::rgb(0xaaccff),
+            _ => t.blue.into(),
+        }
+    } else {
+        match plugin_id {
+            "api-debugger" => gpui::rgb(0x6b4fcf),
+            "clipboard" => gpui::rgb(0x55aa55),
+            "http-capture" => gpui::rgb(0xcc6666),
+            "image-compress" => gpui::rgb(0xccaa33),
+            "json-parser" => gpui::rgb(0x6688cc),
+            "ftp-sftp-ssh-client" => gpui::rgb(0x5599cc),
+            "system-settings" => gpui::rgb(0x6688cc),
+            _ => t.blue.into(),
+        }
+    }
 }
 
 fn launcher_icon_label(item: &Command) -> &'static str {
@@ -1843,21 +1864,17 @@ fn log_slow_launcher_interaction(step: &'static str, started: Instant, fields: &
     }
 }
 
-fn result_badge(item: &Command) -> (String, gpui::Hsla, gpui::Rgba) {
-    let dark = theme_mode::is_dark();
-    let tag_bg = if dark {
-        theme::launcher_badge_bg()
-    } else {
-        theme::launcher_badge_bg()
-    };
-    let tag_fg = theme::launcher_faint_text();
+fn result_badge(item: &Command, t: &Theme) -> (String, gpui::Hsla, gpui::Hsla) {
+    let dark = t.is_dark();
+    let tag_bg = t.muted;
+    let tag_fg = t.muted_foreground;
 
     match item.kind {
         CommandKind::App => (String::from("应用"), tag_bg, tag_fg),
         CommandKind::DynamicAction => (
             String::from("动作"),
-            theme::rgba_with_alpha(theme::launcher_accent(), if dark { 0.12 } else { 0.08 }),
-            theme::launcher_accent(),
+            theme::rgba_with_alpha(t.blue.into(), if dark { 0.12 } else { 0.08 }),
+            t.blue,
         ),
         CommandKind::Plugin => match item.plugin_id.as_str() {
             "system-settings" => (String::from("系统"), tag_bg, tag_fg),

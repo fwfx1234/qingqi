@@ -978,7 +978,7 @@ impl Render for PluginWindow {
                     .absolute()
                     .top(px(6.0))
                     .right(px(6.0))
-                    .child(ui::window_close_button())
+                    .child(ui::window_close_button(cx))
             }))
             .children(notification_layer)
     }

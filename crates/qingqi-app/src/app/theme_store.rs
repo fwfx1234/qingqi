@@ -137,7 +137,9 @@ impl ThemeStore {
     }
 
     fn apply_current(&self) {
-        qingqi_ui::theme_mode::set_dark(self.effective_dark());
+        // Theme application is now handled by ThemeService::apply_theme().
+        // This method exists as a hook point for internal state changes
+        // but no longer needs to set a global at Run.
     }
 
     fn refresh_system_state(&mut self) {
