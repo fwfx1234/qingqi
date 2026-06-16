@@ -1,23 +1,24 @@
-use gpui::{IntoElement, ParentElement, SharedString, Styled, div, px};
+use gpui::{App, IntoElement, ParentElement, SharedString, Styled, div, px};
+use gpui_component::theme::Theme;
 
 use crate::theme;
 
 /// Unified settings card — header with title + optional subtitle, content below.
 /// Extracted from system_settings/view.rs for reuse across clipboard settings, download settings, etc.
 pub fn settings_card(
-    _dark: bool,
     title: impl Into<SharedString>,
     subtitle: Option<impl Into<SharedString>>,
     content: impl IntoElement,
+    cx: &App,
 ) -> impl IntoElement {
     let title = title.into();
-    let s = theme::semantic();
+    let t = Theme::global(cx);
 
     div()
         .rounded(theme::radius_lg())
         .border_1()
-        .border_color(s.border_default)
-        .bg(s.bg_surface)
+        .border_color(t.border)
+        .bg(t.list)
         .flex()
         .flex_col()
         .child(
@@ -26,8 +27,8 @@ pub fn settings_card(
                 .px(theme::space_4())
                 .py(theme::space_3())
                 .border_b_1()
-                .border_color(s.border_default)
-                .bg(s.bg_subtle_2)
+                .border_color(t.border)
+                .bg(t.muted)
                 .flex()
                 .items_center()
                 .justify_between()
@@ -36,14 +37,14 @@ pub fn settings_card(
                         div()
                             .text_size(theme::font_size_body())
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(s.text_primary)
+                            .text_color(t.foreground)
                             .child(title.clone()),
                     );
                     if let Some(st) = subtitle {
                         header = header.child(
                             div()
                                 .text_size(theme::font_size_caption())
-                                .text_color(s.text_secondary)
+                                .text_color(t.muted_foreground)
                                 .child(st.into()),
                         );
                     }
@@ -55,21 +56,21 @@ pub fn settings_card(
 
 /// Unified settings row — label + description on the left, control on the right.
 pub fn settings_row(
-    _dark: bool,
     label: impl Into<SharedString>,
     description: impl Into<SharedString>,
     control: impl IntoElement,
+    cx: &App,
 ) -> impl IntoElement {
     let label = label.into();
     let desc = description.into();
-    let s = theme::semantic();
+    let t = Theme::global(cx);
 
     div()
         .min_h(px(52.0))
         .px(theme::space_4())
         .py(theme::space_2())
         .border_b_1()
-        .border_color(s.border_default)
+        .border_color(t.border)
         .flex()
         .items_center()
         .justify_between()
@@ -85,13 +86,13 @@ pub fn settings_row(
                     div()
                         .text_size(theme::font_size_body())
                         .font_weight(gpui::FontWeight::MEDIUM)
-                        .text_color(s.text_primary)
+                        .text_color(t.foreground)
                         .child(label),
                 )
                 .child(
                     div()
                         .text_size(theme::font_size_caption())
-                        .text_color(s.text_secondary)
+                        .text_color(t.muted_foreground)
                         .child(desc),
                 ),
         )

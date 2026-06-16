@@ -9,97 +9,84 @@ pub use window_chrome::{
 };
 
 use gpui::{
-    InteractiveElement, IntoElement, ParentElement, SharedString, StatefulInteractiveElement,
+    App, InteractiveElement, IntoElement, ParentElement, SharedString, StatefulInteractiveElement,
     Styled, Window, div, hsla, img, px, rgb, svg,
 };
+use gpui_component::theme::Theme;
 
 use crate::{assets, theme};
 use qingqi_plugin::plugin_spec::{PluginAccent, PluginCategory, PluginStatus};
 
-// ── Background Colors (compile-time safe via theme::semantic) ────────────
+// ── Background Colors ────────────────────────────────────────────────────
 
-pub fn bg_canvas() -> gpui::Rgba {
-    theme::semantic().bg_page
+pub fn bg_canvas(cx: &App) -> gpui::Hsla {
+    Theme::global(cx).background
 }
 
-pub fn bg_surface() -> gpui::Rgba {
-    theme::semantic().bg_surface
+pub fn bg_surface(cx: &App) -> gpui::Hsla {
+    Theme::global(cx).list
 }
 
-pub fn bg_subtle() -> gpui::Rgba {
-    theme::semantic().bg_subtle
+pub fn bg_subtle(cx: &App) -> gpui::Hsla {
+    Theme::global(cx).muted
 }
 
-pub fn bg_hover() -> gpui::Rgba {
-    theme::semantic().bg_subtle
+pub fn bg_hover(cx: &App) -> gpui::Hsla {
+    Theme::global(cx).list_hover
 }
 
 // ── Text Colors ─────────────────────────────────────────────────────────
 
-pub fn text_primary() -> gpui::Rgba {
-    theme::semantic().text_primary
+pub fn text_primary(cx: &App) -> gpui::Hsla {
+    Theme::global(cx).foreground
 }
 
-pub fn text_secondary() -> gpui::Rgba {
-    theme::semantic().text_body
+pub fn text_secondary(cx: &App) -> gpui::Hsla {
+    Theme::global(cx).muted_foreground
 }
 
-pub fn text_tertiary() -> gpui::Rgba {
-    theme::semantic().text_secondary
+pub fn text_tertiary(cx: &App) -> gpui::Hsla {
+    Theme::global(cx).muted_foreground
 }
 
-// ── Border Colors ───────────────────────────────────────────────────────
+// ── Border Colors ────────────────────────────────────────────────────────
 
-pub fn border_light() -> gpui::Hsla {
-    theme::semantic().border_default.into()
+pub fn border_light(cx: &App) -> gpui::Hsla {
+    Theme::global(cx).border
 }
 
-pub fn border_strong() -> gpui::Hsla {
-    theme::semantic().border_strong.into()
+pub fn border_strong(cx: &App) -> gpui::Hsla {
+    Theme::global(cx).border
 }
 
-pub fn success() -> gpui::Rgba {
-    theme::semantic().success
+// ── Status Colors ────────────────────────────────────────────────────────
+
+pub fn success(cx: &App) -> gpui::Hsla {
+    Theme::global(cx).success
 }
 
-pub fn warning() -> gpui::Rgba {
-    theme::semantic().warning
+pub fn warning(cx: &App) -> gpui::Hsla {
+    Theme::global(cx).warning
 }
 
-pub fn danger() -> gpui::Rgba {
-    theme::semantic().danger
+pub fn danger(cx: &App) -> gpui::Hsla {
+    Theme::global(cx).danger
 }
 
-pub fn info() -> gpui::Rgba {
-    theme::semantic().info
+pub fn info(cx: &App) -> gpui::Hsla {
+    Theme::global(cx).info
 }
 
-/// Backdrop color for overlay/modal遮罩 (replaces individual hsla in overlay_shell)
-pub fn overlay_backdrop() -> gpui::Hsla {
-    theme::semantic().overlay_backdrop
+pub fn overlay_backdrop(cx: &App) -> gpui::Hsla {
+    Theme::global(cx).overlay
 }
 
-/// Keycap / subtle chip background (replaces launcher_keycap)
-pub fn bg_keycap() -> gpui::Hsla {
-    theme::keycap_bg()
+pub fn row_hover(cx: &App) -> gpui::Hsla {
+    Theme::global(cx).list_hover
 }
 
-/// Row hover background (replaced by theme::semantic().bg_hover)
-pub fn row_hover() -> gpui::Rgba {
-    theme::semantic().bg_hover
-}
-
-pub fn white() -> gpui::Rgba {
-    theme::white()
-}
-
-pub fn panel_heading_text() -> gpui::Rgba {
-    let dark = crate::theme_mode::is_dark();
-    if dark {
-        theme::semantic().text_primary
-    } else {
-        rgb(0x444458)
-    }
+pub fn white() -> gpui::Hsla {
+    hsla(0., 0., 1., 1.)
 }
 
 pub fn accent_color(accent: PluginAccent) -> gpui::Rgba {
@@ -118,45 +105,42 @@ pub fn category_tint(category: PluginCategory) -> gpui::Rgba {
     }
 }
 
-pub fn status_color(status: PluginStatus) -> gpui::Rgba {
+pub fn status_color(status: PluginStatus, cx: &App) -> gpui::Hsla {
     match status {
-        PluginStatus::Ready => success(),
-        PluginStatus::Background => accent_color(PluginAccent::Cyan),
-        PluginStatus::Preview => warning(),
+        PluginStatus::Ready => success(cx),
+        PluginStatus::Background => accent_color(PluginAccent::Cyan).into(),
+        PluginStatus::Preview => warning(cx),
     }
 }
 
 // ── Typography tokens ────────────────────────────────────────────────────
 
-/// Unified UI font stack (Latin via Inter, CJK via PingFang SC).
-/// Call sites must not hardcode font family names (conventions §8.3).
 pub fn font_ui() -> &'static str {
     "Inter, PingFang SC"
 }
 
-/// Monospace font for code / logs / hex / mono blocks.
 pub fn font_mono() -> &'static str {
     "SF Mono, Menlo, Monaco, Courier New, monospace"
 }
 
-/// Terminal panel font (macOS default).
 pub fn font_terminal() -> &'static str {
     "Menlo"
 }
 
 // ── Shared UI Components ─────────────────────────────────────────────────
 
-pub fn section_card() -> gpui::Div {
+pub fn section_card(cx: &App) -> gpui::Div {
     div()
         .rounded(theme::radius_lg())
-        .bg(bg_surface())
+        .bg(bg_surface(cx))
         .border_1()
-        .border_color(border_light())
+        .border_color(border_light(cx))
 }
 
 pub fn page_title(
     title: impl Into<SharedString>,
     subtitle: impl Into<SharedString>,
+    cx: &App,
 ) -> impl IntoElement {
     let title = title.into();
     let subtitle = subtitle.into();
@@ -168,27 +152,31 @@ pub fn page_title(
             div()
                 .text_size(px(20.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(text_primary())
+                .text_color(text_primary(cx))
                 .child(title),
         )
         .child(
             div()
                 .text_size(px(12.0))
-                .text_color(text_secondary())
+                .text_color(text_secondary(cx))
                 .child(subtitle),
         )
 }
 
-pub fn separator() -> impl IntoElement {
-    div().h(px(1.0)).bg(border_light())
+pub fn separator(cx: &App) -> impl IntoElement {
+    div().h(px(1.0)).bg(border_light(cx))
 }
 
-pub fn status_bar(message: impl Into<SharedString>, color: gpui::Rgba) -> impl IntoElement {
+pub fn status_bar(
+    message: impl Into<SharedString>,
+    color: gpui::Hsla,
+    cx: &App,
+) -> impl IntoElement {
     let message = message.into();
     div()
         .h(px(30.0))
         .rounded(theme::radius_md())
-        .bg(bg_subtle())
+        .bg(bg_subtle(cx))
         .px_3()
         .flex()
         .items_center()
@@ -197,18 +185,18 @@ pub fn status_bar(message: impl Into<SharedString>, color: gpui::Rgba) -> impl I
         .child(message)
 }
 
-pub fn mono_block(text: impl Into<SharedString>) -> impl IntoElement {
+pub fn mono_block(text: impl Into<SharedString>, cx: &App) -> impl IntoElement {
     let text = text.into();
     div()
         .rounded(theme::radius_md())
-        .bg(bg_subtle())
+        .bg(bg_subtle(cx))
         .border_1()
-        .border_color(border_light())
+        .border_color(border_light(cx))
         .p_3()
         .font_family(font_mono())
         .text_size(theme::font_size_mono())
         .line_height(px(18.0))
-        .text_color(text_primary())
+        .text_color(text_primary(cx))
         .child(text)
 }
 
@@ -252,8 +240,6 @@ fn app_icon_png_for_size(size_px: f32) -> &'static str {
     }
 }
 
-/// Resolve an icon path to an absolute filesystem path.
-/// Input can be absolute, relative to assets/, or a short name like "icons/about.svg".
 fn resolve_icon_path(icon: &str) -> String {
     assets::resolve_string(icon)
 }
@@ -271,33 +257,33 @@ pub fn icon_tile(icon: &str, accent: PluginAccent, size_px: f32) -> impl IntoEle
         .child(icon_element(icon, accent_rgba, size_px * 0.52))
 }
 
-pub fn toolbar_button(label: impl Into<SharedString>) -> gpui::Div {
+pub fn toolbar_button(label: impl Into<SharedString>, cx: &App) -> gpui::Div {
     let label = label.into();
     div()
         .h(px(34.0))
         .px_3()
         .rounded(theme::radius_md())
-        .bg(bg_surface())
+        .bg(bg_surface(cx))
         .border_1()
-        .border_color(border_light())
-        .hover(|style| style.bg(theme::slate_100()).cursor_pointer())
+        .border_color(border_light(cx))
+        .hover(|style| style.bg(Theme::global(cx).list_hover).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(12.0))
-        .text_color(text_primary())
+        .text_color(text_primary(cx))
         .child(label)
 }
 
-pub fn primary_button(label: impl Into<SharedString>) -> gpui::Div {
+pub fn primary_button(label: impl Into<SharedString>, cx: &App) -> gpui::Div {
     let label = label.into();
-    let accent = theme::blue_500();
+    let accent = Theme::global(cx).primary;
     div()
         .h(px(34.0))
         .px_3()
         .rounded(theme::radius_md())
         .bg(accent)
-        .hover(|style| style.bg(theme::blue_600()).cursor_pointer())
+        .hover(|style| style.bg(Theme::global(cx).primary_hover).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
@@ -309,6 +295,7 @@ pub fn primary_button(label: impl Into<SharedString>) -> gpui::Div {
 pub fn text_input_shell(
     value: impl Into<SharedString>,
     placeholder: impl Into<SharedString>,
+    cx: &App,
 ) -> gpui::Div {
     let value = value.into();
     let placeholder = placeholder.into();
@@ -316,17 +303,17 @@ pub fn text_input_shell(
     div()
         .h(px(38.0))
         .rounded(theme::radius_md())
-        .bg(bg_surface())
+        .bg(bg_surface(cx))
         .border_1()
-        .border_color(border_light())
+        .border_color(border_light(cx))
         .px_3()
         .flex()
         .items_center()
         .text_size(theme::font_size_body())
         .text_color(if has_value {
-            text_primary()
+            text_primary(cx)
         } else {
-            text_tertiary()
+            text_tertiary(cx)
         })
         .child(if has_value { value } else { placeholder })
 }
@@ -335,6 +322,7 @@ pub fn metric_pill(
     label: impl Into<SharedString>,
     value: impl Into<SharedString>,
     accent: PluginAccent,
+    cx: &App,
 ) -> impl IntoElement {
     let label = label.into();
     let value = value.into();
@@ -351,7 +339,7 @@ pub fn metric_pill(
         .child(
             div()
                 .text_size(theme::font_size_caption())
-                .text_color(text_secondary())
+                .text_color(text_secondary(cx))
                 .child(label),
         )
         .child(
@@ -367,6 +355,7 @@ pub fn stat_card(
     label: impl Into<SharedString>,
     value: impl Into<SharedString>,
     accent: PluginAccent,
+    cx: &App,
 ) -> impl IntoElement {
     let label = label.into();
     let value = value.into();
@@ -374,9 +363,9 @@ pub fn stat_card(
     div()
         .min_w(px(116.0))
         .rounded(theme::radius_lg())
-        .bg(bg_surface())
+        .bg(bg_surface(cx))
         .border_1()
-        .border_color(border_light())
+        .border_color(border_light(cx))
         .p_3()
         .flex()
         .flex_col()
@@ -384,7 +373,7 @@ pub fn stat_card(
         .child(
             div()
                 .text_size(theme::font_size_caption())
-                .text_color(text_tertiary())
+                .text_color(text_tertiary(cx))
                 .child(label),
         )
         .child(
@@ -396,7 +385,11 @@ pub fn stat_card(
         )
 }
 
-pub fn category_pill(label: impl Into<SharedString>, category: PluginCategory) -> impl IntoElement {
+pub fn category_pill(
+    label: impl Into<SharedString>,
+    category: PluginCategory,
+    cx: &App,
+) -> impl IntoElement {
     let label = label.into();
     div()
         .px_2()
@@ -407,91 +400,73 @@ pub fn category_pill(label: impl Into<SharedString>, category: PluginCategory) -
         .items_center()
         .justify_center()
         .text_size(theme::font_size_caption())
-        .text_color(text_secondary())
+        .text_color(text_secondary(cx))
         .child(label)
 }
 
-pub fn row_card(selected: bool) -> gpui::Div {
+pub fn row_card(selected: bool, cx: &App) -> gpui::Div {
     let selected_border: gpui::Hsla = rgb(0xbfdbfe).into();
     div()
         .rounded(theme::radius_md())
-        .bg(if selected {
-            rgb(0xeff6ff)
-        } else {
-            bg_surface()
-        })
+        .bg(if selected { rgb(0xeff6ff) } else { bg_surface(cx) })
         .border_1()
         .border_color(if selected {
             selected_border
         } else {
-            border_light()
+            border_light(cx)
         })
 }
 
-pub fn plugin_surface() -> gpui::Div {
+pub fn plugin_surface(cx: &App) -> gpui::Div {
     div()
         .size_full()
-        .bg(theme::semantic().bg_page)
+        .bg(Theme::global(cx).background)
         .font_family(font_ui())
-        .text_color(theme::semantic().text_primary)
+        .text_color(Theme::global(cx).foreground)
 }
 
 pub fn plugin_content() -> gpui::Div {
     div().size_full().p_3()
 }
 
-pub fn plugin_scroll_content() -> gpui::Stateful<gpui::Div> {
+pub fn plugin_scroll_content(cx: &App) -> gpui::Stateful<gpui::Div> {
     plugin_content()
         .id("plugin-scroll-content")
         .overflow_y_scroll()
         .scrollbar_width(px(6.0))
 }
 
-// ── Shared UI Component Library (ported from suishou QML Ui* components) ──
+// ── Shared UI Component Library ──────────────────────────────────────────
 
-/// Multi-variant button: primary, secondary, ghost, danger
 pub fn ui_button(
     label: impl Into<SharedString>,
     variant: &str,
     dark: bool,
     icon: Option<SharedString>,
     danger: bool,
+    cx: &App,
 ) -> gpui::Div {
     let label = label.into();
     let is_primary = variant == "primary";
     let is_ghost = variant == "ghost";
 
+    let t = Theme::global(cx);
+
     let (bg_idle, text_col, border_col) = if is_primary {
         if danger {
-            (
-                theme::semantic().danger,
-                theme::white(),
-                theme::semantic().border_default,
-            )
+            (t.danger, hsla(0., 0., 1., 1.), t.border)
         } else {
             (
-                theme::semantic().primary,
-                theme::white(),
+                t.primary,
+                hsla(0., 0., 1., 1.),
                 if dark { rgb(0x1a1a1a) } else { rgb(0x00000010) },
             )
         }
     } else if danger {
-        (
-            theme::white(),
-            theme::semantic().danger,
-            theme::semantic().danger,
-        )
+        (hsla(0., 0., 1., 1.), t.danger, t.danger)
     } else {
-        let idle = if dark {
-            theme::semantic().bg_elevated
-        } else {
-            theme::white()
-        };
-        (
-            idle,
-            theme::semantic().text_primary,
-            theme::semantic().border_default,
-        )
+        let idle = if dark { t.popover } else { hsla(0., 0., 1., 1.) };
+        (idle, t.foreground, t.border)
     };
 
     let mut btn = div()
@@ -518,33 +493,24 @@ pub fn ui_button(
     btn.child(label).min_w(px(76.0))
 }
 
-/// Icon-only button (matching suishou UiIconButton)
-pub fn ui_icon_button(icon_text: SharedString, size_px: f32) -> gpui::Div {
-    let dark = crate::theme_mode::is_dark();
+pub fn ui_icon_button(icon_text: SharedString, size_px: f32, cx: &App) -> gpui::Div {
+    let t = Theme::global(cx);
     div()
         .size(px(size_px))
         .rounded(theme::radius_md())
-        .hover(|style| style.bg(theme::slate_100()).cursor_pointer())
+        .hover(|style| style.bg(t.list_hover).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
         .child(
             div()
                 .text_size(px(size_px * 0.5))
-                .text_color(if dark {
-                    theme::slate_400()
-                } else {
-                    theme::slate_500()
-                })
+                .text_color(t.muted_foreground)
                 .child(icon_text),
         )
 }
 
-/// System-style window close button (✕) for client-drawn / always-on-top
-/// plugin windows that have no native OS titlebar.  Subtle by default, red
-/// on hover (mimicking the Windows close button).  Clicking closes the
-/// window it is rendered in.
-pub fn window_close_button() -> impl IntoElement {
+pub fn window_close_button(cx: &App) -> impl IntoElement {
     div()
         .id("qingqi-window-close")
         .w(px(40.0))
@@ -554,26 +520,24 @@ pub fn window_close_button() -> impl IntoElement {
         .justify_center()
         .rounded(theme::radius_md())
         .text_size(px(13.0))
-        .text_color(text_secondary())
-        .hover(|style| style.bg(danger()).text_color(white()).cursor_pointer())
+        .text_color(text_secondary(cx))
+        .hover(|style| style.bg(danger(cx)).text_color(white()).cursor_pointer())
         .on_click(|_event, window, app| {
             window.defer(app, |window, _app| window.remove_window());
         })
         .child("✕")
 }
 
-/// Card container (matching suishou UiCard)
-pub fn ui_card() -> gpui::Div {
+pub fn ui_card(cx: &App) -> gpui::Div {
     div()
         .rounded(theme::radius_lg())
-        .bg(bg_surface())
+        .bg(bg_surface(cx))
         .border_1()
-        .border_color(border_light())
+        .border_color(border_light(cx))
         .p_4()
 }
 
-/// Empty state display (matching suishou UiEmptyState)
-pub fn ui_empty_state(message: impl Into<SharedString>) -> impl IntoElement {
+pub fn ui_empty_state(message: impl Into<SharedString>, cx: &App) -> impl IntoElement {
     let message = message.into();
     div()
         .w_full()
@@ -586,12 +550,11 @@ pub fn ui_empty_state(message: impl Into<SharedString>) -> impl IntoElement {
         .child(
             div()
                 .text_size(px(14.0))
-                .text_color(theme::semantic().text_body)
+                .text_color(Theme::global(cx).muted_foreground)
                 .child(message),
         )
 }
 
-/// Chip/tag element (matching suishou UiChip)
 pub fn ui_chip(
     label: impl Into<SharedString>,
     accent: PluginAccent,
@@ -618,8 +581,7 @@ pub fn ui_chip(
         .child(label)
 }
 
-/// Divider with optional label (matching suishou UiDivider)
-pub fn ui_divider(label: Option<impl Into<SharedString>>) -> impl IntoElement {
+pub fn ui_divider(label: Option<impl Into<SharedString>>, cx: &App) -> impl IntoElement {
     if let Some(l) = label {
         let l = l.into();
         div()
@@ -627,29 +589,29 @@ pub fn ui_divider(label: Option<impl Into<SharedString>>) -> impl IntoElement {
             .flex()
             .items_center()
             .gap_2()
-            .child(div().flex_1().h(px(1.0)).bg(border_light()))
+            .child(div().flex_1().h(px(1.0)).bg(border_light(cx)))
             .child(
                 div()
                     .text_size(theme::font_size_caption())
-                    .text_color(text_tertiary())
+                    .text_color(text_tertiary(cx))
                     .child(l),
             )
-            .child(div().flex_1().h(px(1.0)).bg(border_light()))
+            .child(div().flex_1().h(px(1.0)).bg(border_light(cx)))
             .into_any_element()
     } else {
         div()
             .w_full()
             .h(px(1.0))
-            .bg(border_light())
+            .bg(border_light(cx))
             .into_any_element()
     }
 }
 
-pub fn focus_ring(active: bool, accent: PluginAccent) -> gpui::Hsla {
+pub fn focus_ring(active: bool, accent: PluginAccent, cx: &App) -> gpui::Hsla {
     if active {
         accent_color(accent).into()
     } else {
-        border_light()
+        border_light(cx)
     }
 }
 
@@ -663,7 +625,6 @@ pub fn notify_window(window: &mut Window) {
     window.refresh();
 }
 
-/// Resolves asset path relative to executable location.
 pub fn asset_path(relative: &str) -> String {
     assets::resolve_string(relative)
 }

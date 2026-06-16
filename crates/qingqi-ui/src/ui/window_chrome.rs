@@ -2,6 +2,7 @@ use gpui::{
     AnyElement, App, InteractiveElement, IntoElement, MouseButton, ParentElement, SharedString,
     StatefulInteractiveElement, Styled, Window, WindowControlArea, div, hsla, px,
 };
+use gpui_component::theme::Theme;
 use gpui_component::{Icon, IconName, Sizable, Size as ComponentSize};
 
 use crate::{theme, ui};
@@ -157,18 +158,21 @@ impl WindowChromeMetrics {
     }
 }
 
-pub fn popup_window_chrome(config: WindowChromeConfig) -> impl IntoElement {
-    popup_window_chrome_with_titlebar_slot(config, None)
+pub fn popup_window_chrome(config: WindowChromeConfig, cx: &App) -> impl IntoElement {
+    popup_window_chrome_with_titlebar_slot(config, None, cx)
 }
 
 pub fn popup_window_chrome_with_titlebar_slot(
     config: WindowChromeConfig,
     titlebar_slot: Option<AnyElement>,
+    cx: &App,
 ) -> impl IntoElement {
     match config.style {
-        WindowChromeStyle::MacOs => macos_window_chrome(config, titlebar_slot).into_any_element(),
+        WindowChromeStyle::MacOs => {
+            macos_window_chrome(config, titlebar_slot, cx).into_any_element()
+        }
         WindowChromeStyle::Windows => {
-            windows_window_chrome(config, titlebar_slot).into_any_element()
+            windows_window_chrome(config, titlebar_slot, cx).into_any_element()
         }
     }
 }
@@ -176,12 +180,14 @@ pub fn popup_window_chrome_with_titlebar_slot(
 fn windows_window_chrome(
     config: WindowChromeConfig,
     titlebar_slot: Option<AnyElement>,
+    cx: &App,
 ) -> impl IntoElement {
     let immersive = config.mode == WindowChromeMode::Immersive;
+    let t = Theme::global(cx);
     let background = if immersive || config.transparent {
         hsla(0.0, 0.0, 0.0, 0.0)
     } else {
-        theme::rgba_with_alpha(theme::semantic().bg_surface, 0.72)
+        theme::rgba_with_alpha(t.list.into(), 0.72)
     };
 
     div()
@@ -197,12 +203,13 @@ fn windows_window_chrome(
         .border_color(if immersive || config.transparent {
             hsla(0.0, 0.0, 0.0, 0.0)
         } else {
-            ui::border_light()
+            ui::border_light(cx)
         })
         .child(windows_titlebar_content(
             config.title.clone(),
             titlebar_slot,
             config.titlebar_slot_alignment,
+            cx,
         ))
         .children(config.show_minimize.then(|| {
             windows_control_button(
@@ -210,6 +217,7 @@ fn windows_window_chrome(
                 IconName::WindowMinimize,
                 false,
                 |window, _cx| window.minimize_window(),
+                cx,
             )
         }))
         .children(config.show_maximize.then(|| {
@@ -218,6 +226,7 @@ fn windows_window_chrome(
                 IconName::WindowMaximize,
                 false,
                 |window, _cx| window.zoom_window(),
+                cx,
             )
         }))
         .children(config.show_close.then(|| {
@@ -228,6 +237,7 @@ fn windows_window_chrome(
                 |window, cx| {
                     window.defer(cx, |window, _cx| window.remove_window());
                 },
+                cx,
             )
         }))
 }
@@ -236,6 +246,7 @@ fn windows_titlebar_content(
     title: Option<SharedString>,
     titlebar_slot: Option<AnyElement>,
     alignment: WindowChromeTitlebarSlotAlignment,
+    cx: &App,
 ) -> impl IntoElement {
     if let Some(slot) = titlebar_slot {
         match alignment {
@@ -281,13 +292,14 @@ fn windows_titlebar_content(
                 .child(title_drag_region()),
         }
     } else {
+        let t = Theme::global(cx);
         title_drag_region().pl(px(12.0)).pr(px(8.0)).child(
             div()
                 .max_w(px(360.0))
                 .line_clamp(1)
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::MEDIUM)
-                .text_color(theme::semantic().text_secondary)
+                .text_color(t.muted_foreground)
                 .children(title),
         )
     }
@@ -298,7 +310,9 @@ fn windows_control_button(
     icon: IconName,
     is_close: bool,
     action: impl Fn(&mut Window, &mut App) + 'static,
+    cx: &App,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
     div()
         .id(id)
         .w(px(46.0))
@@ -307,14 +321,12 @@ fn windows_control_button(
         .flex()
         .items_center()
         .justify_center()
-        .text_color(theme::semantic().text_secondary)
+        .text_color(t.muted_foreground)
         .hover(move |style| {
             let style = if is_close {
-                style.bg(ui::danger()).text_color(ui::white())
+                style.bg(ui::danger(cx)).text_color(hsla(0., 0., 1., 1.))
             } else {
-                style
-                    .bg(ui::bg_keycap())
-                    .text_color(theme::semantic().text_primary)
+                style.bg(Theme::global(cx).muted).text_color(Theme::global(cx).foreground)
             };
             style.cursor_pointer()
         })
@@ -331,12 +343,14 @@ fn windows_control_button(
 fn macos_window_chrome(
     config: WindowChromeConfig,
     titlebar_slot: Option<AnyElement>,
+    cx: &App,
 ) -> impl IntoElement {
     let immersive = config.mode == WindowChromeMode::Immersive;
+    let t = Theme::global(cx);
     let background = if immersive || config.transparent {
         hsla(0.0, 0.0, 0.0, 0.0)
     } else {
-        theme::rgba_with_alpha(theme::semantic().bg_surface, 0.62)
+        theme::rgba_with_alpha(t.list.into(), 0.62)
     };
 
     div()
@@ -352,13 +366,14 @@ fn macos_window_chrome(
         .border_color(if immersive || config.transparent {
             hsla(0.0, 0.0, 0.0, 0.0)
         } else {
-            ui::border_light()
+            ui::border_light(cx)
         })
         .child(macos_native_traffic_light_spacer())
         .child(macos_titlebar_content(
             config.title.clone(),
             titlebar_slot,
             config.titlebar_slot_alignment,
+            cx,
         ))
         .child(title_drag_spacer(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH))
 }
@@ -367,6 +382,7 @@ fn macos_titlebar_content(
     title: Option<SharedString>,
     titlebar_slot: Option<AnyElement>,
     alignment: WindowChromeTitlebarSlotAlignment,
+    cx: &App,
 ) -> impl IntoElement {
     if let Some(slot) = titlebar_slot {
         match alignment {
@@ -408,13 +424,14 @@ fn macos_titlebar_content(
                 .child(title_drag_region()),
         }
     } else {
+        let t = Theme::global(cx);
         title_drag_region().justify_center().child(
             div()
                 .max_w(px(360.0))
                 .line_clamp(1)
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::MEDIUM)
-                .text_color(theme::semantic().text_secondary)
+                .text_color(t.muted_foreground)
                 .children(title),
         )
     }

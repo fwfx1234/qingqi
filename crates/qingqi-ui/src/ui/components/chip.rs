@@ -1,4 +1,5 @@
-use gpui::{ParentElement, Styled, div, px};
+use gpui::{App, ParentElement, Styled, div, px};
+use gpui_component::theme::Theme;
 
 use crate::{theme, ui};
 use qingqi_plugin::plugin_spec::PluginAccent;
@@ -9,10 +10,11 @@ pub fn chip(
     label: impl Into<gpui::SharedString>,
     selected: bool,
     accent: PluginAccent,
-    dark: bool,
+    cx: &App,
 ) -> gpui::Div {
     let label = label.into();
     let accent_color = ui::accent_color(accent);
+    let dark = Theme::global(cx).is_dark();
     let accent_soft = if dark {
         theme::accent_soft_dark(accent)
     } else {
@@ -26,19 +28,19 @@ pub fn chip(
         .bg(if selected {
             accent_soft
         } else {
-            ui::bg_subtle()
+            ui::bg_subtle(cx)
         })
         .border_1()
         .border_color(if selected {
             let accent_hsla: gpui::Hsla = accent_color.into();
             accent_hsla
         } else {
-            ui::border_light()
+            ui::border_light(cx)
         })
         .text_color(if selected {
             accent_color
         } else {
-            ui::text_secondary()
+            ui::text_secondary(cx)
         })
         .text_size(theme::font_size_caption())
         .font_weight(gpui::FontWeight::MEDIUM)

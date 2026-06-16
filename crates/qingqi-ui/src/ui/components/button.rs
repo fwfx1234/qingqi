@@ -1,4 +1,5 @@
-use gpui::{ParentElement, SharedString, Styled, div, hsla, px};
+use gpui::{App, ParentElement, SharedString, Styled, div, hsla, px};
+use gpui_component::theme::Theme;
 
 use crate::{theme, ui};
 use qingqi_plugin::plugin_spec::PluginAccent;
@@ -17,32 +18,28 @@ pub fn button(
     label: impl Into<SharedString>,
     variant: ButtonVariant,
     accent: Option<PluginAccent>,
-    _dark: bool,
+    cx: &App,
 ) -> gpui::Div {
     let label = label.into();
-    let semantic = theme::semantic();
+    let t = Theme::global(cx);
     let (bg, text, border): (gpui::Hsla, gpui::Hsla, gpui::Hsla) = match variant {
         ButtonVariant::Primary => {
             let primary = if let Some(accent) = accent {
                 ui::accent_color(accent).into()
             } else {
-                semantic.primary.into()
+                t.primary
             };
-            let white: gpui::Hsla = ui::white().into();
+            let white: gpui::Hsla = hsla(0., 0., 1., 1.);
             (primary, white, primary)
         }
-        ButtonVariant::Secondary => (
-            semantic.bg_surface.into(),
-            semantic.text_primary.into(),
-            semantic.border_default.into(),
-        ),
+        ButtonVariant::Secondary => (t.list, t.foreground, t.border),
         ButtonVariant::Ghost => {
             let transparent = hsla(0.0, 0.0, 0.0, 0.0);
-            (transparent, ui::text_primary().into(), transparent)
+            (transparent, ui::text_primary(cx), transparent)
         }
         ButtonVariant::Danger => {
-            let danger: gpui::Hsla = ui::danger().into();
-            let white: gpui::Hsla = ui::white().into();
+            let danger: gpui::Hsla = ui::danger(cx);
+            let white: gpui::Hsla = hsla(0., 0., 1., 1.);
             (danger, white, danger)
         }
     };
@@ -67,13 +64,8 @@ pub fn button(
 }
 
 /// Unified icon button — returns a styled element for icons.
-pub fn icon_button(icon_svg: &str, size_px: f32) -> gpui::Div {
-    let dark = crate::theme_mode::is_dark();
-    let color = if dark {
-        theme::slate_400()
-    } else {
-        theme::slate_500()
-    };
+pub fn icon_button(icon_svg: &str, size_px: f32, cx: &App) -> gpui::Div {
+    let color: gpui::Hsla = Theme::global(cx).muted_foreground;
     let icon_size = size_px * 0.55;
 
     div()
@@ -82,5 +74,5 @@ pub fn icon_button(icon_svg: &str, size_px: f32) -> gpui::Div {
         .flex()
         .items_center()
         .justify_center()
-        .child(ui::icon_element(icon_svg, color, icon_size))
+        .child(ui::icon_element(icon_svg, color.into(), icon_size))
 }

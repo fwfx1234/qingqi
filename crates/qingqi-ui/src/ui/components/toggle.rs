@@ -1,10 +1,9 @@
-use gpui::{div, px, rgb, ParentElement, Styled};
+use gpui::{App, ParentElement, Styled, div, px, rgb};
+use gpui_component::theme::Theme;
 
-use crate::theme;
-
-pub fn toggle(enabled: bool) -> gpui::Div {
+pub fn toggle(enabled: bool, cx: &App) -> gpui::Div {
     let track_bg = if enabled {
-        theme::blue_500()
+        Theme::global(cx).blue
     } else {
         gpui::rgba(0x80808040)
     };

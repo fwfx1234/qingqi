@@ -1,4 +1,4 @@
-use gpui::{IntoElement, ParentElement, Styled, div, px};
+use gpui::{App, IntoElement, ParentElement, Styled, div, px};
 
 use crate::{theme, ui};
 
@@ -12,21 +12,21 @@ pub enum StatusTone {
 }
 
 /// Unified status pill — replaces locally defined status_tag / status_chip / status_pill.
-pub fn status_pill(label: impl Into<gpui::SharedString>, tone: StatusTone) -> impl IntoElement {
+pub fn status_pill(label: impl Into<gpui::SharedString>, tone: StatusTone, cx: &App) -> impl IntoElement {
     let label = label.into();
     let color = match tone {
-        StatusTone::Neutral => ui::text_secondary(),
-        StatusTone::Success => ui::success(),
-        StatusTone::Warning => ui::warning(),
-        StatusTone::Danger => ui::danger(),
-        StatusTone::Info => ui::info(),
+        StatusTone::Neutral => ui::text_secondary(cx),
+        StatusTone::Success => ui::success(cx),
+        StatusTone::Warning => ui::warning(cx),
+        StatusTone::Danger => ui::danger(cx),
+        StatusTone::Info => ui::info(cx),
     };
 
     div()
         .px_2()
         .h(px(24.0))
         .rounded(px(999.0))
-        .bg(theme::rgba_with_alpha(color, 0.14))
+        .bg(theme::rgba_with_alpha(color.into(), 0.14))
         .flex()
         .items_center()
         .justify_center()
