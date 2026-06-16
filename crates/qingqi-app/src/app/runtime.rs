@@ -2,6 +2,7 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     path::{Path, PathBuf},
+    rc::Rc,
     sync::{Arc, Mutex, RwLock},
 };
 
@@ -58,6 +59,13 @@ impl qingqi_plugin::host::ThemeHandle for ThemeHandleAdapter {
             .read()
             .map(|store| store.mode())
             .unwrap_or(qingqi_plugin::theme::ThemeMode::System)
+    }
+
+    fn theme_name(&self) -> String {
+        self.store
+            .read()
+            .map(|s| s.theme().to_string())
+            .unwrap_or_default()
     }
 
     fn config_path(&self) -> String {
@@ -129,6 +137,7 @@ pub struct AppHost {
     pub app_catalog: Arc<AppCatalog>,
     pub power_manager: Arc<Mutex<PowerManager>>,
     pub shortcut_service: Arc<Mutex<ShortcutService>>,
+    pub paths: AppPaths,
     _log_guard: Option<tracing_appender::non_blocking::WorkerGuard>,
 }
 
@@ -151,14 +160,16 @@ pub fn bootstrap() -> Result<AppHost> {
     database.register_database(DatabaseSpec::app(COMMAND_CATALOG_KEY, "command_catalog.db"))?;
     database.register_database(DatabaseSpec::app("app-launcher/index", "app_index.db"))?;
     let theme_store = Arc::new(RwLock::new(ThemeStore::new(paths.config("theme.json"))));
+    let command_usage_store = CommandUsageStore::new(Arc::clone(&database), "command-usage");
     let app_index_service = Arc::new(AppIndexService::with_events(
         Arc::clone(&database),
+        command_usage_store.clone(),
         events.clone(),
     ));
     let app_catalog = Arc::new(AppCatalog::new(Arc::clone(&app_index_service)));
     let plugins = PluginManager::new(
         events.clone(),
-        CommandUsageStore::new(Arc::clone(&database), "command-usage"),
+        command_usage_store,
         CommandCatalogStore::new(Arc::clone(&database), COMMAND_CATALOG_KEY),
     );
     let shortcut_service = Arc::new(Mutex::new(ShortcutService::default()));
@@ -173,6 +184,7 @@ pub fn bootstrap() -> Result<AppHost> {
         app_catalog,
         power_manager,
         shortcut_service,
+        paths,
         _log_guard,
     })
 }
@@ -186,12 +198,16 @@ pub fn run(host: AppHost) -> Result<()> {
         app_catalog,
         power_manager,
         shortcut_service,
+        paths,
         _log_guard: _,
     } = host;
     let plugins = Arc::new(Mutex::new(plugins));
     {
         let mut service = qingqi_core::lock_or_recover(&shortcut_service, "shortcut-service");
-        *service = ShortcutService::new(Arc::clone(&plugins));
+        *service = ShortcutService::new(
+            Arc::clone(&plugins),
+            Some(paths.config("shortcuts.json")),
+        );
     }
     let window_controller = Arc::new(Mutex::new(WindowController::new(
         Arc::clone(&plugins),

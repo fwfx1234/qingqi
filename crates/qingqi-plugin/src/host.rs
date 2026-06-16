@@ -7,6 +7,7 @@ use crate::{app::AppIndexSnapshot, shortcut::ShortcutView, theme::ThemeMode};
 
 pub trait ThemeHandle {
     fn mode(&self) -> ThemeMode;
+    fn theme_name(&self) -> String;
     fn config_path(&self) -> String;
     fn system_dark(&self) -> bool;
     fn set_mode(&self, mode: ThemeMode) -> Result<()>;

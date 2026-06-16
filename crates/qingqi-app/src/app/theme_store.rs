@@ -6,8 +6,14 @@ use std::{
 use anyhow::{Context, Result, bail};
 pub use qingqi_plugin::theme::ThemeMode;
 
-#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+fn default_theme_name() -> String {
+    "Default".into()
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct ThemeConfig {
+    #[serde(default = "default_theme_name")]
+    theme: String,
     mode: ThemeMode,
 }
 
@@ -15,23 +21,25 @@ struct ThemeConfig {
 /// runtime mode and then written to a local JSON config file.
 pub struct ThemeStore {
     mode: ThemeMode,
+    theme: String,
     config_path: PathBuf,
     system_dark: bool,
 }
 
 impl ThemeStore {
     pub fn new(config_path: PathBuf) -> Self {
-        let mode = Self::load_mode(&config_path).unwrap_or_else(|error| {
+        let (mode, theme) = Self::load_config(&config_path).unwrap_or_else(|error| {
             tracing::warn!(
                 path = %config_path.display(),
                 error = %error,
                 "failed to load theme config, falling back to default"
             );
-            ThemeMode::default()
+            (ThemeMode::default(), "Default".to_string())
         });
         let system_dark = Self::read_system_dark();
         let store = Self {
             mode,
+            theme,
             config_path,
             system_dark,
         };
@@ -41,6 +49,23 @@ impl ThemeStore {
 
     pub fn mode(&self) -> ThemeMode {
         self.mode
+    }
+
+    pub fn theme(&self) -> &str {
+        &self.theme
+    }
+
+    pub fn set_theme(&mut self, theme: String) -> Result<()> {
+        if self.theme == theme {
+            return Ok(());
+        }
+        let previous = self.theme.clone();
+        self.theme = theme;
+        if let Err(e) = self.save() {
+            self.theme = previous;
+            return Err(e);
+        }
+        Ok(())
     }
 
     pub fn effective_dark(&self) -> bool {
@@ -83,8 +108,9 @@ impl ThemeStore {
 
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn reload(&mut self) -> Result<ThemeMode> {
-        let mode = Self::load_mode(&self.config_path)?;
+        let (mode, theme) = Self::load_config(&self.config_path)?;
         self.mode = mode;
+        self.theme = theme;
         self.refresh_system_state();
         self.apply_current();
         Ok(self.mode)
@@ -118,24 +144,24 @@ impl ThemeStore {
         self.system_dark = Self::read_system_dark();
     }
 
-    fn load_mode(path: &Path) -> Result<ThemeMode> {
+    fn load_config(path: &Path) -> Result<(ThemeMode, String)> {
         if !path.exists() {
-            return Ok(ThemeMode::default());
+            return Ok((ThemeMode::default(), "Default".to_string()));
         }
 
         let raw = fs::read_to_string(path)
             .with_context(|| format!("cannot read theme config {}", path.display()))?;
         let trimmed = raw.trim();
         if trimmed.is_empty() {
-            return Ok(ThemeMode::default());
+            return Ok((ThemeMode::default(), "Default".to_string()));
         }
 
         if let Ok(config) = serde_json::from_str::<ThemeConfig>(trimmed) {
-            return Ok(config.mode);
+            return Ok((config.mode, config.theme));
         }
 
         if let Ok(mode) = serde_json::from_str::<ThemeMode>(trimmed) {
-            return Ok(mode);
+            return Ok((mode, "Default".to_string()));
         }
 
         bail!("invalid theme config format")
@@ -148,7 +174,10 @@ impl ThemeStore {
             })?;
         }
 
-        let config = ThemeConfig { mode: self.mode };
+        let config = ThemeConfig {
+            theme: self.theme.clone(),
+            mode: self.mode,
+        };
         let json = serde_json::to_string_pretty(&config).context("cannot encode theme config")?;
         fs::write(&self.config_path, json)
             .with_context(|| format!("cannot write theme config {}", self.config_path.display()))
@@ -262,6 +291,62 @@ mod tests {
         let before = store.effective_dark();
         store.sync_system();
         assert_eq!(store.effective_dark(), before);
+
+        let _ = fs::remove_dir_all(path.parent().expect("temp parent"));
+    }
+
+    #[test]
+    fn persists_theme_name() {
+        let path = temp_config_path("theme-name.json");
+        let mut store = ThemeStore::new(path.clone());
+        assert_eq!(store.theme(), "Default");
+        store.set_theme("Custom Theme".into()).expect("set theme");
+
+        let saved = fs::read_to_string(&path).expect("read saved theme");
+        assert!(saved.contains("\"theme\": \"Custom Theme\""));
+
+        let reloaded = ThemeStore::new(path.clone());
+        assert_eq!(reloaded.theme(), "Custom Theme");
+
+        let _ = fs::remove_dir_all(path.parent().expect("temp parent"));
+    }
+
+    #[test]
+    fn legacy_format_defaults_theme_name() {
+        let path = temp_config_path("legacy-theme-name.json");
+        fs::create_dir_all(path.parent().expect("temp parent")).expect("create temp dir");
+        fs::write(&path, "\"Auto\"").expect("write legacy config");
+
+        let store = ThemeStore::new(path.clone());
+        assert_eq!(store.theme(), "Default");
+
+        let _ = fs::remove_dir_all(path.parent().expect("temp parent"));
+    }
+
+    #[test]
+    fn set_theme_rollback_on_save_failure() {
+        let path = temp_config_path("theme-rollback.json");
+        let mut store = ThemeStore::new(path.clone());
+        store.set_theme("Theme A".into()).expect("set theme a");
+
+        // Make the config path a directory so save fails
+        let _ = fs::remove_dir_all(path.parent().expect("temp parent"));
+        fs::create_dir_all(&path).expect("make path a dir");
+
+        let result = store.set_theme("Theme B".into());
+        assert!(result.is_err());
+        assert_eq!(store.theme(), "Theme A");
+
+        let _ = fs::remove_dir_all(&path);
+    }
+
+    #[test]
+    fn set_theme_noop_for_same_name() {
+        let path = temp_config_path("theme-noop.json");
+        let mut store = ThemeStore::new(path.clone());
+        store.set_theme("Same".into()).expect("set theme");
+        store.set_theme("Same".into()).expect("set same again");
+        assert_eq!(store.theme(), "Same");
 
         let _ = fs::remove_dir_all(path.parent().expect("temp parent"));
     }
