@@ -3,9 +3,10 @@ use std::sync::{Arc, Mutex};
 
 use gpui::{
     AnyElement, App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement,
-    Render, StatefulInteractiveElement, Styled, Window, div, prelude::FluentBuilder, px,
+    Render, StatefulInteractiveElement, Styled, Window, div, hsla, prelude::FluentBuilder, px,
 };
 
+use gpui_component::theme::Theme;
 use qingqi_platform::macos::PermissionStatus;
 use qingqi_plugin::{
     app::AppIndexSnapshot,
@@ -91,6 +92,17 @@ impl SettingsView {
             Ok(()) => self.message = format!("已切换为{label}"),
             Err(error) => self.message = format!("主题切换失败: {error}"),
         }
+    }
+
+    pub fn selected_theme_name(&self) -> String {
+        self.theme_handle.theme_name()
+    }
+
+    pub fn set_theme_name(&mut self, name: String, cx: &mut Context<Self>) {
+        // Note: full theme switching by name requires host support.
+        // For now, store the selection and provide feedback.
+        self.message = format!("已选择主题: {name}");
+        cx.notify();
     }
 
     // ── Retention ──
@@ -433,7 +445,6 @@ impl SettingsView {
 impl Render for SettingsView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let entity = cx.entity();
-        let dark = qingqi_ui::theme_mode::is_dark();
         let current_mode = self.current_mode();
         let system_dark = self.system_dark();
         let config_path = self.theme_config_path();
@@ -465,9 +476,10 @@ impl Render for SettingsView {
             (rows, message)
         };
 
-        let page_bg = theme::semantic().bg_page;
-        let text_primary = theme::semantic().text_primary;
-        let text_secondary = theme::semantic().text_secondary;
+        let t = Theme::global(cx);
+        let page_bg = t.background;
+        let text_primary = t.foreground;
+        let text_secondary = t.muted_foreground;
 
         div()
             .size_full()
@@ -489,20 +501,18 @@ impl Render for SettingsView {
             )
             // ── Theme & Appearance ──
             .child(components::settings_card(
-                dark,
                 "主题与外观",
                 Some("控制台视觉样式"),
                 div()
                     .flex()
                     .flex_col()
                     .child(components::settings_row(
-                        dark,
                         "主题模式",
                         "切换浅色 / 深色 / 跟随系统外观",
-                        mode_segment(entity.clone(), current_mode, dark),
+                        mode_segment(entity.clone(), current_mode, cx),
+                        cx,
                     ))
                     .child(components::settings_row(
-                        dark,
                         "系统检测",
                         if system_dark {
                             "当前系统外观: 深色"
@@ -513,68 +523,75 @@ impl Render for SettingsView {
                             .h(px(24.0))
                             .px_2()
                             .rounded(px(999.0))
-                            .bg(theme::semantic().bg_subtle)
+                            .bg(t.muted)
                             .flex()
                             .items_center()
                             .text_size(theme::font_size_caption())
                             .text_color(text_secondary)
                             .child(if system_dark { "深色" } else { "浅色" }),
+                        cx,
+                    ))
+                    .child(components::settings_row(
+                        "主题选择",
+                        "选择内置主题配色方案",
+                        theme_selector(entity.clone(), cx),
+                        cx,
                     )),
+                cx,
             ))
             // ── Plugin Retention ──
             .child(components::settings_card(
-                dark,
                 "插件管理",
                 Some("窗口保留与导入管理"),
                 div()
                     .flex()
                     .flex_col()
                     .child(components::settings_row(
-                        dark,
                         "插件窗口保留",
                         &retention_status,
                         retention_control(
                             entity.clone(),
                             retention_seconds,
                             retention_message,
-                            dark,
+                            cx,
                         ),
+                        cx,
                     ))
                     .child(components::settings_row(
-                        dark,
                         "导入插件",
                         "目录/ZIP 导入尚未实现；可打开目标目录查看",
-                        plugin_dir_button(entity.clone(), dark, &imported_plugin_root),
+                        plugin_dir_button(entity.clone(), cx, &imported_plugin_root),
+                        cx,
                     ))
                     .child(components::settings_row(
-                        dark,
                         "已安装插件管理",
                         "管理已安装插件的启用/卸载",
-                        disabled_badge("尚未实现"),
+                        disabled_badge("尚未实现", cx),
+                        cx,
                     )),
+                cx,
             ))
             // ── Shortcuts ──
             .child(components::settings_card(
-                dark,
                 "快捷键",
                 Some("全局与应用内快捷键"),
-                shortcuts_section(entity.clone(), shortcut_rows, shortcut_message, dark),
+                shortcuts_section(entity.clone(), shortcut_rows, shortcut_message, cx),
+                cx,
             ))
             // ── App Index ──
             .child(components::settings_card(
-                dark,
                 "应用索引",
                 Some("软件快速启动的应用缓存"),
                 div().flex().flex_col().child(app_index_row(
                     entity.clone(),
-                    dark,
+                    cx,
                     has_app_snapshot,
                     app_snapshot,
                 )),
+                cx,
             ))
             // ── macOS Permissions ──
             .child(components::settings_card(
-                dark,
                 "macOS 权限",
                 Some("系统级访问授权状态"),
                 div()
@@ -582,32 +599,32 @@ impl Render for SettingsView {
                     .flex_col()
                     .child(accessibility_row(
                         entity.clone(),
-                        dark,
+                        cx,
                         accessibility_status,
                         &accessibility_text,
                     ))
                     .child(permission_row(
-                        dark,
+                        cx,
                         "剪贴板访问",
                         "读取系统剪贴板内容",
                         PermissionStatus::Unknown,
                     ))
                     .child(permission_row(
-                        dark,
+                        cx,
                         "文件访问",
                         "读取用户目录与应用目录",
                         PermissionStatus::Unknown,
                     ))
                     .child(permission_row(
-                        dark,
+                        cx,
                         "屏幕录制",
                         "截图、取色等插件可能用到",
                         PermissionStatus::Unknown,
                     )),
+                cx,
             ))
             // ── Diagnostics ──
             .child(components::settings_card(
-                dark,
                 "开发诊断",
                 Some("数据、缓存与日志路径"),
                 div()
@@ -615,7 +632,7 @@ impl Render for SettingsView {
                     .flex_col()
                     .child(diag_path_row(
                         entity.clone(),
-                        dark,
+                        cx,
                         "数据目录",
                         "Qingqi 应用数据根目录",
                         &data_dir,
@@ -623,7 +640,7 @@ impl Render for SettingsView {
                     ))
                     .child(diag_path_row(
                         entity.clone(),
-                        dark,
+                        cx,
                         "配置目录",
                         "配置文件与数据库路径",
                         &config_dir,
@@ -631,36 +648,37 @@ impl Render for SettingsView {
                     ))
                     .child(diag_path_row(
                         entity.clone(),
-                        dark,
+                        cx,
                         "日志目录",
                         "运行日志输出目录",
                         &log_dir,
                         DiagAction::LogDir,
                     ))
                     .child(components::settings_row(
-                        dark,
                         "主题配置",
                         "当前主题持久化文件",
-                        path_badge(&config_path),
+                        path_badge(&config_path, cx),
+                        cx,
                     ))
                     .child(components::settings_row(
-                        dark,
                         "应用索引维护",
                         "手动重建软件快速启动的应用索引",
-                        app_index_action_button(entity.clone(), dark, has_app_snapshot),
+                        app_index_action_button(entity.clone(), cx, has_app_snapshot),
+                        cx,
                     ))
                     .child(components::settings_row(
-                        dark,
                         "清理图标缓存",
                         &icon_cache_dir,
-                        icon_cache_clear_button(entity.clone(), dark, icon_cache_message),
+                        icon_cache_clear_button(entity.clone(), cx, icon_cache_message),
+                        cx,
                     ))
                     .child(components::settings_row(
-                        dark,
                         "日志诊断",
                         "后台服务状态、最近错误、警告统计",
-                        disabled_badge("尚未实现"),
+                        disabled_badge("尚未实现", cx),
+                        cx,
                     )),
+                cx,
             ))
     }
 }
@@ -671,10 +689,11 @@ fn retention_control(
     entity: Entity<SettingsView>,
     seconds: u64,
     message: String,
-    _dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
-    let text_primary = theme::semantic().text_primary;
-    let text_secondary = theme::semantic().text_secondary;
+    let t = Theme::global(cx);
+    let text_primary = t.foreground;
+    let text_secondary = t.muted_foreground;
 
     div()
         .flex()
@@ -688,9 +707,9 @@ fn retention_control(
                 .w(px(28.0))
                 .rounded(theme::radius_sm())
                 .border_1()
-                .border_color(theme::semantic().border_default)
-                .bg(theme::semantic().bg_surface)
-                .hover(|style| style.bg(theme::semantic().bg_subtle).cursor_pointer())
+                .border_color(t.border)
+                .bg(t.list)
+                .hover(|style| style.bg(t.muted).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -713,9 +732,9 @@ fn retention_control(
                 .h(px(28.0))
                 .min_w(px(56.0))
                 .rounded(theme::radius_sm())
-                .bg(theme::semantic().bg_subtle)
+                .bg(t.muted)
                 .border_1()
-                .border_color(theme::semantic().border_default)
+                .border_color(t.border)
                 .flex()
                 .items_center()
                 .justify_center()
@@ -731,9 +750,9 @@ fn retention_control(
                 .w(px(28.0))
                 .rounded(theme::radius_sm())
                 .border_1()
-                .border_color(theme::semantic().border_default)
-                .bg(theme::semantic().bg_surface)
-                .hover(|style| style.bg(theme::semantic().bg_subtle).cursor_pointer())
+                .border_color(t.border)
+                .bg(t.list)
+                .hover(|style| style.bg(t.muted).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -758,13 +777,13 @@ fn retention_control(
                 .px_2()
                 .ml(px(4.0))
                 .rounded(theme::radius_sm())
-                .bg(theme::semantic().primary)
-                .hover(|style| style.bg(theme::semantic().primary_hover).cursor_pointer())
+                .bg(t.primary)
+                .hover(|style| style.bg(t.primary_hover).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
                 .text_size(theme::font_size_caption())
-                .text_color(theme::white())
+                .text_color(hsla(0., 0., 1., 1.))
                 .child("保存")
                 .on_click({
                     let entity = entity.clone();
@@ -784,9 +803,9 @@ fn retention_control(
                 .px_2()
                 .rounded(theme::radius_sm())
                 .border_1()
-                .border_color(theme::semantic().border_default)
-                .bg(theme::semantic().bg_surface)
-                .hover(|style| style.bg(theme::semantic().bg_subtle).cursor_pointer())
+                .border_color(t.border)
+                .bg(t.list)
+                .hover(|style| style.bg(t.muted).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -818,12 +837,13 @@ fn retention_control(
 
 fn app_index_row(
     entity: Entity<SettingsView>,
-    dark: bool,
+    cx: &App,
     has_snapshot: bool,
     snapshot: Option<AppIndexSnapshot>,
 ) -> impl IntoElement {
-    let text_secondary = theme::semantic().text_secondary;
-    let text_primary = theme::semantic().text_primary;
+    let t = Theme::global(cx);
+    let text_secondary = t.muted_foreground;
+    let text_primary = t.foreground;
 
     let (status_line, show_rescan) = if !has_snapshot {
         (String::from("应用索引服务不可用"), false)
@@ -857,7 +877,7 @@ fn app_index_row(
     };
 
     let action = if show_rescan {
-        action_button(dark, "重扫描", true, {
+        action_button(cx, "重扫描", true, {
             let entity = entity.clone();
             move |_, _window, cx| {
                 entity.update(cx, |this, cx| {
@@ -868,7 +888,7 @@ fn app_index_row(
         })
         .into_any_element()
     } else {
-        disabled_badge("不可用").into_any_element()
+        disabled_badge("不可用", cx).into_any_element()
     };
 
     div()
@@ -876,7 +896,7 @@ fn app_index_row(
         .px(theme::space_4())
         .py(theme::space_2())
         .border_b_1()
-        .border_color(theme::semantic().border_default)
+        .border_color(t.border)
         .flex()
         .items_center()
         .justify_between()
@@ -908,11 +928,11 @@ fn app_index_row(
 
 fn app_index_action_button(
     entity: Entity<SettingsView>,
-    dark: bool,
+    cx: &App,
     available: bool,
 ) -> AnyElement {
     if available {
-        action_button(dark, "重建索引", true, {
+        action_button(cx, "重建索引", true, {
             let entity = entity.clone();
             move |_, _window, cx| {
                 entity.update(cx, |this, cx| {
@@ -923,29 +943,30 @@ fn app_index_action_button(
         })
         .into_any_element()
     } else {
-        disabled_badge("服务不可用").into_any_element()
+        disabled_badge("服务不可用", cx).into_any_element()
     }
 }
 
 fn plugin_dir_button(
     entity: Entity<SettingsView>,
-    _dark: bool,
+    cx: &App,
     _root_path: &str,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
     div()
         .id("system-settings-open-plugin-dir")
         .h(px(28.0))
         .px_3()
         .rounded(theme::radius_md())
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_surface)
-        .hover(|style| style.bg(theme::semantic().bg_subtle).cursor_pointer())
+        .border_color(t.border)
+        .bg(t.list)
+        .hover(|style| style.bg(t.muted).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
         .text_size(theme::font_size_caption())
-        .text_color(theme::semantic().text_primary)
+        .text_color(t.foreground)
         .child("打开目录")
         .on_click(move |_, _window, cx| {
             entity.update(cx, |this, cx| {
@@ -957,10 +978,11 @@ fn plugin_dir_button(
 
 fn icon_cache_clear_button(
     entity: Entity<SettingsView>,
-    _dark: bool,
+    cx: &App,
     message: String,
 ) -> impl IntoElement {
-    let text_secondary = theme::semantic().text_secondary;
+    let t = Theme::global(cx);
+    let text_secondary = t.muted_foreground;
 
     div()
         .flex()
@@ -972,13 +994,13 @@ fn icon_cache_clear_button(
                 .h(px(28.0))
                 .px_3()
                 .rounded(theme::radius_md())
-                .bg(theme::semantic().primary)
-                .hover(|style| style.bg(theme::semantic().primary_hover).cursor_pointer())
+                .bg(t.primary)
+                .hover(|style| style.bg(t.primary_hover).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
                 .text_size(theme::font_size_caption())
-                .text_color(theme::white())
+                .text_color(hsla(0., 0., 1., 1.))
                 .child("清理缓存")
                 .on_click(move |_, _window, cx| {
                     entity.update(cx, |this, cx| {
@@ -1003,9 +1025,10 @@ fn shortcuts_section(
     entity: Entity<SettingsView>,
     rows: Vec<(ShortcutView, Entity<TextInput>)>,
     message: String,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
-    let text_secondary = theme::semantic().text_secondary;
+    let t = Theme::global(cx);
+    let text_secondary = t.muted_foreground;
 
     div()
         .flex()
@@ -1016,7 +1039,7 @@ fn shortcuts_section(
                     .px(theme::space_4())
                     .py(theme::space_2())
                     .border_b_1()
-                    .border_color(theme::semantic().border_default)
+                    .border_color(t.border)
                     .text_size(theme::font_size_caption())
                     .text_color(text_secondary)
                     .child(message),
@@ -1034,7 +1057,7 @@ fn shortcuts_section(
         })
         .children(
             rows.into_iter()
-                .map(|(view, input)| shortcut_row(entity.clone(), view, input, dark)),
+                .map(|(view, input)| shortcut_row(entity.clone(), view, input, cx)),
         )
 }
 
@@ -1042,10 +1065,11 @@ fn shortcut_row(
     entity: Entity<SettingsView>,
     view: ShortcutView,
     input: Entity<TextInput>,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
-    let text_primary = theme::semantic().text_primary;
-    let text_secondary = theme::semantic().text_secondary;
+    let t = Theme::global(cx);
+    let text_primary = t.foreground;
+    let text_secondary = t.muted_foreground;
     let descriptor = view.descriptor.clone();
     let scope_label = descriptor.scope.label();
     let owner_label = if descriptor.owner_plugin_id == CORE_PLUGIN_ID {
@@ -1065,7 +1089,7 @@ fn shortcut_row(
     let enabled = descriptor.enabled;
     let editable = descriptor.editable;
     let status = shortcut_status(&view);
-    let status_style = shortcut_status_style(&view);
+    let status_style = shortcut_status_style(&view, cx);
     let shortcut_id = descriptor.id.clone();
     let save_enabled = editable;
 
@@ -1074,7 +1098,7 @@ fn shortcut_row(
         .px(theme::space_4())
         .py(theme::space_2())
         .border_b_1()
-        .border_color(theme::semantic().border_default)
+        .border_color(t.border)
         .flex()
         .items_center()
         .justify_between()
@@ -1098,7 +1122,7 @@ fn shortcut_row(
                                 .text_color(text_primary)
                                 .child(descriptor.title.clone()),
                         )
-                        .child(scope_badge(scope_label, descriptor.scope))
+                        .child(scope_badge(scope_label, descriptor.scope, cx))
                         .child(status_badge(status, status_style)),
                 )
                 .child(
@@ -1117,8 +1141,8 @@ fn shortcut_row(
                 .flex()
                 .items_center()
                 .gap(px(8.0))
-                .child(shortcut_input_shell(input.clone(), editable))
-                .child(shortcut_action_button(dark, "保存", true, save_enabled, {
+                .child(shortcut_input_shell(input.clone(), editable, cx))
+                .child(shortcut_action_button(cx, "保存", true, save_enabled, {
                     let entity = entity.clone();
                     let shortcut_id = shortcut_id.clone();
                     let input = input.clone();
@@ -1130,7 +1154,7 @@ fn shortcut_row(
                     }
                 }))
                 .child(shortcut_action_button(
-                    dark,
+                    cx,
                     if enabled { "禁用" } else { "启用" },
                     false,
                     editable,
@@ -1146,7 +1170,7 @@ fn shortcut_row(
                         }
                     },
                 ))
-                .child(shortcut_action_button(dark, "默认", false, editable, {
+                .child(shortcut_action_button(cx, "默认", false, editable, {
                     let entity = entity.clone();
                     let shortcut_id = shortcut_id.clone();
                     move |_, _window, cx| {
@@ -1159,40 +1183,42 @@ fn shortcut_row(
         )
 }
 
-fn shortcut_input_shell(input: Entity<TextInput>, editable: bool) -> impl IntoElement {
+fn shortcut_input_shell(input: Entity<TextInput>, editable: bool, cx: &App) -> impl IntoElement {
+    let t = Theme::global(cx);
     div()
         .w(px(160.0))
         .rounded(theme::radius_sm())
         .border_1()
-        .border_color(theme::semantic().border_default)
+        .border_color(t.border)
         .bg(if editable {
-            theme::semantic().bg_surface
+            t.list
         } else {
-            theme::semantic().bg_subtle
+            t.muted
         })
         .child(input.into_any_element())
 }
 
 fn shortcut_action_button(
-    _dark: bool,
+    cx: &App,
     label: &'static str,
     primary: bool,
     enabled: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
     let bg = if !enabled {
-        theme::semantic().bg_subtle
+        t.muted
     } else if primary {
-        theme::semantic().primary
+        t.primary
     } else {
-        theme::semantic().bg_surface
+        t.list
     };
     let text = if !enabled {
-        theme::semantic().text_secondary
+        t.muted_foreground
     } else if primary {
-        theme::white()
+        hsla(0., 0., 1., 1.)
     } else {
-        theme::semantic().text_primary
+        t.foreground
     };
 
     div()
@@ -1202,14 +1228,14 @@ fn shortcut_action_button(
         .rounded(theme::radius_md())
         .bg(bg)
         .border_1()
-        .border_color(theme::semantic().border_default)
+        .border_color(t.border)
         .hover(move |style| {
             if enabled {
                 style
                     .bg(if primary {
-                        theme::semantic().primary_hover
+                        t.primary_hover
                     } else {
-                        theme::semantic().bg_subtle
+                        t.muted
                     })
                     .cursor_pointer()
             } else {
@@ -1244,35 +1270,37 @@ fn shortcut_status(view: &ShortcutView) -> String {
     }
 }
 
-fn shortcut_status_style(view: &ShortcutView) -> (gpui::Rgba, gpui::Rgba) {
+fn shortcut_status_style(view: &ShortcutView, cx: &App) -> (gpui::Rgba, gpui::Rgba) {
+    let t = Theme::global(cx);
     if view.error.is_some() || view.overridden_by.is_some() {
         return (
-            theme::semantic().warning,
-            theme::rgba_with_alpha(theme::semantic().warning, 0.1).into(),
+            t.warning.into(),
+            theme::rgba_with_alpha(t.warning.into(), 0.1).into(),
         );
     }
     if !view.descriptor.enabled {
         return (
-            theme::semantic().text_secondary,
-            theme::rgba_with_alpha(theme::semantic().text_secondary, 0.08).into(),
+            t.muted_foreground.into(),
+            theme::rgba_with_alpha(t.muted_foreground.into(), 0.08).into(),
         );
     }
     if view.active {
         return (
-            theme::semantic().success,
-            theme::rgba_with_alpha(theme::semantic().success, 0.1).into(),
+            t.success.into(),
+            theme::rgba_with_alpha(t.success.into(), 0.1).into(),
         );
     }
     (
-        theme::semantic().text_secondary,
-        theme::rgba_with_alpha(theme::semantic().text_secondary, 0.08).into(),
+        t.muted_foreground.into(),
+        theme::rgba_with_alpha(t.muted_foreground.into(), 0.08).into(),
     )
 }
 
-fn scope_badge(text: &'static str, scope: ShortcutScope) -> impl IntoElement {
+fn scope_badge(text: &'static str, scope: ShortcutScope, cx: &App) -> impl IntoElement {
+    let t = Theme::global(cx);
     let color = match scope {
         ShortcutScope::Global => ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Slate),
-        ShortcutScope::App => theme::semantic().text_secondary,
+        ShortcutScope::App => t.muted_foreground.into(),
     };
     div()
         .h(px(20.0))
@@ -1307,26 +1335,27 @@ fn status_badge(text: String, style: (gpui::Rgba, gpui::Rgba)) -> impl IntoEleme
 // ── Shared Layout Helpers ──
 
 fn permission_row(
-    _dark: bool,
+    cx: &App,
     label: &'static str,
     description: &'static str,
     status: PermissionStatus,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
     let (status_text, status_color, status_bg) = match status {
         PermissionStatus::Authorized => (
             "已授权",
-            theme::semantic().success,
-            theme::rgba_with_alpha(theme::semantic().success, 0.1),
+            t.success,
+            theme::rgba_with_alpha(t.success.into(), 0.1),
         ),
         PermissionStatus::NotAuthorized => (
             "未授权",
-            theme::semantic().warning,
-            theme::rgba_with_alpha(theme::semantic().warning, 0.1),
+            t.warning,
+            theme::rgba_with_alpha(t.warning.into(), 0.1),
         ),
         PermissionStatus::Unknown => (
             "尚未实现",
-            theme::semantic().text_secondary,
-            theme::rgba_with_alpha(theme::semantic().text_secondary, 0.08),
+            t.muted_foreground,
+            theme::rgba_with_alpha(t.muted_foreground.into(), 0.08),
         ),
     };
 
@@ -1335,7 +1364,7 @@ fn permission_row(
         .px(theme::space_4())
         .py(theme::space_2())
         .border_b_1()
-        .border_color(theme::semantic().border_default)
+        .border_color(t.border)
         .flex()
         .items_center()
         .justify_between()
@@ -1351,13 +1380,13 @@ fn permission_row(
                     div()
                         .text_size(theme::font_size_body())
                         .font_weight(gpui::FontWeight::MEDIUM)
-                        .text_color(theme::semantic().text_primary)
+                        .text_color(t.foreground)
                         .child(label),
                 )
                 .child(
                     div()
                         .text_size(theme::font_size_caption())
-                        .text_color(theme::semantic().text_secondary)
+                        .text_color(t.muted_foreground)
                         .line_height(px(16.0))
                         .child(description),
                 ),
@@ -1382,25 +1411,26 @@ fn permission_row(
 
 fn accessibility_row(
     entity: Entity<SettingsView>,
-    _dark: bool,
+    cx: &App,
     status: PermissionStatus,
     text: &str,
 ) -> impl IntoElement {
-    let text_secondary = theme::semantic().text_secondary;
-    let text_primary = theme::semantic().text_primary;
+    let t = Theme::global(cx);
+    let text_secondary = t.muted_foreground;
+    let text_primary = t.foreground;
 
     let (status_color, status_bg) = match status {
         PermissionStatus::Authorized => (
-            theme::semantic().success,
-            theme::rgba_with_alpha(theme::semantic().success, 0.1),
+            t.success,
+            theme::rgba_with_alpha(t.success.into(), 0.1),
         ),
         PermissionStatus::NotAuthorized => (
-            theme::semantic().warning,
-            theme::rgba_with_alpha(theme::semantic().warning, 0.1),
+            t.warning,
+            theme::rgba_with_alpha(t.warning.into(), 0.1),
         ),
         PermissionStatus::Unknown => (
-            theme::semantic().text_secondary,
-            theme::rgba_with_alpha(theme::semantic().text_secondary, 0.08),
+            t.muted_foreground,
+            theme::rgba_with_alpha(t.muted_foreground.into(), 0.08),
         ),
     };
 
@@ -1409,7 +1439,7 @@ fn accessibility_row(
         .px(theme::space_4())
         .py(theme::space_2())
         .border_b_1()
-        .border_color(theme::semantic().border_default)
+        .border_color(t.border)
         .flex()
         .items_center()
         .justify_between()
@@ -1461,13 +1491,13 @@ fn accessibility_row(
                         .h(px(28.0))
                         .px_3()
                         .rounded(theme::radius_md())
-                        .bg(theme::semantic().primary)
-                        .hover(|style| style.bg(theme::semantic().primary_hover).cursor_pointer())
+                        .bg(t.primary)
+                        .hover(|style| style.bg(t.primary_hover).cursor_pointer())
                         .flex()
                         .items_center()
                         .justify_center()
                         .text_size(theme::font_size_caption())
-                        .text_color(theme::white())
+                        .text_color(hsla(0., 0., 1., 1.))
                         .child("打开设置")
                         .on_click({
                             let entity = entity.clone();
@@ -1493,12 +1523,13 @@ enum DiagAction {
 
 fn diag_path_row(
     entity: Entity<SettingsView>,
-    _dark: bool,
+    cx: &App,
     label: &'static str,
     _description: &'static str,
     path: &str,
     action: DiagAction,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
     let id_key: &'static str = match action {
         DiagAction::DataDir => "diag-open-data",
         DiagAction::ConfigDir => "diag-open-config",
@@ -1510,7 +1541,7 @@ fn diag_path_row(
         .px(theme::space_4())
         .py(theme::space_2())
         .border_b_1()
-        .border_color(theme::semantic().border_default)
+        .border_color(t.border)
         .flex()
         .items_center()
         .justify_between()
@@ -1526,10 +1557,10 @@ fn diag_path_row(
                     div()
                         .text_size(theme::font_size_body())
                         .font_weight(gpui::FontWeight::MEDIUM)
-                        .text_color(theme::semantic().text_primary)
+                        .text_color(t.foreground)
                         .child(label),
                 )
-                .child(path_badge(path)),
+                .child(path_badge(path, cx)),
         )
         .child(
             div()
@@ -1538,14 +1569,14 @@ fn diag_path_row(
                 .px_3()
                 .rounded(theme::radius_md())
                 .border_1()
-                .border_color(theme::semantic().border_default)
-                .bg(theme::semantic().bg_surface)
-                .hover(|style| style.bg(theme::semantic().bg_subtle).cursor_pointer())
+                .border_color(t.border)
+                .bg(t.list)
+                .hover(|style| style.bg(t.muted).cursor_pointer())
                 .flex()
                 .items_center()
                 .justify_center()
                 .text_size(theme::font_size_caption())
-                .text_color(theme::semantic().text_primary)
+                .text_color(t.foreground)
                 .child("打开")
                 .on_click({
                     let entity = entity.clone();
@@ -1563,9 +1594,10 @@ fn diag_path_row(
         )
 }
 
-fn disabled_badge(text: &'static str) -> impl IntoElement {
-    let status_color = theme::semantic().text_secondary;
-    let status_bg = theme::rgba_with_alpha(theme::semantic().text_secondary, 0.08);
+fn disabled_badge(text: &'static str, cx: &App) -> impl IntoElement {
+    let t = Theme::global(cx);
+    let status_color = t.muted_foreground;
+    let status_bg = theme::rgba_with_alpha(t.muted_foreground.into(), 0.08);
 
     div()
         .h(px(28.0))
@@ -1581,41 +1613,43 @@ fn disabled_badge(text: &'static str) -> impl IntoElement {
         .child(text)
 }
 
-fn path_badge(path: &str) -> impl IntoElement {
+fn path_badge(path: &str, cx: &App) -> impl IntoElement {
+    let t = Theme::global(cx);
     div()
         .h(px(28.0))
         .px_2()
         .rounded(theme::radius_sm())
-        .bg(theme::semantic().bg_subtle)
+        .bg(t.muted)
         .border_1()
-        .border_color(theme::semantic().border_default)
+        .border_color(t.border)
         .flex()
         .items_center()
         .font_family("SF Mono")
         .text_size(theme::font_size_caption())
-        .text_color(theme::semantic().text_secondary)
+        .text_color(t.muted_foreground)
         .child(path.to_string())
 }
 
 fn action_button(
-    _dark: bool,
+    cx: &App,
     label: &'static str,
     primary: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
     if primary {
         div()
             .id(label)
             .h(px(28.0))
             .px_3()
             .rounded(theme::radius_md())
-            .bg(theme::semantic().primary)
-            .hover(|style| style.bg(theme::semantic().primary_hover).cursor_pointer())
+            .bg(t.primary)
+            .hover(|style| style.bg(t.primary_hover).cursor_pointer())
             .flex()
             .items_center()
             .justify_center()
             .text_size(theme::font_size_caption())
-            .text_color(theme::white())
+            .text_color(hsla(0., 0., 1., 1.))
             .child(label)
             .on_click(move |event, window, cx| on_click(event, window, cx))
     } else {
@@ -1624,15 +1658,15 @@ fn action_button(
             .h(px(28.0))
             .px_3()
             .rounded(theme::radius_md())
-            .bg(theme::semantic().bg_surface)
+            .bg(t.list)
             .border_1()
-            .border_color(theme::semantic().border_default)
-            .hover(|style| style.bg(theme::semantic().bg_subtle).cursor_pointer())
+            .border_color(t.border)
+            .hover(|style| style.bg(t.muted).cursor_pointer())
             .flex()
             .items_center()
             .justify_center()
             .text_size(theme::font_size_caption())
-            .text_color(theme::semantic().text_primary)
+            .text_color(t.foreground)
             .child(label)
             .on_click(move |event, window, cx| on_click(event, window, cx))
     }
@@ -1643,33 +1677,34 @@ fn action_button(
 fn mode_segment(
     entity: Entity<SettingsView>,
     current_mode: ThemeMode,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
     div()
         .flex()
         .gap(px(2.0))
         .p(px(2.0))
         .rounded(theme::radius_md())
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_subtle)
+        .border_color(t.border)
+        .bg(t.muted)
         .child(seg_button(
             entity.clone(),
             ThemeMode::Light,
             current_mode,
-            dark,
+            cx,
         ))
         .child(seg_button(
             entity.clone(),
             ThemeMode::Dark,
             current_mode,
-            dark,
+            cx,
         ))
         .child(seg_button(
             entity.clone(),
             ThemeMode::System,
             current_mode,
-            dark,
+            cx,
         ))
 }
 
@@ -1677,13 +1712,14 @@ fn seg_button(
     entity: Entity<SettingsView>,
     mode: ThemeMode,
     current_mode: ThemeMode,
-    _dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
     let active = current_mode == mode;
     let text_color = if active {
-        theme::semantic().primary
+        t.primary
     } else {
-        theme::semantic().text_secondary
+        t.muted_foreground
     };
 
     let mut btn = div()
@@ -1698,7 +1734,7 @@ fn seg_button(
         .font_weight(gpui::FontWeight::MEDIUM)
         .text_color(text_color)
         .child(mode_short_label(mode))
-        .hover(move |style| style.bg(theme::semantic().bg_surface).cursor_pointer())
+        .hover(move |style| style.bg(t.list).cursor_pointer())
         .on_click({
             let entity = entity.clone();
             move |_, _window, cx| {
@@ -1711,11 +1747,11 @@ fn seg_button(
 
     if active {
         btn = btn
-            .bg(theme::semantic().bg_surface)
+            .bg(t.list)
             .border_1()
-            .border_color(theme::semantic().primary_soft)
+            .border_color(theme::rgba_with_alpha(t.primary.into(), 0.15))
             .shadow(vec![gpui::BoxShadow {
-                color: theme::rgba_with_alpha(theme::semantic().shadow, 0.06),
+                color: hsla(0., 0., 0., 0.06),
                 offset: gpui::point(px(0.0), px(2.0)),
                 blur_radius: px(6.0),
                 spread_radius: px(0.0),
@@ -1723,6 +1759,19 @@ fn seg_button(
     }
 
     btn
+}
+
+// ── Theme Selector ───────────────────────────────────────────────────────
+
+fn theme_selector(
+    _entity: Entity<SettingsView>,
+    cx: &App,
+) -> impl IntoElement {
+    let t = Theme::global(cx);
+    div()
+        .text_size(theme::font_size_caption())
+        .text_color(t.muted_foreground)
+        .child("选择主题（即将推出）")
 }
 
 fn mode_short_label(mode: ThemeMode) -> &'static str {

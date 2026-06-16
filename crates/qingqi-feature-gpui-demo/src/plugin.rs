@@ -10,6 +10,7 @@ use gpui_component::{
     slider::{Slider, SliderState},
     switch::Switch,
     tab::TabBar,
+    theme::Theme,
 };
 use std::sync::Arc;
 
@@ -81,20 +82,20 @@ struct GpuiDemoView {
 impl Render for GpuiDemoView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = PluginAccent::Purple;
+        let t = Theme::global(cx);
 
-        // Pre-read slider value so helper functions do not need App
         let slider_value = self.slider.read(cx).value().start() as i32;
 
         div()
             .size_full()
-            .bg(theme::semantic().bg_page)
+            .bg(t.background)
             .font_family(ui::font_ui())
-            .text_color(theme::semantic().text_primary)
+            .text_color(t.foreground)
             .flex()
             .flex_col()
             .p_4()
             .gap_3()
-            .child(header(accent))
+            .child(header(accent, cx))
             .child(
                 div()
                     .flex_1()
@@ -106,23 +107,26 @@ impl Render for GpuiDemoView {
                         self.checkbox_checked,
                         slider_value,
                         &self.slider,
+                        cx,
                     ))
-                    .child(layout_column(self.active_tab))
-                    .child(state_column(accent)),
+                    .child(layout_column(self.active_tab, cx))
+                    .child(state_column(accent, cx)),
             )
             .child(ui::status_bar(
                 "gpui-component 组件演示 — 点击按钮、切换 tab、调整 slider 查看交互效果",
-                theme::semantic().text_secondary,
+                t.muted_foreground,
+                cx,
             ))
     }
 }
 
-fn header(accent: PluginAccent) -> impl IntoElement {
+fn header(accent: PluginAccent, cx: &App) -> impl IntoElement {
+    let t = Theme::global(cx);
     div()
         .rounded(theme::radius_lg())
-        .bg(theme::semantic().bg_surface)
+        .bg(t.list)
         .border_1()
-        .border_color(theme::semantic().border_default)
+        .border_color(t.border)
         .p_4()
         .flex()
         .items_center()
@@ -148,13 +152,14 @@ fn header(accent: PluginAccent) -> impl IntoElement {
                     div()
                         .text_size(px(12.0))
                         .line_height(px(18.0))
-                        .text_color(theme::semantic().text_body)
+                        .text_color(t.muted_foreground)
                         .child("用 gpui-component 真实组件替代静态描述，验证按钮、标签页、开关等控件的交互行为。"),
                 ),
         )
         .child(components::status_pill(
             "预览",
             components::StatusTone::Warning,
+            cx,
         ))
 }
 
@@ -163,13 +168,15 @@ fn component_column(
     checkbox_checked: bool,
     slider_value: i32,
     slider: &Entity<SliderState>,
+    cx: &App,
 ) -> impl IntoElement {
-    panel("基础控件")
+    let t = Theme::global(cx);
+    panel("基础控件", cx)
         .child(
             div()
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic().text_secondary)
+                .text_color(t.muted_foreground)
                 .child("Button 变体"),
         )
         .child(
@@ -209,7 +216,7 @@ fn component_column(
                 .mt_1()
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic().text_secondary)
+                .text_color(t.muted_foreground)
                 .child("Switch / Checkbox"),
         )
         .child(
@@ -233,21 +240,22 @@ fn component_column(
                 .mt_1()
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic().text_secondary)
+                .text_color(t.muted_foreground)
                 .child(format!("Slider — {}", slider_value)),
         )
         .child(Slider::new(slider).horizontal())
 }
 
-fn layout_column(active_tab: usize) -> impl IntoElement {
+fn layout_column(active_tab: usize, cx: &App) -> impl IntoElement {
+    let t = Theme::global(cx);
     let tabs = vec!["概览", "设置", "历史"];
 
-    panel("布局模式")
+    panel("布局模式", cx)
         .child(
             div()
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic().text_secondary)
+                .text_color(t.muted_foreground)
                 .child("TabBar — Underline"),
         )
         .child(
@@ -259,9 +267,9 @@ fn layout_column(active_tab: usize) -> impl IntoElement {
         .child(
             div()
                 .rounded(theme::radius_md())
-                .bg(theme::semantic().bg_subtle_2)
+                .bg(t.muted)
                 .border_1()
-                .border_color(theme::semantic().border_default)
+                .border_color(t.border)
                 .p_3()
                 .text_size(px(13.0))
                 .child(format!(
@@ -274,7 +282,7 @@ fn layout_column(active_tab: usize) -> impl IntoElement {
                 .mt_1()
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic().text_secondary)
+                .text_color(t.muted_foreground)
                 .child("TabBar — Segmented"),
         )
         .child(
@@ -288,31 +296,34 @@ fn layout_column(active_tab: usize) -> impl IntoElement {
                 .mt_1()
                 .rounded(theme::radius_md())
                 .border_1()
-                .border_color(theme::semantic().border_default)
+                .border_color(t.border)
                 .overflow_hidden()
-                .child(sample_strip("左侧导航", 0.28))
-                .child(sample_strip("中间内容", 0.42))
-                .child(sample_strip("右侧详情", 0.30)),
+                .child(sample_strip("左侧导航", 0.28, cx))
+                .child(sample_strip("中间内容", 0.42, cx))
+                .child(sample_strip("右侧详情", 0.30, cx)),
         )
 }
 
-fn state_column(accent: PluginAccent) -> impl IntoElement {
-    panel("状态与服务")
+fn state_column(accent: PluginAccent, cx: &App) -> impl IntoElement {
+    panel("状态与服务", cx)
         .child(demo_row(
             accent,
             "Runtime",
             "长生命周期，持有 service、cache、background handle",
+            cx,
         ))
         .child(demo_row(
             accent,
             "Session",
             "窗口生命周期，只持有 UI entity state",
+            cx,
         ))
-        .child(demo_row(accent, "Service", "可单测业务逻辑，不依赖 GPUI"))
+        .child(demo_row(accent, "Service", "可单测业务逻辑，不依赖 GPUI", cx))
         .child(demo_row(
             accent,
             "Store",
             "持久化和分页查询，锁短、连接可控",
+            cx,
         ))
         .child(
             div()
@@ -325,13 +336,14 @@ fn state_column(accent: PluginAccent) -> impl IntoElement {
         )
 }
 
-fn panel(title: &'static str) -> gpui::Div {
+fn panel(title: &'static str, cx: &App) -> gpui::Div {
+    let t = Theme::global(cx);
     div()
         .flex_1()
         .rounded(theme::radius_lg())
-        .bg(theme::semantic().bg_surface)
+        .bg(t.list)
         .border_1()
-        .border_color(theme::semantic().border_default)
+        .border_color(t.border)
         .p_4()
         .flex()
         .flex_col()
@@ -347,12 +359,13 @@ fn panel(title: &'static str) -> gpui::Div {
         )
 }
 
-fn demo_row(accent: PluginAccent, title: &'static str, body: &'static str) -> impl IntoElement {
+fn demo_row(accent: PluginAccent, title: &'static str, body: &'static str, cx: &App) -> impl IntoElement {
+    let t = Theme::global(cx);
     div()
         .rounded(theme::radius_md())
-        .bg(theme::semantic().bg_subtle_2)
+        .bg(t.muted)
         .border_1()
-        .border_color(theme::semantic().border_default)
+        .border_color(t.border)
         .p_3()
         .flex()
         .gap_2()
@@ -385,24 +398,25 @@ fn demo_row(accent: PluginAccent, title: &'static str, body: &'static str) -> im
                     div()
                         .text_size(px(11.0))
                         .line_height(px(16.0))
-                        .text_color(theme::semantic().text_body)
+                        .text_color(t.muted_foreground)
                         .child(body),
                 ),
         )
 }
 
-fn sample_strip(label: &'static str, width_ratio: f32) -> impl IntoElement {
+fn sample_strip(label: &'static str, width_ratio: f32, cx: &App) -> impl IntoElement {
+    let t = Theme::global(cx);
     let width = 240.0 * width_ratio;
     div()
         .h(px(34.0))
         .w(px(width))
-        .bg(theme::semantic().bg_subtle)
+        .bg(t.muted)
         .border_b_1()
-        .border_color(theme::semantic().border_default)
+        .border_color(t.border)
         .flex()
         .items_center()
         .px_2()
         .text_size(px(11.0))
-        .text_color(theme::semantic().text_secondary)
+        .text_color(t.muted_foreground)
         .child(SharedString::from(label))
 }

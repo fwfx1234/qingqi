@@ -5762,6 +5762,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "gpui",
+ "gpui-component",
  "qingqi-plugin",
  "qingqi-ui",
 ]
@@ -5970,6 +5971,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "gpui",
+ "gpui-component",
  "qingqi-platform",
  "qingqi-plugin",
  "qingqi-ui",
