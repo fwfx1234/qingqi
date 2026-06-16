@@ -24,6 +24,7 @@ use crate::{
         app_catalog::AppCatalog,
         app_index::AppIndexService,
         background::BackgroundSupervisor,
+        theme_service::ThemeService,
         theme_store::ThemeStore,
         window_controller::{PluginOpenTrace, WindowController, WindowControllerHandle},
     },
@@ -222,6 +223,25 @@ pub fn run(host: AppHost) -> Result<()> {
     let database_for_shutdown = Arc::clone(&build_cx.database);
     app.run(move |cx| {
         gpui_component::init(cx);
+
+        // 初始化主题服务
+        let themes_dir = paths.data_dir().join("config").join("themes");
+        let theme_service = ThemeService::new(themes_dir);
+        if let Err(e) = theme_service.init(cx) {
+            tracing::error!(error = %e, "failed to init theme service");
+        }
+
+        // 应用已保存的主题
+        let initial_theme = theme_store
+            .read()
+            .map(|s| s.theme().to_string())
+            .unwrap_or_else(|_| "Default".to_string());
+        let initial_mode = theme_store
+            .read()
+            .map(|s| s.mode())
+            .unwrap_or_default();
+        ThemeService::apply_theme(&initial_theme, initial_mode, cx);
+
         qingqi_ui::text_input::TextInput::register_bindings(cx);
 
         cx.on_action({

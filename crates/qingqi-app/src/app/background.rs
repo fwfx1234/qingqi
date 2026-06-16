@@ -6,6 +6,8 @@ use std::{
 use global_hotkey::HotKeyState;
 use gpui::{App, Global, Task};
 
+use gpui_component::theme::Theme;
+
 use crate::{
     app::{
         theme_store::ThemeStore,
@@ -191,10 +193,11 @@ impl BackgroundSupervisor {
                     break;
                 }
                 let store = Arc::clone(&theme_store);
-                let _ = async_cx.update(move |_cx| {
+                let _ = async_cx.update(move |cx| {
                     if let Ok(mut ts) = store.write() {
                         let _ = ts.sync_system_changed();
                     }
+                    Theme::sync_system_appearance(None, cx);
                 });
             }
         });

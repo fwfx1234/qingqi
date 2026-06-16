@@ -4,5 +4,6 @@ pub mod app_index_store;
 pub mod background;
 pub mod launcher;
 pub mod runtime;
+pub mod theme_service;
 pub mod theme_store;
 pub mod window_controller;
