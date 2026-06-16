@@ -1,5 +1,5 @@
 use gpui::{AnyElement, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Styled, Window, div, px, prelude::FluentBuilder};
-use qingqi_ui::{theme, ui};
+use qingqi_ui::theme;
 
 /// A styled dropdown menu item.
 ///
@@ -42,19 +42,23 @@ impl DropdownItem {
 /// Items are rendered with rounded highlights on hover and a subtle
 /// accent background for the active item. The list has a border, shadow,
 /// and consistent padding.
-pub fn dropdown_list(items: Vec<DropdownItem>) -> impl IntoElement {
-    let accent = theme::semantic().primary;
+pub fn dropdown_list(
+    items: Vec<DropdownItem>,
+    accent: Hsla,
+    bg: Hsla,
+    border: Hsla,
+) -> impl IntoElement {
     div()
         .py(px(4.0))
         .border_1()
-        .border_color(ui::border_light())
-        .bg(theme::semantic().bg_surface)
+        .border_color(border)
+        .bg(bg)
         .rounded(px(8.0))
         .shadow_md()
         .overflow_hidden()
         .flex()
         .flex_col()
-        .children(items.into_iter().map(|item| {
+        .children(items.into_iter().map(move |item| {
             let active = item.active;
             let element = item.element;
             let on_select = item.on_select;
@@ -66,12 +70,12 @@ pub fn dropdown_list(items: Vec<DropdownItem>) -> impl IntoElement {
                 .my(px(1.0))
                 .rounded(px(5.0))
                 .bg(if active {
-                    theme::rgba_with_alpha(accent, 0.08)
+                    theme::rgba_with_alpha(accent.into(), 0.08)
                 } else {
                     Hsla::default()
                 })
-                .hover(|s| {
-                    s.bg(theme::rgba_with_alpha(accent, 0.05))
+                .hover(move |s| {
+                    s.bg(theme::rgba_with_alpha(accent.into(), 0.05))
                         .cursor_pointer()
                 })
                 .child(element)

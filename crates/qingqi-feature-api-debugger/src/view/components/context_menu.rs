@@ -2,6 +2,7 @@ use gpui::{
     App, Entity, IntoElement, InteractiveElement, MouseButton, ParentElement,
     StatefulInteractiveElement, Styled, div, px, prelude::FluentBuilder,
 };
+use gpui_component::theme::Theme;
 use gpui_component::{IconName, Sizable, Size, button::{Button, ButtonVariants}};
 use qingqi_ui::{theme, ui};
 use crate::view::ApiDebuggerView;
@@ -14,7 +15,7 @@ pub fn context_menu_overlay(
     position: Option<(f32, f32)>,
     node_id: String,
     kind: MenuKind,
-    _dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     let (x, y) = position.unwrap_or((248.0, 96.0));
     div()
@@ -45,20 +46,20 @@ pub fn context_menu_overlay(
                 .left(px(x))
                 .w(px(230.0))
                 .border_1()
-                .border_color(ui::border_light())
-                .bg(theme::semantic().bg_surface)
+                .border_color(ui::border_light(cx))
+                .bg(Theme::global(cx).list)
                 .rounded(px(8.0))
                 .shadow_md()
                 .overflow_hidden()
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .flex()
                 .flex_col()
-                .child(menu_header(title, kind))
-                .children(build_menu_items(view.clone(), kind, node_id)),
+                .child(menu_header(title, kind, cx))
+                .children(build_menu_items(view.clone(), kind, node_id, cx)),
         )
 }
 
-fn menu_header(title: String, kind: MenuKind) -> impl IntoElement {
+fn menu_header(title: String, kind: MenuKind, cx: &App) -> impl IntoElement {
     let icon = match kind {
         MenuKind::Folder => IconName::Folder,
         MenuKind::Request => IconName::SquareTerminal,
@@ -68,10 +69,10 @@ fn menu_header(title: String, kind: MenuKind) -> impl IntoElement {
         .px(px(12.0))
         .py(px(9.0))
         .border_b_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .text_size(px(13.0))
         .font_weight(gpui::FontWeight::SEMIBOLD)
-        .text_color(api_accent())
+        .text_color(api_accent(cx))
         .flex()
         .items_center()
         .gap(px(6.0))
@@ -88,17 +89,19 @@ fn build_menu_items(
     view: Entity<ApiDebuggerView>,
     kind: MenuKind,
     node_id: String,
+    cx: &App,
 ) -> Vec<gpui::AnyElement> {
     match kind {
-        MenuKind::Folder => folder_menu_items(view, node_id),
-        MenuKind::Request => request_menu_items(view, node_id),
-        MenuKind::Scenario => scenario_menu_items(view, node_id),
+        MenuKind::Folder => folder_menu_items(view, node_id, cx),
+        MenuKind::Request => request_menu_items(view, node_id, cx),
+        MenuKind::Scenario => scenario_menu_items(view, node_id, cx),
     }
 }
 
 fn folder_menu_items(
     view: Entity<ApiDebuggerView>,
     _node_id: String,
+    cx: &App,
 ) -> Vec<gpui::AnyElement> {
     vec![
         menu_item(
@@ -111,6 +114,7 @@ fn folder_menu_items(
                     view.update(cx, |view, _cx| view.create_new_folder());
                 }
             },
+            cx,
         ),
         menu_item(
             "api-collection-menu-new-request",
@@ -122,8 +126,9 @@ fn folder_menu_items(
                     view.update(cx, |view, _cx| view.create_new_endpoint());
                 }
             },
+            cx,
         ),
-        menu_separator(),
+        menu_separator(cx),
         menu_item(
             "api-collection-menu-import-curl",
             "导入 cURL",
@@ -136,6 +141,7 @@ fn folder_menu_items(
                     });
                 }
             },
+            cx,
         ),
         menu_item(
             "api-collection-menu-import-openapi",
@@ -147,6 +153,7 @@ fn folder_menu_items(
                     view.update(cx, |view, _cx| view.import_openapi_file());
                 }
             },
+            cx,
         ),
         menu_item(
             "api-collection-menu-import-postman",
@@ -158,6 +165,7 @@ fn folder_menu_items(
                     view.update(cx, |view, _cx| view.import_postman_file());
                 }
             },
+            cx,
         ),
         menu_item(
             "api-collection-menu-export-openapi",
@@ -169,8 +177,9 @@ fn folder_menu_items(
                     view.update(cx, |view, _cx| view.export_openapi());
                 }
             },
+            cx,
         ),
-        menu_separator(),
+        menu_separator(cx),
         menu_item(
             "api-collection-menu-rename",
             "重命名",
@@ -181,8 +190,9 @@ fn folder_menu_items(
                     view.update(cx, |view, cx| view.open_rename(cx));
                 }
             },
+            cx,
         ),
-        menu_separator(),
+        menu_separator(cx),
         menu_item(
             "api-collection-menu-delete",
             "删除",
@@ -193,6 +203,7 @@ fn folder_menu_items(
                     view.update(cx, |view, _cx| view.delete_selected_collection_item());
                 }
             },
+            cx,
         ),
     ]
 }
@@ -200,6 +211,7 @@ fn folder_menu_items(
 fn request_menu_items(
     view: Entity<ApiDebuggerView>,
     node_id: String,
+    cx: &App,
 ) -> Vec<gpui::AnyElement> {
     vec![
         menu_item(
@@ -212,8 +224,9 @@ fn request_menu_items(
                     view.update(cx, |view, _cx| view.create_new_case());
                 }
             },
+            cx,
         ),
-        menu_separator(),
+        menu_separator(cx),
         menu_item(
             "api-collection-menu-copy-path",
             "复制路径",
@@ -248,8 +261,9 @@ fn request_menu_items(
                     }
                 }
             },
+            cx,
         ),
-        menu_separator(),
+        menu_separator(cx),
         menu_item(
             "api-collection-menu-rename",
             "重命名",
@@ -260,8 +274,9 @@ fn request_menu_items(
                     view.update(cx, |view, cx| view.open_rename(cx));
                 }
             },
+            cx,
         ),
-        menu_separator(),
+        menu_separator(cx),
         menu_item(
             "api-collection-menu-delete",
             "删除",
@@ -272,6 +287,7 @@ fn request_menu_items(
                     view.update(cx, |view, _cx| view.delete_selected_collection_item());
                 }
             },
+            cx,
         ),
     ]
 }
@@ -279,6 +295,7 @@ fn request_menu_items(
 fn scenario_menu_items(
     view: Entity<ApiDebuggerView>,
     _node_id: String,
+    cx: &App,
 ) -> Vec<gpui::AnyElement> {
     vec![
         menu_item(
@@ -291,8 +308,9 @@ fn scenario_menu_items(
                     view.update(cx, |view, cx| view.open_rename(cx));
                 }
             },
+            cx,
         ),
-        menu_separator(),
+        menu_separator(cx),
         menu_item(
             "api-collection-menu-delete",
             "删除",
@@ -303,6 +321,7 @@ fn scenario_menu_items(
                     view.update(cx, |view, _cx| view.delete_selected_collection_item());
                 }
             },
+            cx,
         ),
     ]
 }
@@ -312,16 +331,17 @@ fn menu_item(
     label: &'static str,
     shortcut: &'static str,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
+    cx: &App,
 ) -> gpui::AnyElement {
     div()
         .id(id)
         .px(px(12.0))
         .py(px(8.0))
         .text_size(px(11.0))
-        .text_color(theme::semantic().text_body)
+        .text_color(Theme::global(cx).muted_foreground)
         .hover(move |style| {
             style
-                .bg(theme::rgba_with_alpha(api_accent(), 0.06))
+                .bg(theme::rgba_with_alpha(api_accent(cx), 0.06))
                 .cursor_pointer()
         })
         .flex()
@@ -332,7 +352,7 @@ fn menu_item(
             row.child(
                 div()
                     .text_size(px(10.0))
-                    .text_color(ui::text_tertiary())
+                    .text_color(ui::text_tertiary(cx))
                     .child(shortcut),
             )
         })
@@ -343,6 +363,6 @@ fn menu_item(
         .into_any_element()
 }
 
-fn menu_separator() -> gpui::AnyElement {
-    div().h(px(1.0)).bg(ui::border_light()).into_any_element()
+fn menu_separator(cx: &App) -> gpui::AnyElement {
+    div().h(px(1.0)).bg(ui::border_light(cx)).into_any_element()
 }

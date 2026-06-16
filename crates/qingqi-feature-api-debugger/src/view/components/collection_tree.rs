@@ -1,13 +1,15 @@
 use std::collections::HashSet;
 
 use gpui::{
-    Entity, InteractiveElement, IntoElement, MouseButton, ParentElement,
+    App, Entity, InteractiveElement, IntoElement, MouseButton, ParentElement,
     StatefulInteractiveElement, Styled, div, px,
 };
 use gpui_component::list::ListItem;
+use gpui_component::theme::Theme;
 use gpui_component::tree::{tree, TreeItem, TreeState};
 use gpui_component::menu::{ContextMenuExt, PopupMenuItem};
 use gpui_component::{Icon, IconName};
+use qingqi_ui::{theme, ui};
 use crate::service::{ApiGroup, HttpMethod};
 use crate::view::ApiDebuggerView;
 
@@ -69,7 +71,7 @@ pub fn build_tree_items(groups: &[ApiGroup], global_req_index: &mut usize, colla
 pub fn collection_tree(
     view: Entity<ApiDebuggerView>,
     tree_state: Entity<TreeState>,
-    _dark: bool,
+    _cx: &App,
 ) -> impl IntoElement {
     let ts = tree_state.clone();
 
@@ -109,15 +111,15 @@ pub fn collection_tree(
                             .child(
                                 Icon::new(IconName::SquareTerminal)
                                     .size(px(12.0))
-                                    .text_color(qingqi_ui::ui::text_tertiary()),
+                                    .text_color(ui::text_tertiary(cx)),
                             )
                             .child(
                                 div()
                                     .text_size(px(11.0))
                                     .text_color(if selected {
-                                        qingqi_ui::theme::semantic().primary
+                                        Theme::global(cx).primary
                                     } else {
-                                        qingqi_ui::ui::text_secondary()
+                                        ui::text_secondary(cx)
                                     })
                                     .truncate()
                                     .child(label_clone.clone()),
@@ -171,11 +173,11 @@ pub fn collection_tree(
                                         if is_expanded { IconName::ChevronDown } else { IconName::ChevronRight },
                                     )
                                     .size(px(12.0))
-                                    .text_color(qingqi_ui::ui::text_tertiary())
+                                    .text_color(ui::text_tertiary(cx))
                                 } else {
                                     Icon::new(IconName::Folder)
                                         .size(px(12.0))
-                                        .text_color(qingqi_ui::ui::text_tertiary())
+                                        .text_color(ui::text_tertiary(cx))
                                 },
                             )
                             .child(
@@ -183,13 +185,13 @@ pub fn collection_tree(
                                     if is_expanded { IconName::FolderOpen } else { IconName::FolderClosed },
                                 )
                                 .size(px(14.0))
-                                .text_color(qingqi_ui::theme::semantic().primary),
+                                .text_color(Theme::global(cx).primary),
                             )
                             .child(
                                 div()
                                     .text_size(px(12.0))
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .text_color(qingqi_ui::ui::text_secondary())
+                                    .text_color(ui::text_secondary(cx))
                                     .truncate()
                                     .child(label_clone.clone()),
                             )
@@ -263,7 +265,7 @@ pub fn collection_tree(
                         "OPTIONS" => HttpMethod::Options,
                         _ => HttpMethod::Get,
                     };
-                    let method_color = qingqi_ui::theme::http_method_color(method.label());
+                    let method_color = theme::http_method_color(method.label(), Theme::global(cx).is_dark());
                     let display_name = label_clone.splitn(2, "  ").nth(1).unwrap_or(&label_clone).to_string();
 
                     let req_idx: usize = id_clone.splitn(4, ':').nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
@@ -301,12 +303,12 @@ pub fn collection_tree(
                                 if entry.is_expanded() { IconName::ChevronDown } else { IconName::ChevronRight },
                             )
                             .size(px(12.0))
-                            .text_color(qingqi_ui::ui::text_tertiary())
+                            .text_color(ui::text_tertiary(cx))
                             .into_any_element()
                         } else {
                             Icon::new(IconName::SquareTerminal)
                                 .size(px(12.0))
-                                .text_color(qingqi_ui::ui::text_tertiary())
+                                .text_color(ui::text_tertiary(cx))
                                 .into_any_element()
                         };
                         list_item = list_item.child(
@@ -316,7 +318,7 @@ pub fn collection_tree(
                                 .py(px(4.0))
                                 .h(px(30.0))
                                 .rounded(px(4.0))
-                                .bg(qingqi_ui::theme::semantic().bg_elevated)
+                                .bg(Theme::global(cx).popover)
                                 .flex()
                                 .items_center()
                                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
@@ -407,12 +409,12 @@ pub fn collection_tree(
                                 if entry.is_expanded() { IconName::ChevronDown } else { IconName::ChevronRight },
                             )
                             .size(px(12.0))
-                            .text_color(qingqi_ui::ui::text_tertiary())
+                            .text_color(ui::text_tertiary(cx))
                             .into_any_element()
                         } else {
                             Icon::new(IconName::SquareTerminal)
                                 .size(px(12.0))
-                                .text_color(qingqi_ui::ui::text_tertiary())
+                                .text_color(ui::text_tertiary(cx))
                                 .into_any_element()
                         };
                         list_item = list_item.child(

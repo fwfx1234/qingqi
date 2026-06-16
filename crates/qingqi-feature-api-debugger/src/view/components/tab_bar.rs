@@ -1,6 +1,7 @@
-use gpui::{rgb, Entity, IntoElement, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled, div, px, prelude::FluentBuilder};
+use gpui::{rgb, App, Entity, IntoElement, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled, div, px, prelude::FluentBuilder};
 use gpui_component::popover::Popover;
 use gpui_component::tab::{Tab, TabBar};
+use gpui_component::theme::Theme;
 use gpui_component::{Icon, IconName, Sizable, Size, button::{Button, ButtonVariants}};
 use qingqi_ui::{theme, ui};
 use crate::service::ApiEnvironment;
@@ -19,9 +20,9 @@ pub fn open_tabs_bar(
     environments: Vec<ApiEnvironment>,
     selected_env_index: usize,
     show_env_popover: bool,
-    _dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
-    let border = ui::border_light();
+    let border = ui::border_light(cx);
     let active_index = tabs.iter().position(|t| *t == active_tab).unwrap_or(0);
 
     let current_env = environments.get(selected_env_index).cloned()
@@ -73,7 +74,7 @@ pub fn open_tabs_bar(
                                     .child(
                                         div()
                                             .text_size(px(9.0))
-                                            .text_color(ui::text_tertiary())
+                                            .text_color(ui::text_tertiary(cx))
                                             .child("\u{25BE}"),
                                     ),
                             )
@@ -82,6 +83,9 @@ pub fn open_tabs_bar(
                         let v = view.clone();
                         let envs2 = envs.clone();
                         let idx = selected_idx;
+                        let accent = Theme::global(_cx).primary;
+                        let bg = Theme::global(_cx).list;
+                        let border = ui::border_light(_cx);
                         dropdown_list(
                             envs2.into_iter().enumerate().map(|(i, env)| {
                                 let active = i == idx;
@@ -103,7 +107,7 @@ pub fn open_tabs_bar(
                                                     div()
                                                         .text_size(px(12.0))
                                                         .font_weight(gpui::FontWeight::MEDIUM)
-                                                        .text_color(theme::semantic().text_primary)
+                                                        .text_color(Theme::global(_cx).foreground)
                                                         .truncate()
                                                         .child(env.name.clone()),
                                                 )
@@ -111,7 +115,7 @@ pub fn open_tabs_bar(
                                                     div()
                                                         .font_family("SF Mono")
                                                         .text_size(px(10.0))
-                                                        .text_color(ui::text_tertiary())
+                                                        .text_color(ui::text_tertiary(_cx))
                                                         .truncate()
                                                         .child(env.base_url.clone()),
                                                 ),
@@ -121,7 +125,7 @@ pub fn open_tabs_bar(
                                                 div()
                                                     .text_size(px(12.0))
                                                     .font_weight(gpui::FontWeight::BOLD)
-                                                    .text_color(theme::semantic().primary)
+                                                    .text_color(Theme::global(_cx).primary)
                                                     .child("\u{2713}"),
                                             )
                                         }),
@@ -137,6 +141,9 @@ pub fn open_tabs_bar(
                                     }
                                 })
                             }).collect(),
+                            accent,
+                            bg,
+                            border,
                         )
                     })
             })
@@ -150,11 +157,11 @@ pub fn open_tabs_bar(
                     .justify_center()
                     .rounded(px(4.0))
                     .cursor_pointer()
-                    .hover(|s| s.bg(ui::bg_hover()))
+                    .hover(|s| s.bg(ui::bg_hover(cx)))
                     .child(
                         Icon::new(IconName::Settings)
                             .size(px(12.0))
-                            .text_color(ui::text_tertiary()),
+                            .text_color(ui::text_tertiary(cx)),
                     )
                     .on_click(move |_, _, cx| {
                         open_env_editor_window(view.clone(), cx);
@@ -169,7 +176,7 @@ pub fn open_tabs_bar(
         .min_h(px(TAB_BAR_HEIGHT))
         .flex_shrink_0()
         .relative()
-        .bg(ui::bg_surface())
+        .bg(ui::bg_surface(cx))
         .child(
             div()
                 .absolute()
@@ -215,7 +222,7 @@ pub fn open_tabs_bar(
                                 .rounded(px(4.0))
                                 .cursor_pointer()
                                 .hover(|s| {
-                                    s.bg(theme::rgba_with_alpha(ui::text_tertiary(), 0.12))
+                                    s.bg(theme::rgba_with_alpha(ui::text_tertiary(cx).into(), 0.12))
                                 })
                                 .on_click(move |_, _, cx| {
                                     cx.stop_propagation();
@@ -226,7 +233,7 @@ pub fn open_tabs_bar(
                                 .child(
                                     Icon::new(IconName::Close)
                                         .size(px(10.0))
-                                        .text_color(ui::text_tertiary()),
+                                        .text_color(ui::text_tertiary(cx)),
                                 ),
                         )
                 })),

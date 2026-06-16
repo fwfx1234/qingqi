@@ -2,6 +2,7 @@ use gpui::{
     App, Entity, IntoElement, InteractiveElement, ParentElement, StatefulInteractiveElement,
     Styled, div, hsla, px,
 };
+use gpui_component::theme::Theme;
 use qingqi_ui::{theme, ui, ui::glass};
 use qingqi_ui::text_input::TextInput;
 use crate::view::ApiDebuggerView;
@@ -9,7 +10,7 @@ use crate::view::ApiDebuggerView;
 pub fn curl_import_dialog(
     view: Entity<ApiDebuggerView>,
     curl_import_input: Entity<TextInput>,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     let import_view = view.clone();
     let cancel_view = view.clone();
@@ -17,8 +18,8 @@ pub fn curl_import_dialog(
         .w(px(560.0))
         .rounded(px(16.0))
         .border_1()
-        .border_color(glass::border(dark))
-        .bg(glass::bg(dark))
+        .border_color(glass::border(cx))
+        .bg(glass::bg(cx))
         .overflow_hidden()
         .flex()
         .flex_col()
@@ -27,17 +28,17 @@ pub fn curl_import_dialog(
                 .h(px(44.0))
                 .px(px(18.0))
                 .border_b_1()
-                .border_color(ui::border_light())
+                .border_color(ui::border_light(cx))
                 .bg(theme::rgba_with_alpha(
-                    theme::semantic().bg_surface,
-                    if dark { 0.34 } else { 0.52 },
+                    Theme::global(cx).list.into(),
+                    if Theme::global(cx).is_dark() { 0.34 } else { 0.52 },
                 ))
                 .flex()
                 .items_center()
                 .child(
                     div()
                         .text_sm()
-                        .text_color(theme::semantic().text_body)
+                        .text_color(Theme::global(cx).muted_foreground)
                         .child("导入 cURL 命令"),
                 ),
         )
@@ -50,7 +51,7 @@ pub fn curl_import_dialog(
                 .child(
                     div()
                         .text_xs()
-                        .text_color(theme::semantic().text_secondary)
+                        .text_color(Theme::global(cx).muted_foreground)
                         .child("粘贴 cURL 命令以导入请求"),
                 )
                 .child(
@@ -70,11 +71,11 @@ pub fn curl_import_dialog(
                                 .py(px(6.0))
                                 .rounded(px(6.0))
                                 .bg(theme::rgba_with_alpha(
-                                    theme::semantic().bg_surface,
-                                    if dark { 0.5 } else { 0.7 },
+                                    Theme::global(cx).list.into(),
+                                    if Theme::global(cx).is_dark() { 0.5 } else { 0.7 },
                                 ))
                                 .text_xs()
-                                .text_color(theme::semantic().text_secondary)
+                                .text_color(Theme::global(cx).muted_foreground)
                                 .cursor_pointer()
                                 .on_click(move |_event, _window, cx| {
                                     cancel_view.update(cx, |view, _cx| {
@@ -89,9 +90,9 @@ pub fn curl_import_dialog(
                                 .px(px(16.0))
                                 .py(px(6.0))
                                 .rounded(px(6.0))
-                                .bg(theme::semantic().primary)
+                                .bg(Theme::global(cx).primary)
                                 .text_xs()
-                                .text_color(theme::semantic().text_primary)
+                                .text_color(Theme::global(cx).foreground)
                                 .cursor_pointer()
                                 .on_click(move |_event, _window, cx| {
                                     import_view.update(cx, |view, cx| {
@@ -107,7 +108,7 @@ pub fn curl_import_dialog(
 pub fn rename_dialog(
     view: Entity<ApiDebuggerView>,
     rename_input: Entity<TextInput>,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     let confirm_view = view.clone();
     let cancel_view = view.clone();
@@ -115,8 +116,8 @@ pub fn rename_dialog(
         .w(px(420.0))
         .rounded(px(16.0))
         .border_1()
-        .border_color(glass::border(dark))
-        .bg(glass::bg(dark))
+        .border_color(glass::border(cx))
+        .bg(glass::bg(cx))
         .overflow_hidden()
         .flex()
         .flex_col()
@@ -125,17 +126,17 @@ pub fn rename_dialog(
                 .h(px(44.0))
                 .px(px(18.0))
                 .border_b_1()
-                .border_color(ui::border_light())
+                .border_color(ui::border_light(cx))
                 .bg(theme::rgba_with_alpha(
-                    theme::semantic().bg_surface,
-                    if dark { 0.34 } else { 0.52 },
+                    Theme::global(cx).list.into(),
+                    if Theme::global(cx).is_dark() { 0.34 } else { 0.52 },
                 ))
                 .flex()
                 .items_center()
                 .child(
                     div()
                         .text_sm()
-                        .text_color(theme::semantic().text_body)
+                        .text_color(Theme::global(cx).muted_foreground)
                         .child("重命名"),
                 ),
         )
@@ -148,7 +149,7 @@ pub fn rename_dialog(
                 .child(
                     div()
                         .text_xs()
-                        .text_color(theme::semantic().text_secondary)
+                        .text_color(Theme::global(cx).muted_foreground)
                         .child("输入新的名称"),
                 )
                 .child(div().id("api-rename-input-wrapper").child(rename_input))
@@ -164,11 +165,11 @@ pub fn rename_dialog(
                                 .py(px(6.0))
                                 .rounded(px(6.0))
                                 .bg(theme::rgba_with_alpha(
-                                    theme::semantic().bg_surface,
-                                    if dark { 0.5 } else { 0.7 },
+                                    Theme::global(cx).list.into(),
+                                    if Theme::global(cx).is_dark() { 0.5 } else { 0.7 },
                                 ))
                                 .text_xs()
-                                .text_color(theme::semantic().text_secondary)
+                                .text_color(Theme::global(cx).muted_foreground)
                                 .cursor_pointer()
                                 .on_click(move |_event, _window, cx| {
                                     cancel_view.update(cx, |view, _cx| {
@@ -183,9 +184,9 @@ pub fn rename_dialog(
                                 .px(px(16.0))
                                 .py(px(6.0))
                                 .rounded(px(6.0))
-                                .bg(theme::semantic().primary)
+                                .bg(Theme::global(cx).primary)
                                 .text_xs()
-                                .text_color(theme::semantic().text_primary)
+                                .text_color(Theme::global(cx).foreground)
                                 .cursor_pointer()
                                 .on_click(move |_event, _window, cx| {
                                     confirm_view.update(cx, |view, cx| {
@@ -199,7 +200,7 @@ pub fn rename_dialog(
 }
 
 pub fn overlay_shell(
-    dark: bool,
+    cx: &App,
     backdrop_id: &'static str,
     on_close: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
     content: impl IntoElement,
@@ -216,7 +217,7 @@ pub fn overlay_shell(
                 .absolute()
                 .top_0()
                 .left_0()
-                .bg(hsla(0.0, 0.0, 0.0, if dark { 0.46 } else { 0.24 }))
+                .bg(hsla(0.0, 0.0, 0.0, if Theme::global(cx).is_dark() { 0.46 } else { 0.24 }))
                 .on_click(move |event, _window, cx| on_close(event, cx)),
         )
         .child(

@@ -19,9 +19,9 @@ use crate::service::{
     self, ApiEnvironment, ApiGroup, ApiRequest, ApiResponse, ApiService, AuthType,
     BodyMode, EditorTab, EnvDetailTab, HttpHistory, HttpMethod, ResponseTab,
 };
+use gpui_component::theme::Theme;
 use qingqi_ui::{
     text_input::TextInput,
-    theme,
     ui::glass,
 };
 
@@ -375,7 +375,6 @@ impl Render for ApiDebuggerView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_service_updates(cx);
 
-        let dark = qingqi_ui::theme_mode::is_dark();
         let stacked = window.bounds().size.width < px(STACK_BREAKPOINT_PX);
 
         let entity = cx.entity();
@@ -421,14 +420,16 @@ impl Render for ApiDebuggerView {
 
         let esc_view = entity.clone();
 
+        let app: &App = cx;
+
         div()
             .relative()
             .size_full()
-            .bg(glass::bg(dark))
+            .bg(glass::bg(cx))
             .rounded(px(12.0))
             .overflow_hidden()
             .font_family("Inter, PingFang SC")
-            .text_color(theme::semantic().text_primary)
+            .text_color(Theme::global(cx).foreground)
             .on_key_down(move |event, _window, cx| {
                 if event.keystroke.key == "escape" {
                     esc_view.update(cx, |view, _cx| {
@@ -529,7 +530,7 @@ impl Render for ApiDebuggerView {
                                     .child(components::collection_tree::collection_tree(
                                         entity.clone(),
                                         self.tree_state.clone(),
-                                        dark,
+                                        app,
                                     )),
                             )
                             .child(
@@ -537,8 +538,8 @@ impl Render for ApiDebuggerView {
                                     .flex_1()
                                     .min_w(px(0.0))
                                     .border_1()
-                                    .border_color(glass::divider(dark))
-                                    .bg(glass::bg(dark))
+                                    .border_color(glass::divider(cx))
+                                    .bg(glass::bg(cx))
                                     .rounded(px(10.0))
                                     .overflow_hidden()
                                     .flex()
@@ -551,7 +552,7 @@ impl Render for ApiDebuggerView {
                                         environments,
                                         selected_environment,
                                         show_env_popover,
-                                        dark,
+                                        app,
                                     ))
                                     .child(components::action_bar::action_bar(
                                         entity.clone(),
@@ -559,7 +560,7 @@ impl Render for ApiDebuggerView {
                                         current_environment.clone(),
                                         path_input,
                                         in_flight,
-                                        dark,
+                                        app,
                                         current_method,
                                         show_method_popover,
                                     ))
@@ -573,7 +574,7 @@ impl Render for ApiDebuggerView {
                                                 editor_auth_form,
                                                 body_mode,
                                                 auth_type,
-                                                dark,
+                                                app,
                                             ))
                                             .child(components::response_panel::response_panel(
                                                 entity.clone(),
@@ -583,7 +584,7 @@ impl Render for ApiDebuggerView {
                                                 response_history,
                                                 response_code_lang,
                                                 notice,
-                                                dark,
+                                                app,
                                             )),
                                     ),
                             ),
@@ -596,7 +597,7 @@ impl Render for ApiDebuggerView {
                     collection_menu_position,
                     collection_menu_node_id,
                     collection_menu_kind.unwrap_or(components::collection_tree::MenuKind::Folder),
-                    dark,
+                    app,
                 )
                 .into_any_element()
             } else {
@@ -604,7 +605,7 @@ impl Render for ApiDebuggerView {
             })
             .child(if show_curl_import {
                 components::dialogs::overlay_shell(
-                    dark,
+                    app,
                     "api-curl-import-backdrop",
                     {
                         let view = entity.clone();
@@ -612,7 +613,7 @@ impl Render for ApiDebuggerView {
                             view.update(cx, |view, _cx| view.show_curl_import = false);
                         }
                     },
-                    components::dialogs::curl_import_dialog(entity.clone(), curl_import_input, dark),
+                    components::dialogs::curl_import_dialog(entity.clone(), curl_import_input, app),
                 )
                 .into_any_element()
             } else {
@@ -620,7 +621,7 @@ impl Render for ApiDebuggerView {
             })
             .child(if show_rename {
                 components::dialogs::overlay_shell(
-                    dark,
+                    app,
                     "api-rename-backdrop",
                     {
                         let view = entity.clone();
@@ -628,7 +629,7 @@ impl Render for ApiDebuggerView {
                             view.update(cx, |view, _cx| view.show_rename = false);
                         }
                     },
-                    components::dialogs::rename_dialog(entity.clone(), rename_input, dark),
+                    components::dialogs::rename_dialog(entity.clone(), rename_input, app),
                 )
                 .into_any_element()
             } else {

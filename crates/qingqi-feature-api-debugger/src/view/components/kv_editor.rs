@@ -1,7 +1,8 @@
 use gpui::{
-    Entity, IntoElement, InteractiveElement, ParentElement,
+    App, Entity, IntoElement, InteractiveElement, ParentElement,
     StatefulInteractiveElement, Styled, div, hsla, px, prelude::FluentBuilder,
 };
+use gpui_component::theme::Theme;
 use gpui_component::{IconName, Sizable, Size, button::{Button, ButtonVariants}};
 use qingqi_ui::{theme, ui, ui::glass};
 use crate::service::EditorTab;
@@ -13,7 +14,7 @@ pub fn kv_editor_table(
     view: Entity<ApiDebuggerView>,
     tab: EditorTab,
     rows: Vec<KvRow>,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     let add_view = view.clone();
     let show_schema_columns = tab == EditorTab::Params;
@@ -23,8 +24,8 @@ pub fn kv_editor_table(
         .flex_col()
         .rounded(px(8.0))
         .border_1()
-        .border_color(glass::divider(dark))
-        .bg(glass::inset(dark))
+        .border_color(glass::divider(cx))
+        .bg(glass::inset(cx))
         .overflow_hidden()
         .child(
             div()
@@ -32,13 +33,13 @@ pub fn kv_editor_table(
                 .h(px(28.0))
                 .px(px(10.0))
                 .border_b_1()
-                .border_color(glass::divider(dark))
-                .bg(glass::bar(dark))
+                .border_color(glass::divider(cx))
+                .bg(glass::bar(cx))
                 .flex()
                 .items_center()
                 .gap(px(8.0))
                 .text_size(px(10.0))
-                .text_color(ui::text_tertiary())
+                .text_color(ui::text_tertiary(cx))
                 .child(div().w(px(24.0)))
                 .child(div().flex_1().min_w(px(0.0)).child("key"))
                 .child(div().flex_1().min_w(px(0.0)).child("value"))
@@ -64,8 +65,8 @@ pub fn kv_editor_table(
                 .px(px(10.0))
                 .py(px(4.0))
                 .border_b_1()
-                .border_color(glass::divider(dark))
-                .hover(move |s| s.bg(glass::hover_bg(dark)))
+                .border_color(glass::divider(cx))
+                .hover(move |s| s.bg(glass::hover_bg(cx)))
                 .flex()
                 .items_center()
                 .gap(px(8.0))
@@ -78,18 +79,18 @@ pub fn kv_editor_table(
                             .rounded(px(4.0))
                             .border_1()
                             .border_color(if enabled {
-                                theme::rgba_with_alpha(api_accent(), 0.55)
+                                theme::rgba_with_alpha(api_accent(cx), 0.55)
                             } else {
-                                glass::divider(dark)
+                                glass::divider(cx)
                             })
                             .bg(if enabled {
-                                theme::rgba_with_alpha(api_accent(), 0.11)
+                                theme::rgba_with_alpha(api_accent(cx), 0.11)
                             } else {
-                                transparent_surface()
+                                transparent_surface(cx)
                             })
                             .text_size(px(9.0))
                             .text_color(if enabled {
-                                api_accent().into()
+                                api_accent(cx).into()
                             } else {
                                 hsla(0.0, 0.0, 0.0, 0.0)
                             })
@@ -109,11 +110,11 @@ pub fn kv_editor_table(
                             }),
                     ),
                 )
-                .child(kv_cell(key_input, enabled, dark))
-                .child(kv_cell(value_input, enabled, dark))
+                .child(kv_cell(key_input, enabled, cx))
+                .child(kv_cell(value_input, enabled, cx))
                 .when(show_schema_columns, |row| {
-                    row.child(kv_cell_fixed(type_input, enabled, dark, 108.0))
-                        .child(kv_cell(desc_input, enabled, dark))
+                    row.child(kv_cell_fixed(type_input, enabled, cx, 108.0))
+                        .child(kv_cell(desc_input, enabled, cx))
                 })
                 .child(
                     Button::new(("kv-del", i))
@@ -150,31 +151,31 @@ pub fn kv_editor_table(
         )
 }
 
-fn kv_cell(input: Entity<qingqi_ui::text_input::TextInput>, enabled: bool, dark: bool) -> gpui::Div {
-    kv_cell_base(input, enabled, dark).flex_1()
+fn kv_cell(input: Entity<qingqi_ui::text_input::TextInput>, enabled: bool, cx: &App) -> gpui::Div {
+    kv_cell_base(input, enabled, cx).flex_1()
 }
 
 fn kv_cell_fixed(
     input: Entity<qingqi_ui::text_input::TextInput>,
     enabled: bool,
-    dark: bool,
+    cx: &App,
     width: f32,
 ) -> gpui::Div {
-    kv_cell_base(input, enabled, dark).w(px(width)).flex_none()
+    kv_cell_base(input, enabled, cx).w(px(width)).flex_none()
 }
 
 fn kv_cell_base(
     input: Entity<qingqi_ui::text_input::TextInput>,
     enabled: bool,
-    dark: bool,
+    cx: &App,
 ) -> gpui::Div {
     div()
         .min_w(px(0.0))
         .rounded(px(6.0))
         .border_1()
-        .border_color(glass::divider(dark))
+        .border_color(glass::divider(cx))
         .bg(theme::rgba_with_alpha(
-            theme::semantic().bg_surface,
+            Theme::global(cx).list.into(),
             if enabled { 0.36 } else { 0.18 },
         ))
         .overflow_hidden()

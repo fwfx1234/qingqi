@@ -3,6 +3,7 @@ use gpui::{
     Render, SharedString, StatefulInteractiveElement, Styled, Subscription, TitlebarOptions,
     Window, WindowBounds, WindowKind, WindowOptions, div, px, size,
 };
+use gpui_component::theme::Theme;
 use gpui_component::{IconName, Root, Sizable, Size, button::{Button, ButtonVariants}};
 use qingqi_ui::{theme, ui, ui::glass};
 use qingqi_ui::text_input::TextInput;
@@ -80,7 +81,6 @@ impl EnvEditorWindow {
 impl Render for EnvEditorWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let view = self.debugger_view.read(cx);
-        let dark = qingqi_ui::theme_mode::is_dark();
         let environments = view.environments.clone();
         let selected = view.selected_environment;
         let detail_tab = view.env_detail_tab;
@@ -96,13 +96,15 @@ impl Render for EnvEditorWindow {
             headers_input.clone()
         };
 
+        let app: &App = cx;
+
         div()
             .size_full()
-            .bg(theme::semantic().bg_elevated)
+            .bg(Theme::global(app).popover)
             .font_family("Inter, PingFang SC")
             .flex()
             .flex_col()
-            .child(env_chips_bar(&environments, selected, handle.clone(), dark))
+            .child(env_chips_bar(&environments, selected, handle.clone(), app))
             .child(
                 div()
                     .flex_1()
@@ -111,8 +113,8 @@ impl Render for EnvEditorWindow {
                     .flex_col()
                     .gap(px(10.0))
                     .p(px(14.0))
-                    .child(labeled_field("名称", name_input.clone(), dark))
-                    .child(labeled_field("Base URL", base_url_input.clone(), dark))
+                    .child(labeled_field("名称", name_input.clone(), app))
+                    .child(labeled_field("Base URL", base_url_input.clone(), app))
                     .child(
                         div()
                             .flex()
@@ -133,7 +135,7 @@ impl Render for EnvEditorWindow {
                                                 .py(px(5.0))
                                                 .rounded(px(5.0))
                                                 .bg(if active {
-                                                    theme::rgba_with_alpha(api_accent(), 0.10)
+                                                    theme::rgba_with_alpha(api_accent(app), 0.10)
                                                 } else {
                                                     gpui::transparent_black()
                                                 })
@@ -144,13 +146,13 @@ impl Render for EnvEditorWindow {
                                                     gpui::FontWeight::NORMAL
                                                 })
                                                 .text_color(if active {
-                                                    api_accent()
+                                                    api_accent(app).into()
                                                 } else {
-                                                    ui::text_secondary()
+                                                    ui::text_secondary(app)
                                                 })
                                                 .hover(move |style| {
                                                     style
-                                                        .bg(theme::rgba_with_alpha(api_accent(), 0.06))
+                                                        .bg(theme::rgba_with_alpha(api_accent(app), 0.06))
                                                         .cursor_pointer()
                                                 })
                                                 .child(tab.label())
@@ -170,13 +172,13 @@ impl Render for EnvEditorWindow {
                             .min_h(px(140.0))
                             .rounded(px(6.0))
                             .border_1()
-                            .border_color(glass::divider(dark))
-                            .bg(glass::inset(dark))
+                            .border_color(glass::divider(app))
+                            .bg(glass::inset(app))
                             .overflow_hidden()
                             .child(detail_input),
                     ),
             )
-            .child(env_bottom_bar(handle.clone(), dark))
+            .child(env_bottom_bar(handle.clone(), app))
     }
 }
 
@@ -184,15 +186,15 @@ fn env_chips_bar(
     environments: &[crate::service::ApiEnvironment],
     selected_index: usize,
     handle: Entity<ApiDebuggerView>,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     div()
         .flex_shrink_0()
         .px(px(10.0))
         .py(px(8.0))
         .border_b_1()
-        .border_color(glass::divider(dark))
-        .bg(glass::bar(dark))
+        .border_color(glass::divider(cx))
+        .bg(glass::bar(cx))
         .flex()
         .items_center()
         .gap(px(6.0))
@@ -211,13 +213,13 @@ fn env_chips_bar(
                         .py(px(4.0))
                         .rounded(px(5.0))
                         .bg(if active {
-                            theme::rgba_with_alpha(api_accent(), 0.12)
+                            theme::rgba_with_alpha(api_accent(cx), 0.12)
                         } else {
                             gpui::transparent_black()
                         })
                         .border_1()
                         .border_color(if active {
-                            theme::rgba_with_alpha(api_accent(), 0.24)
+                            theme::rgba_with_alpha(api_accent(cx), 0.24)
                         } else {
                             gpui::transparent_black()
                         })
@@ -226,7 +228,7 @@ fn env_chips_bar(
                         .gap(px(5.0))
                         .hover(move |style| {
                             if !active {
-                                style.bg(ui::bg_hover()).cursor_pointer()
+                                style.bg(ui::bg_hover(cx)).cursor_pointer()
                             } else {
                                 style.cursor_pointer()
                             }
@@ -241,9 +243,9 @@ fn env_chips_bar(
                                     gpui::FontWeight::NORMAL
                                 })
                                 .text_color(if active {
-                                    api_accent()
+                                    api_accent(cx).into()
                                 } else {
-                                    ui::text_secondary()
+                                    ui::text_secondary(cx)
                                 })
                                 .child(env.name.clone()),
                         )
@@ -269,15 +271,15 @@ fn env_chips_bar(
 
 fn env_bottom_bar(
     handle: Entity<ApiDebuggerView>,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     div()
         .flex_shrink_0()
         .h(px(40.0))
         .px(px(12.0))
         .border_t_1()
-        .border_color(glass::divider(dark))
-        .bg(glass::bar(dark))
+        .border_color(glass::divider(cx))
+        .bg(glass::bar(cx))
         .flex()
         .items_center()
         .gap(px(6.0))
@@ -370,20 +372,20 @@ fn env_bottom_bar(
 fn labeled_field(
     label: &'static str,
     input: Entity<TextInput>,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
         .gap(px(5.0))
-        .child(section_micro_label(label, dark))
+        .child(section_micro_label(label, cx))
         .child(
             div()
                 .h(px(32.0))
                 .rounded(px(6.0))
                 .border_1()
-                .border_color(glass::divider(dark))
-                .bg(glass::inset(dark))
+                .border_color(glass::divider(cx))
+                .bg(glass::inset(cx))
                 .overflow_hidden()
                 .child(input),
         )

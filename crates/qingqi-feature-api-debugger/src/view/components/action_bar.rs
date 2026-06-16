@@ -1,8 +1,9 @@
 use gpui::{
-    Entity, IntoElement, InteractiveElement, ParentElement,
+    App, Entity, IntoElement, InteractiveElement, ParentElement,
     Styled, div, px,
 };
 use gpui_component::popover::Popover;
+use gpui_component::theme::Theme;
 use gpui_component::{Icon, IconName, Sizable, Size, button::{Button, ButtonVariants}};
 use qingqi_ui::{theme, ui, ui::glass};
 use qingqi_ui::text_input::TextInput;
@@ -16,7 +17,7 @@ pub fn action_bar(
     environment: ApiEnvironment,
     path_input: Entity<TextInput>,
     in_flight: bool,
-    dark: bool,
+    cx: &App,
     current_method: HttpMethod,
     show_popover: bool,
 ) -> impl IntoElement {
@@ -24,8 +25,8 @@ pub fn action_bar(
         .px(px(10.0))
         .py(px(6.0))
         .border_b_1()
-        .border_color(glass::divider(dark))
-        .bg(glass::bar(dark))
+        .border_color(glass::divider(cx))
+        .bg(glass::bar(cx))
         .flex()
         .items_center()
         .gap(px(6.0))
@@ -43,7 +44,7 @@ pub fn action_bar(
                     }
                 })
                 .trigger({
-                    let method_color = theme::http_method_color(current.label());
+                    let method_color = theme::http_method_color(current.label(), Theme::global(cx).is_dark());
                     Button::new("api-method-trigger")
                         .ghost()
                         .w(px(76.0))
@@ -76,9 +77,12 @@ pub fn action_bar(
                 .content(move |_state, _window, _cx| {
                     let curr = current;
                     let v = view.clone();
+                    let accent = Theme::global(_cx).primary;
+                    let bg = Theme::global(_cx).list;
+                    let border = ui::border_light(_cx);
                     dropdown_list(
                         HttpMethod::all().into_iter().map(|method| {
-                            let mc = theme::http_method_color(method.label());
+                            let mc = theme::http_method_color(method.label(), Theme::global(_cx).is_dark());
                             DropdownItem::new(
                                 div()
                                     .flex()
@@ -105,6 +109,9 @@ pub fn action_bar(
                                 }
                             })
                         }).collect(),
+                        accent,
+                        bg,
+                        border,
                     )
                 })
         })
@@ -115,8 +122,8 @@ pub fn action_bar(
                 .h(px(32.0))
                 .rounded(px(6.0))
                 .border_1()
-                .border_color(glass::divider(dark))
-                .bg(glass::inset(dark))
+                .border_color(glass::divider(cx))
+                .bg(glass::inset(cx))
                 .px(px(10.0))
                 .flex()
                 .items_center()
@@ -126,7 +133,7 @@ pub fn action_bar(
                         .flex_shrink_0()
                         .font_family("SF Mono")
                         .text_size(px(11.0))
-                        .text_color(ui::text_tertiary())
+                        .text_color(ui::text_tertiary(cx))
                         .child(environment.base_url),
                 )
                 .child(div().flex_1().min_w(px(0.0)).child(path_input))

@@ -1,4 +1,5 @@
-use gpui::{Entity, IntoElement, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled, div, hsla, px};
+use gpui::{App, Entity, IntoElement, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled, div, hsla, px};
+use gpui_component::theme::Theme;
 use qingqi_ui::text_input::TextInput;
 use qingqi_ui::{theme, ui, ui::glass};
 use crate::service::AuthType;
@@ -10,46 +11,42 @@ pub fn auth_form_panel(
     view: Entity<ApiDebuggerView>,
     auth_type: AuthType,
     form: AuthFormInputs,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     let body = match auth_type {
         AuthType::None => div()
             .py(px(6.0))
             .text_size(px(11.0))
-            .text_color(ui::text_tertiary())
+            .text_color(ui::text_tertiary(cx))
             .child("该请求不附带认证信息。")
             .into_any_element(),
         AuthType::BearerToken => div()
             .flex()
             .flex_col()
             .gap(px(10.0))
-            .child(labeled_field("Token", form.bearer.clone(), dark))
-            .child(auth_hint(
-                "发送时自动添加请求头 Authorization: Bearer <token>。",
-            ))
+            .child(labeled_field("Token", form.bearer.clone(), cx))
+            .child(auth_hint(cx))
             .into_any_element(),
         AuthType::BasicAuth => div()
             .flex()
             .flex_col()
             .gap(px(10.0))
-            .child(labeled_field("用户名", form.basic_user.clone(), dark))
-            .child(labeled_field("密码", form.basic_pass.clone(), dark))
-            .child(auth_hint(
-                "发送时自动以 Base64 编码为 Authorization: Basic 头。",
-            ))
+            .child(labeled_field("用户名", form.basic_user.clone(), cx))
+            .child(labeled_field("密码", form.basic_pass.clone(), cx))
+            .child(auth_hint(cx))
             .into_any_element(),
         AuthType::ApiKey => div()
             .flex()
             .flex_col()
             .gap(px(10.0))
-            .child(labeled_field("Key", form.apikey_name.clone(), dark))
-            .child(labeled_field("Value", form.apikey_value.clone(), dark))
+            .child(labeled_field("Key", form.apikey_name.clone(), cx))
+            .child(labeled_field("Value", form.apikey_value.clone(), cx))
             .child(
                 div()
                     .flex()
                     .flex_col()
                     .gap(px(6.0))
-                    .child(section_micro_label("位置", dark))
+                    .child(section_micro_label("位置", cx))
                     .child(
                         div()
                             .flex()
@@ -59,14 +56,14 @@ pub fn auth_form_panel(
                                 "Header",
                                 false,
                                 !form.in_query,
-                                dark,
+                                cx,
                             ))
                             .child(auth_location_button(
                                 view.clone(),
                                 "Query",
                                 true,
                                 form.in_query,
-                                dark,
+                                cx,
                             )),
                     ),
             )
@@ -76,11 +73,11 @@ pub fn auth_form_panel(
     div().flex().flex_col().gap(px(12.0)).child(body)
 }
 
-fn auth_hint(text: &'static str) -> impl IntoElement {
+fn auth_hint(cx: &App) -> impl IntoElement {
     div()
         .text_size(px(10.0))
-        .text_color(ui::text_tertiary())
-        .child(text)
+        .text_color(ui::text_tertiary(cx))
+        .child("发送时自动添加请求头 Authorization: Bearer <token>。")
 }
 
 fn auth_location_button(
@@ -88,7 +85,7 @@ fn auth_location_button(
     label: &'static str,
     query: bool,
     active: bool,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     div()
         .id(("api-auth-location", query as usize))
@@ -97,20 +94,20 @@ fn auth_location_button(
         .rounded(px(4.0))
         .text_size(px(10.0))
         .text_color(if active {
-            theme::semantic().text_primary
+            Theme::global(cx).foreground
         } else {
-            ui::text_tertiary()
+            ui::text_tertiary(cx)
         })
         .bg(if active {
-            theme::rgba_with_alpha(theme::semantic().text_primary, 0.055)
+            theme::rgba_with_alpha(Theme::global(cx).foreground.into(), 0.055)
         } else {
             hsla(0.0, 0.0, 0.0, 0.0)
         })
         .hover(move |style| {
             style
                 .cursor_pointer()
-                .bg(glass::hover_bg(dark))
-                .text_color(theme::semantic().text_primary)
+                .bg(glass::hover_bg(cx))
+                .text_color(Theme::global(cx).foreground)
         })
         .child(label)
         .on_click(move |_, _, cx| {
@@ -122,21 +119,21 @@ fn auth_location_button(
         })
 }
 
-fn labeled_field(label: &'static str, input: Entity<TextInput>, dark: bool) -> impl IntoElement {
+fn labeled_field(label: &'static str, input: Entity<TextInput>, cx: &App) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
         .gap(px(6.0))
-        .child(section_micro_label(label, dark))
+        .child(section_micro_label(label, cx))
         .child(
             div()
                 .h(px(32.0))
                 .rounded(px(6.0))
                 .border_1()
-                .border_color(ui::border_light())
+                .border_color(ui::border_light(cx))
                 .bg(theme::rgba_with_alpha(
-                    theme::semantic().bg_surface,
-                    if dark { 0.34 } else { 0.58 },
+                    Theme::global(cx).list.into(),
+                    if Theme::global(cx).is_dark() { 0.34 } else { 0.58 },
                 ))
                 .overflow_hidden()
                 .child(input),

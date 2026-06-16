@@ -1,7 +1,8 @@
 use gpui::{
-    AnyElement, Entity, IntoElement, InteractiveElement, ParentElement,
+    AnyElement, App, Entity, IntoElement, InteractiveElement, ParentElement,
     StatefulInteractiveElement, Styled, div, px, prelude::FluentBuilder,
 };
+use gpui_component::theme::Theme;
 use gpui_component::{IconName, Sizable, Size, button::{Button, ButtonVariants}};
 use qingqi_ui::{theme, ui, ui::glass};
 use crate::code_gen::CodeLanguage;
@@ -17,25 +18,25 @@ pub fn response_panel(
     history_entries: Vec<HttpHistory>,
     code_lang: CodeLanguage,
     notice: String,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     let tabs_view = view.clone();
 
     let content: AnyElement = match response_tab {
         ResponseTab::History => {
-            response_history_view(view.clone(), history_entries, dark).into_any_element()
+            response_history_view(view.clone(), history_entries, cx).into_any_element()
         }
         ResponseTab::Code => {
-            response_code_view(view.clone(), code_lang, response_text, dark).into_any_element()
+            response_code_view(view.clone(), code_lang, response_text, cx).into_any_element()
         }
         ResponseTab::Body => response_body_view(
             view.clone(),
             response.content_type.clone(),
             response_text,
-            dark,
+            cx,
         )
         .into_any_element(),
-        _ => response_text_view(response_text, dark).into_any_element(),
+        _ => response_text_view(response_text, cx).into_any_element(),
     };
 
     div()
@@ -44,8 +45,8 @@ pub fn response_panel(
         .max_h(px(380.0))
         .flex_none()
         .border_t_1()
-        .border_color(glass::divider(dark))
-        .bg(glass::panel(dark))
+        .border_color(glass::divider(cx))
+        .bg(glass::panel(cx))
         .flex()
         .flex_col()
         .child(
@@ -53,26 +54,26 @@ pub fn response_panel(
                 .px(px(12.0))
                 .py(px(8.0))
                 .border_b_1()
-                .border_color(glass::divider(dark))
-                .bg(glass::bar(dark))
+                .border_color(glass::divider(cx))
+                .bg(glass::bar(cx))
                 .flex()
                 .items_center()
                 .gap(px(8.0))
-                .child(status_badge(&response, dark))
+                .child(status_badge(&response, cx))
                 .child(div().flex_1())
                 .child(response_metric(
                     format!("{} ms", response.duration_ms),
-                    dark,
+                    cx,
                 ))
-                .child(response_metric(format!("{} B", response.size_bytes), dark)),
+                .child(response_metric(format!("{} B", response.size_bytes), cx)),
         )
         .child(
             div()
                 .px(px(10.0))
                 .py(px(4.0))
                 .border_b_1()
-                .border_color(glass::divider(dark))
-                .bg(glass::bar(dark))
+                .border_color(glass::divider(cx))
+                .bg(glass::bar(cx))
                 .flex()
                 .flex_wrap()
                 .items_center()
@@ -90,18 +91,18 @@ pub fn response_panel(
                                 .py(px(5.0))
                                 .rounded(px(4.0))
                                 .bg(if active {
-                                    theme::rgba_with_alpha(theme::semantic().text_primary, 0.055)
+                                    theme::rgba_with_alpha(Theme::global(cx).foreground.into(), 0.055)
                                 } else {
-                                    transparent_surface()
+                                    transparent_surface(cx)
                                 })
                                 .text_size(px(11.0))
                                 .text_color(if active {
-                                    theme::semantic().text_primary
+                                    Theme::global(cx).foreground
                                 } else {
-                                    ui::text_tertiary()
+                                    ui::text_tertiary(cx)
                                 })
                                 .hover(move |style| {
-                                    style.bg(glass::hover_bg(dark)).cursor_pointer()
+                                    style.bg(glass::hover_bg(cx)).cursor_pointer()
                                 })
                                 .child(tab.label())
                                 .on_click(move |_, window, cx| {
@@ -117,14 +118,14 @@ pub fn response_panel(
                 .px(px(12.0))
                 .py(px(6.0))
                 .border_t_1()
-                .border_color(glass::divider(dark))
+                .border_color(glass::divider(cx))
                 .text_size(px(11.0))
-                .text_color(ui::text_secondary())
+                .text_color(ui::text_secondary(cx))
                 .child(notice),
         )
 }
 
-fn response_text_view(text: String, dark: bool) -> impl IntoElement {
+fn response_text_view(text: String, cx: &App) -> impl IntoElement {
     div()
         .id("api-response-scroll")
         .flex_1()
@@ -132,13 +133,13 @@ fn response_text_view(text: String, dark: bool) -> impl IntoElement {
         .overflow_y_scroll()
         .scrollbar_width(px(4.0))
         .p(px(10.0))
-        .bg(glass::inset(dark))
+        .bg(glass::inset(cx))
         .child(
             div()
                 .font_family("SF Mono")
                 .text_size(px(12.0))
                 .line_height(px(18.0))
-                .text_color(theme::semantic().text_body)
+                .text_color(Theme::global(cx).muted_foreground)
                 .child(text),
         )
 }
@@ -147,7 +148,7 @@ fn response_body_view(
     view: Entity<ApiDebuggerView>,
     content_type: String,
     text: String,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     let binary = is_binary_content_type(&content_type);
     div()
@@ -160,8 +161,8 @@ fn response_body_view(
                 .px(px(10.0))
                 .py(px(6.0))
                 .border_b_1()
-                .border_color(glass::divider(dark))
-                .bg(glass::bar(dark))
+                .border_color(glass::divider(cx))
+                .bg(glass::bar(cx))
                 .flex()
                 .items_center()
                 .gap(px(6.0))
@@ -169,19 +170,19 @@ fn response_body_view(
                     view.clone(),
                     "复制",
                     ResponseBodyAction::Copy,
-                    dark,
+                    cx,
                 ))
                 .child(response_action_button(
                     view.clone(),
                     "格式化",
                     ResponseBodyAction::Format,
-                    dark,
+                    cx,
                 ))
                 .child(response_action_button(
                     view.clone(),
                     "保存",
                     ResponseBodyAction::Save,
-                    dark,
+                    cx,
                 ))
                 .child(div().flex_1())
                 .when(!content_type.is_empty(), |row| {
@@ -189,7 +190,7 @@ fn response_body_view(
                         div()
                             .text_size(px(10.0))
                             .font_family("SF Mono")
-                            .text_color(ui::text_tertiary())
+                            .text_color(ui::text_tertiary(cx))
                             .child(content_type.clone()),
                     )
                 }),
@@ -199,12 +200,12 @@ fn response_body_view(
                 div()
                     .px(px(10.0))
                     .py(px(6.0))
-                    .bg(theme::rgba_with_alpha(theme::semantic().danger, 0.08))
+                    .bg(theme::rgba_with_alpha(Theme::global(cx).danger.into(), 0.08))
                     .flex()
                     .items_center()
                     .gap(px(6.0))
                     .text_size(px(11.0))
-                    .text_color(theme::semantic().danger)
+                    .text_color(Theme::global(cx).danger)
                     .child(
                         Button::new("api-response-binary-warning-icon")
                             .ghost()
@@ -214,14 +215,14 @@ fn response_body_view(
                     .child("二进制/图片响应，文本预览可能乱码，建议点击「保存」后查看"),
             )
         })
-        .child(response_text_view(text, dark))
+        .child(response_text_view(text, cx))
 }
 
 fn response_code_view(
     view: Entity<ApiDebuggerView>,
     code_lang: CodeLanguage,
     code_text: String,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     div()
         .flex_1()
@@ -233,8 +234,8 @@ fn response_code_view(
                 .px(px(10.0))
                 .py(px(6.0))
                 .border_b_1()
-                .border_color(glass::divider(dark))
-                .bg(glass::bar(dark))
+                .border_color(glass::divider(cx))
+                .bg(glass::bar(cx))
                 .flex()
                 .flex_wrap()
                 .items_center()
@@ -253,17 +254,17 @@ fn response_code_view(
                                 .rounded(px(4.0))
                                 .text_size(px(11.0))
                                 .bg(if active {
-                                    theme::rgba_with_alpha(theme::semantic().text_primary, 0.055)
+                                    theme::rgba_with_alpha(Theme::global(cx).foreground.into(), 0.055)
                                 } else {
-                                    transparent_surface()
+                                    transparent_surface(cx)
                                 })
                                 .text_color(if active {
-                                    theme::semantic().text_primary
+                                    Theme::global(cx).foreground
                                 } else {
-                                    ui::text_tertiary()
+                                    ui::text_tertiary(cx)
                                 })
                                 .hover(move |style| {
-                                    style.bg(glass::hover_bg(dark)).cursor_pointer()
+                                    style.bg(glass::hover_bg(cx)).cursor_pointer()
                                 })
                                 .child(lang.label())
                                 .on_click(move |_, window, cx| {
@@ -274,13 +275,13 @@ fn response_code_view(
                         }),
                 ),
         )
-        .child(response_text_view(code_text, dark))
+        .child(response_text_view(code_text, cx))
 }
 
 fn response_history_view(
     view: Entity<ApiDebuggerView>,
     entries: Vec<HttpHistory>,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     let clear_view = view.clone();
     let count = entries.len();
@@ -294,8 +295,8 @@ fn response_history_view(
                 .px(px(10.0))
                 .py(px(6.0))
                 .border_b_1()
-                .border_color(glass::divider(dark))
-                .bg(glass::bar(dark))
+                .border_color(glass::divider(cx))
+                .bg(glass::bar(cx))
                 .flex()
                 .items_center()
                 .gap(px(8.0))
@@ -303,7 +304,7 @@ fn response_history_view(
                     div()
                         .flex_1()
                         .text_size(px(11.0))
-                        .text_color(ui::text_secondary())
+                        .text_color(ui::text_secondary(cx))
                         .child(format!("共 {count} 条历史记录")),
                 )
                 .when(count > 0, |row| {
@@ -314,8 +315,8 @@ fn response_history_view(
                             .py(px(3.0))
                             .rounded(px(4.0))
                             .text_size(px(11.0))
-                            .text_color(theme::semantic().danger)
-                            .hover(move |style| style.bg(glass::hover_bg(dark)).cursor_pointer())
+                            .text_color(Theme::global(cx).danger)
+                            .hover(move |style| style.bg(glass::hover_bg(cx)).cursor_pointer())
                             .child("清空")
                             .on_click(move |_, window, cx| {
                                 clear_view.update(cx, |view, _cx| view.clear_current_history());
@@ -336,7 +337,7 @@ fn response_history_view(
                         div()
                             .p(px(12.0))
                             .text_size(px(11.0))
-                            .text_color(ui::text_tertiary())
+                            .text_color(ui::text_tertiary(cx))
                             .child("暂无历史记录，发送请求后会自动追加"),
                     )
                 })
@@ -344,7 +345,7 @@ fn response_history_view(
                     entries
                         .into_iter()
                         .enumerate()
-                        .map(move |(index, entry)| history_row(view.clone(), index, entry, dark)),
+                        .map(move |(index, entry)| history_row(view.clone(), index, entry, cx)),
                 ),
         )
 }
@@ -353,25 +354,25 @@ fn history_row(
     view: Entity<ApiDebuggerView>,
     index: usize,
     entry: HttpHistory,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     let status_color = if entry.status == 0 {
-        theme::semantic().text_secondary
+        Theme::global(cx).muted_foreground
     } else if (200..300).contains(&entry.status) {
-        theme::semantic().success
+        Theme::global(cx).success
     } else {
-        theme::semantic().danger
+        Theme::global(cx).danger
     };
     div()
         .id(("api-history-row", index))
         .px(px(10.0))
         .py(px(8.0))
         .border_b_1()
-        .border_color(glass::divider(dark))
+        .border_color(glass::divider(cx))
         .flex()
         .flex_col()
         .gap(px(2.0))
-        .hover(move |style| style.bg(glass::hover_bg(dark)).cursor_pointer())
+        .hover(move |style| style.bg(glass::hover_bg(cx)).cursor_pointer())
         .on_click(move |_, window, cx| {
             view.update(cx, |view, _cx| view.view_history_entry(index));
             window.refresh();
@@ -386,7 +387,7 @@ fn history_row(
                         .text_size(px(10.0))
                         .font_family("SF Mono")
                         .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(theme::semantic().text_primary)
+                        .text_color(Theme::global(cx).foreground)
                         .child(entry.method.clone()),
                 )
                 .child(
@@ -400,14 +401,14 @@ fn history_row(
                 .child(
                     div()
                         .text_size(px(10.0))
-                        .text_color(ui::text_tertiary())
+                        .text_color(ui::text_tertiary(cx))
                         .child(entry.created_at.clone()),
                 ),
         )
         .child(
             div()
                 .text_size(px(11.0))
-                .text_color(theme::semantic().text_body)
+                .text_color(Theme::global(cx).muted_foreground)
                 .child(entry.url.clone()),
         )
 }
@@ -423,7 +424,7 @@ fn response_action_button(
     view: Entity<ApiDebuggerView>,
     label: &'static str,
     action: ResponseBodyAction,
-    _dark: bool,
+    _cx: &App,
 ) -> impl IntoElement {
     let id_index = match action {
         ResponseBodyAction::Copy => 0usize,
