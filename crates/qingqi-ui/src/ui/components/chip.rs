@@ -21,27 +21,30 @@ pub fn chip(
         theme::accent_soft(accent)
     };
 
+    let bg: gpui::Hsla = if selected {
+        accent_soft.into()
+    } else {
+        ui::bg_subtle(cx)
+    };
+    let border: gpui::Hsla = if selected {
+        accent_color.into()
+    } else {
+        ui::border_light(cx)
+    };
+    let text: gpui::Hsla = if selected {
+        accent_color.into()
+    } else {
+        ui::text_secondary(cx)
+    };
+
     div()
         .px_2()
         .h(px(26.0))
         .rounded(theme::radius_sm())
-        .bg(if selected {
-            accent_soft
-        } else {
-            ui::bg_subtle(cx)
-        })
+        .bg(bg)
         .border_1()
-        .border_color(if selected {
-            let accent_hsla: gpui::Hsla = accent_color.into();
-            accent_hsla
-        } else {
-            ui::border_light(cx)
-        })
-        .text_color(if selected {
-            accent_color
-        } else {
-            ui::text_secondary(cx)
-        })
+        .border_color(border)
+        .text_color(text)
         .text_size(theme::font_size_caption())
         .font_weight(gpui::FontWeight::MEDIUM)
         .flex()

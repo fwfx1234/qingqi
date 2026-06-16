@@ -408,7 +408,7 @@ pub fn row_card(selected: bool, cx: &App) -> gpui::Div {
     let selected_border: gpui::Hsla = rgb(0xbfdbfe).into();
     div()
         .rounded(theme::radius_md())
-        .bg(if selected { rgb(0xeff6ff) } else { bg_surface(cx) })
+        .bg(if selected { rgb(0xeff6ff).into() } else { bg_surface(cx) })
         .border_1()
         .border_color(if selected {
             selected_border
@@ -429,7 +429,7 @@ pub fn plugin_content() -> gpui::Div {
     div().size_full().p_3()
 }
 
-pub fn plugin_scroll_content(cx: &App) -> gpui::Stateful<gpui::Div> {
+pub fn plugin_scroll_content() -> gpui::Stateful<gpui::Div> {
     plugin_content()
         .id("plugin-scroll-content")
         .overflow_y_scroll()
@@ -459,7 +459,7 @@ pub fn ui_button(
             (
                 t.primary,
                 hsla(0., 0., 1., 1.),
-                if dark { rgb(0x1a1a1a) } else { rgb(0x00000010) },
+                if dark { rgb(0x1a1a1a).into() } else { rgb(0x00000010).into() },
             )
         }
     } else if danger {

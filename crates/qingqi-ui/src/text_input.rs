@@ -245,7 +245,7 @@ impl TextInput {
         }
     }
 
-    fn build_input(&self, state: &Entity<InputState>) -> Input {
+    fn build_input(&self, state: &Entity<InputState>, cx: &App) -> Input {
         let style = self.style;
         let mut input = Input::new(state).w_full().h_full();
 
@@ -258,9 +258,9 @@ impl TextInput {
 
         if self.draw_chrome {
             input = input
-                .bg(ui::bg_surface())
+                .bg(ui::bg_surface(cx))
                 .rounded(px(8.0))
-                .border_color(ui::border_light());
+                .border_color(ui::border_light(cx));
         }
 
         if self.monospace {
@@ -294,7 +294,7 @@ impl Render for TextInput {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let state = self.ensure_state(window, cx);
         self.sync_pending(&state, window, cx);
-        let mut input = self.build_input(&state).w_full();
+        let mut input = self.build_input(&state, cx).w_full();
         if self.fill_height {
             input = input.h_full();
         } else {

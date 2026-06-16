@@ -5,7 +5,7 @@ pub fn toggle(enabled: bool, cx: &App) -> gpui::Div {
     let track_bg = if enabled {
         Theme::global(cx).blue
     } else {
-        gpui::rgba(0x80808040)
+        gpui::rgba(0x80808040).into()
     };
     let thumb_x = if enabled { px(20.0) } else { px(2.0) };
 
