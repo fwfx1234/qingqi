@@ -1,5 +1,6 @@
 pub mod components;
 pub mod glass;
+pub mod traffic_light;
 mod window_chrome;
 
 pub use window_chrome::{

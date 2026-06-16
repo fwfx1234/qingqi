@@ -29,7 +29,7 @@ impl AppCatalog {
     }
 
     pub fn start_background(&self) {
-        self.service.request_scan();
+        self.service.request_probe_scan();
     }
 }
 

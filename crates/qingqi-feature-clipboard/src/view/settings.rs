@@ -1,228 +1,94 @@
-use super::shared::theme_button;
+use super::shared::{pill_button, toggle_control};
 use super::*;
-use gpui_component::scroll::ScrollableElement;
-use gpui_component::{Icon, IconName, Sizable, Size as ComponentSize};
 
-/// macOS 风格标题栏：左箭头 + 标题，融入系统窗口 chrome。
-pub(super) fn settings_titlebar_slot(
+pub(super) fn settings_panel(
     handle: Entity<ClipboardView>,
+    config: ClipboardConfig,
+    ignore_patterns_input: Entity<TextInput>,
+    max_text_chars_input: Entity<TextInput>,
+    hotkey_input: Entity<TextInput>,
     _dark: bool,
 ) -> impl IntoElement {
-    let back_handle = handle.clone();
-    div()
-        .h_full()
-        .flex()
-        .items_center()
-        .gap(px(6.0))
-        .child(
-            div()
-                .id("clipboard-settings-back")
-                .size(px(26.0))
-                .rounded(px(5.0))
-                .flex()
-                .items_center()
-                .justify_center()
-                .hover(|style| style.bg(theme::semantic().bg_hover).cursor_pointer())
-                .child(
-                    Icon::new(IconName::ChevronLeft)
-                        .with_size(ComponentSize::Small)
-                        .text_color(theme::semantic().text_secondary),
-                )
-                .on_click(move |_, _, cx| {
-                    cx.stop_propagation();
-                    let _ = cx.update_entity(&back_handle, |panel, cx| {
-                        panel.set_tab(ClipboardTab::History);
-                        cx.notify();
-                    });
-                }),
-        )
-        .child(
-            div()
-                .text_size(px(12.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic().text_primary)
-                .child("剪贴板设置"),
-        )
-}
-
-pub(super) fn settings_page(
-    handle: Entity<ClipboardView>,
-    _status_text: String,
-    config: ClipboardConfig,
-    inputs: (Entity<TextInput>, Entity<TextInput>, Entity<TextInput>),
-    dark: bool,
-    chrome_metrics: ui::WindowChromeMetrics,
-) -> impl IntoElement {
-    let back_handle = handle.clone();
 
     div()
         .size_full()
-        .pt(px(chrome_metrics.content_top_padding))
         .flex()
         .flex_col()
-        .overflow_hidden()
-        .child(
-            div()
-                .flex_none()
-                .px(px(8.0))
-                .pt(px(8.0))
-                .child(settings_back_button(back_handle)),
-        )
-        .child(
-            div()
-                .flex_1()
-                .min_h(px(0.0))
-                .overflow_y_scrollbar()
-                .p(px(8.0))
-                .child(settings_panel(handle, config, inputs, dark)),
-        )
-}
-
-fn settings_back_button(handle: Entity<ClipboardView>) -> impl IntoElement {
-    div()
-        .id("clipboard-settings-content-back")
-        .h(px(28.0))
-        .px(px(8.0))
-        .rounded(px(5.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.55))
-        .flex()
-        .items_center()
-        .gap(px(4.0))
-        .text_size(px(10.0))
-        .font_weight(gpui::FontWeight::MEDIUM)
-        .text_color(theme::semantic().text_secondary)
-        .hover(|style| style.bg(theme::semantic().bg_hover).cursor_pointer())
-        .child(
-            Icon::new(IconName::ChevronLeft)
-                .with_size(ComponentSize::Small)
-                .text_color(theme::semantic().text_secondary),
-        )
-        .child("返回剪贴板")
-        .on_click(move |_, _, cx| {
-            cx.stop_propagation();
-            let _ = cx.update_entity(&handle, |panel, cx| {
-                panel.set_tab(ClipboardTab::History);
-                cx.notify();
-            });
-        })
-}
-
-fn settings_panel(
-    handle: Entity<ClipboardView>,
-    config: ClipboardConfig,
-    inputs: (Entity<TextInput>, Entity<TextInput>, Entity<TextInput>),
-    dark: bool,
-) -> impl IntoElement {
-    let (ignore_patterns_input, max_text_chars_input, hotkey_input) = inputs;
-
-    div()
-        .w_full()
-        .min_w(px(0.0))
-        .rounded(px(4.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.5))
-        .p_2p5()
-        .flex()
-        .flex_col()
-        .gap_2()
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .child(
-                    div()
-                        .text_size(px(14.0))
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .child("采集设置"),
-                )
-                .child(
-                    div()
-                        .text_size(px(10.0))
-                        .text_color(theme::semantic().text_secondary)
-                        .child("设置会直接写入 SQLite，供后台采集和后续热键接管使用"),
+        .gap(px(20.0))
+        .p(px(20.0))
+        .child(settings_card(vec![
+            settings_toggle_row(
+                "文本采集",
+                if config.capture_text {
+                    "当前开启，新的文本会写入历史"
+                } else {
+                    "当前关闭，新的文本不会进入历史"
+                },
+                config.capture_text,
+                {
+                    let handle = handle.clone();
+                    move |_, cx| {
+                        let _ = cx.update_entity(&handle, |panel, cx| {
+                            panel.toggle_capture_text(cx);
+                            cx.notify();
+                        });
+                    }
+                },
+            ),
+            settings_toggle_row(
+                "图片采集",
+                if config.capture_image {
+                    "当前开启，后续图片剪贴板将进入历史"
+                } else {
+                    "当前关闭，后续图片剪贴板会被跳过"
+                },
+                config.capture_image,
+                {
+                    let handle = handle.clone();
+                    move |_, cx| {
+                        let _ = cx.update_entity(&handle, |panel, cx| {
+                            panel.toggle_capture_image(cx);
+                            cx.notify();
+                        });
+                    }
+                },
+            ),
+            settings_toggle_row(
+                "文件采集",
+                if config.capture_files {
+                    "当前开启，后续文件剪贴板将进入历史"
+                } else {
+                    "当前关闭，后续文件剪贴板会被跳过"
+                },
+                config.capture_files,
+                {
+                    let handle = handle.clone();
+                    move |_, cx| {
+                        let _ = cx.update_entity(&handle, |panel, cx| {
+                            panel.toggle_capture_files(cx);
+                            cx.notify();
+                        });
+                    }
+                },
+            ),
+        ]))
+        .child(settings_card(vec![
+            settings_input_row(
+                "文本长度上限",
+                format!(
+                    "当前上限 {} 字符，超过后跳过采集",
+                    config.max_text_chars
                 ),
-        )
-        .child(settings_row(
-            "文本采集",
-            if config.capture_text {
-                "当前开启，新的文本会写入历史"
-            } else {
-                "当前关闭，新的文本不会进入历史"
-            },
-            theme_button(if config.capture_text {
-                "关闭文本采集"
-            } else {
-                "开启文本采集"
-            }, dark, {
-                let handle = handle.clone();
-                move |_, cx| {
-                    let _ = cx.update_entity(&handle, |panel, cx| {
-                        panel.toggle_capture_text(cx);
-                        cx.notify();
-                    });
-                }
-            }),
-            dark,
-        ))
-        .child(settings_row(
-            "图片采集",
-            if config.capture_image {
-                "当前开启，后续图片剪贴板将进入历史"
-            } else {
-                "当前关闭，后续图片剪贴板会被跳过"
-            },
-            theme_button(if config.capture_image {
-                "关闭图片采集"
-            } else {
-                "开启图片采集"
-            }, dark, {
-                let handle = handle.clone();
-                move |_, cx| {
-                    let _ = cx.update_entity(&handle, |panel, cx| {
-                        panel.toggle_capture_image(cx);
-                        cx.notify();
-                    });
-                }
-            }),
-            dark,
-        ))
-        .child(settings_row(
-            "文件采集",
-            if config.capture_files {
-                "当前开启，后续文件剪贴板将进入历史"
-            } else {
-                "当前关闭，后续文件剪贴板会被跳过"
-            },
-            theme_button(if config.capture_files {
-                "关闭文件采集"
-            } else {
-                "开启文件采集"
-            }, dark, {
-                let handle = handle.clone();
-                move |_, cx| {
-                    let _ = cx.update_entity(&handle, |panel, cx| {
-                        panel.toggle_capture_files(cx);
-                        cx.notify();
-                    });
-                }
-            }),
-            dark,
-        ))
-        .child(settings_row(
-            "文本长度上限",
-            format!("当前上限 {} 字符，超过后跳过采集", config.max_text_chars),
-            settings_input_group(
-                div()
-                    .w(px(180.0))
-                    .child(input_shell(max_text_chars_input)),
                 div()
                     .flex()
+                    .items_center()
                     .gap_1()
-                    .child(theme_button("保存", dark, {
+                    .child(
+                        div()
+                            .w(px(120.0))
+                            .child(input_shell(max_text_chars_input)),
+                    )
+                    .child(pill_button("保存", {
                         let handle = handle.clone();
                         move |_, cx| {
                             let _ = cx.update_entity(&handle, |panel, cx| {
@@ -231,7 +97,7 @@ fn settings_panel(
                             });
                         }
                     }))
-                    .child(theme_button("4k", dark, {
+                    .child(pill_button("4k", {
                         let handle = handle.clone();
                         move |_, cx| {
                             let _ = cx.update_entity(&handle, |panel, cx| {
@@ -240,7 +106,7 @@ fn settings_panel(
                             });
                         }
                     }))
-                    .child(theme_button("20k", dark, {
+                    .child(pill_button("20k", {
                         let handle = handle.clone();
                         move |_, cx| {
                             let _ = cx.update_entity(&handle, |panel, cx| {
@@ -249,7 +115,7 @@ fn settings_panel(
                             });
                         }
                     }))
-                    .child(theme_button("100k", dark, {
+                    .child(pill_button("100k", {
                         let handle = handle.clone();
                         move |_, cx| {
                             let _ = cx.update_entity(&handle, |panel, cx| {
@@ -259,22 +125,22 @@ fn settings_panel(
                         }
                     })),
             ),
-            dark,
-        ))
-        .child(settings_row(
-            "过滤规则",
-            format!(
-                "当前 {} 条规则；命中内容会在采集阶段被跳过，支持正则，失败时退回大小写不敏感子串匹配",
-                config.ignore_patterns.len()
-            ),
-            settings_input_group(
-                div()
-                    .w(px(320.0))
-                    .child(input_shell(ignore_patterns_input)),
+            settings_input_row(
+                "过滤规则",
+                format!(
+                    "当前 {} 条规则；命中内容在采集阶段跳过，支持正则",
+                    config.ignore_patterns.len()
+                ),
                 div()
                     .flex()
+                    .items_center()
                     .gap_1()
-                    .child(theme_button("保存规则", dark, {
+                    .child(
+                        div()
+                            .w(px(200.0))
+                            .child(input_shell(ignore_patterns_input)),
+                    )
+                    .child(pill_button("保存规则", {
                         let handle = handle.clone();
                         move |_, cx| {
                             let _ = cx.update_entity(&handle, |panel, cx| {
@@ -283,7 +149,7 @@ fn settings_panel(
                             });
                         }
                     }))
-                    .child(theme_button("清空规则", dark, {
+                    .child(pill_button("清空规则", {
                         let handle = handle.clone();
                         move |_, cx| {
                             let _ = cx.update_entity(&handle, |panel, cx| {
@@ -293,16 +159,20 @@ fn settings_panel(
                         }
                     })),
             ),
-            dark,
-        ))
-        .child(settings_row(
+        ]))
+        .child(settings_card(vec![settings_input_row(
             "打开快捷键",
             format!("当前保存为 {}；保存后立即重新注册", config.hotkey),
-            settings_input_group(
-                div()
-                    .w(px(180.0))
-                    .child(input_shell(hotkey_input)),
-                div().child(theme_button("保存快捷键", dark, {
+            div()
+                .flex()
+                .items_center()
+                .gap_1()
+                .child(
+                    div()
+                        .w(px(140.0))
+                        .child(input_shell(hotkey_input)),
+                )
+                .child(pill_button("保存快捷键", {
                     let handle = handle.clone();
                     move |_, cx| {
                         let _ = cx.update_entity(&handle, |panel, cx| {
@@ -311,69 +181,112 @@ fn settings_panel(
                         });
                     }
                 })),
-            ),
-            dark,
-        ))
+        )]))
 }
 
-fn settings_row(
-    title: &'static str,
-    detail: impl Into<String>,
-    action: impl IntoElement,
-    _dark: bool,
-) -> impl IntoElement {
+fn settings_card(rows: Vec<gpui::AnyElement>) -> impl IntoElement {
+    let s = theme::semantic();
     div()
-        .p_2()
-        .rounded(px(4.0))
+        .rounded(theme::radius_lg())
+        .bg(s.bg_surface)
         .border_1()
         .border_color(ui::border_light())
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.4))
+        .flex()
+        .flex_col()
+        .children(rows)
+}
+
+fn settings_toggle_row(
+    label: &'static str,
+    description: impl Into<String>,
+    enabled: bool,
+    on_toggle: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
+) -> gpui::AnyElement {
+    let s = theme::semantic();
+
+    div()
+        .min_h(px(52.0))
+        .px(px(16.0))
+        .py(px(10.0))
         .flex()
         .items_center()
         .justify_between()
-        .gap_1p5()
-        .overflow_hidden()
+        .gap(px(12.0))
         .child(
             div()
                 .flex_1()
                 .min_w(px(0.0))
                 .flex()
                 .flex_col()
-                .gap_1()
+                .gap(px(2.0))
                 .child(
                     div()
-                        .text_size(px(11.0))
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .child(title),
+                        .text_size(theme::font_size_body())
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_color(s.text_primary)
+                        .child(label),
                 )
                 .child(
                     div()
-                        .text_size(px(10.0))
-                        .line_height(px(14.0))
-                        .line_clamp(2)
-                        .text_color(theme::semantic().text_secondary)
-                        .child(detail.into()),
+                        .text_size(theme::font_size_caption())
+                        .text_color(s.text_secondary)
+                        .child(description.into()),
                 ),
         )
-        .child(div().flex_shrink_0().child(action))
+        .child(toggle_control(enabled, on_toggle))
+        .into_any_element()
 }
 
-fn settings_input_group(field: impl IntoElement, actions: impl IntoElement) -> impl IntoElement {
+fn settings_input_row(
+    label: &'static str,
+    description: impl Into<String>,
+    control: impl IntoElement,
+) -> gpui::AnyElement {
+    let s = theme::semantic();
+
     div()
+        .min_h(px(52.0))
+        .px(px(16.0))
+        .py(px(10.0))
         .flex()
-        .flex_shrink_0()
         .items_center()
-        .gap_1()
-        .child(field)
-        .child(actions)
+        .justify_between()
+        .gap(px(12.0))
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(0.0))
+                .flex()
+                .flex_col()
+                .gap(px(2.0))
+                .child(
+                    div()
+                        .text_size(theme::font_size_body())
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_color(s.text_primary)
+                        .child(label),
+                )
+                .child(
+                    div()
+                        .text_size(theme::font_size_caption())
+                        .text_color(s.text_secondary)
+                        .child(description.into()),
+                ),
+        )
+        .child(
+            div()
+                .flex_shrink_0()
+                .child(control.into_any_element()),
+        )
+        .into_any_element()
 }
 
 fn input_shell(input: Entity<TextInput>) -> impl IntoElement {
     div()
-        .rounded(px(4.0))
+        .rounded(theme::radius_md())
         .border_1()
         .border_color(ui::border_light())
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.5))
+        .bg(theme::semantic().bg_surface)
         .child(input.into_any_element())
 }
 

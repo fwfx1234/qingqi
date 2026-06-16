@@ -1,3 +1,5 @@
+use qingqi_ui::ui::components::toggle;
+
 use super::*;
 
 pub(super) fn theme_button(
@@ -21,4 +23,32 @@ pub(super) fn theme_button(
         .text_color(theme::semantic().text_primary)
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
+}
+
+pub(super) fn pill_button(
+    label: &'static str,
+    handler: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
+) -> impl IntoElement {
+    div()
+        .id(label)
+        .h(px(26.0))
+        .px(px(8.0))
+        .rounded(px(13.0))
+        .bg(theme::semantic().bg_subtle)
+        .hover(|style| style.bg(ui::row_hover()).cursor_pointer())
+        .flex()
+        .items_center()
+        .justify_center()
+        .flex_shrink_0()
+        .text_size(theme::font_size_caption())
+        .text_color(theme::semantic().text_primary)
+        .child(label)
+        .on_click(move |event, _window, cx| handler(event, cx))
+}
+
+pub(super) fn toggle_control(
+    enabled: bool,
+    handler: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
+) -> impl IntoElement {
+    toggle(enabled).id("toggle").on_click(move |event, _window, cx| handler(event, cx))
 }

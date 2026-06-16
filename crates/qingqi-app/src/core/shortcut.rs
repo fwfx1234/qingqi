@@ -1,5 +1,7 @@
 use std::{
     collections::HashMap,
+    fs,
+    path::PathBuf,
     str::FromStr,
     sync::{Arc, Mutex},
 };
@@ -58,6 +60,7 @@ pub struct ShortcutService {
     resolved: Vec<ResolvedShortcut>,
     hotkey_ids: HashMap<u32, String>,
     registration_errors: HashMap<String, String>,
+    config_path: Option<PathBuf>,
     /// Shortcut ids that are handled via `WH_KEYBOARD_LL` instead of
     /// `RegisterHotKey` (Windows-only — empty on other platforms).
     #[cfg(target_os = "windows")]
@@ -103,20 +106,22 @@ impl ShortcutGlobal {
 }
 
 impl ShortcutService {
-    pub fn new(plugins: Arc<Mutex<PluginManager>>) -> Self {
+    pub fn new(plugins: Arc<Mutex<PluginManager>>, config_path: Option<PathBuf>) -> Self {
         Self {
             plugins: Some(plugins),
+            config_path,
             ..Default::default()
         }
     }
 
     pub fn reload_from_plugins(&mut self, cx: &mut App) -> Result<()> {
-        let mut shortcuts = vec![core_open_launcher_shortcut()];
+        let mut core_shortcut = core_open_launcher_shortcut();
+        // 从配置文件加载用户自定义的快捷键
+        if let Some(custom_accelerator) = self.load_core_shortcut_config() {
+            core_shortcut = core_shortcut.with_current_accelerator(custom_accelerator);
+        }
+        let mut shortcuts = vec![core_shortcut];
         if let Some(plugins) = self.plugins.as_ref() {
-            // Respect each plugin's declared shortcut scope. Plugins that
-            // explicitly declare Global (e.g. clipboard Alt+V) will be
-            // registered as system-wide hotkeys; App-scoped shortcuts are
-            // bound as in-window key bindings only.
             shortcuts.extend(
                 qingqi_core::lock_or_recover(&plugins, "plugin-manager")
                     .shortcuts()
@@ -192,9 +197,10 @@ impl ShortcutService {
         };
         if owner == CORE_PLUGIN_ID {
             if let Some(shortcut) = self.shortcuts.iter_mut().find(|shortcut| shortcut.id == id) {
-                shortcut.current_accelerator = normalized;
+                shortcut.current_accelerator = normalized.clone();
                 shortcut.enabled = enabled;
             }
+            self.save_core_shortcut_config(&normalized);
             return Ok(());
         }
 
@@ -221,6 +227,30 @@ impl ShortcutService {
             .cloned()
             .ok_or_else(|| anyhow!("快捷键不存在: {id}"))?;
         self.set_shortcut_internal(id, &shortcut.default_accelerator, true)
+    }
+
+    fn load_core_shortcut_config(&self) -> Option<String> {
+        let path = self.config_path.as_ref()?;
+        let content = fs::read_to_string(path).ok()?;
+        let map: HashMap<String, String> = serde_json::from_str(&content).ok()?;
+        map.get(OPEN_LAUNCHER_SHORTCUT_ID).cloned()
+    }
+
+    fn save_core_shortcut_config(&self, accelerator: &str) {
+        let Some(path) = self.config_path.as_ref() else {
+            return;
+        };
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let mut map: HashMap<String, String> = fs::read_to_string(path)
+            .ok()
+            .and_then(|content| serde_json::from_str(&content).ok())
+            .unwrap_or_default();
+        map.insert(OPEN_LAUNCHER_SHORTCUT_ID.to_string(), accelerator.to_string());
+        if let Ok(json) = serde_json::to_string_pretty(&map) {
+            let _ = fs::write(path, json);
+        }
     }
 
     pub fn dispatch_global(&self, hotkey_id: u32) -> Option<ShortcutTarget> {
@@ -401,7 +431,6 @@ pub fn core_open_launcher_shortcut() -> ShortcutDescriptor {
         "Alt+Space",
         ShortcutTarget::CoreAction(CoreShortcutAction::ToggleLauncher),
     )
-    .editable(false)
 }
 
 pub fn parse_hotkey(accelerator: &str) -> Result<HotKey> {

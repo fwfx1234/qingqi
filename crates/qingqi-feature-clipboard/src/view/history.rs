@@ -4,7 +4,7 @@ use std::sync::Arc;
 use gpui::{UniformListScrollHandle, hsla, uniform_list};
 use gpui_component::{
     Icon, IconName, Sizable, Size as ComponentSize,
-    scroll::{ScrollableElement, Scrollbar, ScrollbarShow},
+    scroll::{Scrollbar, ScrollbarShow},
 };
 
 pub(super) fn keyboard_filters() -> [ClipboardFilter; 5] {
@@ -22,120 +22,186 @@ pub(super) fn history_page(
     items: Arc<Vec<ClipboardRecord>>,
     selected: usize,
     query: &str,
-    selected_record: Option<ClipboardRecord>,
     current_filter: ClipboardFilter,
     history_scroll: UniformListScrollHandle,
-    preview_input: Entity<TextInput>,
     dark: bool,
-    chrome_metrics: ui::WindowChromeMetrics,
 ) -> impl IntoElement {
     div()
         .flex_1()
         .min_h(px(0.0))
-        .pt(px(chrome_metrics.content_top_padding))
         .flex()
-        .overflow_hidden()
+        .flex_col()
         .child(
             div()
-                .flex_1()
-                .min_w(px(0.0))
-                .h_full()
-                .flex()
-                .flex_col()
-                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.45))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_h(px(0.0))
-                        .flex()
-                        .flex_col()
-                        .child(
-                            div()
-                                .px(px(10.0))
-                                .pt(px(12.0))
-                                .pb(px(4.0))
-                                .child(render_filter_tabs(handle.clone(), current_filter, dark)),
-                        )
-                        .child(history_filter_divider(dark))
-                        .child(div().flex_1().min_h(px(0.0)).px(px(4.0)).pb(px(6.0)).child(
-                            history_list(
-                                handle.clone(),
-                                items,
-                                selected,
-                                query,
-                                history_scroll,
-                                dark,
-                            ),
-                        )),
-                ),
+                .px(px(12.0))
+                .pt(px(10.0))
+                .pb(px(6.0))
+                .child(render_filter_tabs(handle.clone(), current_filter, dark)),
         )
-        .child(
-            div()
-                .w(px(370.0))
-                .min_w(px(370.0))
-                .h_full()
-                .border_l_1()
-                .border_color(ui::border_light())
-                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.55))
-                .flex()
-                .flex_col()
-                .child(
-                    div()
-                        .flex_1()
-                        .min_h(px(0.0))
-                        .px(px(14.0))
-                        .pt(px(14.0))
-                        .pb(px(8.0))
-                        .child(detail_panel(selected_record, preview_input, dark)),
-                ),
-        )
+        .child(history_filter_divider(dark))
+        .child(div().flex_1().min_h(px(0.0)).px(px(4.0)).pb(px(6.0)).child(
+            history_list(
+                handle.clone(),
+                items,
+                selected,
+                query,
+                history_scroll,
+                dark,
+            ),
+        ))
 }
 
-pub(super) fn history_titlebar_slot(
-    handle: Entity<ClipboardView>,
-    query_input: Entity<TextInput>,
+pub(super) fn search_field(query_input: Entity<TextInput>, _dark: bool) -> gpui::Div {
+    div()
+        .min_w(px(0.0))
+        .h(px(30.0))
+        .rounded(px(6.0))
+        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.45))
+        .px(px(10.0))
+        .flex()
+        .items_center()
+        .gap(px(6.0))
+        .child(
+            Icon::new(IconName::Search)
+                .with_size(ComponentSize::Small)
+                .text_color(theme::semantic().text_placeholder),
+        )
+        .child(div().flex_1().child(query_input.into_any_element()))
+}
+
+pub(super) fn preview_panel(
+    selected_record: Option<ClipboardRecord>,
+    preview_input: Entity<TextInput>,
+    wrap_enabled: bool,
+    panel: Entity<ClipboardView>,
     dark: bool,
 ) -> impl IntoElement {
     div()
-        .h_full()
+        .size_full()
         .flex()
-        .items_center()
-        .gap(px(10.0))
-        .child(
+        .flex_col()
+        .child(if let Some(item) = selected_record {
+            let kind_label = match item.kind {
+                history_store::ClipboardItemKind::Text => {
+                    if !item.badge.is_empty() {
+                        item.badge.clone()
+                    } else {
+                        String::from("文本")
+                    }
+                }
+                history_store::ClipboardItemKind::Image => String::from("图片"),
+                history_store::ClipboardItemKind::Files => {
+                    let count = item.parsed_file_paths().len();
+                    if count > 0 {
+                        format!("{} 个文件", count)
+                    } else {
+                        String::from("文件")
+                    }
+                }
+            };
+            let kind_color = match item.kind {
+                history_store::ClipboardItemKind::Text => match item.badge_kind() {
+                    history_store::ClipboardBadgeKind::Link => theme::semantic().success,
+                    history_store::ClipboardBadgeKind::Json => {
+                        ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
+                    }
+                    history_store::ClipboardBadgeKind::Other => theme::semantic().text_secondary,
+                },
+                history_store::ClipboardItemKind::Image => theme::semantic().warning,
+                history_store::ClipboardItemKind::Files => theme::semantic().danger,
+            };
+
             div()
-                .flex_none()
-                .text_size(px(12.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic().text_primary)
-                .child("剪贴板"),
-        )
-        .child(search_field(query_input, dark).w(px(280.0)).flex_none())
-        .child(
-            div()
-                .id("clipboard-open-settings")
-                .size(px(26.0))
-                .flex_none()
-                .rounded(px(5.0))
+                .size_full()
                 .flex()
-                .items_center()
-                .justify_center()
-                .hover(|style| {
-                    style
-                        .bg(theme::rgba_with_alpha(theme::semantic().bg_elevated, 0.4))
-                        .cursor_pointer()
-                })
+                .flex_col()
                 .child(
-                    Icon::new(IconName::Settings)
-                        .with_size(ComponentSize::Small)
-                        .text_color(theme::semantic().text_placeholder),
+                    div()
+                        .flex_none()
+                        .px(px(10.0))
+                        .pt(px(14.0))
+                        .pb(px(10.0))
+                        .flex()
+                        .items_center()
+                        .gap(px(8.0))
+                        .child(
+                            div()
+                                .px(px(6.0))
+                                .h(px(20.0))
+                                .rounded(px(4.0))
+                                .bg(theme::rgba_with_alpha(kind_color, 0.12))
+                                .flex()
+                                .items_center()
+                                .text_size(px(10.0))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(kind_color)
+                                .child(kind_label),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(11.0))
+                                .text_color(theme::semantic().text_secondary)
+                                .child(item.created_at.clone()),
+                        )
+                        .child(div().flex_1())
+                        .child({
+                            let panel_toggle = panel.clone();
+                            let btn_text = if wrap_enabled { "自动换行" } else { "不换行" };
+                            div()
+                                .px(px(6.0))
+                                .h(px(20.0))
+                                .rounded(px(4.0))
+                                .flex()
+                                .items_center()
+                                .text_size(px(10.0))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(theme::semantic().text_secondary)
+                                .bg(theme::rgba_with_alpha(theme::semantic().text_secondary, 0.08))
+                                .cursor_pointer()
+                                .hover(|s| s.bg(theme::rgba_with_alpha(
+                                    theme::semantic().text_secondary,
+                                    0.14,
+                                )))
+                                .on_mouse_down(gpui::MouseButton::Left, move |_event, _, cx| {
+                                    panel_toggle.update(cx, |panel, cx| {
+                                        panel.toggle_preview_wrap(cx);
+                                    });
+                                })
+                                .child(btn_text)
+                        })
+                        .child(if item.pinned {
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(3.0))
+                                .text_size(px(10.0))
+                                .text_color(ui::accent_color(
+                                    qingqi_plugin::plugin_spec::PluginAccent::Blue,
+                                ))
+                                .child(
+                                    Icon::new(IconName::Star)
+                                        .with_size(ComponentSize::Small)
+                                        .text_color(ui::accent_color(
+                                            qingqi_plugin::plugin_spec::PluginAccent::Blue,
+                                        )),
+                                )
+                                .child("已置顶")
+                                .into_any_element()
+                        } else {
+                            div().into_any_element()
+                        }),
                 )
-                .on_click(move |_, _, cx| {
-                    let _ = cx.update_entity(&handle, |panel, cx| {
-                        panel.set_tab(ClipboardTab::Settings);
-                        cx.notify();
-                    });
-                }),
-        )
+                .child(
+                    div()
+                        .flex_1()
+                        .flex_col()
+                        .min_h(px(0.0))
+                        .child(preview_content(item, preview_input, dark)),
+                )
+                .into_any_element()
+        } else {
+            preview_empty(dark).into_any_element()
+        })
 }
 
 fn history_filter_divider(_dark: bool) -> impl IntoElement {
@@ -145,27 +211,6 @@ fn history_filter_divider(_dark: bool) -> impl IntoElement {
         .mb(px(4.0))
         .h(px(1.0))
         .bg(ui::border_light())
-}
-
-fn search_field(query_input: Entity<TextInput>, _dark: bool) -> gpui::Div {
-    div()
-        .min_w(px(0.0))
-        .h(px(28.0))
-        .rounded(px(6.0))
-        .border_1()
-        .border_color(ui::border_light())
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.35))
-        .shadow(glass_shadow())
-        .px(px(8.0))
-        .flex()
-        .items_center()
-        .gap(px(4.0))
-        .child(
-            Icon::new(IconName::Search)
-                .with_size(ComponentSize::Small)
-                .text_color(theme::semantic().text_placeholder),
-        )
-        .child(div().flex_1().child(query_input.into_any_element()))
 }
 
 fn render_filter_tabs(
@@ -182,8 +227,8 @@ fn render_filter_tabs(
             let el = div()
                 .id(("clipboard-filter-tab", idx))
                 .h(px(24.0))
-                .px(px(8.0))
-                .rounded(px(4.0))
+                .px(px(10.0))
+                .rounded(px(5.0))
                 .bg(if is_active {
                     theme::rgba_with_alpha(
                         ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue),
@@ -294,6 +339,11 @@ fn empty_state_text(query: &str, _dark: bool, is_empty: bool) -> impl IntoElemen
     } else {
         "没有匹配记录"
     };
+    let hint = if is_empty && query.trim().is_empty() {
+        "复制内容后将自动出现在这里"
+    } else {
+        "尝试其他关键词或筛选"
+    };
 
     div()
         .flex_1()
@@ -312,6 +362,12 @@ fn empty_state_text(query: &str, _dark: bool, is_empty: bool) -> impl IntoElemen
                 .text_size(px(12.0))
                 .text_color(theme::semantic().text_placeholder)
                 .child(message),
+        )
+        .child(
+            div()
+                .text_size(px(10.0))
+                .text_color(theme::semantic().text_placeholder)
+                .child(hint),
         )
 }
 
@@ -419,7 +475,6 @@ fn history_row(
                         .child(meta),
                 ),
         )
-        // Pin + Delete — subtle icon buttons on the right
         .child(
             div()
                 .flex()
@@ -624,15 +679,40 @@ fn preview_content(
 
 fn preview_text(preview_input: Entity<TextInput>, _dark: bool) -> impl IntoElement {
     div()
-        .w_full()
-        .px(px(8.0))
-        .py(px(6.0))
+        .size_full()
+        .pl(px(10.0))
+        .pr(px(4.0))
+        .pt(px(2.0))
+        .pb(px(8.0))
         .text_color(theme::semantic().text_body)
         .child(preview_input)
 }
 
-fn preview_empty(dark: bool) -> impl IntoElement {
-    preview_unavailable("选择一条记录", dark)
+fn preview_empty(_dark: bool) -> impl IntoElement {
+    div()
+        .size_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .flex_col()
+        .gap(px(10.0))
+        .child(
+            Icon::new(IconName::Copy)
+                .with_size(ComponentSize::Large)
+                .text_color(theme::semantic().text_placeholder),
+        )
+        .child(
+            div()
+                .text_size(px(13.0))
+                .text_color(theme::semantic().text_placeholder)
+                .child("选择一条记录以查看详情"),
+        )
+        .child(
+            div()
+                .text_size(px(11.0))
+                .text_color(theme::semantic().text_placeholder)
+                .child("Ctrl+C 复制 · ↑↓ 导航 · Enter 粘贴"),
+        )
 }
 
 fn preview_unavailable(message: &'static str, _dark: bool) -> impl IntoElement {
@@ -644,27 +724,4 @@ fn preview_unavailable(message: &'static str, _dark: bool) -> impl IntoElement {
         .text_size(px(11.0))
         .text_color(theme::semantic().text_placeholder)
         .child(message)
-}
-
-fn detail_panel(
-    selected_record: Option<ClipboardRecord>,
-    preview_input: Entity<TextInput>,
-    dark: bool,
-) -> impl IntoElement {
-    div().size_full().flex().flex_col().child(
-        div()
-            .flex_1()
-            .min_h(px(0.0))
-            .rounded(px(8.0))
-            .border_1()
-            .border_color(ui::border_light())
-            .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.5))
-            .shadow(glass_shadow())
-            .overflow_y_scrollbar()
-            .child(
-                selected_record
-                    .map(|item| preview_content(item, preview_input, dark).into_any_element())
-                    .unwrap_or_else(|| preview_empty(dark).into_any_element()),
-            ),
-    )
 }

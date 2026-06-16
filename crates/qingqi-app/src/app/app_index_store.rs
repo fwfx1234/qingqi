@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
@@ -31,16 +31,6 @@ ON CONFLICT(key) DO UPDATE SET value = excluded.value
 
 pub const DELETE_LAST_SCAN: &str = "DELETE FROM app_index_meta WHERE key = 'last_scan'";
 
-pub const RECORD_LAUNCH: &str = "
-INSERT INTO command_usage (command_key, use_count, last_used_at)
-VALUES (?1, 1, strftime('%s', 'now'))
-ON CONFLICT(command_key) DO UPDATE SET
-    use_count = use_count + 1,
-    last_used_at = excluded.last_used_at
-";
-
-pub const LOAD_USAGE: &str = "SELECT command_key, use_count, last_used_at FROM command_usage";
-
 pub const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS app_index_entries (
     path TEXT PRIMARY KEY,
@@ -63,27 +53,12 @@ CREATE TABLE IF NOT EXISTS app_index_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-
-CREATE TABLE IF NOT EXISTS command_usage (
-    command_key TEXT PRIMARY KEY,
-    use_count INTEGER NOT NULL DEFAULT 0,
-    last_used_at INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE INDEX IF NOT EXISTS idx_app_command_usage_recent
-    ON command_usage(use_count DESC, last_used_at DESC);
 ";
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppIndexCache {
     pub apps: Vec<AppEntry>,
     pub last_scan: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AppLaunchUsage {
-    pub use_count: i64,
-    pub last_used_at: i64,
 }
 
 #[derive(Clone, Debug)]
@@ -159,42 +134,13 @@ impl AppIndexStore {
         let terms = query_terms(query);
         let (where_sql, params) = search_where_clause(&terms);
         let total = count_matches(&conn, &where_sql, &params)?;
-        let rows = select_matches(&conn, &where_sql, &params, offset, limit, terms.is_empty())?;
+        let rows = select_matches(&conn, &where_sql, &params, offset, limit)?;
         Ok(qingqi_plugin::page::Page {
             rows,
             total,
             offset,
             limit,
         })
-    }
-
-    pub fn record_launch(&self, app_path: &str) -> Result<()> {
-        let conn = self.connection()?;
-        ensure_schema(&conn)?;
-        conn.execute(RECORD_LAUNCH, params![format!("app:{app_path}")])?;
-        Ok(())
-    }
-
-    pub fn usage_map(&self) -> Result<HashMap<String, AppLaunchUsage>> {
-        let conn = self.connection()?;
-        ensure_schema(&conn)?;
-        let mut stmt = conn.prepare(LOAD_USAGE)?;
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                AppLaunchUsage {
-                    use_count: row.get(1)?,
-                    last_used_at: row.get(2)?,
-                },
-            ))
-        })?;
-
-        let mut usage = HashMap::new();
-        for row in rows {
-            let (key, value) = row?;
-            usage.insert(key, value);
-        }
-        Ok(usage)
     }
 
     fn connection(&self) -> Result<qingqi_plugin::database::PooledConnection> {
@@ -227,28 +173,15 @@ fn select_matches(
     values: &[String],
     offset: usize,
     limit: usize,
-    recommend: bool,
 ) -> Result<Vec<AppEntry>> {
     let limit = limit.min(i64::MAX as usize);
     let offset = offset.min(i64::MAX as usize);
-    let order_sql = if recommend {
-        "
-        ORDER BY COALESCE(usage.use_count, 0) DESC,
-                 COALESCE(usage.last_used_at, 0) DESC,
-                 sort_name ASC,
-                 name ASC
-        "
-    } else {
-        "ORDER BY sort_name ASC, name ASC"
-    };
     let sql = format!(
         "
         SELECT name, path, bundle_id, icon_path, aliases_json, icon_letter
         FROM app_index_entries
-        LEFT JOIN command_usage AS usage
-            ON usage.command_key = 'app:' || app_index_entries.path
         {where_sql}
-        {order_sql}
+        ORDER BY sort_name ASC, name ASC
         LIMIT {limit} OFFSET {offset}
         "
     );

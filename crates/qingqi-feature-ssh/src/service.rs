@@ -903,16 +903,15 @@ impl SshService {
         if path.is_empty() || path == "/" {
             return Ok(());
         }
-        if self.remote_entry_exists(id, path)? {
-            return Ok(());
-        }
         if let Some(parent) = crate::upload::remote_parent(path) {
             if parent != "/" {
                 self.ensure_remote_directory(id, &parent)?;
             }
         }
-        let _ = self.create_remote_directory(id, path);
-        Ok(())
+        if self.remote_entry_exists(id, path)? {
+            return Ok(());
+        }
+        self.create_remote_directory(id, path)
     }
 
     pub fn ensure_remote_parent_dirs(&self, id: &SessionId, remote_file: &str) -> Result<()> {

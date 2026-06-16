@@ -2,7 +2,6 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     path::{Path, PathBuf},
-    rc::Rc,
     sync::{Arc, Mutex, RwLock},
 };
 

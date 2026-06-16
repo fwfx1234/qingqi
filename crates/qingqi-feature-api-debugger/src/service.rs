@@ -24,7 +24,7 @@ use qingqi_plugin::{database::DatabaseService, log_error, storage::AppPaths};
 // Re-export model types for backward compatibility
 pub use crate::model::{
     ApiEnvironment, ApiGroup, ApiRequest, ApiScenario, AuthType, BodyMode, EnvHeader, EnvVariable,
-    EnvironmentFull, HttpHistory, HttpMethod, KeyValueRow, ScenarioStatus,
+    EnvironmentFull, HttpHistory, HttpMethod, KeyValueRow,
 };
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
@@ -168,6 +168,8 @@ struct ApiServiceState {
     pending_response: Option<ApiResponse>,
     pending_error: Option<String>,
     pending_notice: Option<String>,
+    pending_groups: Option<Vec<ApiGroup>>,
+    pending_environments: Option<Vec<ApiEnvironment>>,
     last_tab_id: String,
 }
 
@@ -194,6 +196,8 @@ impl ApiService {
                 pending_response: None,
                 pending_error: None,
                 pending_notice: None,
+                pending_groups: None,
+                pending_environments: None,
                 last_tab_id: String::new(),
             }),
             data_source,
@@ -243,6 +247,31 @@ impl ApiService {
             .lock()
             .ok()
             .and_then(|mut state| state.pending_notice.take())
+    }
+
+    pub fn take_pending_groups(&self) -> Option<Vec<ApiGroup>> {
+        self.state
+            .lock()
+            .ok()
+            .and_then(|mut state| state.pending_groups.take())
+    }
+
+    pub fn take_pending_environments(&self) -> Option<Vec<ApiEnvironment>> {
+        self.state
+            .lock()
+            .ok()
+            .and_then(|mut state| state.pending_environments.take())
+    }
+
+    fn reload_workspace_with_notice(&self, notice: String) {
+        let groups = self.build_collection_tree().unwrap_or_default();
+        let environments = self.list_environments_ui();
+        if let Ok(mut state) = self.state.lock() {
+            state.pending_groups = Some(groups);
+            state.pending_environments = Some(environments);
+            state.pending_notice = Some(notice);
+        }
+        self.revision.fetch_add(1, Ordering::SeqCst);
     }
 
     fn publish_notice(&self, notice: String) {
@@ -355,6 +384,8 @@ impl ApiService {
         thread::spawn(move || {
             if let Err(error) = service.save_workspace(&[], &environments) {
                 service.publish_notice(format!("工作区保存失败: {error}"));
+            } else {
+                service.reload_workspace_with_notice(String::from("工作区已保存"));
             }
         });
     }
@@ -397,7 +428,7 @@ impl ApiService {
         let service = Arc::clone(self);
         thread::spawn(move || {
             match service.create_endpoint(parent_id.as_deref(), &name, &method, &url) {
-                Ok(_) => service.publish_notice(format!("已创建端点 {}", name)),
+                Ok(_) => service.reload_workspace_with_notice(format!("已创建端点 {}", name)),
                 Err(e) => service.publish_notice(format!("创建端点失败: {e}")),
             }
         });
@@ -431,7 +462,7 @@ impl ApiService {
     pub fn create_case_async(self: &Arc<Self>, parent_id: String, name: String) {
         let service = Arc::clone(self);
         thread::spawn(move || match service.create_case(&parent_id, &name) {
-            Ok(_) => service.publish_notice(format!("已创建用例 {}", name)),
+            Ok(_) => service.reload_workspace_with_notice(format!("已创建用例 {}", name)),
             Err(e) => service.publish_notice(format!("创建用例失败: {e}")),
         });
     }
@@ -455,7 +486,7 @@ impl ApiService {
         let service = Arc::clone(self);
         thread::spawn(
             move || match service.create_folder(parent_id.as_deref(), &name) {
-                Ok(_) => service.publish_notice(format!("已创建分组 {}", name)),
+                Ok(_) => service.reload_workspace_with_notice(format!("已创建分组 {}", name)),
                 Err(e) => service.publish_notice(format!("创建分组失败: {e}")),
             },
         );
@@ -470,7 +501,7 @@ impl ApiService {
     pub fn delete_collection_item_async(self: &Arc<Self>, node_id: String) {
         let service = Arc::clone(self);
         thread::spawn(move || match service.delete_collection_item(&node_id) {
-            Ok(count) => service.publish_notice(format!("已删除 {} 项", count)),
+            Ok(count) => service.reload_workspace_with_notice(format!("已删除 {} 项", count)),
             Err(e) => service.publish_notice(format!("删除失败: {e}")),
         });
     }
@@ -496,7 +527,7 @@ impl ApiService {
         let service = Arc::clone(self);
         thread::spawn(
             move || match service.rename_collection_item(&node_id, &new_name) {
-                Ok(()) => service.publish_notice(format!("已重命名为 {}", new_name)),
+                Ok(()) => service.reload_workspace_with_notice(format!("已重命名为 {}", new_name)),
                 Err(e) => service.publish_notice(format!("重命名失败: {e}")),
             },
         );
@@ -537,7 +568,7 @@ impl ApiService {
     pub fn import_from_curl_async(self: &Arc<Self>, curl_text: String) {
         let service = Arc::clone(self);
         thread::spawn(move || match service.import_from_curl(&curl_text) {
-            Ok(node) => service.publish_notice(format!("已导入 cURL 请求: {}", node.name)),
+            Ok(node) => service.reload_workspace_with_notice(format!("已导入 cURL 请求: {}", node.name)),
             Err(e) => service.publish_notice(format!("cURL 导入失败: {e}")),
         });
     }
@@ -590,7 +621,7 @@ impl ApiService {
         let service = Arc::clone(self);
         thread::spawn(move || match service.import_from_openapi(&content) {
             Ok(nodes) => {
-                service.publish_notice(format!("已从 OpenAPI 导入 {} 个端点", nodes.len()))
+                service.reload_workspace_with_notice(format!("已从 OpenAPI 导入 {} 个端点", nodes.len()))
             }
             Err(e) => service.publish_notice(format!("OpenAPI 导入失败: {e}")),
         });
@@ -600,7 +631,7 @@ impl ApiService {
         let service = Arc::clone(self);
         thread::spawn(move || match service.import_from_postman(&content) {
             Ok(nodes) => {
-                service.publish_notice(format!("已从 Postman 导入 {} 个端点", nodes.len()))
+                service.reload_workspace_with_notice(format!("已从 Postman 导入 {} 个端点", nodes.len()))
             }
             Err(e) => service.publish_notice(format!("Postman 导入失败: {e}")),
         });
@@ -905,7 +936,7 @@ impl ApiService {
     pub fn create_environment_async(self: &Arc<Self>, name: String, base_url: String) {
         let service = Arc::clone(self);
         thread::spawn(move || match service.create_environment(&name, &base_url) {
-            Ok(env) => service.publish_notice(format!("已创建环境 {}", env.name)),
+            Ok(env) => service.reload_workspace_with_notice(format!("已创建环境 {}", env.name)),
             Err(error) => service.publish_notice(format!("创建环境失败: {error}")),
         });
     }
@@ -977,7 +1008,7 @@ impl ApiService {
     pub fn duplicate_environment_async(self: &Arc<Self>, source_index: usize) {
         let service = Arc::clone(self);
         thread::spawn(move || match service.duplicate_environment(source_index) {
-            Ok(env) => service.publish_notice(format!("已复制为 {}", env.name)),
+            Ok(env) => service.reload_workspace_with_notice(format!("已复制为 {}", env.name)),
             Err(error) => service.publish_notice(format!("复制环境失败: {error}")),
         });
     }
@@ -1000,7 +1031,7 @@ impl ApiService {
     pub fn delete_environment_by_index_async(self: &Arc<Self>, index: usize) {
         let service = Arc::clone(self);
         thread::spawn(move || match service.delete_environment_by_index(index) {
-            Ok(true) => service.publish_notice(String::from("已删除环境")),
+            Ok(true) => service.reload_workspace_with_notice(String::from("已删除环境")),
             Ok(false) => service.publish_notice(String::from("环境未删除")),
             Err(error) => service.publish_notice(format!("删除环境失败: {error}")),
         });
@@ -1046,7 +1077,7 @@ impl ApiService {
                 &variables_kv,
                 &headers_kv,
             ) {
-                Ok(()) => service.publish_notice(format!("已保存环境 {}", name)),
+                Ok(()) => service.reload_workspace_with_notice(format!("已保存环境 {}", name)),
                 Err(error) => service.publish_notice(format!("保存环境失败: {error}")),
             }
         });
@@ -1055,7 +1086,7 @@ impl ApiService {
     pub fn import_environments_json_async(self: &Arc<Self>, content: String) {
         let service = Arc::clone(self);
         thread::spawn(move || match service.import_environments_json(&content) {
-            Ok(count) => service.publish_notice(format!("已导入 {count} 个环境")),
+            Ok(count) => service.reload_workspace_with_notice(format!("已导入 {count} 个环境")),
             Err(error) => service.publish_notice(format!("环境导入失败: {error}")),
         });
     }
@@ -1800,25 +1831,13 @@ fn env_ui_to_full(env: &ApiEnvironment, id: &str) -> EnvironmentFull {
 
 fn build_groups_from_nodes(nodes: &[CollectionNode]) -> Vec<ApiGroup> {
     let mut groups = Vec::new();
-    let top_folders: Vec<&CollectionNode> = nodes
-        .iter()
-        .filter(|n| n.kind == NodeKind::Folder && n.parent_id.is_none())
-        .collect();
 
-    for folder in &top_folders {
-        let endpoints = collect_descendant_endpoints(folder.id.as_str(), nodes);
-        let requests: Vec<ApiRequest> = endpoints
-            .iter()
-            .map(|ep| node_to_request(ep, nodes))
-            .collect();
-        groups.push(ApiGroup {
-            id: Some(folder.id.clone()),
-            name: folder.name.clone(),
-            requests,
-        });
+    for node in nodes {
+        if node.kind == NodeKind::Folder && node.parent_id.is_none() {
+            groups.push(build_group_from_node(node, nodes));
+        }
     }
 
-    // Root-level endpoints (not under any folder) go into a default group
     let root_endpoints: Vec<&CollectionNode> = nodes
         .iter()
         .filter(|n| n.kind == NodeKind::Endpoint && n.parent_id.is_none())
@@ -1829,6 +1848,7 @@ fn build_groups_from_nodes(nodes: &[CollectionNode]) -> Vec<ApiGroup> {
             ApiGroup {
                 id: None,
                 name: String::from("默认"),
+                folders: Vec::new(),
                 requests: root_endpoints
                     .iter()
                     .map(|ep| node_to_request(ep, nodes))
@@ -1840,24 +1860,30 @@ fn build_groups_from_nodes(nodes: &[CollectionNode]) -> Vec<ApiGroup> {
     groups
 }
 
-fn collect_descendant_endpoints<'a>(
-    root_id: &str,
-    nodes: &'a [CollectionNode],
-) -> Vec<&'a CollectionNode> {
-    let mut result = Vec::new();
-    let mut queue = vec![root_id];
-    while let Some(current_id) = queue.pop() {
-        for node in nodes {
-            if node.parent_id.as_deref() == Some(current_id) {
-                match node.kind {
-                    NodeKind::Endpoint => result.push(node),
-                    NodeKind::Folder => queue.push(node.id.as_str()),
-                    NodeKind::Case => {}
+fn build_group_from_node(node: &CollectionNode, nodes: &[CollectionNode]) -> ApiGroup {
+    let mut folders = Vec::new();
+    let mut requests = Vec::new();
+
+    for child in nodes {
+        if child.parent_id.as_deref() == Some(node.id.as_str()) {
+            match child.kind {
+                NodeKind::Folder => {
+                    folders.push(build_group_from_node(child, nodes));
                 }
+                NodeKind::Endpoint => {
+                    requests.push(node_to_request(child, nodes));
+                }
+                NodeKind::Case => {}
             }
         }
     }
-    result
+
+    ApiGroup {
+        id: Some(node.id.clone()),
+        name: node.name.clone(),
+        folders,
+        requests,
+    }
 }
 
 fn node_to_request(node: &CollectionNode, nodes: &[CollectionNode]) -> ApiRequest {
@@ -1901,7 +1927,6 @@ fn node_scenarios(endpoint: &CollectionNode, nodes: &[CollectionNode]) -> Vec<Ap
         .map(|c| ApiScenario {
             node_id: c.id.clone(),
             name: c.name.clone(),
-            status: ScenarioStatus::Pending,
             request: Some(Box::new(case_node_to_request(c, endpoint))),
         })
         .collect()
@@ -2213,6 +2238,8 @@ mod tests {
                 pending_response: None,
                 pending_error: None,
                 pending_notice: None,
+                pending_groups: None,
+                pending_environments: None,
                 last_tab_id: String::new(),
             }),
             data_source: store,
@@ -2381,12 +2408,6 @@ mod tests {
         assert_eq!(scenario_request.node_id, "case-1");
         assert_eq!(scenario_request.title, "正常下单");
         assert_eq!(scenario_request.path, "/orders");
-        assert!(
-            request
-                .scenarios
-                .iter()
-                .all(|s| s.status == ScenarioStatus::Pending)
-        );
     }
 
     #[test]
@@ -2440,7 +2461,7 @@ mod tests {
     }
 
     #[test]
-    fn build_groups_nested_folders_collect_descendants() {
+    fn build_groups_nested_folders_preserve_hierarchy() {
         let store = temp_store();
 
         store
@@ -2482,8 +2503,11 @@ mod tests {
 
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].name, "API");
-        assert_eq!(groups[0].requests.len(), 1);
-        assert_eq!(groups[0].requests[0].title, "/user/list");
+        assert_eq!(groups[0].requests.len(), 0);
+        assert_eq!(groups[0].folders.len(), 1);
+        assert_eq!(groups[0].folders[0].name, "Users");
+        assert_eq!(groups[0].folders[0].requests.len(), 1);
+        assert_eq!(groups[0].folders[0].requests[0].title, "/user/list");
     }
 
     #[test]
@@ -3064,6 +3088,8 @@ mod tests {
                 pending_response: None,
                 pending_error: None,
                 pending_notice: None,
+                pending_groups: None,
+                pending_environments: None,
                 last_tab_id: String::new(),
             }),
             data_source: store,
@@ -3088,6 +3114,8 @@ mod tests {
                 pending_response: None,
                 pending_error: None,
                 pending_notice: None,
+                pending_groups: None,
+                pending_environments: None,
                 last_tab_id: String::new(),
             }),
             data_source: store,
@@ -3110,6 +3138,8 @@ mod tests {
                 pending_response: None,
                 pending_error: None,
                 pending_notice: None,
+                pending_groups: None,
+                pending_environments: None,
                 last_tab_id: String::new(),
             }),
             data_source: store,
@@ -3131,6 +3161,8 @@ mod tests {
                 pending_response: None,
                 pending_error: None,
                 pending_notice: None,
+                pending_groups: None,
+                pending_environments: None,
                 last_tab_id: String::new(),
             }),
             data_source: store,
@@ -3153,6 +3185,8 @@ mod tests {
                 pending_response: None,
                 pending_error: None,
                 pending_notice: None,
+                pending_groups: None,
+                pending_environments: None,
                 last_tab_id: String::new(),
             }),
             data_source: store,
@@ -3214,6 +3248,8 @@ mod tests {
                 pending_response: None,
                 pending_error: None,
                 pending_notice: None,
+                pending_groups: None,
+                pending_environments: None,
                 last_tab_id: String::new(),
             }),
             data_source: store,
@@ -3268,6 +3304,8 @@ mod tests {
                 pending_response: None,
                 pending_error: None,
                 pending_notice: None,
+                pending_groups: None,
+                pending_environments: None,
                 last_tab_id: String::new(),
             }),
             data_source: store,
@@ -3657,6 +3695,8 @@ mod tests {
                 pending_response: None,
                 pending_error: None,
                 pending_notice: None,
+                pending_groups: None,
+                pending_environments: None,
                 last_tab_id: String::new(),
             }),
             data_source: store,

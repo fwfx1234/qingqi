@@ -36,6 +36,9 @@ pub struct TextInput {
     multiline: bool,
     read_only: bool,
     monospace: bool,
+    fill_height: bool,
+    soft_wrap: bool,
+    pending_soft_wrap: Option<bool>,
     text_color: Option<Hsla>,
     placeholder_color: Option<Hsla>,
     pending_value: Option<String>,
@@ -61,6 +64,9 @@ impl TextInput {
             multiline: false,
             read_only: false,
             monospace: false,
+            fill_height: false,
+            soft_wrap: true,
+            pending_soft_wrap: None,
             text_color: None,
             placeholder_color: None,
             pending_value: None,
@@ -115,6 +121,17 @@ impl TextInput {
 
     pub fn set_monospace(&mut self, monospace: bool, cx: &mut Context<Self>) {
         self.monospace = monospace;
+        cx.notify();
+    }
+
+    pub fn set_fill_height(&mut self, fill: bool, cx: &mut Context<Self>) {
+        self.fill_height = fill;
+        cx.notify();
+    }
+
+    pub fn set_soft_wrap(&mut self, wrap: bool, cx: &mut Context<Self>) {
+        self.soft_wrap = wrap;
+        self.pending_soft_wrap = Some(wrap);
         cx.notify();
     }
 
@@ -221,6 +238,11 @@ impl TextInput {
             window.focus(&focus);
             window.dispatch_action(Box::new(SelectAll), cx);
         }
+        if let Some(wrap) = self.pending_soft_wrap.take() {
+            state.update(cx, |input, cx| {
+                input.set_soft_wrap(wrap, window, cx);
+            });
+        }
     }
 
     fn build_input(&self, state: &Entity<InputState>) -> Input {
@@ -272,11 +294,17 @@ impl Render for TextInput {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let state = self.ensure_state(window, cx);
         self.sync_pending(&state, window, cx);
-        let height = if self.multiline {
-            self.style.height.max(40.0)
+        let mut input = self.build_input(&state).w_full();
+        if self.fill_height {
+            input = input.h_full();
         } else {
-            self.style.height
-        };
-        self.build_input(&state).w_full().h(px(height))
+            let height = if self.multiline {
+                self.style.height.max(40.0)
+            } else {
+                self.style.height
+            };
+            input = input.h(px(height));
+        }
+        input
     }
 }

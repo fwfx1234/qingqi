@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use russh_sftp::client::error::Error as SftpClientError;
+use russh_sftp::protocol::StatusCode;
 
 use crate::model::{RemoteEntry, SessionId, TransferId};
 use crate::service::SshService;
@@ -208,7 +210,11 @@ impl<'a> RemoteListingCache<'a> {
         if remote_dirs_match(&parent, &self.cwd) {
             return Ok(self.cwd_entries.iter().any(matches));
         }
-        let entries = self.listings(&parent)?;
+        let entries = match self.listings(&parent) {
+            Ok(entries) => entries,
+            Err(e) if is_remote_not_found(&e) => return Ok(false),
+            Err(e) => return Err(e),
+        };
         Ok(entries.iter().any(matches))
     }
 
@@ -220,12 +226,11 @@ impl<'a> RemoteListingCache<'a> {
         if name.is_empty() || name == "." || name == ".." {
             return Ok(false);
         }
-        let matches = |entry: &RemoteEntry| entry.name == name && entry.is_dir != uploading_file;
-        if remote_dirs_match(&parent, &self.cwd) {
-            return Ok(self.cwd_entries.iter().any(matches));
+        if !remote_dirs_match(&parent, &self.cwd) {
+            return Ok(false);
         }
-        let entries = self.listings(&parent)?;
-        Ok(entries.iter().any(matches))
+        let matches = |entry: &RemoteEntry| entry.name == name && entry.is_dir != uploading_file;
+        Ok(self.cwd_entries.iter().any(matches))
     }
 
     fn listings(&mut self, parent: &str) -> Result<&Vec<RemoteEntry>> {
@@ -249,6 +254,23 @@ pub fn remote_parent(path: &str) -> Option<String> {
     } else {
         Some(path[..pos].to_string())
     }
+}
+
+/// 检查错误是否为远端目录不存在（SFTP SSH_FX_NO_SUCH_FILE）。
+fn is_remote_not_found(err: &anyhow::Error) -> bool {
+    if let Some(sftp_err) = err.downcast_ref::<SftpClientError>() {
+        if let SftpClientError::Status(status) = sftp_err {
+            return status.status_code == StatusCode::NoSuchFile;
+        }
+    }
+    for cause in err.chain().skip(1) {
+        if let Some(sftp_err) = cause.downcast_ref::<SftpClientError>() {
+            if let SftpClientError::Status(status) = sftp_err {
+                return status.status_code == StatusCode::NoSuchFile;
+            }
+        }
+    }
+    false
 }
 
 pub fn split_remote_parent(remote: &str) -> Option<(String, String)> {

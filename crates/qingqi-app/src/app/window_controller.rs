@@ -170,6 +170,7 @@ impl WindowController {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             display_id: display.map(|display| display.id()),
+            show: false,
             titlebar: Some(TitlebarOptions {
                 title: Some("Qingqi".into()),
                 appears_transparent: true,

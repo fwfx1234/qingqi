@@ -308,37 +308,37 @@ pub fn http_method_color(method: &str) -> Rgba {
     match method {
         "GET" => {
             if dark {
-                green_400()
+                rgb(0x34d399)
             } else {
-                green_500()
+                rgb(0x10b981)
             }
         }
         "POST" => {
             if dark {
-                amber_400()
+                rgb(0xfbbf24)
             } else {
-                amber_500()
+                rgb(0xf59e0b)
             }
         }
         "PUT" => {
             if dark {
-                blue_400()
+                rgb(0xfb923c)
             } else {
-                rgb(0x3b82f6)
+                rgb(0xf97316)
             }
         }
         "DELETE" => {
             if dark {
-                red_400()
+                rgb(0xf87171)
             } else {
-                red_500()
+                rgb(0xef4444)
             }
         }
         "PATCH" => {
             if dark {
-                cyan_400()
+                rgb(0xc084fc)
             } else {
-                cyan_500()
+                rgb(0xa855f7)
             }
         }
         _ => {

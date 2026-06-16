@@ -189,31 +189,6 @@ impl AuthType {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ScenarioStatus {
-    Passed,
-    Pending,
-    Failed,
-}
-
-impl ScenarioStatus {
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Passed => "已通过",
-            Self::Pending => "待执行",
-            Self::Failed => "失败",
-        }
-    }
-
-    pub fn symbol(&self) -> &'static str {
-        match self {
-            Self::Passed => "✓",
-            Self::Pending => "⏳",
-            Self::Failed => "✗",
-        }
-    }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct KeyValueRow {
     pub enabled: bool,
@@ -242,7 +217,6 @@ pub struct ApiScenario {
     #[serde(default)]
     pub node_id: String,
     pub name: String,
-    pub status: ScenarioStatus,
     #[serde(default)]
     pub request: Option<Box<ApiRequest>>,
 }
@@ -308,7 +282,27 @@ pub struct ApiRequest {
 pub struct ApiGroup {
     pub id: Option<String>,
     pub name: String,
+    #[serde(default)]
+    pub folders: Vec<ApiGroup>,
     pub requests: Vec<ApiRequest>,
+}
+
+impl ApiGroup {
+    pub fn is_empty(&self) -> bool {
+        self.requests.is_empty() && self.folders.iter().all(|f| f.is_empty())
+    }
+
+    pub fn total_request_count(&self) -> usize {
+        self.requests.len()
+            + self.folders.iter().map(|f| f.total_request_count()).sum::<usize>()
+    }
+
+    pub fn any_scenario_exists(&self, predicate: impl Fn(&ApiScenario) -> bool + Copy) -> bool {
+        if self.requests.iter().any(|r| r.scenarios.iter().any(predicate)) {
+            return true;
+        }
+        self.folders.iter().any(|f| f.any_scenario_exists(predicate))
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
