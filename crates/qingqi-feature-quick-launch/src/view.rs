@@ -14,6 +14,7 @@ use crate::{
     parameters::{join_shell_words, split_shell_words},
     service::{QuickLaunchService, RunSummary},
 };
+use gpui_component::Selectable;
 use gpui_component::theme::Theme;
 use qingqi_ui::{
     text_input::{TextInput, TextInputStyle},
@@ -3074,46 +3075,11 @@ fn latest_run_status_chip(
 fn segment_button(
     label: &'static str,
     active: bool,
-    cx: &App,
+    _cx: &App,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement {
-    let accent = Theme::global(cx).primary;
-    let hover_bg = ui::row_hover(cx);
-    div()
-        .id(label)
-        .h(px(26.0))
-        .px(px(8.0))
-        .rounded(px(4.0))
-        .border_1()
-        .border_color(if active {
-            accent
-        } else {
-            ui::border_light(cx)
-        })
-        .bg(if active {
-            accent
-        } else {
-            ui::bg_surface(cx)
-        })
-        .hover(move |style| {
-            style
-                .bg(if active {
-                    accent
-                } else {
-                    hover_bg
-                })
-                .cursor_pointer()
-        })
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(10.0))
-        .text_color(if active {
-            gpui::Hsla::from(ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue))
-        } else {
-            ui::text_primary(cx)
-        })
-        .child(label)
+    ui::secondary_btn(label, label)
+        .selected(active)
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
