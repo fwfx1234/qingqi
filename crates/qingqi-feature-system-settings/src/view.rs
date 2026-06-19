@@ -6,6 +6,7 @@ use gpui::{
     Render, StatefulInteractiveElement, Styled, Window, div, hsla, prelude::FluentBuilder, px,
 };
 
+use gpui_component::Disableable;
 use gpui_component::theme::Theme;
 use qingqi_platform::macos::PermissionStatus;
 use qingqi_plugin::{
@@ -938,29 +939,13 @@ fn app_index_action_button(entity: Entity<SettingsView>, cx: &App, available: bo
     }
 }
 
-fn plugin_dir_button(entity: Entity<SettingsView>, cx: &App, _root_path: &str) -> impl IntoElement {
-    let t = Theme::global(cx);
-    div()
-        .id("system-settings-open-plugin-dir")
-        .h(px(28.0))
-        .px_3()
-        .rounded(theme::radius_md())
-        .border_1()
-        .border_color(t.border)
-        .bg(t.list)
-        .hover(|style| style.bg(t.muted).cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(theme::font_size_caption())
-        .text_color(t.foreground)
-        .child("打开目录")
-        .on_click(move |_, _window, cx| {
-            entity.update(cx, |this, cx| {
-                this.open_plugin_dir();
-                cx.notify();
-            });
-        })
+fn plugin_dir_button(entity: Entity<SettingsView>, _cx: &App, _root_path: &str) -> impl IntoElement {
+    ui::secondary_btn("system-settings-open-plugin-dir", "打开目录").on_click(move |_, _window, cx| {
+        entity.update(cx, |this, cx| {
+            this.open_plugin_dir();
+            cx.notify();
+        });
+    })
 }
 
 fn icon_cache_clear_button(
@@ -1182,54 +1167,18 @@ fn shortcut_input_shell(input: Entity<TextInput>, editable: bool, cx: &App) -> i
 }
 
 fn shortcut_action_button(
-    cx: &App,
+    _cx: &App,
     label: &'static str,
     primary: bool,
     enabled: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    let t = Theme::global(cx);
-    let bg = if !enabled {
-        t.muted
-    } else if primary {
-        t.primary
+    let btn = if primary {
+        ui::primary_btn(label, label)
     } else {
-        t.list
+        ui::secondary_btn(label, label)
     };
-    let text = if !enabled {
-        t.muted_foreground
-    } else if primary {
-        hsla(0., 0., 1., 1.)
-    } else {
-        t.foreground
-    };
-
-    div()
-        .id(label)
-        .h(px(28.0))
-        .px_3()
-        .rounded(theme::radius_md())
-        .bg(bg)
-        .border_1()
-        .border_color(t.border)
-        .hover(move |style| {
-            if enabled {
-                style
-                    .bg(if primary { t.primary_hover } else { t.muted })
-                    .cursor_pointer()
-            } else {
-                style
-            }
-        })
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(theme::font_size_caption())
-        .text_color(text)
-        .child(label)
-        .when(enabled, |button| {
-            button.on_click(move |event, window, cx| on_click(event, window, cx))
-        })
+    btn.disabled(!enabled).on_click(on_click)
 }
 
 fn shortcut_status(view: &ShortcutView) -> String {
@@ -1606,45 +1555,17 @@ fn path_badge(path: &str, cx: &App) -> impl IntoElement {
 }
 
 fn action_button(
-    cx: &App,
+    _cx: &App,
     label: &'static str,
     primary: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    let t = Theme::global(cx);
-    if primary {
-        div()
-            .id(label)
-            .h(px(28.0))
-            .px_3()
-            .rounded(theme::radius_md())
-            .bg(t.primary)
-            .hover(|style| style.bg(t.primary_hover).cursor_pointer())
-            .flex()
-            .items_center()
-            .justify_center()
-            .text_size(theme::font_size_caption())
-            .text_color(hsla(0., 0., 1., 1.))
-            .child(label)
-            .on_click(move |event, window, cx| on_click(event, window, cx))
+    let btn = if primary {
+        ui::primary_btn(label, label)
     } else {
-        div()
-            .id(label)
-            .h(px(28.0))
-            .px_3()
-            .rounded(theme::radius_md())
-            .bg(t.list)
-            .border_1()
-            .border_color(t.border)
-            .hover(|style| style.bg(t.muted).cursor_pointer())
-            .flex()
-            .items_center()
-            .justify_center()
-            .text_size(theme::font_size_caption())
-            .text_color(t.foreground)
-            .child(label)
-            .on_click(move |event, window, cx| on_click(event, window, cx))
-    }
+        ui::secondary_btn(label, label)
+    };
+    btn.on_click(on_click)
 }
 
 // ── Segmented Control for Theme Mode ──
