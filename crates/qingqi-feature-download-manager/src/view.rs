@@ -920,7 +920,7 @@ fn url_input_bar(
                 .items_center()
                 .child(url_input.into_any_element()),
         )
-        .child(action_button("粘贴", cx).id("download-paste").on_click({
+        .child(action_button("download-paste", "粘贴", cx).on_click({
             let h = handle.clone();
             move |_, _window, cx| {
                 cx.update_entity(&h, |panel, cx| {
@@ -932,8 +932,7 @@ fn url_input_bar(
             }
         }))
         .child(
-            primary_btn("添加下载", PluginAccent::Green, cx)
-                .id("download-add")
+            primary_btn("download-add", "添加下载", PluginAccent::Green, cx)
                 .on_click({
                     let h = handle.clone();
                     move |_, _window, cx| {
@@ -993,8 +992,7 @@ fn filter_bar(
                 }))
                 .child(div().flex_1())
                 .child(
-                    action_button("全部开始", cx)
-                        .id("download-start-all")
+                    action_button("download-start-all", "全部开始", cx)
                         .on_click({
                             let h = handle.clone();
                             move |_, _window, cx| {
@@ -1006,8 +1004,7 @@ fn filter_bar(
                         }),
                 )
                 .child(
-                    action_button("全部暂停", cx)
-                        .id("download-pause-all")
+                    action_button("download-pause-all", "全部暂停", cx)
                         .on_click({
                             let h = handle.clone();
                             move |_, _window, cx| {
@@ -1019,8 +1016,7 @@ fn filter_bar(
                         }),
                 )
                 .child(
-                    action_button("清除已完成", cx)
-                        .id("download-clear-done")
+                    action_button("download-clear-done", "清除已完成", cx)
                         .on_click({
                             let h = handle.clone();
                             move |_, _window, cx| {
@@ -1032,8 +1028,7 @@ fn filter_bar(
                         }),
                 )
                 .child(
-                    action_button("清除失败", cx)
-                        .id("download-clear-failed")
+                    action_button("download-clear-failed", "清除失败", cx)
                         .on_click({
                             let h = handle.clone();
                             move |_, _window, cx| {
@@ -1465,8 +1460,7 @@ fn bottom_bar(
                 )),
         )
         .child(
-            secondary_btn("\u{2699} 设置", cx)
-                .id("download-settings")
+            secondary_btn("download-settings", "\u{2699} 设置", cx)
                 .on_click({
                     let h = handle.clone();
                     move |_, _window, cx| {
@@ -1478,8 +1472,7 @@ fn bottom_bar(
                 }),
         )
         .child(
-            secondary_btn("打开目录", cx)
-                .id("download-open-dir")
+            secondary_btn("download-open-dir", "打开目录", cx)
                 .on_click({
                     let h = handle.clone();
                     move |_, _window, cx| {
@@ -1539,7 +1532,7 @@ fn settings_overlay(
                         .flex()
                         .items_center()
                         .gap_1()
-                        .child(secondary_btn("保存", cx).id("settings-save").on_click({
+                        .child(secondary_btn("settings-save", "保存", cx).on_click({
                             let h = handle.clone();
                             move |_, _window, cx| {
                                 cx.update_entity(&h, |panel, cx| {
@@ -1548,7 +1541,7 @@ fn settings_overlay(
                                 });
                             }
                         }))
-                        .child(secondary_btn("取消", cx).id("settings-cancel").on_click({
+                        .child(secondary_btn("settings-cancel", "取消", cx).on_click({
                             let h = handle.clone();
                             move |_, _window, cx| {
                                 cx.update_entity(&h, |panel, cx| {
@@ -1627,53 +1620,29 @@ fn settings_field(label: &str, input: Option<Entity<TextInput>>, cx: &App) -> gp
 
 // ── Helper Components ──
 
-fn primary_btn(label: &str, accent: PluginAccent, cx: &App) -> gpui::Div {
-    div()
-        .h(px(26.0))
-        .px_2()
-        .rounded(px(6.0))
-        .bg(ui::accent_color(accent))
-        .hover(|style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(10.0))
-        .text_color(ui::white())
-        .child(label.to_string())
+fn primary_btn(
+    id: impl Into<gpui::ElementId>,
+    label: &str,
+    accent: PluginAccent,
+    cx: &App,
+) -> gpui_component::button::Button {
+    ui::accent_btn(id, label.to_string(), accent, cx)
 }
 
-fn secondary_btn(label: &str, cx: &App) -> gpui::Div {
-    div()
-        .h(px(26.0))
-        .px_2()
-        .rounded(px(6.0))
-        .bg(ui::bg_surface(cx))
-        .border_1()
-        .border_color(ui::border_light(cx))
-        .hover(|style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(10.0))
-        .text_color(ui::text_primary(cx))
-        .child(label.to_string())
+fn secondary_btn(
+    id: impl Into<gpui::ElementId>,
+    label: &str,
+    _cx: &App,
+) -> gpui_component::button::Button {
+    ui::secondary_btn(id, label.to_string())
 }
 
-fn action_button(label: &str, cx: &App) -> gpui::Div {
-    div()
-        .h(px(26.0))
-        .px_1p5()
-        .rounded(px(6.0))
-        .bg(ui::bg_surface(cx))
-        .border_1()
-        .border_color(ui::border_light(cx))
-        .hover(|style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(9.0))
-        .text_color(ui::text_primary(cx))
-        .child(label.to_string())
+fn action_button(
+    id: impl Into<gpui::ElementId>,
+    label: &str,
+    _cx: &App,
+) -> gpui_component::button::Button {
+    ui::secondary_btn(id, label.to_string())
 }
 
 fn action_icon(icon: &str, cx: &App) -> gpui::Div {
