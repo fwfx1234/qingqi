@@ -582,31 +582,13 @@ fn secondary_button(
     label: &'static str,
     action: JsonAction,
     panel: &Entity<JsonView>,
-    cx: &App,
+    _cx: &App,
 ) -> impl IntoElement {
-    let t = Theme::global(cx);
-    div()
-        .id(label)
-        .h(px(26.0))
-        .px_3()
-        .rounded(px(5.0))
-        .bg(t.list)
-        .border_1()
-        .border_color(ui::border_light(cx))
-        .hover(move |s| s.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .text_color(t.foreground)
-        .child(label)
-        .on_click({
-            let p = panel.clone();
-            move |_, w, cx| {
-                run_action(action, &p, cx);
-                w.refresh();
-            }
-        })
+    let p = panel.clone();
+    ui::secondary_btn(label, label).on_click(move |_, w, cx| {
+        run_action(action, &p, cx);
+        w.refresh();
+    })
 }
 
 fn mode_pill(
@@ -665,32 +647,13 @@ fn mode_pill(
 fn query_execute_button(
     label: &'static str,
     panel: &Entity<JsonView>,
-    cx: &App,
+    _cx: &App,
 ) -> impl IntoElement {
-    let t = Theme::global(cx);
-    div()
-        .id(label)
-        .h(px(26.0))
-        .px_3()
-        .rounded(px(5.0))
-        .bg(t.primary)
-        .hover(move |s| s.bg(t.primary_hover).cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .gap_1()
-        .text_size(px(11.0))
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(ui::white())
-        .child("▶")
-        .child(label)
-        .on_click({
-            let p = panel.clone();
-            move |_, w, cx| {
-                run_action(JsonAction::Query, &p, cx);
-                w.refresh();
-            }
-        })
+    let p = panel.clone();
+    ui::primary_btn(label, format!("▶ {label}")).on_click(move |_, w, cx| {
+        run_action(JsonAction::Query, &p, cx);
+        w.refresh();
+    })
 }
 
 // ── Actions ──
