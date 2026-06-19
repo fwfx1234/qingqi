@@ -7,6 +7,7 @@ use gpui::{
 };
 
 use gpui_component::Disableable;
+use gpui_component::Selectable;
 use gpui_component::theme::Theme;
 use qingqi_platform::macos::PermissionStatus;
 use qingqi_plugin::{
@@ -1608,53 +1609,17 @@ fn seg_button(
     entity: Entity<SettingsView>,
     mode: ThemeMode,
     current_mode: ThemeMode,
-    cx: &App,
+    _cx: &App,
 ) -> impl IntoElement {
-    let t = Theme::global(cx);
     let active = current_mode == mode;
-    let text_color = if active {
-        t.primary
-    } else {
-        t.muted_foreground
-    };
-
-    let mut btn = div()
-        .id(mode.persisted_value())
-        .h(px(26.0))
-        .px_3()
-        .rounded(theme::radius_sm())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(theme::font_size_caption())
-        .font_weight(gpui::FontWeight::MEDIUM)
-        .text_color(text_color)
-        .child(mode_short_label(mode))
-        .hover(move |style| style.bg(t.list).cursor_pointer())
-        .on_click({
-            let entity = entity.clone();
-            move |_, _window, cx| {
-                entity.update(cx, |this, cx| {
-                    this.set_theme_mode(mode);
-                    cx.notify();
-                });
-            }
-        });
-
-    if active {
-        btn = btn
-            .bg(t.list)
-            .border_1()
-            .border_color(theme::rgba_with_alpha(t.primary.into(), 0.15))
-            .shadow(vec![gpui::BoxShadow {
-                color: hsla(0., 0., 0., 0.06),
-                offset: gpui::point(px(0.0), px(2.0)),
-                blur_radius: px(6.0),
-                spread_radius: px(0.0),
-            }]);
-    }
-
-    btn
+    ui::secondary_btn(mode.persisted_value(), mode_short_label(mode))
+        .selected(active)
+        .on_click(move |_, _window, cx| {
+            entity.update(cx, |this, cx| {
+                this.set_theme_mode(mode);
+                cx.notify();
+            });
+        })
 }
 
 // ── Theme Selector ───────────────────────────────────────────────────────
