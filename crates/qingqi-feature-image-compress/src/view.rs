@@ -13,6 +13,7 @@ use gpui::{
     App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
     StatefulInteractiveElement, Styled, Window, div, img, px,
 };
+use gpui_component::Selectable;
 use gpui_component::theme::Theme;
 
 use qingqi_plugin::plugin_spec::PluginAccent;
@@ -841,12 +842,12 @@ impl Render for ImageCompressView {
                                     .gap_2()
                                     .child(
                                         mode_chip(
+                                            "image-compress-mode-lossless",
                                             "视觉无损",
                                             mode == CompressionMode::VisuallyLossless,
                                             dark,
                                             cx,
                                         )
-                                        .id("image-compress-mode-lossless")
                                         .on_click({
                                             let handle = handle.clone();
                                             move |_, window, cx| {
@@ -861,12 +862,12 @@ impl Render for ImageCompressView {
                                     )
                                     .child(
                                         mode_chip(
+                                            "image-compress-mode-standard",
                                             "普通压缩",
                                             mode == CompressionMode::Standard,
                                             dark,
                                             cx,
                                         )
-                                        .id("image-compress-mode-standard")
                                         .on_click({
                                             let handle = handle.clone();
                                             move |_, window, cx| {
@@ -960,33 +961,14 @@ impl Render for ImageCompressView {
     }
 }
 
-fn mode_chip(label: &str, active: bool, _dark: bool, cx: &App) -> gpui::Div {
-    div()
-        .h(px(28.0))
-        .px_3()
-        .rounded(px(8.0))
-        .bg(if active {
-            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Amber), 0.12)
-        } else {
-            theme::rgba_with_alpha(Theme::global(cx).list.into(), 0.82)
-        })
-        .border_1()
-        .border_color(if active {
-            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Amber), 0.25)
-        } else {
-            ui::border_light(cx)
-        })
-        .hover(move |style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .text_color(if active {
-            ui::accent_color(PluginAccent::Amber)
-        } else {
-            ui::text_secondary(cx).into()
-        })
-        .child(label.to_string())
+fn mode_chip(
+    id: impl Into<gpui::ElementId>,
+    label: &str,
+    active: bool,
+    _dark: bool,
+    _cx: &App,
+) -> gpui_component::button::Button {
+    ui::secondary_btn(id, label.to_string()).selected(active)
 }
 
 fn quality_button(label: &str, _dark: bool, cx: &App) -> gpui::Div {
