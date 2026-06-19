@@ -1,5 +1,4 @@
 pub mod button;
-pub mod chip;
 pub mod empty_state;
 pub mod overlay_host;
 pub mod settings;

@@ -12,7 +12,9 @@ use gpui::{
     App, InteractiveElement, IntoElement, ParentElement, SharedString, StatefulInteractiveElement,
     Styled, Window, div, hsla, img, px, rgb, svg,
 };
+use gpui_component::Sizable;
 use gpui_component::divider::Divider;
+use gpui_component::tag::Tag;
 use gpui_component::theme::Theme;
 
 use crate::{assets, theme};
@@ -568,30 +570,27 @@ pub fn ui_empty_state(message: impl Into<SharedString>, cx: &App) -> impl IntoEl
         )
 }
 
-pub fn ui_chip(
-    label: impl Into<SharedString>,
-    accent: PluginAccent,
-    dark: bool,
-) -> impl IntoElement {
-    let label = label.into();
-    let bg = if dark {
-        theme::accent_soft_dark(accent)
-    } else {
-        theme::accent_soft(accent)
-    };
-    let text = theme::accent_color(accent);
-    div()
-        .px_2()
-        .h(px(24.0))
-        .rounded(theme::radius_sm())
-        .bg(bg)
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(theme::font_size_caption())
-        .font_weight(gpui::FontWeight::SEMIBOLD)
-        .text_color(text)
-        .child(label)
+/// Accent 色 Tag（替换原 chip / 各 feature 本地彩色 chip）；`Tag::custom` 传硬编码 accent 色，无需 cx。
+pub fn accent_tag(label: impl Into<SharedString>, accent: PluginAccent) -> impl IntoElement {
+    let label: SharedString = label.into();
+    let color: gpui::Hsla = accent_color(accent).into();
+    let soft: gpui::Hsla = accent_soft(accent).into();
+    Tag::custom(soft, color, soft).small().child(label)
+}
+
+/// 状态 Tag（替换 status_pill / 各 feature 本地 status badge）；内置 variant 在 render 时取主题色，无需 cx。
+pub fn status_tag(label: impl Into<SharedString>, tone: components::StatusTone) -> impl IntoElement {
+    use components::StatusTone;
+    let label: SharedString = label.into();
+    match tone {
+        StatusTone::Success => Tag::success(),
+        StatusTone::Warning => Tag::warning(),
+        StatusTone::Danger => Tag::danger(),
+        StatusTone::Info => Tag::info(),
+        StatusTone::Neutral => Tag::secondary(),
+    }
+    .small()
+    .child(label)
 }
 
 pub fn ui_divider(label: Option<impl Into<SharedString>>, cx: &App) -> impl IntoElement {
