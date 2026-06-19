@@ -2760,50 +2760,18 @@ fn menu_overlay_shell(
 
 fn primary_action_button(
     label: &'static str,
-    theme: RowTheme,
+    _theme: RowTheme,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement + 'static {
-    let primary_active = theme.primary_active;
-    div()
-        .id(label)
-        .h(px(26.0))
-        .min_w(px(68.0))
-        .px(px(8.0))
-        .rounded(px(4.0))
-        .bg(theme.primary)
-        .hover(move |style| style.bg(primary_active).cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(10.0))
-        .text_color(ui::white())
-        .child(label)
-        .on_click(move |event, _window, cx| on_click(event, cx))
+    ui::primary_btn(label, label).on_click(move |event, _window, cx| on_click(event, cx))
 }
 
 fn action_button(
     label: &'static str,
-    theme: RowTheme,
+    _theme: RowTheme,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement + 'static {
-    let hover_bg = theme.hover_bg;
-    div()
-        .id(label)
-        .h(px(26.0))
-        .min_w(px(56.0))
-        .px(px(8.0))
-        .rounded(px(4.0))
-        .border_1()
-        .border_color(theme.border)
-        .bg(theme.bg_surface)
-        .hover(move |style| style.bg(hover_bg).cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(10.0))
-        .text_color(theme.text_primary)
-        .child(label)
-        .on_click(move |event, _window, cx| on_click(event, cx))
+    ui::secondary_btn(label, label).on_click(move |event, _window, cx| on_click(event, cx))
 }
 
 fn icon_action_button(
@@ -3026,32 +2994,10 @@ fn delete_confirm_sheet(
 
 fn destructive_action_button(
     label: &'static str,
-    cx: &App,
+    _cx: &App,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement {
-    let danger_hover_bg = theme::rgba_with_alpha(
-        gpui::Rgba::from(ui::danger(cx)),
-        if Theme::global(cx).is_dark() { 0.88 } else { 0.92 },
-    );
-    div()
-        .id(label)
-        .h(px(26.0))
-        .min_w(px(56.0))
-        .px(px(8.0))
-        .rounded(px(4.0))
-        .bg(ui::danger(cx))
-        .hover(move |style| {
-            style
-                .bg(danger_hover_bg)
-                .cursor_pointer()
-        })
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(10.0))
-        .text_color(ui::white())
-        .child(label)
-        .on_click(move |event, _window, cx| on_click(event, cx))
+    ui::danger_btn(label, label).on_click(move |event, _window, cx| on_click(event, cx))
 }
 
 fn kind_chip(label: String, theme: RowTheme) -> impl IntoElement + 'static {
