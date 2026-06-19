@@ -12,6 +12,7 @@ use gpui::{
     App, InteractiveElement, IntoElement, ParentElement, SharedString, StatefulInteractiveElement,
     Styled, Window, div, hsla, img, px, rgb, svg,
 };
+use gpui_component::divider::Divider;
 use gpui_component::theme::Theme;
 
 use crate::{assets, theme};
@@ -164,7 +165,7 @@ pub fn page_title(
 }
 
 pub fn separator(cx: &App) -> impl IntoElement {
-    div().h(px(1.0)).bg(border_light(cx))
+    Divider::horizontal().color(border_light(cx))
 }
 
 pub fn status_bar(
@@ -594,29 +595,11 @@ pub fn ui_chip(
 }
 
 pub fn ui_divider(label: Option<impl Into<SharedString>>, cx: &App) -> impl IntoElement {
+    let mut divider = Divider::horizontal().color(border_light(cx));
     if let Some(l) = label {
-        let l = l.into();
-        div()
-            .w_full()
-            .flex()
-            .items_center()
-            .gap_2()
-            .child(div().flex_1().h(px(1.0)).bg(border_light(cx)))
-            .child(
-                div()
-                    .text_size(theme::font_size_caption())
-                    .text_color(text_tertiary(cx))
-                    .child(l),
-            )
-            .child(div().flex_1().h(px(1.0)).bg(border_light(cx)))
-            .into_any_element()
-    } else {
-        div()
-            .w_full()
-            .h(px(1.0))
-            .bg(border_light(cx))
-            .into_any_element()
+        divider = divider.label(l);
     }
+    divider
 }
 
 pub fn focus_ring(active: bool, accent: PluginAccent, cx: &App) -> gpui::Hsla {
