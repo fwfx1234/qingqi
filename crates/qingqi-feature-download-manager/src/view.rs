@@ -7,6 +7,7 @@ use gpui::{
     App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
     StatefulInteractiveElement, Styled, Subscription, Window, div, px,
 };
+use gpui_component::Selectable;
 
 
 use qingqi_plugin::{
@@ -981,8 +982,7 @@ fn filter_bar(
                     let active = tab == active_filter;
                     let count = tab.count(counts);
                     let h = handle.clone();
-                    filter_chip(tab.label(), count, active, cx)
-                        .id(("download-filter", tab as usize))
+                    filter_chip(("download-filter", tab as usize), tab.label(), count, active, cx)
                         .on_click(move |_, _window, cx| {
                             cx.update_entity(&h, |panel, cx| {
                                 panel.set_filter(tab);
@@ -1050,8 +1050,7 @@ fn filter_bar(
                     let count = tab.count(counts);
                     if count > 0 || active {
                         let h = handle.clone();
-                        filter_chip(tab.label(), count, active, cx)
-                            .id(("download-cat-filter", tab as usize))
+                        filter_chip(("download-cat-filter", tab as usize), tab.label(), count, active, cx)
                             .on_click(move |_, _window, cx| {
                                 cx.update_entity(&h, |panel, cx| {
                                     panel.set_filter(tab);
@@ -1066,44 +1065,14 @@ fn filter_bar(
         )
 }
 
-fn filter_chip(label: &str, count: usize, active: bool, cx: &App) -> gpui::Div {
-    div()
-        .h(px(26.0))
-        .px_2()
-        .rounded(px(6.0))
-        .bg(if active {
-            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.12)
-        } else {
-            ui::bg_surface(cx)
-        })
-        .border_1()
-        .border_color(if active {
-            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.25)
-        } else {
-            ui::border_light(cx)
-        })
-        .hover(|style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .gap_1()
-        .text_size(px(10.0))
-        .text_color(if active {
-            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 1.0)
-        } else {
-            ui::text_secondary(cx)
-        })
-        .child(label.to_string())
-        .child(
-            div()
-                .text_size(px(9.0))
-                .text_color(if active {
-                    theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 1.0)
-                } else {
-                    ui::text_tertiary(cx)
-                })
-                .child(format!("{count}")),
-        )
+fn filter_chip(
+    id: impl Into<gpui::ElementId>,
+    label: &str,
+    count: usize,
+    active: bool,
+    _cx: &App,
+) -> gpui_component::button::Button {
+    ui::secondary_btn(id, format!("{label} {count}")).selected(active)
 }
 
 fn task_list(
