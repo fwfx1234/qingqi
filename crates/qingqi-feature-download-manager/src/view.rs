@@ -5,7 +5,7 @@ use std::{
 
 use gpui::{
     App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
-    StatefulInteractiveElement, Styled, Subscription, Window, div, px, relative,
+    StatefulInteractiveElement, Styled, Subscription, Window, div, px,
 };
 
 
@@ -1262,7 +1262,6 @@ fn task_row(
                 .items_center()
                 .gap_1()
                 .child(progress_bar(
-                    cx,
                     job_progress,
                     task.progress_percent(),
                     is_active,
@@ -1282,7 +1281,7 @@ fn task_row(
                 .w(px(72.0))
                 .flex()
                 .justify_center()
-                .child(status_tag(status, cx)),
+                .child(status_tag(status)),
         )
         .child(
             div()
@@ -1384,75 +1383,34 @@ fn task_row(
         )
 }
 
-fn progress_bar(
-    cx: &App,
-    job_progress: Option<f64>,
-    percent: f64,
-    is_active: bool,
-) -> impl IntoElement {
+fn progress_bar(job_progress: Option<f64>, percent: f64, is_active: bool) -> impl IntoElement {
     let pct = job_progress
         .map(|progress| progress * 100.0)
         .unwrap_or(percent)
         .clamp(0.0, 100.0);
+    let green: gpui::Hsla = ui::accent_color(PluginAccent::Green).into();
     let fill = if is_active || pct >= 100.0 {
-        theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 1.0)
+        green
     } else {
-        theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.5)
+        gpui::Hsla { a: 0.5, ..green }
     };
-    div()
-        .w_full()
+    gpui_component::progress::Progress::new()
+        .bg(fill)
+        .value(pct as f32)
         .h(px(6.0))
-        .rounded(px(3.0))
-        .bg(ui::bg_subtle(cx))
-        .overflow_hidden()
-        .child(
-            div()
-                .h_full()
-                .w(relative(pct.clamp(0.0, 100.0) as f32 / 100.0))
-                .rounded(px(3.0))
-                .bg(fill),
-        )
 }
 
-fn status_tag(status: TaskStatus, cx: &App) -> impl IntoElement {
-    let (bg, text) = match status {
-        TaskStatus::Completed => (
-            ui::success(cx),
-            ui::success(cx),
-        ),
-        TaskStatus::Downloading => (
-            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.1),
-            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 1.0),
-        ),
-        TaskStatus::Pending => (
-            ui::warning(cx),
-            ui::warning(cx),
-        ),
-        TaskStatus::Paused => (
-            ui::warning(cx),
-            ui::warning(cx),
-        ),
-        TaskStatus::Failed => (
-            ui::danger(cx),
-            ui::danger(cx),
-        ),
-        TaskStatus::Cancelled => {
-            let muted = ui::text_secondary(cx);
-            (gpui::Hsla { a: 0.1, ..muted }, muted)
-        },
+fn status_tag(status: TaskStatus) -> impl IntoElement {
+    use qingqi_ui::ui::components::StatusTone;
+    let tone = match status {
+        TaskStatus::Completed => StatusTone::Success,
+        TaskStatus::Downloading => StatusTone::Info,
+        TaskStatus::Pending => StatusTone::Warning,
+        TaskStatus::Paused => StatusTone::Warning,
+        TaskStatus::Failed => StatusTone::Danger,
+        TaskStatus::Cancelled => StatusTone::Neutral,
     };
-
-    div()
-        .px_2()
-        .h(px(20.0))
-        .rounded(px(999.0))
-        .bg(bg)
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(9.0))
-        .text_color(text)
-        .child(status.label())
+    ui::status_tag(status.label(), tone)
 }
 
 fn bottom_bar(
