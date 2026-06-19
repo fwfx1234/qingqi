@@ -13,6 +13,7 @@ use gpui::{
     Styled, Window, div, hsla, img, px, rgb, svg,
 };
 use gpui_component::Sizable;
+use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
 use gpui_component::divider::Divider;
 use gpui_component::tag::Tag;
 use gpui_component::theme::Theme;
@@ -621,4 +622,40 @@ pub fn notify_window(window: &mut Window) {
 
 pub fn asset_path(relative: &str) -> String {
     assets::resolve_string(relative)
+}
+
+// ── Button 工厂（gpui_component Button）─────────────────────────────────────
+
+/// 主按钮
+pub fn primary_btn(id: impl Into<gpui::ElementId>, label: impl Into<SharedString>) -> Button {
+    Button::new(id).label(label).small().primary()
+}
+
+/// 次要按钮（Secondary 是 Button 默认 variant，无需 .secondary()）
+pub fn secondary_btn(id: impl Into<gpui::ElementId>, label: impl Into<SharedString>) -> Button {
+    Button::new(id).label(label).small()
+}
+
+/// Ghost 按钮（无边框）
+pub fn ghost_btn(id: impl Into<gpui::ElementId>, label: impl Into<SharedString>) -> Button {
+    Button::new(id).label(label).small().ghost()
+}
+
+/// 危险按钮
+pub fn danger_btn(id: impl Into<gpui::ElementId>, label: impl Into<SharedString>) -> Button {
+    Button::new(id).label(label).small().danger()
+}
+
+/// accent 色按钮（自定义 variant，需 cx 读主题构造默认色）
+pub fn accent_btn(
+    id: impl Into<gpui::ElementId>,
+    label: impl Into<SharedString>,
+    accent: PluginAccent,
+    cx: &App,
+) -> Button {
+    let c: gpui::Hsla = accent_color(accent).into();
+    Button::new(id)
+        .label(label)
+        .small()
+        .custom(ButtonCustomVariant::new(cx).color(c).foreground(white()))
 }

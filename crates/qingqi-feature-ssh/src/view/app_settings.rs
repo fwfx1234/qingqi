@@ -5,7 +5,6 @@ use gpui::*;
 use gpui_component::theme::Theme;
 use qingqi_ui::text_input::TextInput;
 use qingqi_ui::ui;
-use qingqi_ui::ui::components::button::{ButtonVariant, button};
 use qingqi_ui::ui::glass;
 
 pub struct AppSettingsInputs {
@@ -80,17 +79,13 @@ fn render_footer(handle: &Entity<super::SshView>, cx: &App) -> impl IntoElement 
         .border_t_1()
         .border_color(glass::divider(cx))
         .child(
-            button("取消", ButtonVariant::Secondary, None, cx)
-                .id("app-settings-cancel")
-                .cursor_pointer()
+            ui::secondary_btn("app-settings-cancel", "取消")
                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                     h_cancel.update(cx, |v, cx| v.close_app_settings(cx));
                 }),
         )
         .child(
-            button("保存", ButtonVariant::Primary, None, cx)
-                .id("app-settings-save")
-                .cursor_pointer()
+            ui::primary_btn("app-settings-save", "保存")
                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                     h_save.update(cx, |v, cx| v.save_app_settings(cx));
                 }),

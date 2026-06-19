@@ -5,7 +5,6 @@ use gpui::{point, *};
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::theme::Theme;
 use qingqi_ui::text_input::TextInput;
-use qingqi_ui::ui::components::button::{ButtonVariant, button};
 use qingqi_ui::ui::glass;
 use qingqi_ui::{theme, ui};
 
@@ -756,10 +755,8 @@ fn render_footer(handle: &Entity<super::SshView>, is_edit: bool, cx: &App) -> im
         .bg(Theme::global(cx).popover)
         .child(if is_edit {
             let h = handle.clone();
-            button("删除连接", ButtonVariant::Ghost, None, cx)
-                .id("btn-delete-profile")
+            ui::ghost_btn("btn-delete-profile", "删除连接")
                 .text_color(ui::danger(cx))
-                .cursor_pointer()
                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                     h.update(cx, |v, cx| {
                         if let Some(pid) = v.editing_profile_id {
@@ -779,17 +776,13 @@ fn render_footer(handle: &Entity<super::SshView>, is_edit: bool, cx: &App) -> im
                 .flex()
                 .gap(theme::space_2())
                 .child(
-                    button("取消", ButtonVariant::Secondary, None, cx)
-                        .id("btn-cancel")
-                        .cursor_pointer()
+                    ui::secondary_btn("btn-cancel", "取消")
                         .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                             h_cancel.update(cx, |v, cx| v.close_profile_editor(cx));
                         }),
                 )
                 .child(
-                    button("保存", ButtonVariant::Primary, None, cx)
-                        .id("btn-save-profile")
-                        .cursor_pointer()
+                    ui::primary_btn("btn-save-profile", "保存")
                         .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                             h_save.update(cx, |v, cx| v.save_profile_from_form(cx));
                         }),

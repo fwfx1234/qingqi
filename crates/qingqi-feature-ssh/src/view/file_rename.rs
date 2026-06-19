@@ -5,7 +5,6 @@ use gpui::*;
 use gpui_component::theme::Theme;
 use qingqi_ui::text_input::TextInput;
 use qingqi_ui::ui;
-use qingqi_ui::ui::components::button::{ButtonVariant, button};
 use qingqi_ui::ui::glass;
 
 pub fn render_file_rename_overlay(
@@ -69,16 +68,14 @@ pub fn render_file_rename_overlay(
                         .gap_2()
                         .child({
                             let h = handle.clone();
-                            button("取消", ButtonVariant::Secondary, None, cx)
-                                .id("file-rename-cancel")
+                            ui::secondary_btn("file-rename-cancel", "取消")
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.close_file_rename(cx));
                                 })
                         })
                         .child({
                             let h = handle;
-                            button("确定", ButtonVariant::Primary, None, cx)
-                                .id("file-rename-ok")
+                            ui::primary_btn("file-rename-ok", "确定")
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.confirm_file_rename(cx));
                                 })
