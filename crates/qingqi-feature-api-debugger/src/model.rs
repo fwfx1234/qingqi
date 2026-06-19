@@ -294,14 +294,24 @@ impl ApiGroup {
 
     pub fn total_request_count(&self) -> usize {
         self.requests.len()
-            + self.folders.iter().map(|f| f.total_request_count()).sum::<usize>()
+            + self
+                .folders
+                .iter()
+                .map(|f| f.total_request_count())
+                .sum::<usize>()
     }
 
     pub fn any_scenario_exists(&self, predicate: impl Fn(&ApiScenario) -> bool + Copy) -> bool {
-        if self.requests.iter().any(|r| r.scenarios.iter().any(predicate)) {
+        if self
+            .requests
+            .iter()
+            .any(|r| r.scenarios.iter().any(predicate))
+        {
             return true;
         }
-        self.folders.iter().any(|f| f.any_scenario_exists(predicate))
+        self.folders
+            .iter()
+            .any(|f| f.any_scenario_exists(predicate))
     }
 }
 

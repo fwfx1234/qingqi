@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf};
 
 use anyhow::Result;
 use gpui::{App, WindowAppearance};
-use gpui_component::theme::{Theme, ThemeRegistry, ThemeMode as GpuiThemeMode};
+use gpui_component::theme::{Theme, ThemeMode as GpuiThemeMode, ThemeRegistry};
 
 pub struct ThemeService {
     themes_dir: PathBuf,
@@ -52,6 +52,11 @@ impl ThemeService {
 
         ThemeRegistry::watch_dir(self.themes_dir.clone(), cx, |_cx| {})?;
 
+        // 打印已注册的所有主题名，确认 macOS Classic 在内
+        let registry = ThemeRegistry::global(cx);
+        let names: Vec<_> = registry.themes().values().map(|c| c.name.as_ref()).collect();
+        tracing::info!(themes = ?names, "ThemeRegistry initialized");
+
         Ok(())
     }
 
@@ -75,11 +80,7 @@ impl ThemeService {
         names
     }
 
-    pub fn apply_theme(
-        theme_name: &str,
-        mode: qingqi_plugin::theme::ThemeMode,
-        cx: &mut App,
-    ) {
+    pub fn apply_theme(theme_name: &str, mode: qingqi_plugin::theme::ThemeMode, cx: &mut App) {
         let effective_dark = match mode {
             qingqi_plugin::theme::ThemeMode::Light => false,
             qingqi_plugin::theme::ThemeMode::Dark => true,
@@ -123,9 +124,23 @@ impl ThemeService {
                 }
             });
 
-        if let Some(config) = config {
-            let theme = Theme::global_mut(cx);
-            theme.apply_config(&config);
+        let theme = Theme::global_mut(cx);
+        if let Some(ref config) = config {
+            tracing::info!(
+                theme_name = %theme_name,
+                variant = %config.name.as_ref(),
+                mode = ?mode,
+                effective_dark = effective_dark,
+                "apply_theme: matched config"
+            );
+            theme.apply_config(config);
+        } else {
+            tracing::warn!(
+                theme_name = %theme_name,
+                mode = ?mode,
+                effective_dark = effective_dark,
+                "apply_theme: no theme matched, using existing config"
+            );
         }
 
         Theme::change(target_mode, None, cx);

@@ -3,7 +3,7 @@ use gpui_component::theme::Theme;
 
 pub fn toggle(enabled: bool, cx: &App) -> gpui::Div {
     let track_bg = if enabled {
-        Theme::global(cx).blue
+        Theme::global(cx).primary
     } else {
         gpui::rgba(0x80808040).into()
     };

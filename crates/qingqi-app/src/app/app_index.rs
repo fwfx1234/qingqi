@@ -4,9 +4,7 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
-use crate::app::app_index_store::{
-    AppIndexCache, AppIndexStore,
-};
+use crate::app::app_index_store::{AppIndexCache, AppIndexStore};
 use qingqi_core::command_usage::CommandUsageStore;
 use qingqi_core::lock_or_recover;
 use qingqi_platform::apps::{open_application, scan_application_metadata, scan_application_paths};
@@ -46,10 +44,7 @@ pub struct AppIndexService {
 impl AppIndexService {
     pub const DEFAULT_PAGE_LIMIT: usize = 40;
 
-    pub fn new(
-        database: Arc<DatabaseService>,
-        usage_store: CommandUsageStore,
-    ) -> Self {
+    pub fn new(database: Arc<DatabaseService>, usage_store: CommandUsageStore) -> Self {
         Self::build(database, usage_store, None)
     }
 

@@ -16,9 +16,11 @@ use crate::{
     store::CaptureStore,
 };
 use gpui::{
-    AppContext, ClipboardItem, Context, Entity, InteractiveElement, IntoElement, ParentElement,
-    Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task, Window, div, px,
+    App, AppContext, ClipboardItem, Context, Entity, InteractiveElement, IntoElement,
+    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task,
+    Window, div, px,
 };
+use gpui_component::theme::Theme;
 use gpui_component::scroll::ScrollableElement;
 use qingqi_plugin::{
     events::{AppEventBus, AppEventKind},
@@ -485,28 +487,17 @@ impl CaptureView {
         }
     }
 
-    fn method_color(_dark: bool, method: &str) -> gpui::Rgba {
-        match method.to_uppercase().as_str() {
-            "GET" => theme::semantic().success,
-            "POST" => theme::semantic().info,
-            "PUT" => theme::semantic().warning,
-            "DELETE" => theme::semantic().danger,
-            "PATCH" => theme::semantic().warning,
-            _ => theme::semantic().text_secondary,
-        }
-    }
-
-    fn status_color(_dark: bool, status: i64) -> gpui::Rgba {
+    fn status_color(status: i64, cx: &App) -> gpui::Rgba {
         if status >= 500 {
-            theme::semantic().danger
+            Theme::global(cx).danger.into()
         } else if status >= 400 {
-            theme::semantic().warning
+            Theme::global(cx).warning.into()
         } else if status >= 300 {
-            theme::semantic().info
+            Theme::global(cx).info.into()
         } else if status >= 200 {
-            theme::semantic().success
+            Theme::global(cx).success.into()
         } else {
-            theme::semantic().text_secondary
+            Theme::global(cx).muted_foreground.into()
         }
     }
 }
@@ -584,11 +575,11 @@ fn status_badge(label: &str, color: gpui::Rgba) -> gpui::AnyElement {
         .into_any_element()
 }
 
-fn section_label(label: &str) -> gpui::AnyElement {
+fn section_label(label: &str, cx: &App) -> gpui::AnyElement {
     div()
         .text_size(px(11.0))
         .font_weight(gpui::FontWeight::SEMIBOLD)
-        .text_color(theme::semantic().text_secondary)
+        .text_color(ui::text_secondary(cx))
         .child(label.to_string())
         .into_any_element()
 }
@@ -597,12 +588,13 @@ fn proxy_value_row(
     label: &str,
     value: String,
     action: gpui::Stateful<gpui::Div>,
+    cx: &App,
 ) -> gpui::AnyElement {
     div()
         .rounded(theme::radius_md())
-        .bg(theme::semantic().bg_subtle)
+        .bg(ui::bg_subtle(cx))
         .border_1()
-        .border_color(theme::semantic().border_default)
+        .border_color(ui::border_light(cx))
         .p_2()
         .flex()
         .items_center()
@@ -611,7 +603,7 @@ fn proxy_value_row(
             div()
                 .w(px(44.0))
                 .text_size(px(11.0))
-                .text_color(theme::semantic().text_secondary)
+                .text_color(ui::text_secondary(cx))
                 .child(label.to_string()),
         )
         .child(
@@ -619,7 +611,7 @@ fn proxy_value_row(
                 .flex_1()
                 .font_family(ui::font_mono())
                 .text_size(px(11.0))
-                .text_color(theme::semantic().text_primary)
+                .text_color(ui::text_primary(cx))
                 .overflow_hidden()
                 .text_ellipsis()
                 .child(value),
@@ -628,26 +620,26 @@ fn proxy_value_row(
         .into_any_element()
 }
 
-fn small_action(id: &'static str, label: &str) -> gpui::Stateful<gpui::Div> {
+fn small_action(id: &'static str, label: &str, cx: &App) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
         .h(px(24.0))
         .px_2()
         .rounded(theme::radius_sm())
-        .bg(theme::semantic().bg_surface)
+        .bg(ui::bg_surface(cx))
         .border_1()
-        .border_color(theme::semantic().border_default)
+        .border_color(ui::border_light(cx))
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(11.0))
-        .text_color(theme::semantic().text_primary)
+        .text_color(ui::text_primary(cx))
         .cursor_pointer()
-        .hover(|s| s.bg(theme::semantic().bg_hover))
+        .hover(|s| s.bg(ui::bg_hover(cx)))
         .child(label.to_string())
 }
 
-fn guide_step(index: &str, text: &str) -> gpui::AnyElement {
+fn guide_step(index: &str, text: &str, cx: &App) -> gpui::AnyElement {
     div()
         .flex()
         .items_start()
@@ -657,13 +649,13 @@ fn guide_step(index: &str, text: &str) -> gpui::AnyElement {
                 .w(px(18.0))
                 .h(px(18.0))
                 .rounded(theme::radius_sm())
-                .bg(theme::semantic().primary_soft)
+                .bg(Theme::global(cx).primary_hover)
                 .flex()
                 .items_center()
                 .justify_center()
                 .text_size(px(10.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic().primary_active)
+                .text_color(Theme::global(cx).primary_active)
                 .child(index.to_string()),
         )
         .child(
@@ -671,13 +663,13 @@ fn guide_step(index: &str, text: &str) -> gpui::AnyElement {
                 .flex_1()
                 .text_size(px(11.0))
                 .line_height(px(16.0))
-                .text_color(theme::semantic().text_secondary)
+                .text_color(ui::text_secondary(cx))
                 .child(text.to_string()),
         )
         .into_any_element()
 }
 
-fn value_line(label: &str, value: String, value_color: gpui::Rgba) -> gpui::AnyElement {
+fn value_line(label: &str, value: String, value_color: gpui::Rgba, cx: &App) -> gpui::AnyElement {
     div()
         .flex()
         .items_center()
@@ -686,7 +678,7 @@ fn value_line(label: &str, value: String, value_color: gpui::Rgba) -> gpui::AnyE
         .child(
             div()
                 .w(px(56.0))
-                .text_color(theme::semantic().text_secondary)
+                .text_color(ui::text_secondary(cx))
                 .child(label.to_string()),
         )
         .child(
@@ -715,7 +707,7 @@ fn short_path(path: &str) -> String {
 
 impl Render for CaptureView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let dark = qingqi_ui::theme_mode::is_dark();
+        let dark = Theme::global(cx).is_dark();
         let exchanges = self.exchanges.clone();
         let total = self.total;
         let selected_id = self.selected_id;
@@ -755,8 +747,8 @@ impl Render for CaptureView {
 
         div()
             .size_full()
-            .bg(theme::semantic().bg_page)
-            .text_color(theme::semantic().text_primary)
+            .bg(ui::bg_canvas(cx))
+            .text_color(ui::text_primary(cx))
             .font_family(ui::font_ui())
             .flex()
             .flex_col()
@@ -767,9 +759,9 @@ impl Render for CaptureView {
                 div()
                     .h(px(54.0))
                     .rounded(theme::radius_lg())
-                    .bg(theme::semantic().bg_surface)
+                    .bg(ui::bg_surface(cx))
                     .border_1()
-                    .border_color(theme::semantic().border_default)
+                    .border_color(ui::border_light(cx))
                     .px_4()
                     .flex()
                     .items_center()
@@ -780,13 +772,9 @@ impl Render for CaptureView {
                             .h(px(34.0))
                             .rounded(theme::radius_md())
                             .bg(if engine_running {
-                                if dark {
-                                    theme::semantic().success
-                                } else {
-                                    theme::semantic().success
-                                }
+                                ui::success(cx)
                             } else {
-                                theme::semantic().bg_subtle
+                                ui::bg_subtle(cx)
                             })
                             .flex()
                             .items_center()
@@ -794,9 +782,9 @@ impl Render for CaptureView {
                             .child(ui::icon_element(
                                 "icons/antenna.svg",
                                 if engine_running {
-                                    theme::semantic().bg_page
+                                    ui::bg_canvas(cx).into()
                                 } else {
-                                    ui::text_secondary()
+                                    ui::text_secondary(cx).into()
                                 },
                                 18.0,
                             )),
@@ -815,7 +803,7 @@ impl Render for CaptureView {
                             .child(
                                 div()
                                     .text_size(px(11.0))
-                                    .text_color(theme::semantic().text_secondary)
+                                    .text_color(ui::text_secondary(cx))
                                     .child(if engine_running {
                                         "HTTP/HTTPS MITM 代理运行中，可接入桌面或移动端"
                                     } else {
@@ -831,30 +819,30 @@ impl Render for CaptureView {
                             "已停止"
                         },
                         if engine_running {
-                            theme::semantic().success
+                            ui::success(cx).into()
                         } else {
-                            theme::semantic().text_secondary
+                            ui::text_secondary(cx).into()
                         },
                     ))
                     .child(status_badge(
                         certificate_status.label(),
                         if certificate_status == CertificateStatus::Installed {
-                            theme::semantic().success
+                            ui::success(cx).into()
                         } else if certificate_status.ready_for_https() {
-                            theme::semantic().warning
+                            ui::warning(cx).into()
                         } else {
-                            theme::semantic().danger
+                            ui::danger(cx).into()
                         },
                     ))
                     .child(if engine_running {
-                        ui::ui_button("停止代理", "secondary", dark, None, true)
+                        ui::ui_button("停止代理", "secondary", dark, None, true, cx)
                             .id("stop-proxy-btn")
                             .cursor_pointer()
                             .on_click(cx.listener(|panel, _, _, cx| {
                                 panel.stop_proxy(cx);
                             }))
                     } else {
-                        ui::ui_button("启动代理", "primary", dark, None, false)
+                        ui::ui_button("启动代理", "primary", dark, None, false, cx)
                             .id("start-proxy-btn")
                             .cursor_pointer()
                             .on_click(cx.listener(|panel, _, _, cx| {
@@ -862,7 +850,7 @@ impl Render for CaptureView {
                             }))
                     })
                     .child({
-                        let reset_btn = ui::ui_button("重置过滤", "ghost", dark, None, false)
+                        let reset_btn = ui::ui_button("重置过滤", "ghost", dark, None, false, cx)
                             .id("reset-filter-btn");
                         if has_active_filter {
                             reset_btn
@@ -876,7 +864,7 @@ impl Render for CaptureView {
                     })
                     .child({
                         let clear_btn =
-                            ui::ui_button("清空记录", "ghost", dark, None, true).id("clear-btn");
+                            ui::ui_button("清空记录", "ghost", dark, None, true, cx).id("clear-btn");
                         if total > 0 {
                             clear_btn
                                 .cursor_pointer()
@@ -901,9 +889,9 @@ impl Render for CaptureView {
                         div()
                             .w(px(260.0))
                             .rounded(theme::radius_lg())
-                            .bg(theme::semantic().bg_surface)
+                            .bg(ui::bg_surface(cx))
                             .border_1()
-                            .border_color(theme::semantic().border_default)
+                            .border_color(ui::border_light(cx))
                             .p_3()
                             .flex()
                             .flex_col()
@@ -915,31 +903,33 @@ impl Render for CaptureView {
                                     .flex()
                                     .flex_col()
                                     .gap_2()
-                                    .child(section_label("连接向导"))
+                                    .child(section_label("连接向导", cx))
                                     .child(proxy_value_row(
                                         "本机",
                                         local_proxy.clone(),
-                                        small_action("copy-local-proxy", "复制").on_click(
+                                        small_action("copy-local-proxy", "复制", cx).on_click(
                                             cx.listener(|panel, _, _, cx| {
                                                 panel.copy_local_proxy(cx);
                                             }),
                                         ),
+                                        cx,
                                     ))
                                     .child(proxy_value_row(
                                         "移动端",
                                         lan_proxy.clone(),
-                                        small_action("copy-lan-proxy", "复制").on_click(
+                                        small_action("copy-lan-proxy", "复制", cx).on_click(
                                             cx.listener(|panel, _, _, cx| {
                                                 panel.copy_lan_proxy(cx);
                                             }),
                                         ),
+                                        cx,
                                     ))
                                     .child(
                                         div()
                                             .rounded(theme::radius_md())
-                                            .bg(theme::semantic().bg_subtle_2)
+                                            .bg(ui::bg_subtle(cx))
                                             .border_1()
-                                            .border_color(theme::semantic().border_default)
+                                            .border_color(ui::border_light(cx))
                                             .p_2()
                                             .flex()
                                             .flex_col()
@@ -951,27 +941,31 @@ impl Render for CaptureView {
                                                 } else {
                                                     "先点击右上角启动代理"
                                                 },
+                                                cx,
                                             ))
                                             .child(guide_step(
                                                 "2",
                                                 "桌面应用填本机地址，手机需同一局域网并填移动端地址",
+                                                cx,
                                             ))
                                             .child(guide_step(
                                                 "3",
                                                 "手机设置代理后访问下载地址，安装并信任 Qingqi CA",
+                                                cx,
                                             ))
                                             .child(guide_step(
                                                 "4",
                                                 "遇到证书固定的 App 时，该请求可能无法解密",
+                                                cx,
                                             )),
                                     )
-                                    .child(section_label("HTTPS 证书"))
+                                    .child(section_label("HTTPS 证书", cx))
                                     .child(
                                         div()
                                             .rounded(theme::radius_md())
-                                            .bg(theme::semantic().bg_subtle)
+                                            .bg(ui::bg_subtle(cx))
                                             .border_1()
-                                            .border_color(theme::semantic().border_default)
+                                            .border_color(ui::border_light(cx))
                                             .p_2()
                                             .flex()
                                             .flex_col()
@@ -982,20 +976,23 @@ impl Render for CaptureView {
                                                 if certificate_status
                                                     == CertificateStatus::Installed
                                                 {
-                                                    theme::semantic().success
+                                                    ui::success(cx).into()
                                                 } else {
-                                                    theme::semantic().warning
+                                                    ui::warning(cx).into()
                                                 },
+                                                cx,
                                             ))
                                             .child(value_line(
                                                 "手机访问",
                                                 cert_download_url.clone(),
-                                                theme::semantic().primary,
+                                                Theme::global(cx).primary.into(),
+                                                cx,
                                             ))
                                             .child(value_line(
                                                 "移动证书",
                                                 short_path(&mobile_cert_path),
-                                                theme::semantic().text_primary,
+                                                ui::text_primary(cx).into(),
+                                                cx,
                                             ))
                                             .child(
                                                 div()
@@ -1005,6 +1002,7 @@ impl Render for CaptureView {
                                                         small_action(
                                                             "copy-cert-download-url",
                                                             "复制下载地址",
+                                                            cx,
                                                         )
                                                         .on_click(cx.listener(|panel, _, _, cx| {
                                                             panel.copy_cert_download_url(cx);
@@ -1014,6 +1012,7 @@ impl Render for CaptureView {
                                                         small_action(
                                                             "copy-cert-path",
                                                             "复制证书路径",
+                                                            cx,
                                                         )
                                                         .on_click(cx.listener(|panel, _, _, cx| {
                                                             panel.copy_cert_path(cx);
@@ -1021,7 +1020,7 @@ impl Render for CaptureView {
                                                     ),
                                             )
                                             .child(div().flex().gap_1().child(
-                                                small_action("open-cert-dir", "打开目录").on_click(
+                                                small_action("open-cert-dir", "打开目录", cx).on_click(
                                                     cx.listener(|panel, _, _, cx| {
                                                         panel.open_certificate_dir(cx);
                                                     }),
@@ -1035,6 +1034,7 @@ impl Render for CaptureView {
                                                         small_action(
                                                             "copy-install-command",
                                                             "复制安装命令",
+                                                            cx,
                                                         )
                                                         .on_click(cx.listener(|panel, _, _, cx| {
                                                             panel.copy_install_command(cx);
@@ -1044,6 +1044,7 @@ impl Render for CaptureView {
                                                         small_action(
                                                             "refresh-cert-status",
                                                             "刷新状态",
+                                                            cx,
                                                         )
                                                         .on_click(cx.listener(|panel, _, _, cx| {
                                                             panel.refresh_certificate_status(cx);
@@ -1052,32 +1053,32 @@ impl Render for CaptureView {
                                             ),
                                     ),
                             )
-                            .child(ui::separator())
+                            .child(ui::separator(cx))
                             .child(
                                 div()
                                     .rounded(theme::radius_md())
-                                    .bg(theme::semantic().bg_subtle)
+                                    .bg(ui::bg_subtle(cx))
                                     .border_1()
-                                    .border_color(theme::semantic().border_default)
+                                    .border_color(ui::border_light(cx))
                                     .child(search_input.clone()),
                             )
                             .child(
                                 div()
                                     .rounded(theme::radius_md())
-                                    .bg(theme::semantic().bg_subtle)
+                                    .bg(ui::bg_subtle(cx))
                                     .border_1()
-                                    .border_color(theme::semantic().border_default)
+                                    .border_color(ui::border_light(cx))
                                     .child(host_input.clone()),
                             )
                             // Method filter chips
                             .child(div().flex().flex_wrap().gap_1().children(
                                 ["GET", "POST", "PUT", "DELETE"].iter().map(|&m| {
                                     let active = filter_method == m;
-                                    let color = CaptureView::method_color(dark, m);
+                                    let color = theme::http_method_color(m, dark);
                                     let chip_bg: gpui::Hsla = if active {
                                         theme::rgba_with_alpha(color, 0.18)
                                     } else {
-                                        theme::rgba_with_alpha(theme::semantic().bg_subtle, 1.0)
+                                        theme::rgba_with_alpha(ui::bg_subtle(cx).into(), 1.0)
                                     };
                                     div()
                                         .id(SharedString::from(format!("method-chip-{m}")))
@@ -1089,7 +1090,7 @@ impl Render for CaptureView {
                                         .border_color(if active {
                                             color
                                         } else {
-                                            theme::semantic().border_default
+                                            ui::border_light(cx).into()
                                         })
                                         .flex()
                                         .items_center()
@@ -1098,7 +1099,7 @@ impl Render for CaptureView {
                                         .text_color(if active {
                                             color
                                         } else {
-                                            theme::semantic().text_secondary
+                                            ui::text_secondary(cx).into()
                                         })
                                         .font_weight(if active {
                                             gpui::FontWeight::SEMIBOLD
@@ -1119,11 +1120,11 @@ impl Render for CaptureView {
                                     .gap_1()
                                     .child({
                                         let active = filter_error_only;
-                                        let color = theme::semantic().danger;
+                                        let color = ui::danger(cx).into();
                                         let chip_bg: gpui::Hsla = if active {
                                             theme::rgba_with_alpha(color, 0.18)
                                         } else {
-                                            theme::rgba_with_alpha(theme::semantic().bg_subtle, 1.0)
+                                            theme::rgba_with_alpha(ui::bg_subtle(cx).into(), 1.0)
                                         };
                                         div()
                                             .id("error-toggle")
@@ -1135,7 +1136,7 @@ impl Render for CaptureView {
                                             .border_color(if active {
                                                 color
                                             } else {
-                                                theme::semantic().border_default
+                                                ui::border_light(cx).into()
                                             })
                                             .flex()
                                             .items_center()
@@ -1144,7 +1145,7 @@ impl Render for CaptureView {
                                             .text_color(if active {
                                                 color
                                             } else {
-                                                theme::semantic().text_secondary
+                                                ui::text_secondary(cx).into()
                                             })
                                             .cursor_pointer()
                                             .on_click(cx.listener(|panel, _, _, cx| {
@@ -1154,11 +1155,11 @@ impl Render for CaptureView {
                                     })
                                     .child({
                                         let active = filter_https_only;
-                                        let color = theme::semantic().success;
+                                        let color = ui::success(cx).into();
                                         let chip_bg: gpui::Hsla = if active {
                                             theme::rgba_with_alpha(color, 0.18)
                                         } else {
-                                            theme::rgba_with_alpha(theme::semantic().bg_subtle, 1.0)
+                                            theme::rgba_with_alpha(ui::bg_subtle(cx).into(), 1.0)
                                         };
                                         div()
                                             .id("https-toggle")
@@ -1170,7 +1171,7 @@ impl Render for CaptureView {
                                             .border_color(if active {
                                                 color
                                             } else {
-                                                theme::semantic().border_default
+                                                ui::border_light(cx).into()
                                             })
                                             .flex()
                                             .items_center()
@@ -1179,7 +1180,7 @@ impl Render for CaptureView {
                                             .text_color(if active {
                                                 color
                                             } else {
-                                                theme::semantic().text_secondary
+                                                ui::text_secondary(cx).into()
                                             })
                                             .cursor_pointer()
                                             .on_click(cx.listener(|panel, _, _, cx| {
@@ -1189,11 +1190,11 @@ impl Render for CaptureView {
                                     })
                                     .child({
                                         let active = filter_hide_static;
-                                        let color = theme::semantic().warning;
+                                        let color = ui::warning(cx).into();
                                         let chip_bg: gpui::Hsla = if active {
                                             theme::rgba_with_alpha(color, 0.18)
                                         } else {
-                                            theme::rgba_with_alpha(theme::semantic().bg_subtle, 1.0)
+                                            theme::rgba_with_alpha(ui::bg_subtle(cx).into(), 1.0)
                                         };
                                         div()
                                             .id("hide-static-toggle")
@@ -1205,7 +1206,7 @@ impl Render for CaptureView {
                                             .border_color(if active {
                                                 color
                                             } else {
-                                                theme::semantic().border_default
+                                                ui::border_light(cx).into()
                                             })
                                             .flex()
                                             .items_center()
@@ -1214,7 +1215,7 @@ impl Render for CaptureView {
                                             .text_color(if active {
                                                 color
                                             } else {
-                                                theme::semantic().text_secondary
+                                                ui::text_secondary(cx).into()
                                             })
                                             .cursor_pointer()
                                             .on_click(cx.listener(|panel, _, _, cx| {
@@ -1223,16 +1224,18 @@ impl Render for CaptureView {
                                             .child("隐藏静态")
                                     }),
                             )
-                            .child(ui::separator())
+                            .child(ui::separator(cx))
                             .child(ui::metric_pill(
                                 "总计",
                                 format!("{total}"),
                                 PluginAccent::Cyan,
+                                cx,
                             ))
                             .child(ui::metric_pill(
                                 "当前页",
                                 format!("{page_count}"),
                                 PluginAccent::Blue,
+                                cx,
                             )),
                     )
                     // ── Center: exchange list ──
@@ -1242,9 +1245,9 @@ impl Render for CaptureView {
                             .min_w(px(0.0))
                             .min_h(px(0.0))
                             .rounded(theme::radius_lg())
-                            .bg(theme::semantic().bg_surface)
+                            .bg(ui::bg_surface(cx))
                             .border_1()
-                            .border_color(theme::semantic().border_default)
+                            .border_color(ui::border_light(cx))
                             .flex()
                             .flex_col()
                             // Table header
@@ -1252,13 +1255,13 @@ impl Render for CaptureView {
                                 div()
                                     .h(px(30.0))
                                     .px_3()
-                                    .bg(theme::semantic().bg_subtle_2)
+                                    .bg(ui::bg_subtle(cx))
                                     .rounded_t(theme::radius_lg())
                                     .flex()
                                     .items_center()
                                     .gap_2()
                                     .text_size(px(11.0))
-                                    .text_color(theme::semantic().text_secondary)
+                                    .text_color(ui::text_secondary(cx))
                                     .child(div().w(px(58.0)).child("时间"))
                                     .child(div().w(px(54.0)).child("方法"))
                                     .child(div().w(px(130.0)).child("Host"))
@@ -1302,7 +1305,7 @@ impl Render for CaptureView {
                                         } else {
                                             "暂无抓包记录 — 请先接入代理捕获引擎"
                                         },
-                                        dark,
+                                        cx,
                                     ))
                                     .into_any_element()
                             } else {
@@ -1320,13 +1323,10 @@ impl Render for CaptureView {
                                                 |(i, ex)| {
                                                     let selected = selected_id == Some(ex.id);
                                                     let ex_id = ex.id;
-                                                    let method_color = CaptureView::method_color(
-                                                        dark,
-                                                        &ex.method,
-                                                    );
+                                                    let method_color = theme::http_method_color(&ex.method, dark);
                                                     let status_color = CaptureView::status_color(
-                                                        dark,
                                                         ex.status,
+                                                        cx,
                                                     );
                                                     let timestamp = ex.timestamp.clone();
                                                     let method = ex.method.clone();
@@ -1341,14 +1341,14 @@ impl Render for CaptureView {
                                                         .h(px(32.0))
                                                         .px_3()
                                                         .bg(if selected {
-                                                            theme::semantic().primary_bg
+                                                            Theme::global(cx).primary
                                                         } else if i % 2 == 0 {
-                                                            theme::semantic().bg_surface
+                                                            ui::bg_surface(cx)
                                                         } else {
-                                                            theme::semantic().bg_subtle_2
+                                                            ui::bg_subtle(cx)
                                                         })
                                                         .hover(|s| {
-                                                            s.bg(theme::semantic().bg_hover)
+                                                            s.bg(ui::bg_hover(cx))
                                                                 .cursor_pointer()
                                                         })
                                                         .flex()
@@ -1366,8 +1366,7 @@ impl Render for CaptureView {
                                                             div()
                                                                 .w(px(58.0))
                                                                 .text_color(
-                                                                    theme::semantic()
-                                                                        .text_secondary,
+                                                                    ui::text_secondary(cx),
                                                                 )
                                                                 .child(if timestamp.len() >= 16 {
                                                                     timestamp[11..16].to_string()
@@ -1388,7 +1387,7 @@ impl Render for CaptureView {
                                                             div()
                                                                 .w(px(130.0))
                                                                 .text_color(
-                                                                    theme::semantic().text_primary,
+                                                                    ui::text_primary(cx),
                                                                 )
                                                                 .overflow_hidden()
                                                                 .text_ellipsis()
@@ -1398,7 +1397,7 @@ impl Render for CaptureView {
                                                             div()
                                                                 .flex_1()
                                                                 .text_color(
-                                                                    theme::semantic().text_primary,
+                                                                    ui::text_primary(cx),
                                                                 )
                                                                 .overflow_hidden()
                                                                 .text_ellipsis()
@@ -1413,8 +1412,7 @@ impl Render for CaptureView {
                                                                 .text_color(if status > 0 {
                                                                     status_color
                                                                 } else {
-                                                                    theme::semantic()
-                                                                        .text_secondary
+                                                                    ui::text_secondary(cx).into()
                                                                 })
                                                                 .font_weight(if status >= 400 {
                                                                     gpui::FontWeight::SEMIBOLD
@@ -1434,8 +1432,7 @@ impl Render for CaptureView {
                                                                     gpui::TextAlign::Right,
                                                                 )
                                                                 .text_color(
-                                                                    theme::semantic()
-                                                                        .text_secondary,
+                                                                    ui::text_secondary(cx),
                                                                 )
                                                                 .child(size),
                                                         )
@@ -1446,8 +1443,7 @@ impl Render for CaptureView {
                                                                     gpui::TextAlign::Right,
                                                                 )
                                                                 .text_color(
-                                                                    theme::semantic()
-                                                                        .text_secondary,
+                                                                    ui::text_secondary(cx),
                                                                 )
                                                                 .child(duration),
                                                         )
@@ -1464,15 +1460,15 @@ impl Render for CaptureView {
                                             .justify_center()
                                             .gap_3()
                                             .border_t_1()
-                                            .border_color(theme::semantic().border_default)
+                                            .border_color(ui::border_light(cx))
                                             .text_size(px(11.0))
                                             .child({
                                                 let prev_link = div()
                                                     .id("prev-page")
                                                     .text_color(if has_prev {
-                                                        theme::semantic().primary
+                                                        Theme::global(cx).primary
                                                     } else {
-                                                        ui::text_tertiary()
+                                                        ui::text_tertiary(cx)
                                                     })
                                                     .child("上一页");
                                                 if has_prev {
@@ -1487,7 +1483,7 @@ impl Render for CaptureView {
                                             })
                                             .child(
                                                 div()
-                                                    .text_color(theme::semantic().text_secondary)
+                                                    .text_color(ui::text_secondary(cx))
                                                     .child(format!(
                                                         "{}–{} / {}",
                                                         offset + 1,
@@ -1499,9 +1495,9 @@ impl Render for CaptureView {
                                                 let next_link = div()
                                                     .id("next-page")
                                                     .text_color(if has_next {
-                                                        theme::semantic().primary
+                                                        Theme::global(cx).primary
                                                     } else {
-                                                        ui::text_tertiary()
+                                                        ui::text_tertiary(cx)
                                                     })
                                                     .child("下一页");
                                                 if has_next {
@@ -1524,9 +1520,9 @@ impl Render for CaptureView {
                             .w(px(340.0))
                             .min_h(px(0.0))
                             .rounded(theme::radius_lg())
-                            .bg(theme::semantic().bg_surface)
+                            .bg(ui::bg_surface(cx))
                             .border_1()
-                            .border_color(theme::semantic().border_default)
+                            .border_color(ui::border_light(cx))
                             .p_3()
                             .flex()
                             .flex_col()
@@ -1541,10 +1537,7 @@ impl Render for CaptureView {
                                         div()
                                             .text_size(px(11.0))
                                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                                            .text_color(CaptureView::method_color(
-                                                dark,
-                                                &detail.method,
-                                            ))
+                                            .text_color(theme::http_method_color(&detail.method, dark))
                                             .font_family("SF Mono")
                                             .child(detail.method.clone()),
                                     )
@@ -1553,7 +1546,7 @@ impl Render for CaptureView {
                                             .flex_1()
                                             .text_size(px(11.0))
                                             .font_family("SF Mono")
-                                            .text_color(theme::semantic().text_primary)
+                                            .text_color(ui::text_primary(cx))
                                             .overflow_hidden()
                                             .text_ellipsis()
                                             .child(detail.url.clone()),
@@ -1561,16 +1554,16 @@ impl Render for CaptureView {
                                     .into_any_element(),
                                 None => div()
                                     .text_size(px(11.0))
-                                    .text_color(ui::text_tertiary())
+                                    .text_color(ui::text_tertiary(cx))
                                     .child("未选择记录")
                                     .into_any_element(),
                             })
                             .child(match selected_detail {
                                 Some(ref detail) => div()
                                     .rounded(theme::radius_md())
-                                    .bg(theme::semantic().bg_subtle_2)
+                                    .bg(ui::bg_subtle(cx))
                                     .border_1()
-                                    .border_color(theme::semantic().border_default)
+                                    .border_color(ui::border_light(cx))
                                     .p_2()
                                     .flex()
                                     .gap_3()
@@ -1583,22 +1576,26 @@ impl Render for CaptureView {
                                             } else {
                                                 "-".to_string()
                                             },
-                                            CaptureView::status_color(dark, detail.status),
+                                            CaptureView::status_color(detail.status, cx),
+                                            cx,
                                         ),
                                         detail_mini(
                                             "耗时",
                                             &detail.formatted_duration(),
-                                            theme::semantic().text_primary,
+                                            ui::text_primary(cx),
+                                            cx,
                                         ),
                                         detail_mini(
                                             "请求",
                                             &crate::model::format_bytes(detail.request_size),
-                                            theme::semantic().text_primary,
+                                            ui::text_primary(cx),
+                                            cx,
                                         ),
                                         detail_mini(
                                             "响应",
                                             &crate::model::format_bytes(detail.response_size),
-                                            theme::semantic().text_primary,
+                                            ui::text_primary(cx),
+                                            cx,
                                         ),
                                     ])
                                     .into_any_element(),
@@ -1609,7 +1606,7 @@ impl Render for CaptureView {
                                 div()
                                     .h(px(28.0))
                                     .rounded(theme::radius_sm())
-                                    .bg(theme::semantic().bg_subtle)
+                                    .bg(ui::bg_subtle(cx))
                                     .flex()
                                     .gap_px()
                                     .children(DetailTab::ALL.iter().map(|&tab| {
@@ -1621,22 +1618,22 @@ impl Render for CaptureView {
                                             .h(px(28.0))
                                             .rounded(theme::radius_sm())
                                             .bg(if active {
-                                                if qingqi_ui::theme_mode::is_dark() {
-                                                    theme::semantic().primary
+                                                if Theme::global(cx).is_dark() {
+                                                    Theme::global(cx).primary
                                                 } else {
-                                                    theme::semantic().primary_soft
+                                                    Theme::global(cx).primary_hover
                                                 }
                                             } else {
-                                                theme::semantic().bg_subtle
+                                                ui::bg_subtle(cx)
                                             })
                                             .flex()
                                             .items_center()
                                             .justify_center()
                                             .text_size(px(11.0))
                                             .text_color(if active {
-                                                theme::semantic().primary_active
+                                                Theme::global(cx).primary_active
                                             } else {
-                                                theme::semantic().text_secondary
+                                                ui::text_secondary(cx)
                                             })
                                             .font_weight(if active {
                                                 gpui::FontWeight::SEMIBOLD
@@ -1646,7 +1643,7 @@ impl Render for CaptureView {
                                             .cursor_pointer()
                                             .hover(|s| {
                                                 if !active {
-                                                    s.bg(theme::semantic().bg_subtle_2)
+                                                    s.bg(ui::bg_subtle(cx))
                                                 } else {
                                                     s
                                                 }
@@ -1665,7 +1662,7 @@ impl Render for CaptureView {
                                     .overflow_y_scrollbar()
                                     .child(match selected_detail {
                                         Some(ref detail) => {
-                                            render_detail_tab_content(detail_tab, detail, dark)
+                                            render_detail_tab_content(detail_tab, detail, cx)
                                         }
                                         None => div()
                                             .flex_1()
@@ -1673,7 +1670,7 @@ impl Render for CaptureView {
                                             .items_center()
                                             .justify_center()
                                             .text_size(px(12.0))
-                                            .text_color(ui::text_tertiary())
+                                            .text_color(ui::text_tertiary(cx))
                                             .child("选择一条记录查看详情")
                                             .into_any_element(),
                                     }),
@@ -1684,17 +1681,18 @@ impl Render for CaptureView {
             .child(ui::status_bar(
                 self.status_text(),
                 if notice.is_some() {
-                    theme::semantic().warning
+                    ui::warning(cx)
                 } else if exchanges.is_empty() {
-                    ui::text_tertiary()
+                    ui::text_tertiary(cx)
                 } else {
-                    theme::semantic().text_secondary
+                    ui::text_secondary(cx)
                 },
+                cx,
             ))
     }
 }
 
-fn detail_mini(key: &str, value: &str, value_color: impl Into<gpui::Hsla>) -> gpui::AnyElement {
+fn detail_mini(key: &str, value: &str, value_color: impl Into<gpui::Hsla>, cx: &App) -> gpui::AnyElement {
     let key = key.to_string();
     let value_color: gpui::Hsla = value_color.into();
     div()
@@ -1704,7 +1702,7 @@ fn detail_mini(key: &str, value: &str, value_color: impl Into<gpui::Hsla>) -> gp
         .text_size(px(11.0))
         .child(
             div()
-                .text_color(theme::semantic().text_secondary)
+                .text_color(ui::text_secondary(cx))
                 .child(key),
         )
         .child(
@@ -1720,33 +1718,33 @@ fn detail_mini(key: &str, value: &str, value_color: impl Into<gpui::Hsla>) -> gp
 fn render_detail_tab_content(
     tab: DetailTab,
     detail: &CapturedExchange,
-    dark: bool,
+    cx: &App,
 ) -> gpui::AnyElement {
     match tab {
-        DetailTab::Overview => render_overview_section(detail, dark),
+        DetailTab::Overview => render_overview_section(detail, cx),
         DetailTab::RequestHeaders => render_headers_section(
             "请求头",
             &detail.request_headers_entries(),
             detail.has_request_headers(),
-            dark,
+            cx,
         ),
         DetailTab::RequestBody => {
-            render_body_section("请求体", detail.request_body_display(), dark)
+            render_body_section("请求体", detail.request_body_display(), cx)
         }
         DetailTab::ResponseHeaders => render_headers_section(
             "响应头",
             &detail.response_headers_entries(),
             detail.has_response_headers(),
-            dark,
+            cx,
         ),
         DetailTab::ResponseBody => {
-            render_body_section("响应体", detail.response_body_display(), dark)
+            render_body_section("响应体", detail.response_body_display(), cx)
         }
-        DetailTab::Timing => render_timing_section(detail, dark),
+        DetailTab::Timing => render_timing_section(detail, cx),
     }
 }
 
-fn render_timing_section(detail: &CapturedExchange, _dark: bool) -> gpui::AnyElement {
+fn render_timing_section(detail: &CapturedExchange, cx: &App) -> gpui::AnyElement {
     let rows = detail.timing_rows();
     div()
         .flex()
@@ -1759,17 +1757,17 @@ fn render_timing_section(detail: &CapturedExchange, _dark: bool) -> gpui::AnyEle
                 .font_family("SF Mono")
                 .p_1()
                 .rounded(theme::radius_sm())
-                .hover(|s| s.bg(theme::semantic().bg_subtle_2))
+                .hover(|s| s.bg(ui::bg_subtle(cx)))
                 .child(
                     div()
                         .w(px(80.0))
-                        .text_color(theme::semantic().text_secondary)
+                        .text_color(ui::text_secondary(cx))
                         .child(key.to_string()),
                 )
                 .child(
                     div()
                         .flex_1()
-                        .text_color(theme::semantic().text_primary)
+                        .text_color(ui::text_primary(cx))
                         .child(value),
                 )
         }))
@@ -1780,10 +1778,10 @@ fn render_headers_section(
     title: &str,
     entries: &[crate::model::HeaderEntry],
     has_data: bool,
-    dark: bool,
+    cx: &App,
 ) -> gpui::AnyElement {
     if !has_data || entries.is_empty() {
-        return render_empty_tab(title, dark);
+        return render_empty_tab(title, cx);
     }
     div()
         .flex()
@@ -1796,26 +1794,26 @@ fn render_headers_section(
                 .font_family("SF Mono")
                 .p_1()
                 .rounded(theme::radius_sm())
-                .hover(|s| s.bg(theme::semantic().bg_subtle_2))
+                .hover(|s| s.bg(ui::bg_subtle(cx)))
                 .child(
                     div()
                         .w(px(100.0))
-                        .text_color(theme::semantic().text_secondary)
+                        .text_color(ui::text_secondary(cx))
                         .child(entry.name.clone()),
                 )
                 .child(
                     div()
                         .flex_1()
-                        .text_color(theme::semantic().text_primary)
+                        .text_color(ui::text_primary(cx))
                         .child(entry.value.clone()),
                 )
         }))
         .into_any_element()
 }
 
-fn render_body_section(title: &str, display: BodyDisplay, dark: bool) -> gpui::AnyElement {
+fn render_body_section(title: &str, display: BodyDisplay, cx: &App) -> gpui::AnyElement {
     match display {
-        BodyDisplay::Empty => render_empty_tab(title, dark),
+        BodyDisplay::Empty => render_empty_tab(title, cx),
         BodyDisplay::Hinted(msg) => div()
             .flex_1()
             .flex()
@@ -1823,7 +1821,7 @@ fn render_body_section(title: &str, display: BodyDisplay, dark: bool) -> gpui::A
             .justify_center()
             .p_3()
             .text_size(px(11.0))
-            .text_color(ui::text_tertiary())
+            .text_color(ui::text_tertiary(cx))
             .child(msg)
             .into_any_element(),
         BodyDisplay::Text(body) => div()
@@ -1832,13 +1830,13 @@ fn render_body_section(title: &str, display: BodyDisplay, dark: bool) -> gpui::A
             .p_1()
             .text_size(px(11.0))
             .font_family("SF Mono")
-            .text_color(theme::semantic().text_primary)
+            .text_color(ui::text_primary(cx))
             .children(body.lines().map(|line| div().child(line.to_string())))
             .into_any_element(),
     }
 }
 
-fn render_overview_section(detail: &CapturedExchange, _dark: bool) -> gpui::AnyElement {
+fn render_overview_section(detail: &CapturedExchange, cx: &App) -> gpui::AnyElement {
     let rows: Vec<(&str, String)> = vec![
         ("方法", detail.method.clone()),
         ("URL", detail.url.clone()),
@@ -1873,31 +1871,31 @@ fn render_overview_section(detail: &CapturedExchange, _dark: bool) -> gpui::AnyE
                 .font_family("SF Mono")
                 .p_1()
                 .rounded(theme::radius_sm())
-                .hover(|s| s.bg(theme::semantic().bg_subtle_2))
+                .hover(|s| s.bg(ui::bg_subtle(cx)))
                 .child(
                     div()
                         .w(px(80.0))
-                        .text_color(theme::semantic().text_secondary)
+                        .text_color(ui::text_secondary(cx))
                         .child(key.to_string()),
                 )
                 .child(
                     div()
                         .flex_1()
-                        .text_color(theme::semantic().text_primary)
+                        .text_color(ui::text_primary(cx))
                         .child(value),
                 )
         }))
         .into_any_element()
 }
 
-fn render_empty_tab(label: &str, _dark: bool) -> gpui::AnyElement {
+fn render_empty_tab(label: &str, cx: &App) -> gpui::AnyElement {
     div()
         .flex_1()
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(12.0))
-        .text_color(ui::text_tertiary())
+        .text_color(ui::text_tertiary(cx))
         .child(format!("{label}无数据"))
         .into_any_element()
 }

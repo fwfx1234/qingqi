@@ -1,15 +1,15 @@
-use gpui::{
-    App, Entity, IntoElement, InteractiveElement, ParentElement,
-    Styled, div, px,
-};
+use super::dropdown::{DropdownItem, dropdown_list};
+use crate::service::{ApiEnvironment, ApiRequest, HttpMethod};
+use crate::view::ApiDebuggerView;
+use gpui::{App, Entity, InteractiveElement, IntoElement, ParentElement, Styled, div, px};
 use gpui_component::popover::Popover;
 use gpui_component::theme::Theme;
-use gpui_component::{Icon, IconName, Sizable, Size, button::{Button, ButtonVariants}};
-use qingqi_ui::{theme, ui, ui::glass};
+use gpui_component::{
+    Icon, IconName, Sizable, Size,
+    button::{Button, ButtonVariants},
+};
 use qingqi_ui::text_input::TextInput;
-use crate::service::{ApiRequest, ApiEnvironment, HttpMethod};
-use crate::view::ApiDebuggerView;
-use super::dropdown::{DropdownItem, dropdown_list};
+use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn action_bar(
     view: Entity<ApiDebuggerView>,
@@ -44,7 +44,8 @@ pub fn action_bar(
                     }
                 })
                 .trigger({
-                    let method_color = theme::http_method_color(current.label(), Theme::global(cx).is_dark());
+                    let method_color =
+                        theme::http_method_color(current.label(), Theme::global(cx).is_dark());
                     Button::new("api-method-trigger")
                         .ghost()
                         .w(px(76.0))
@@ -81,13 +82,15 @@ pub fn action_bar(
                     let bg = Theme::global(_cx).list;
                     let border = ui::border_light(_cx);
                     dropdown_list(
-                        HttpMethod::all().into_iter().map(|method| {
-                            let mc = theme::http_method_color(method.label(), Theme::global(_cx).is_dark());
-                            DropdownItem::new(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .child(
+                        HttpMethod::all()
+                            .into_iter()
+                            .map(|method| {
+                                let mc = theme::http_method_color(
+                                    method.label(),
+                                    Theme::global(_cx).is_dark(),
+                                );
+                                DropdownItem::new(
+                                    div().flex().items_center().child(
                                         div()
                                             .font_family("SF Mono")
                                             .text_size(px(12.0))
@@ -96,19 +99,20 @@ pub fn action_bar(
                                             .whitespace_nowrap()
                                             .child(method.label()),
                                     ),
-                            )
-                            .active(method == curr)
-                            .on_select({
-                                let v = v.clone();
-                                let m = method;
-                                move |_, cx| {
-                                    v.update(cx, |view, cx| {
-                                        view.set_method(m, cx);
-                                        view.show_method_popover = false;
-                                    });
-                                }
+                                )
+                                .active(method == curr)
+                                .on_select({
+                                    let v = v.clone();
+                                    let m = method;
+                                    move |_, cx| {
+                                        v.update(cx, |view, cx| {
+                                            view.set_method(m, cx);
+                                            view.show_method_popover = false;
+                                        });
+                                    }
+                                })
                             })
-                        }).collect(),
+                            .collect(),
                         accent,
                         bg,
                         border,

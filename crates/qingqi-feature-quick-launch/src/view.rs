@@ -14,11 +14,53 @@ use crate::{
     parameters::{join_shell_words, split_shell_words},
     service::{QuickLaunchService, RunSummary},
 };
+use gpui_component::theme::Theme;
 use qingqi_ui::{
     text_input::{TextInput, TextInputStyle},
     theme,
     ui::{self, components},
 };
+
+/// Pre-computed theme colors used for uniform_list rows (must be Copy/'static for lifetime compatibility)
+#[derive(Clone, Copy)]
+struct RowTheme {
+    hover_bg: gpui::Hsla,
+    bg_surface: gpui::Hsla,
+    border: gpui::Hsla,
+    bg_subtle: gpui::Hsla,
+    text_secondary: gpui::Hsla,
+    text_primary: gpui::Hsla,
+    accent: gpui::Rgba,
+    success: gpui::Rgba,
+    warning: gpui::Rgba,
+    danger: gpui::Rgba,
+    primary: gpui::Hsla,
+    primary_active: gpui::Hsla,
+    background: gpui::Hsla,
+    is_dark: bool,
+}
+
+impl RowTheme {
+    fn from_app(cx: &App) -> Self {
+        let theme = Theme::global(cx);
+        Self {
+            hover_bg: ui::row_hover(cx),
+            bg_surface: ui::bg_surface(cx),
+            border: ui::border_light(cx),
+            bg_subtle: ui::bg_subtle(cx),
+            text_secondary: ui::text_secondary(cx),
+            text_primary: ui::text_primary(cx),
+            accent: ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue),
+            success: gpui::Rgba::from(ui::success(cx)),
+            warning: gpui::Rgba::from(ui::warning(cx)),
+            danger: gpui::Rgba::from(ui::danger(cx)),
+            primary: theme.primary,
+            primary_active: theme.primary_active,
+            background: theme.background,
+            is_dark: theme.is_dark(),
+        }
+    }
+}
 
 const HISTORY_LIMIT: usize = 8;
 
@@ -1088,7 +1130,6 @@ impl Render for QuickLaunchView {
         }
 
         let handle = cx.entity();
-        let dark = qingqi_ui::theme_mode::is_dark();
         let actions = self.actions.clone();
         let running_action_ids = self.running_action_ids.clone();
         let selected = self.selected.min(actions.len().saturating_sub(1));
@@ -1109,8 +1150,8 @@ impl Render for QuickLaunchView {
 
         div()
             .size_full()
-            .bg(theme::semantic().bg_page)
-            .text_color(theme::semantic().text_primary)
+            .bg(Theme::global(cx).background)
+            .text_color(ui::text_primary(cx))
             .font_family(ui::font_ui())
             .p_2p5()
             .flex()
@@ -1174,7 +1215,7 @@ impl Render for QuickLaunchView {
                     .child(
                         div()
                             .text_size(px(10.0))
-                            .text_color(theme::semantic().text_secondary)
+                            .text_color(ui::text_secondary(cx))
                             .child(message),
                     ),
             )
@@ -1182,11 +1223,11 @@ impl Render for QuickLaunchView {
                 handle.clone(),
                 query_input,
                 selected_running,
-                dark,
+                cx,
             ))
             .child(
                 selected_action
-                    .map(|action| management_row(handle.clone(), action, dark).into_any_element())
+                    .map(|action| management_row(handle.clone(), action, cx).into_any_element())
                     .unwrap_or_else(|| div().into_any_element()),
             )
             .child({
@@ -1195,12 +1236,12 @@ impl Render for QuickLaunchView {
                     .flex_1()
                     .rounded(px(8.0))
                     .border_1()
-                    .border_color(theme::semantic().border_default)
-                    .bg(theme::semantic().bg_surface);
+                    .border_color(ui::border_light(cx))
+                    .bg(ui::bg_surface(cx));
                 if actions.is_empty() {
                     list_container
                         .overflow_y_scroll()
-                        .child(empty_state(has_query, dark))
+                        .child(empty_state(has_query, cx))
                         .into_any_element()
                 } else {
                     let scroll = self.list_scroll.clone();
@@ -1211,7 +1252,8 @@ impl Render for QuickLaunchView {
                     let actions_for_list = actions.clone();
                     list_container
                         .child(
-                            uniform_list("quick-launch-rows", total, move |range, _window, _cx| {
+                            uniform_list("quick-launch-rows", total, move |range, _window, cx| {
+                                let theme = RowTheme::from_app(cx);
                                 range
                                     .map(|index| {
                                         let action = actions_for_list[index].clone();
@@ -1223,7 +1265,7 @@ impl Render for QuickLaunchView {
                                             index == selected,
                                             running,
                                             latest_summaries.clone(),
-                                            dark,
+                                            theme,
                                         )
                                     })
                                     .collect()
@@ -1236,10 +1278,10 @@ impl Render for QuickLaunchView {
             })
             .child(if let Some(action_menu) = action_menu {
                 let running = running_action_ids.contains(&action_menu.action.id);
-                menu_overlay_shell(handle.clone(), action_menu, running, dark).into_any_element()
+                menu_overlay_shell(handle.clone(), action_menu, running, cx).into_any_element()
             } else if let Some(delete_confirm) = delete_confirm {
                 overlay_shell(
-                    dark,
+                    cx,
                     "quick-launch-delete-overlay",
                     {
                         let handle = handle.clone();
@@ -1249,12 +1291,12 @@ impl Render for QuickLaunchView {
                             });
                         }
                     },
-                    delete_confirm_sheet(handle.clone(), delete_confirm, dark),
+                    delete_confirm_sheet(handle.clone(), delete_confirm, cx),
                 )
                 .into_any_element()
             } else if let Some(pending) = pending {
                 overlay_shell(
-                    dark,
+                    cx,
                     "quick-launch-pending-overlay",
                     {
                         let handle = handle.clone();
@@ -1262,12 +1304,12 @@ impl Render for QuickLaunchView {
                             let _ = cx.update_entity(&handle, |view, cx| view.close_pending(cx));
                         }
                     },
-                    pending_sheet(handle.clone(), pending, dark),
+                    pending_sheet(handle.clone(), pending, cx),
                 )
                 .into_any_element()
             } else if let Some(editor) = editor {
                 overlay_shell(
-                    dark,
+                    cx,
                     "quick-launch-editor-overlay",
                     {
                         let handle = handle.clone();
@@ -1275,12 +1317,12 @@ impl Render for QuickLaunchView {
                             let _ = cx.update_entity(&handle, |view, cx| view.close_editor(cx));
                         }
                     },
-                    action_editor_sheet(handle.clone(), editor, dark),
+                    action_editor_sheet(handle.clone(), editor, cx),
                 )
                 .into_any_element()
             } else if let Some(result) = result {
                 overlay_shell(
-                    dark,
+                    cx,
                     "quick-launch-result-overlay",
                     {
                         let handle = handle.clone();
@@ -1288,12 +1330,12 @@ impl Render for QuickLaunchView {
                             let _ = cx.update_entity(&handle, |view, cx| view.close_result(cx));
                         }
                     },
-                    result_sheet(handle.clone(), result, dark),
+                    result_sheet(handle.clone(), result, cx),
                 )
                 .into_any_element()
             } else if let Some(history) = history {
                 overlay_shell(
-                    dark,
+                    cx,
                     "quick-launch-history-overlay",
                     {
                         let handle = handle.clone();
@@ -1301,7 +1343,7 @@ impl Render for QuickLaunchView {
                             let _ = cx.update_entity(&handle, |view, cx| view.close_history(cx));
                         }
                     },
-                    history_sheet(handle, history, dark),
+                    history_sheet(handle, history, cx),
                 )
                 .into_any_element()
             } else {
@@ -1314,8 +1356,9 @@ fn search_row(
     handle: Entity<QuickLaunchView>,
     query_input: Entity<TextInput>,
     selected_running: bool,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
+    let sr_theme = RowTheme::from_app(cx);
     div()
         .h(px(30.0))
         .flex()
@@ -1327,12 +1370,12 @@ fn search_row(
                 .h(px(28.0))
                 .rounded(px(4.0))
                 .border_1()
-                .border_color(theme::semantic().border_default)
-                .bg(theme::semantic().bg_surface)
+                .border_color(ui::border_light(cx))
+                .bg(ui::bg_surface(cx))
                 .child(query_input),
         )
         .child(if selected_running {
-            action_button("停止选中项", dark, {
+            action_button("停止选中项", sr_theme, {
                 let handle = handle.clone();
                 move |_, cx| {
                     let _ = cx.update_entity(&handle, |view, cx| view.stop_selected(cx));
@@ -1340,7 +1383,7 @@ fn search_row(
             })
             .into_any_element()
         } else {
-            primary_action_button("运行选中项", dark, {
+            primary_action_button("运行选中项", sr_theme, {
                 let handle = handle.clone();
                 move |_, cx| {
                     let _ = cx.update_entity(&handle, |view, cx| view.run_selected(cx));
@@ -1348,25 +1391,25 @@ fn search_row(
             })
             .into_any_element()
         })
-        .child(action_button("查看历史", dark, {
+        .child(action_button("查看历史", sr_theme, {
             let handle = handle.clone();
             move |_, cx| {
                 let _ = cx.update_entity(&handle, |view, cx| view.open_selected_history(cx));
             }
         }))
-        .child(action_button("最新结果", dark, {
+        .child(action_button("最新结果", sr_theme, {
             let handle = handle.clone();
             move |_, cx| {
                 let _ = cx.update_entity(&handle, |view, cx| view.open_selected_result(cx));
             }
         }))
-        .child(action_button("新建动作", dark, {
+        .child(action_button("新建动作", sr_theme, {
             let handle = handle.clone();
             move |_, cx| {
                 let _ = cx.update_entity(&handle, |view, cx| view.open_create_editor(cx));
             }
         }))
-        .child(action_button("清空", dark, move |_, cx| {
+        .child(action_button("清空", sr_theme, move |_, cx| {
             let _ = cx.update_entity(&handle, |view, cx| view.clear_query(cx));
         }))
 }
@@ -1374,15 +1417,16 @@ fn search_row(
 fn management_row(
     handle: Entity<QuickLaunchView>,
     action: QuickAction,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
+    let mgmt_theme = RowTheme::from_app(cx);
     let enabled_label = if action.enabled { "停用" } else { "启用" };
 
     div()
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_surface)
+        .border_color(ui::border_light(cx))
+        .bg(ui::bg_surface(cx))
         .px(px(8.0))
         .py_1()
         .flex()
@@ -1405,52 +1449,52 @@ fn management_row(
                         .flex()
                         .items_center()
                         .gap_1()
-                        .child(kind_chip(action.kind.label().to_string(), dark))
+                        .child(kind_chip(action.kind.label().to_string(), mgmt_theme))
                         .child(if action.feedback_mode != FeedbackMode::Notification {
-                            subtle_chip(feedback_label(action.feedback_mode).to_string(), dark)
+                            subtle_chip(feedback_label(action.feedback_mode).to_string(), mgmt_theme)
                                 .into_any_element()
                         } else {
                             div().into_any_element()
                         })
                         .child(if action.enabled {
-                            status_chip(String::from("已启用"), theme::semantic().success, dark)
+                            status_chip(String::from("已启用"), gpui::Rgba::from(ui::success(cx)), mgmt_theme)
                                 .into_any_element()
                         } else {
-                            status_chip(String::from("已停用"), theme::semantic().warning, dark)
+                            status_chip(String::from("已停用"), gpui::Rgba::from(ui::warning(cx)), mgmt_theme)
                                 .into_any_element()
                         })
                         .child(
                             div()
                                 .text_size(px(10.0))
-                                .text_color(theme::semantic().text_secondary)
+                                .text_color(ui::text_secondary(cx))
                                 .child(subtitle_for(&action)),
                         ),
                 ),
         )
-        .child(action_button("编辑", dark, {
+        .child(action_button("编辑", mgmt_theme, {
             let handle = handle.clone();
             move |_, cx| {
                 let _ = cx.update_entity(&handle, |view, cx| view.open_selected_editor(cx));
             }
         }))
-        .child(action_button("复制", dark, {
+        .child(action_button("复制", mgmt_theme, {
             let handle = handle.clone();
             move |_, cx| {
                 let _ = cx.update_entity(&handle, |view, cx| view.duplicate_selected(cx));
             }
         }))
-        .child(action_button(enabled_label, dark, {
+        .child(action_button(enabled_label, mgmt_theme, {
             let handle = handle.clone();
             move |_, cx| {
                 let _ = cx.update_entity(&handle, |view, cx| view.toggle_selected_enabled(cx));
             }
         }))
-        .child(action_button("删除", dark, move |_, cx| {
+        .child(action_button("删除", mgmt_theme, move |_, cx| {
             let _ = cx.update_entity(&handle, |view, cx| view.delete_selected(cx));
         }))
 }
 
-fn empty_state(has_query: bool, _dark: bool) -> impl IntoElement {
+fn empty_state(has_query: bool, cx: &App) -> impl IntoElement {
     let (title, subtitle) = if has_query {
         ("没有匹配的动作", "换个关键词，或者清空当前搜索")
     } else {
@@ -1472,7 +1516,7 @@ fn empty_state(has_query: bool, _dark: bool) -> impl IntoElement {
             div()
                 .size(px(36.0))
                 .rounded(px(8.0))
-                .bg(theme::semantic().bg_subtle)
+                .bg(ui::bg_subtle(cx))
                 .flex()
                 .items_center()
                 .justify_center()
@@ -1491,7 +1535,7 @@ fn empty_state(has_query: bool, _dark: bool) -> impl IntoElement {
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(theme::semantic().text_secondary)
+                .text_color(ui::text_secondary(cx))
                 .child(subtitle),
         )
 }
@@ -1503,12 +1547,12 @@ fn action_row(
     selected: bool,
     running: bool,
     latest_run_summaries: HashMap<i64, RunSummary>,
-    dark: bool,
-) -> impl IntoElement {
+    theme: RowTheme,
+) -> impl IntoElement + 'static {
     let row_bg = if selected {
-        ui::row_hover()
+        theme.hover_bg
     } else {
-        theme::semantic().bg_surface
+        theme.bg_surface
     };
     let parameter_count = action.parameter_specs().len();
     let action_for_run = action.clone();
@@ -1517,15 +1561,16 @@ fn action_row(
     let action_for_menu = action.clone();
     let menu_handle = handle.clone();
     let run_handle = handle.clone();
+    let row_hover_bg = theme.hover_bg;
 
     div()
         .id(("quick-launch-row", index))
         .h(px(48.0))
         .px(px(8.0))
         .border_b_1()
-        .border_color(theme::semantic().border_default)
+        .border_color(theme.border)
         .bg(row_bg)
-        .hover(move |style| style.bg(ui::row_hover()).cursor_pointer())
+        .hover(move |style| style.bg(row_hover_bg).cursor_pointer())
         .on_click({
             let handle = handle.clone();
             move |_, _, cx| {
@@ -1539,14 +1584,12 @@ fn action_row(
             div()
                 .size(px(30.0))
                 .rounded(px(6.0))
-                .bg(theme::semantic().bg_subtle)
+                .bg(theme.bg_subtle)
                 .flex()
                 .items_center()
                 .justify_center()
                 .text_size(px(14.0))
-                .text_color(ui::accent_color(
-                    qingqi_plugin::plugin_spec::PluginAccent::Blue,
-                ))
+                .text_color(theme.accent)
                 .child(icon_for_action(&action)),
         )
         .child(
@@ -1561,26 +1604,26 @@ fn action_row(
                         .items_center()
                         .gap_1()
                         .child(div().text_size(px(12.0)).child(action.name.clone()))
-                        .child(kind_chip(action.kind.label().to_string(), dark))
+                        .child(kind_chip(action.kind.label().to_string(), theme))
                         .child(if parameter_count > 0 {
-                            subtle_chip(format!("{parameter_count} 参数"), dark).into_any_element()
+                            subtle_chip(format!("{parameter_count} 参数"), theme).into_any_element()
                         } else {
                             div().into_any_element()
                         })
                         .child(if action.feedback_mode != FeedbackMode::Notification {
-                            subtle_chip(feedback_label(action.feedback_mode).to_string(), dark)
+                            subtle_chip(feedback_label(action.feedback_mode).to_string(), theme)
                                 .into_any_element()
                         } else {
                             div().into_any_element()
                         })
                         .child(if running {
-                            status_chip(String::from("运行中"), theme::semantic().success, dark)
+                            status_chip(String::from("运行中"), theme.success, theme)
                                 .into_any_element()
                         } else {
                             div().into_any_element()
                         })
                         .child(if !running {
-                            latest_run_status_chip(action.id, &latest_run_summaries, dark)
+                            latest_run_status_chip(action.id, &latest_run_summaries, theme)
                                 .into_any_element()
                         } else {
                             div().into_any_element()
@@ -1588,7 +1631,7 @@ fn action_row(
                         .child(if action.enabled {
                             div().into_any_element()
                         } else {
-                            status_chip("已停用".to_string(), theme::semantic().warning, dark)
+                            status_chip("已停用".to_string(), theme.warning, theme)
                                 .into_any_element()
                         }),
                 )
@@ -1596,25 +1639,25 @@ fn action_row(
                     div()
                         .text_size(px(10.0))
                         .font_family("SF Mono")
-                        .text_color(theme::semantic().text_body)
+                        .text_color(theme.text_secondary)
                         .child(subtitle_for(&action)),
                 ),
         )
-        .child(action_button("历史", dark, {
+        .child(action_button("历史", theme, {
             let handle = handle.clone();
             move |_, cx| {
                 let action = action_for_history.clone();
                 let _ = cx.update_entity(&handle, |view, cx| view.open_history(action, cx));
             }
         }))
-        .child(action_button("编辑", dark, {
+        .child(action_button("编辑", theme, {
             let handle = handle.clone();
             move |_, cx| {
                 let action = action_for_edit.clone();
                 let _ = cx.update_entity(&handle, |view, cx| view.open_edit_editor(action, cx));
             }
         }))
-        .child(icon_action_button("⋯", dark, move |event, window, cx| {
+        .child(icon_action_button("⋯", theme, move |event, window, cx| {
             let action = action_for_menu.clone();
             let position = menu_position(event.position(), window);
             let _ = cx.update_entity(&menu_handle, |view, cx| {
@@ -1622,12 +1665,12 @@ fn action_row(
             });
         }))
         .child(if running {
-            action_button("停止", dark, move |_, cx| {
+            action_button("停止", theme, move |_, cx| {
                 let _ = cx.update_entity(&handle, |view, cx| view.stop_action(action.id, cx));
             })
             .into_any_element()
         } else {
-            primary_action_button("运行", dark, move |_, cx| {
+            primary_action_button("运行", theme, move |_, cx| {
                 let action = action_for_run.clone();
                 let _ = cx.update_entity(&run_handle, |view, cx| view.run_action(action, cx));
             })
@@ -1638,8 +1681,9 @@ fn action_row(
 fn action_editor_sheet(
     handle: Entity<QuickLaunchView>,
     editor: ActionEditorState,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
+    let ed_theme = RowTheme::from_app(cx);
     let title = match editor.mode {
         ActionEditorMode::Create => "新建动作",
         ActionEditorMode::Edit(_) => "编辑动作",
@@ -1665,8 +1709,8 @@ fn action_editor_sheet(
         .w(px(480.0))
         .rounded(theme::radius_sheet())
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_elevated)
+        .border_color(ui::border_light(cx))
+        .bg(ui::bg_surface(cx))
         .shadow_lg()
         .flex()
         .flex_col()
@@ -1675,7 +1719,7 @@ fn action_editor_sheet(
                 .px_3()
                 .py_2()
                 .border_b_1()
-                .border_color(theme::semantic().border_default)
+                .border_color(ui::border_light(cx))
                 .flex()
                 .items_center()
                 .justify_between()
@@ -1685,7 +1729,7 @@ fn action_editor_sheet(
                         .font_weight(gpui::FontWeight::BOLD)
                         .child(title),
                 )
-                .child(action_button("关闭", dark, {
+                .child(action_button("关闭", ed_theme, {
                     let handle = handle.clone();
                     move |_, cx| {
                         let _ = cx.update_entity(&handle, |view, cx| view.close_editor(cx));
@@ -1700,7 +1744,7 @@ fn action_editor_sheet(
                     .flex()
                     .flex_col()
                     .gap_1p5()
-                    .child(editor_field("名称", editor.name_input, dark))
+                    .child(editor_field("名称", editor.name_input, cx))
                     .child(
                         div()
                             .flex()
@@ -1709,7 +1753,7 @@ fn action_editor_sheet(
                             .child(
                                 div()
                                     .text_size(px(12.0))
-                                    .text_color(theme::semantic().text_secondary)
+                                    .text_color(ui::text_secondary(cx))
                                     .child("类型"),
                             )
                             .child(
@@ -1719,7 +1763,7 @@ fn action_editor_sheet(
                                     .child(segment_button(
                                         "脚本",
                                         editor.kind == ActionKind::Script,
-                                        dark,
+                                        cx,
                                         {
                                             let handle = handle.clone();
                                             move |_, cx| {
@@ -1732,7 +1776,7 @@ fn action_editor_sheet(
                                     .child(segment_button(
                                         "打开路径",
                                         editor.kind == ActionKind::OpenPath,
-                                        dark,
+                                        cx,
                                         {
                                             let handle = handle.clone();
                                             move |_, cx| {
@@ -1745,7 +1789,7 @@ fn action_editor_sheet(
                                     .child(segment_button(
                                         "打开链接",
                                         editor.kind == ActionKind::OpenUrl,
-                                        dark,
+                                        cx,
                                         {
                                             let handle = handle.clone();
                                             move |_, cx| {
@@ -1765,7 +1809,7 @@ fn action_editor_sheet(
                             .child(
                                 div()
                                     .text_size(px(12.0))
-                                    .text_color(theme::semantic().text_secondary)
+                                    .text_color(ui::text_secondary(cx))
                                     .child("脚本类型"),
                             )
                             .child(
@@ -1775,7 +1819,7 @@ fn action_editor_sheet(
                                     .child(segment_button(
                                         "Shell",
                                         editor.script_type == ScriptType::Shell,
-                                        dark,
+                                        cx,
                                         {
                                             let handle = handle.clone();
                                             move |_, cx| {
@@ -1791,7 +1835,7 @@ fn action_editor_sheet(
                                     .child(segment_button(
                                         "Node",
                                         editor.script_type == ScriptType::Node,
-                                        dark,
+                                        cx,
                                         {
                                             let handle = handle.clone();
                                             move |_, cx| {
@@ -1807,7 +1851,7 @@ fn action_editor_sheet(
                                     .child(segment_button(
                                         "Python",
                                         editor.script_type == ScriptType::Python,
-                                        dark,
+                                        cx,
                                         {
                                             let handle = handle.clone();
                                             move |_, cx| {
@@ -1823,7 +1867,7 @@ fn action_editor_sheet(
                                     .child(segment_button(
                                         "其他",
                                         editor.script_type == ScriptType::Other,
-                                        dark,
+                                        cx,
                                         {
                                             let handle = handle.clone();
                                             move |_, cx| {
@@ -1849,7 +1893,7 @@ fn action_editor_sheet(
                             .child(
                                 div()
                                     .text_size(px(12.0))
-                                    .text_color(theme::semantic().text_secondary)
+                                    .text_color(ui::text_secondary(cx))
                                     .child("脚本来源"),
                             )
                             .child(
@@ -1859,7 +1903,7 @@ fn action_editor_sheet(
                                     .child(segment_button(
                                         "文件",
                                         editor.script_source == ScriptSource::Path,
-                                        dark,
+                                        cx,
                                         {
                                             let handle = handle.clone();
                                             move |_, cx| {
@@ -1875,7 +1919,7 @@ fn action_editor_sheet(
                                     .child(segment_button(
                                         "内联",
                                         editor.script_source == ScriptSource::Inline,
-                                        dark,
+                                        cx,
                                         {
                                             let handle = handle.clone();
                                             move |_, cx| {
@@ -1894,7 +1938,7 @@ fn action_editor_sheet(
                         div().into_any_element()
                     })
                     .child(if editor.kind == ActionKind::Script {
-                        editor_field("解释器（可选覆盖）", editor.interpreter_input, dark)
+                        editor_field("解释器（可选覆盖）", editor.interpreter_input, cx)
                             .into_any_element()
                     } else {
                         div().into_any_element()
@@ -1908,21 +1952,21 @@ fn action_editor_sheet(
                             target_label,
                             "选择…",
                             editor.target_input,
-                            dark,
+                            cx,
                             QuickLaunchView::pick_editor_target,
                         )
                         .into_any_element()
                     } else {
-                        editor_field(target_label, editor.target_input, dark).into_any_element()
+                        editor_field(target_label, editor.target_input, cx).into_any_element()
                     })
                     .child(
                         div()
                             .text_size(px(10.0))
-                            .text_color(theme::semantic().text_secondary)
+                            .text_color(ui::text_secondary(cx))
                             .child(target_hint),
                     )
                     .child(if editor.kind != ActionKind::OpenUrl {
-                        editor_field("运行参数", editor.args_input, dark).into_any_element()
+                        editor_field("运行参数", editor.args_input, cx).into_any_element()
                     } else {
                         div().into_any_element()
                     })
@@ -1932,7 +1976,7 @@ fn action_editor_sheet(
                             "工作目录",
                             "选择…",
                             editor.cwd_input,
-                            dark,
+                            cx,
                             QuickLaunchView::pick_editor_cwd,
                         )
                         .into_any_element()
@@ -1940,13 +1984,13 @@ fn action_editor_sheet(
                         div().into_any_element()
                     })
                     .child(if editor.kind == ActionKind::Script {
-                        editor_field("环境变量（每行 KEY=VALUE）", editor.env_input, dark)
+                        editor_field("环境变量（每行 KEY=VALUE）", editor.env_input, cx)
                             .into_any_element()
                     } else {
                         div().into_any_element()
                     })
                     .child(if editor.kind == ActionKind::Script {
-                        editor_field("超时（秒）", editor.timeout_input, dark).into_any_element()
+                        editor_field("超时（秒）", editor.timeout_input, cx).into_any_element()
                     } else {
                         div().into_any_element()
                     })
@@ -1958,7 +2002,7 @@ fn action_editor_sheet(
                             .child(
                                 div()
                                     .text_size(px(12.0))
-                                    .text_color(theme::semantic().text_secondary)
+                                    .text_color(ui::text_secondary(cx))
                                     .child("反馈方式"),
                             )
                             .child(
@@ -1968,7 +2012,7 @@ fn action_editor_sheet(
                                     .child(segment_button(
                                         "静默",
                                         editor.feedback_mode == FeedbackMode::Silent,
-                                        dark,
+                                        cx,
                                         {
                                             let handle = handle.clone();
                                             move |_, cx| {
@@ -1984,7 +2028,7 @@ fn action_editor_sheet(
                                     .child(segment_button(
                                         "弹窗",
                                         editor.feedback_mode == FeedbackMode::Popup,
-                                        dark,
+                                        cx,
                                         {
                                             let handle = handle.clone();
                                             move |_, cx| {
@@ -2000,7 +2044,7 @@ fn action_editor_sheet(
                                     .child(segment_button(
                                         "通知",
                                         editor.feedback_mode == FeedbackMode::Notification,
-                                        dark,
+                                        cx,
                                         {
                                             let handle = handle.clone();
                                             move |_, cx| {
@@ -2018,15 +2062,15 @@ fn action_editor_sheet(
                     .child(editor_field(
                         "关键词（逗号分隔）",
                         editor.keywords_input,
-                        dark,
+                        cx,
                     ))
                     .child(editor_field(
                         "前缀（逗号分隔）",
                         editor.prefixes_input,
-                        dark,
+                        cx,
                     ))
-                    .child(editor_field("图标字符（可选）", editor.icon_input, dark))
-                    .child(editor_field("描述", editor.description_input, dark))
+                    .child(editor_field("图标字符（可选）", editor.icon_input, cx))
+                    .child(editor_field("描述", editor.description_input, cx))
                     .child(
                         div()
                             .flex()
@@ -2034,8 +2078,8 @@ fn action_editor_sheet(
                             .justify_between()
                             .rounded(px(6.0))
                             .border_1()
-                            .border_color(theme::semantic().border_default)
-                            .bg(theme::semantic().bg_surface)
+                            .border_color(ui::border_light(cx))
+                            .bg(ui::bg_surface(cx))
                             .px(px(8.0))
                             .py_1()
                             .child(
@@ -2047,7 +2091,7 @@ fn action_editor_sheet(
                                     .child(
                                         div()
                                             .text_size(px(10.0))
-                                            .text_color(theme::semantic().text_secondary)
+                                            .text_color(ui::text_secondary(cx))
                                             .child(if editor.enabled {
                                                 "创建后会注册到启动器"
                                             } else {
@@ -2061,7 +2105,7 @@ fn action_editor_sheet(
                                 } else {
                                     "已停用"
                                 },
-                                dark,
+                                ed_theme,
                                 {
                                     let handle = handle.clone();
                                     move |_, cx| {
@@ -2075,7 +2119,7 @@ fn action_editor_sheet(
                     .child(
                         div()
                             .text_size(px(11.0))
-                            .text_color(theme::semantic().text_secondary)
+                            .text_color(ui::text_secondary(cx))
                             .child(
                                 "提示：在脚本、解释器、路径、参数、cwd、env 中使用 ${name} 可声明运行时参数。",
                             ),
@@ -2087,17 +2131,17 @@ fn action_editor_sheet(
                 .px_3()
                 .py_2()
                 .border_t_1()
-                .border_color(theme::semantic().border_default)
+                .border_color(ui::border_light(cx))
                 .flex()
                 .justify_end()
                 .gap_1()
-                .child(action_button("取消", dark, {
+                .child(action_button("取消", ed_theme, {
                     let handle = handle.clone();
                     move |_, cx| {
                         let _ = cx.update_entity(&handle, |view, cx| view.close_editor(cx));
                     }
                 }))
-                .child(primary_action_button("保存", dark, move |_, cx| {
+                .child(primary_action_button("保存", ed_theme, move |_, cx| {
                     let _ = cx.update_entity(&handle, |view, cx| view.save_editor(cx));
                 })),
         )
@@ -2114,7 +2158,7 @@ fn editor_target_placeholder(kind: ActionKind, script_source: ScriptSource) -> &
     }
 }
 
-fn editor_field(label: &'static str, input: Entity<TextInput>, _dark: bool) -> impl IntoElement {
+fn editor_field(label: &'static str, input: Entity<TextInput>, cx: &App) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -2122,15 +2166,15 @@ fn editor_field(label: &'static str, input: Entity<TextInput>, _dark: bool) -> i
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(theme::semantic().text_secondary)
+                .text_color(ui::text_secondary(cx))
                 .child(label),
         )
         .child(
             div()
                 .rounded(px(6.0))
                 .border_1()
-                .border_color(theme::semantic().border_default)
-                .bg(theme::semantic().bg_surface)
+                .border_color(ui::border_light(cx))
+                .bg(ui::bg_surface(cx))
                 .child(input),
         )
 }
@@ -2140,9 +2184,10 @@ fn editor_picker_field(
     label: &'static str,
     button_label: &'static str,
     input: Entity<TextInput>,
-    dark: bool,
+    cx: &App,
     on_pick: fn(&mut QuickLaunchView, &mut Context<QuickLaunchView>),
 ) -> impl IntoElement {
+    let epf_theme = RowTheme::from_app(cx);
     div()
         .flex()
         .flex_col()
@@ -2150,7 +2195,7 @@ fn editor_picker_field(
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(theme::semantic().text_secondary)
+                .text_color(ui::text_secondary(cx))
                 .child(label),
         )
         .child(
@@ -2163,11 +2208,11 @@ fn editor_picker_field(
                         .flex_1()
                         .rounded(px(6.0))
                         .border_1()
-                        .border_color(theme::semantic().border_default)
-                        .bg(theme::semantic().bg_surface)
+                        .border_color(ui::border_light(cx))
+                        .bg(ui::bg_surface(cx))
                         .child(input),
                 )
-                .child(action_button(button_label, dark, move |_, cx| {
+                .child(action_button(button_label, epf_theme, move |_, cx| {
                     let _ = cx.update_entity(&handle, |view, cx| on_pick(view, cx));
                 })),
         )
@@ -2176,14 +2221,15 @@ fn editor_picker_field(
 fn pending_sheet(
     handle: Entity<QuickLaunchView>,
     pending: PendingExecution,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
+    let pd_theme = RowTheme::from_app(cx);
     div()
         .w(px(440.0))
         .rounded(theme::radius_sheet())
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_elevated)
+        .border_color(ui::border_light(cx))
+        .bg(ui::bg_surface(cx))
         .shadow_lg()
         .flex()
         .flex_col()
@@ -2192,7 +2238,7 @@ fn pending_sheet(
                 .px_3()
                 .py_2()
                 .border_b_1()
-                .border_color(theme::semantic().border_default)
+                .border_color(ui::border_light(cx))
                 .flex()
                 .items_center()
                 .justify_between()
@@ -2210,11 +2256,11 @@ fn pending_sheet(
                         .child(
                             div()
                                 .text_size(px(10.0))
-                                .text_color(theme::semantic().text_secondary)
+                                .text_color(ui::text_secondary(cx))
                                 .child("该动作包含参数占位符，先填写再执行"),
                         ),
                 )
-                .child(action_button("取消", dark, {
+                .child(action_button("取消", pd_theme, {
                     let handle = handle.clone();
                     move |_, cx| {
                         let _ = cx.update_entity(&handle, |view, cx| view.close_pending(cx));
@@ -2227,7 +2273,7 @@ fn pending_sheet(
                     .fields
                     .into_iter()
                     .enumerate()
-                    .map(|(index, field)| parameter_row(field, index, dark)),
+                    .map(|(index, field)| parameter_row(field, index, cx)),
             ),
         )
         .child(
@@ -2235,23 +2281,23 @@ fn pending_sheet(
                 .px_3()
                 .py_2()
                 .border_t_1()
-                .border_color(theme::semantic().border_default)
+                .border_color(ui::border_light(cx))
                 .flex()
                 .justify_end()
                 .gap_1()
-                .child(action_button("稍后", dark, {
+                .child(action_button("稍后", pd_theme, {
                     let handle = handle.clone();
                     move |_, cx| {
                         let _ = cx.update_entity(&handle, |view, cx| view.close_pending(cx));
                     }
                 }))
-                .child(primary_action_button("执行", dark, move |_, cx| {
+                .child(primary_action_button("执行", pd_theme, move |_, cx| {
                     let _ = cx.update_entity(&handle, |view, cx| view.submit_pending(cx));
                 })),
         )
 }
 
-fn parameter_row(field: PendingParameterField, index: usize, _dark: bool) -> impl IntoElement {
+fn parameter_row(field: PendingParameterField, index: usize, cx: &App) -> impl IntoElement {
     div()
         .id(("quick-launch-parameter", index))
         .flex()
@@ -2260,15 +2306,15 @@ fn parameter_row(field: PendingParameterField, index: usize, _dark: bool) -> imp
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(theme::semantic().text_secondary)
+                .text_color(ui::text_secondary(cx))
                 .child(field.name),
         )
         .child(
             div()
                 .rounded(px(6.0))
                 .border_1()
-                .border_color(theme::semantic().border_default)
-                .bg(theme::semantic().bg_surface)
+                .border_color(ui::border_light(cx))
+                .bg(ui::bg_surface(cx))
                 .child(field.input),
         )
 }
@@ -2276,14 +2322,15 @@ fn parameter_row(field: PendingParameterField, index: usize, _dark: bool) -> imp
 fn history_sheet(
     handle: Entity<QuickLaunchView>,
     history: HistorySheetState,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
+    let hs_theme = RowTheme::from_app(cx);
     div()
         .w(px(560.0))
         .rounded(theme::radius_sheet())
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_elevated)
+        .border_color(ui::border_light(cx))
+        .bg(ui::bg_surface(cx))
         .shadow_lg()
         .flex()
         .flex_col()
@@ -2292,7 +2339,7 @@ fn history_sheet(
                 .px_3()
                 .py_2()
                 .border_b_1()
-                .border_color(theme::semantic().border_default)
+                .border_color(ui::border_light(cx))
                 .flex()
                 .items_center()
                 .justify_between()
@@ -2310,7 +2357,7 @@ fn history_sheet(
                         .child(
                             div()
                                 .text_size(px(10.0))
-                                .text_color(theme::semantic().text_secondary)
+                                .text_color(ui::text_secondary(cx))
                                 .child(format!("最近 {} 条记录", history.runs.len())),
                         ),
                 )
@@ -2319,7 +2366,7 @@ fn history_sheet(
                         .flex()
                         .items_center()
                         .gap_1()
-                        .child(action_button("刷新", dark, {
+                        .child(action_button("刷新", hs_theme, {
                             let handle = handle.clone();
                             move |_, cx| {
                                 let _ = cx.update_entity(&handle, |view, cx| {
@@ -2327,7 +2374,7 @@ fn history_sheet(
                                 });
                             }
                         }))
-                        .child(action_button("关闭", dark, {
+                        .child(action_button("关闭", hs_theme, {
                             let handle = handle.clone();
                             move |_, cx| {
                                 let _ =
@@ -2343,7 +2390,7 @@ fn history_sheet(
                 .items_center()
                 .justify_center()
                 .text_size(px(10.0))
-                .text_color(theme::semantic().text_secondary)
+                .text_color(ui::text_secondary(cx))
                 .child("还没有运行记录")
                 .into_any_element()
         } else {
@@ -2359,7 +2406,7 @@ fn history_sheet(
                         history.action_name.clone(),
                         run,
                         index,
-                        dark,
+                        cx,
                     )
                 }))
                 .into_any_element()
@@ -2371,9 +2418,10 @@ fn history_row(
     action_name: String,
     run: QuickRun,
     index: usize,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
-    let tone = run_status_color(run.status, dark);
+    let hr_theme = RowTheme::from_app(cx);
+    let tone = run_status_color(run.status, &hr_theme);
     let preview = if !run.stderr.trim().is_empty() {
         preview_text(&run.stderr)
     } else if !run.stdout.trim().is_empty() {
@@ -2389,8 +2437,8 @@ fn history_row(
         .id(("quick-launch-history-row", index))
         .rounded(px(6.0))
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_surface)
+        .border_color(ui::border_light(cx))
+        .bg(ui::bg_surface(cx))
         .px_2()
         .py_2()
         .flex()
@@ -2403,24 +2451,24 @@ fn history_row(
                 .gap_1()
                 .child(status_chip(
                     run_status_label(run.status).to_string(),
-                    tone,
-                    dark,
+                    gpui::Rgba::from(tone),
+                    hr_theme,
                 ))
                 .child(
                     div()
                         .text_size(px(10.0))
-                        .text_color(theme::semantic().text_secondary)
+                        .text_color(ui::text_secondary(cx))
                         .child(run.started_at.clone()),
                 )
                 .child(div().flex_1())
                 .child(
                     div()
                         .text_size(px(10.0))
-                        .text_color(theme::semantic().text_secondary)
+                        .text_color(ui::text_secondary(cx))
                         .child(format!("{} ms", run.duration_ms)),
                 )
                 .child(if let Some(code) = run.exit_code {
-                    subtle_chip(format!("exit {code}"), dark).into_any_element()
+                    subtle_chip(format!("exit {code}"), hr_theme).into_any_element()
                 } else {
                     div().into_any_element()
                 }),
@@ -2437,18 +2485,18 @@ fn history_row(
                         .text_size(px(10.0))
                         .font_family("SF Mono")
                         .text_color(if run.stderr.trim().is_empty() {
-                            theme::semantic().text_body
+                            ui::text_secondary(cx)
                         } else {
                             tone
                         })
                         .child(preview),
                 )
-                .child(action_button("重新运行", dark, move |_, cx| {
+                .child(action_button("重新运行", hr_theme, move |_, cx| {
                     let _ = cx.update_entity(&rerun_handle, |view, cx| {
                         view.rerun_action_by_id(rerun_action_id, cx);
                     });
                 }))
-                .child(action_button("详情", dark, move |_, cx| {
+                .child(action_button("详情", hr_theme, move |_, cx| {
                     let action_name = action_name.clone();
                     let run = run_for_result.clone();
                     let _ = cx.update_entity(&handle, |view, cx| {
@@ -2461,13 +2509,14 @@ fn history_row(
 fn result_sheet(
     handle: Entity<QuickLaunchView>,
     result: ResultSheetState,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
-    let tone = run_status_color(result.run.status, dark);
+    let result_theme = RowTheme::from_app(cx);
+    let tone = run_status_color(result.run.status, &result_theme);
     let ok = result.run.status == RunStatus::Success;
     let status_line = result_meta_text(&result.run);
     let stderr_color = if result.run.stderr.trim().is_empty() {
-        theme::semantic().text_body
+        ui::text_secondary(cx)
     } else {
         tone
     };
@@ -2478,8 +2527,8 @@ fn result_sheet(
         .w(px(500.0))
         .rounded(theme::radius_sheet())
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_elevated)
+        .border_color(ui::border_light(cx))
+        .bg(ui::bg_surface(cx))
         .shadow_lg()
         .flex()
         .flex_col()
@@ -2488,7 +2537,7 @@ fn result_sheet(
                 .px_3()
                 .py_2()
                 .border_b_1()
-                .border_color(theme::semantic().border_default)
+                .border_color(ui::border_light(cx))
                 .flex()
                 .items_center()
                 .justify_between()
@@ -2498,7 +2547,7 @@ fn result_sheet(
                         .font_weight(gpui::FontWeight::BOLD)
                         .child("执行结果"),
                 )
-                .child(action_button("关闭", dark, {
+                .child(action_button("关闭", result_theme, {
                     let handle = handle.clone();
                     move |_, cx| {
                         let _ = cx.update_entity(&handle, |view, cx| view.close_result(cx));
@@ -2550,7 +2599,7 @@ fn result_sheet(
                                     .child(
                                         div()
                                             .text_size(px(10.0))
-                                            .text_color(theme::semantic().text_secondary)
+                                            .text_color(ui::text_secondary(cx))
                                             .child(status_line),
                                     ),
                             ),
@@ -2558,17 +2607,17 @@ fn result_sheet(
                     .child(
                         div()
                             .text_size(px(10.0))
-                            .text_color(theme::semantic().text_secondary)
+                            .text_color(ui::text_secondary(cx))
                             .child(result.run.message.clone()),
                     )
                     .child(result_block(
                         handle.clone(),
                         "stdout",
                         result.run.stdout,
-                        theme::semantic().text_primary,
+                        ui::text_primary(cx),
                         "复制 stdout",
                         QuickLaunchView::copy_result_stdout,
-                        dark,
+                        cx,
                     ))
                     .child(result_block(
                         handle.clone(),
@@ -2577,7 +2626,7 @@ fn result_sheet(
                         stderr_color,
                         "复制 stderr",
                         QuickLaunchView::copy_result_stderr,
-                        dark,
+                        cx,
                     )),
             ),
         )
@@ -2586,15 +2635,15 @@ fn result_sheet(
                 .px_3()
                 .py_2()
                 .border_t_1()
-                .border_color(theme::semantic().border_default)
+                .border_color(ui::border_light(cx))
                 .flex()
                 .justify_between()
-                .child(action_button("重新运行", dark, move |_, cx| {
+                .child(action_button("重新运行", result_theme, move |_, cx| {
                     let _ = cx.update_entity(&rerun_handle, |view, cx| {
                         view.rerun_action_by_id(rerun_action_id, cx);
                     });
                 }))
-                .child(primary_action_button("完成", dark, move |_, cx| {
+                .child(primary_action_button("完成", result_theme, move |_, cx| {
                     let _ = cx.update_entity(&handle, |view, cx| view.close_result(cx));
                 })),
         )
@@ -2604,11 +2653,12 @@ fn result_block(
     handle: Entity<QuickLaunchView>,
     title: &'static str,
     content: String,
-    text_color: gpui::Rgba,
+    text_color: gpui::Hsla,
     copy_label: &'static str,
     on_copy: fn(&mut QuickLaunchView, &mut Context<QuickLaunchView>),
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
+    let rb_theme = RowTheme::from_app(cx);
     div()
         .flex()
         .flex_col()
@@ -2621,10 +2671,10 @@ fn result_block(
                 .child(
                     div()
                         .text_size(px(10.0))
-                        .text_color(theme::semantic().text_secondary)
+                        .text_color(ui::text_secondary(cx))
                         .child(title),
                 )
-                .child(action_button(copy_label, dark, move |_, cx| {
+                .child(action_button(copy_label, rb_theme, move |_, cx| {
                     let _ = cx.update_entity(&handle, |view, cx| on_copy(view, cx));
                 })),
         )
@@ -2632,8 +2682,8 @@ fn result_block(
             div()
                 .rounded(px(6.0))
                 .border_1()
-                .border_color(theme::semantic().border_default)
-                .bg(theme::semantic().bg_surface)
+                .border_color(ui::border_light(cx))
+                .bg(ui::bg_surface(cx))
                 .max_h(px(140.0))
                 .child(
                     div()
@@ -2650,16 +2700,16 @@ fn result_block(
 }
 
 fn overlay_shell(
-    dark: bool,
+    cx: &App,
     backdrop_id: &'static str,
     on_close: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
     content: impl IntoElement,
 ) -> impl IntoElement {
     components::overlay_host(
-        dark,
         backdrop_id,
         move |event, _window, cx| on_close(event, cx),
         content,
+        cx,
     )
 }
 
@@ -2667,7 +2717,7 @@ fn menu_overlay_shell(
     handle: Entity<QuickLaunchView>,
     menu: ActionMenuState,
     running: bool,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     div()
         .size_full()
@@ -2697,44 +2747,46 @@ fn menu_overlay_shell(
                 .w(px(160.0))
                 .rounded(px(6.0))
                 .border_1()
-                .border_color(theme::semantic().border_default)
-                .bg(theme::semantic().bg_elevated)
+                .border_color(ui::border_light(cx))
+                .bg(ui::bg_surface(cx))
                 .shadow_lg()
                 .p_1()
                 .flex()
                 .flex_col()
                 .gap(px(2.0))
-                .children(action_menu_items(handle, menu.action, running, dark)),
+                .children(action_menu_items(handle, menu.action, running, cx)),
         )
 }
 
 fn primary_action_button(
     label: &'static str,
-    _dark: bool,
+    theme: RowTheme,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
-) -> impl IntoElement {
+) -> impl IntoElement + 'static {
+    let primary_active = theme.primary_active;
     div()
         .id(label)
         .h(px(26.0))
         .min_w(px(68.0))
         .px(px(8.0))
         .rounded(px(4.0))
-        .bg(theme::semantic().primary)
-        .hover(move |style| style.bg(theme::semantic().primary_active).cursor_pointer())
+        .bg(theme.primary)
+        .hover(move |style| style.bg(primary_active).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(10.0))
-        .text_color(theme::white())
+        .text_color(ui::white())
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
 fn action_button(
     label: &'static str,
-    _dark: bool,
+    theme: RowTheme,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
-) -> impl IntoElement {
+) -> impl IntoElement + 'static {
+    let hover_bg = theme.hover_bg;
     div()
         .id(label)
         .h(px(26.0))
@@ -2742,36 +2794,37 @@ fn action_button(
         .px(px(8.0))
         .rounded(px(4.0))
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_surface)
-        .hover(move |style| style.bg(ui::row_hover()).cursor_pointer())
+        .border_color(theme.border)
+        .bg(theme.bg_surface)
+        .hover(move |style| style.bg(hover_bg).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(10.0))
-        .text_color(theme::semantic().text_primary)
+        .text_color(theme.text_primary)
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
 fn icon_action_button(
     label: &'static str,
-    _dark: bool,
+    theme: RowTheme,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
-) -> impl IntoElement {
+) -> impl IntoElement + 'static {
+    let hover_bg = theme.hover_bg;
     div()
         .id(label)
         .size(px(26.0))
         .rounded(px(4.0))
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_surface)
-        .hover(move |style| style.bg(ui::row_hover()).cursor_pointer())
+        .border_color(theme.border)
+        .bg(theme.bg_surface)
+        .hover(move |style| style.bg(hover_bg).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(12.0))
-        .text_color(theme::semantic().text_primary)
+        .text_color(theme.text_primary)
         .child(label)
         .on_click(move |event, window, cx| on_click(event, window, cx))
 }
@@ -2780,13 +2833,13 @@ fn action_menu_items(
     handle: Entity<QuickLaunchView>,
     action: QuickAction,
     running: bool,
-    dark: bool,
+    cx: &App,
 ) -> Vec<gpui::AnyElement> {
     let mut items = Vec::new();
 
     if running {
         items.push(
-            action_menu_item("停止", true, dark, {
+            action_menu_item("停止", true, cx, {
                 let handle = handle.clone();
                 let action = action.clone();
                 move |_, cx| {
@@ -2805,7 +2858,7 @@ fn action_menu_items(
         action_menu_item(
             if action.enabled { "停用" } else { "启用" },
             false,
-            dark,
+            cx,
             {
                 let handle = handle.clone();
                 let action = action.clone();
@@ -2820,7 +2873,7 @@ fn action_menu_items(
         .into_any_element(),
     );
     items.push(
-        action_menu_item("复制", false, dark, {
+        action_menu_item("复制", false, cx, {
             let handle = handle.clone();
             let action = action.clone();
             move |_, cx| {
@@ -2833,7 +2886,7 @@ fn action_menu_items(
         .into_any_element(),
     );
     items.push(
-        action_menu_item("查看运行历史", false, dark, {
+        action_menu_item("查看运行历史", false, cx, {
             let handle = handle.clone();
             let action = action.clone();
             move |_, cx| {
@@ -2845,9 +2898,9 @@ fn action_menu_items(
         })
         .into_any_element(),
     );
-    items.push(action_menu_separator().into_any_element());
+    items.push(action_menu_separator(cx).into_any_element());
     items.push(
-        action_menu_item("删除", true, dark, move |_, cx| {
+        action_menu_item("删除", true, cx, move |_, cx| {
             let action = action.clone();
             let _ = cx.update_entity(&handle, |view, cx| {
                 view.request_delete_action(action, cx);
@@ -2862,34 +2915,35 @@ fn action_menu_items(
 fn action_menu_item(
     label: &'static str,
     destructive: bool,
-    _dark: bool,
+    cx: &App,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement {
+    let hover_bg = ui::row_hover(cx);
     div()
         .id(label)
         .h(px(26.0))
         .w_full()
         .px(px(8.0))
         .rounded(px(4.0))
-        .hover(move |style| style.bg(ui::row_hover()).cursor_pointer())
+        .hover(move |style| style.bg(hover_bg).cursor_pointer())
         .flex()
         .items_center()
         .text_size(px(10.0))
         .text_color(if destructive {
-            theme::semantic().danger
+            ui::danger(cx)
         } else {
-            theme::semantic().text_primary
+            ui::text_primary(cx)
         })
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
-fn action_menu_separator() -> impl IntoElement {
+fn action_menu_separator(cx: &App) -> impl IntoElement {
     div()
         .w_full()
         .h(px(1.0))
         .my(px(2.0))
-        .bg(theme::semantic().border_default)
+        .bg(ui::border_light(cx))
 }
 
 fn menu_position(click: Point<Pixels>, window: &Window) -> Point<Pixels> {
@@ -2908,14 +2962,15 @@ fn menu_position(click: Point<Pixels>, window: &Window) -> Point<Pixels> {
 fn delete_confirm_sheet(
     handle: Entity<QuickLaunchView>,
     delete_confirm: DeleteConfirmState,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
+    let dc_theme = RowTheme::from_app(cx);
     div()
         .w(px(380.0))
         .rounded(theme::radius_sheet())
         .border_1()
-        .border_color(theme::semantic().border_default)
-        .bg(theme::semantic().bg_elevated)
+        .border_color(ui::border_light(cx))
+        .bg(ui::bg_surface(cx))
         .shadow_lg()
         .flex()
         .flex_col()
@@ -2936,7 +2991,7 @@ fn delete_confirm_sheet(
                     div()
                         .text_size(px(10.0))
                         .line_height(px(14.0))
-                        .text_color(theme::semantic().text_secondary)
+                        .text_color(ui::text_secondary(cx))
                         .child(format!(
                             "确定要删除动作 “{}” 吗？此操作不可撤销。",
                             delete_confirm.action_name
@@ -2948,11 +3003,11 @@ fn delete_confirm_sheet(
                 .px_3()
                 .py_2()
                 .border_t_1()
-                .border_color(theme::semantic().border_default)
+                .border_color(ui::border_light(cx))
                 .flex()
                 .justify_end()
                 .gap_1()
-                .child(action_button("取消", dark, {
+                .child(action_button("取消", dc_theme, {
                     let handle = handle.clone();
                     move |_, cx| {
                         let _ = cx.update_entity(&handle, |view, cx| {
@@ -2960,7 +3015,7 @@ fn delete_confirm_sheet(
                         });
                     }
                 }))
-                .child(destructive_action_button("删除", dark, move |_, cx| {
+                .child(destructive_action_button("删除", cx, move |_, cx| {
                     let action_id = delete_confirm.action_id;
                     let _ = cx.update_entity(&handle, |view, cx| {
                         view.confirm_delete_action(action_id, cx);
@@ -2971,39 +3026,40 @@ fn delete_confirm_sheet(
 
 fn destructive_action_button(
     label: &'static str,
-    dark: bool,
+    cx: &App,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement {
+    let danger_hover_bg = theme::rgba_with_alpha(
+        gpui::Rgba::from(ui::danger(cx)),
+        if Theme::global(cx).is_dark() { 0.88 } else { 0.92 },
+    );
     div()
         .id(label)
         .h(px(26.0))
         .min_w(px(56.0))
         .px(px(8.0))
         .rounded(px(4.0))
-        .bg(theme::semantic().danger)
+        .bg(ui::danger(cx))
         .hover(move |style| {
             style
-                .bg(theme::rgba_with_alpha(
-                    theme::semantic().danger,
-                    if dark { 0.88 } else { 0.92 },
-                ))
+                .bg(danger_hover_bg)
                 .cursor_pointer()
         })
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(10.0))
-        .text_color(theme::white())
+        .text_color(ui::white())
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
-fn kind_chip(label: String, _dark: bool) -> impl IntoElement {
+fn kind_chip(label: String, theme: RowTheme) -> impl IntoElement + 'static {
     div()
         .h(px(18.0))
         .px(px(6.0))
         .rounded(px(3.0))
-        .bg(theme::semantic().primary_bg)
+        .bg(theme.primary)
         .flex()
         .items_center()
         .justify_center()
@@ -3014,26 +3070,26 @@ fn kind_chip(label: String, _dark: bool) -> impl IntoElement {
         .child(label)
 }
 
-fn subtle_chip(label: String, _dark: bool) -> impl IntoElement {
+fn subtle_chip(label: String, theme: RowTheme) -> impl IntoElement + 'static {
     div()
         .h(px(18.0))
         .px(px(6.0))
         .rounded(px(3.0))
-        .bg(theme::semantic().bg_page)
+        .bg(theme.background)
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(9.0))
-        .text_color(theme::semantic().text_secondary)
+        .text_color(theme.text_secondary)
         .child(label)
 }
 
-fn status_chip(label: String, tone: gpui::Rgba, dark: bool) -> impl IntoElement {
+fn status_chip(label: String, tone: gpui::Rgba, theme: RowTheme) -> impl IntoElement + 'static {
     div()
         .h(px(18.0))
         .px(px(6.0))
         .rounded(px(3.0))
-        .bg(if dark {
+        .bg(if theme.is_dark {
             hsla(0.0, 0.0, 1.0, 0.08)
         } else {
             hsla(0.0, 0.0, 0.0, 0.05)
@@ -3049,17 +3105,17 @@ fn status_chip(label: String, tone: gpui::Rgba, dark: bool) -> impl IntoElement 
 fn latest_run_status_chip(
     action_id: i64,
     latest_run_summaries: &HashMap<i64, RunSummary>,
-    dark: bool,
-) -> impl IntoElement {
+    theme: RowTheme,
+) -> impl IntoElement + 'static {
     let Some(summary) = latest_run_summaries.get(&action_id) else {
         return div().into_any_element();
     };
-    let tone = run_status_color(summary.status, dark);
+    let tone = run_status_color(summary.status, &theme);
     div()
         .h(px(18.0))
         .px(px(6.0))
         .rounded(px(3.0))
-        .bg(hsla(0.0, 0.0, if dark { 1.0 } else { 0.0 }, 0.06))
+        .bg(hsla(0.0, 0.0, if theme.is_dark { 1.0 } else { 0.0 }, 0.06))
         .flex()
         .items_center()
         .justify_center()
@@ -3072,9 +3128,11 @@ fn latest_run_status_chip(
 fn segment_button(
     label: &'static str,
     active: bool,
-    _dark: bool,
+    cx: &App,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement {
+    let accent = Theme::global(cx).primary;
+    let hover_bg = ui::row_hover(cx);
     div()
         .id(label)
         .h(px(26.0))
@@ -3082,21 +3140,21 @@ fn segment_button(
         .rounded(px(4.0))
         .border_1()
         .border_color(if active {
-            theme::semantic().primary
+            accent
         } else {
-            theme::semantic().border_default
+            ui::border_light(cx)
         })
         .bg(if active {
-            theme::semantic().primary_bg
+            accent
         } else {
-            theme::semantic().bg_surface
+            ui::bg_surface(cx)
         })
         .hover(move |style| {
             style
                 .bg(if active {
-                    theme::semantic().primary_bg
+                    accent
                 } else {
-                    ui::row_hover()
+                    hover_bg
                 })
                 .cursor_pointer()
         })
@@ -3105,9 +3163,9 @@ fn segment_button(
         .justify_center()
         .text_size(px(10.0))
         .text_color(if active {
-            ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
+            gpui::Hsla::from(ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue))
         } else {
-            theme::semantic().text_primary
+            ui::text_primary(cx)
         })
         .child(label)
         .on_click(move |event, _window, cx| on_click(event, cx))
@@ -3425,11 +3483,11 @@ fn result_meta_text(run: &QuickRun) -> String {
     parts.join("  ·  ")
 }
 
-fn run_status_color(status: RunStatus, _dark: bool) -> gpui::Rgba {
+fn run_status_color(status: RunStatus, theme: &RowTheme) -> gpui::Hsla {
     match status {
-        RunStatus::Success => theme::semantic().success,
-        RunStatus::Timeout => theme::semantic().warning,
-        RunStatus::Stopped => theme::semantic().text_secondary,
-        RunStatus::Failed | RunStatus::Error => theme::semantic().danger,
+        RunStatus::Success => theme.success.into(),
+        RunStatus::Timeout => theme.warning.into(),
+        RunStatus::Stopped => theme.text_secondary,
+        RunStatus::Failed | RunStatus::Error => theme.danger.into(),
     }
 }

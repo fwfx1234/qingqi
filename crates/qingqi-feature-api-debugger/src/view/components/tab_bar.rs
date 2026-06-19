@@ -1,16 +1,22 @@
-use gpui::{rgb, App, Entity, IntoElement, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled, div, px, prelude::FluentBuilder};
+use super::dropdown::{DropdownItem, dropdown_list};
+use super::shared::circle_badge;
+use crate::service::ApiEnvironment;
+use crate::view::ApiDebuggerView;
+use crate::view::TAB_BAR_HEIGHT;
+use crate::view::components::env_editor::open_env_editor_window;
+use crate::view::types::OpenTab;
+use gpui::{
+    App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
+    Styled, div, prelude::FluentBuilder, px, rgb,
+};
 use gpui_component::popover::Popover;
 use gpui_component::tab::{Tab, TabBar};
 use gpui_component::theme::Theme;
-use gpui_component::{Icon, IconName, Sizable, Size, button::{Button, ButtonVariants}};
+use gpui_component::{
+    Icon, IconName, Sizable, Size,
+    button::{Button, ButtonVariants},
+};
 use qingqi_ui::{theme, ui};
-use crate::service::ApiEnvironment;
-use crate::view::ApiDebuggerView;
-use crate::view::components::env_editor::open_env_editor_window;
-use crate::view::types::OpenTab;
-use crate::view::TAB_BAR_HEIGHT;
-use super::dropdown::{DropdownItem, dropdown_list};
-use super::shared::circle_badge;
 
 pub fn open_tabs_bar(
     view: Entity<ApiDebuggerView>,
@@ -25,7 +31,9 @@ pub fn open_tabs_bar(
     let border = ui::border_light(cx);
     let active_index = tabs.iter().position(|t| *t == active_tab).unwrap_or(0);
 
-    let current_env = environments.get(selected_env_index).cloned()
+    let current_env = environments
+        .get(selected_env_index)
+        .cloned()
         .unwrap_or_else(|| ApiEnvironment {
             name: String::from("默认环境"),
             badge: String::from("默"),
@@ -87,60 +95,66 @@ pub fn open_tabs_bar(
                         let bg = Theme::global(_cx).list;
                         let border = ui::border_light(_cx);
                         dropdown_list(
-                            envs2.into_iter().enumerate().map(|(i, env)| {
-                                let active = i == idx;
-                                DropdownItem::new(
-                                    div()
-                                        .min_h(px(48.0))
-                                        .flex()
-                                        .items_center()
-                                        .gap(px(10.0))
-                                        .child(circle_badge(&env.badge, env.color, 32.0))
-                                        .child(
-                                            div()
-                                                .flex_1()
-                                                .min_w(px(0.0))
-                                                .flex()
-                                                .flex_col()
-                                                .gap(px(2.0))
-                                                .child(
+                            envs2
+                                .into_iter()
+                                .enumerate()
+                                .map(|(i, env)| {
+                                    let active = i == idx;
+                                    DropdownItem::new(
+                                        div()
+                                            .min_h(px(48.0))
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(10.0))
+                                            .child(circle_badge(&env.badge, env.color, 32.0))
+                                            .child(
+                                                div()
+                                                    .flex_1()
+                                                    .min_w(px(0.0))
+                                                    .flex()
+                                                    .flex_col()
+                                                    .gap(px(2.0))
+                                                    .child(
+                                                        div()
+                                                            .text_size(px(12.0))
+                                                            .font_weight(gpui::FontWeight::MEDIUM)
+                                                            .text_color(
+                                                                Theme::global(_cx).foreground,
+                                                            )
+                                                            .truncate()
+                                                            .child(env.name.clone()),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .font_family("SF Mono")
+                                                            .text_size(px(10.0))
+                                                            .text_color(ui::text_tertiary(_cx))
+                                                            .truncate()
+                                                            .child(env.base_url.clone()),
+                                                    ),
+                                            )
+                                            .when(active, |row| {
+                                                row.child(
                                                     div()
                                                         .text_size(px(12.0))
-                                                        .font_weight(gpui::FontWeight::MEDIUM)
-                                                        .text_color(Theme::global(_cx).foreground)
-                                                        .truncate()
-                                                        .child(env.name.clone()),
+                                                        .font_weight(gpui::FontWeight::BOLD)
+                                                        .text_color(Theme::global(_cx).primary)
+                                                        .child("\u{2713}"),
                                                 )
-                                                .child(
-                                                    div()
-                                                        .font_family("SF Mono")
-                                                        .text_size(px(10.0))
-                                                        .text_color(ui::text_tertiary(_cx))
-                                                        .truncate()
-                                                        .child(env.base_url.clone()),
-                                                ),
-                                        )
-                                        .when(active, |row| {
-                                            row.child(
-                                                div()
-                                                    .text_size(px(12.0))
-                                                    .font_weight(gpui::FontWeight::BOLD)
-                                                    .text_color(Theme::global(_cx).primary)
-                                                    .child("\u{2713}"),
-                                            )
-                                        }),
-                                )
-                                .active(active)
-                                .on_select({
-                                    let v2 = v.clone();
-                                    move |_, cx| {
-                                        v2.update(cx, |view, cx| {
-                                            view.select_environment(i, cx);
-                                            view.show_env_popover = false;
-                                        });
-                                    }
+                                            }),
+                                    )
+                                    .active(active)
+                                    .on_select({
+                                        let v2 = v.clone();
+                                        move |_, cx| {
+                                            v2.update(cx, |view, cx| {
+                                                view.select_environment(i, cx);
+                                                view.show_env_popover = false;
+                                            });
+                                        }
+                                    })
                                 })
-                            }).collect(),
+                                .collect(),
                             accent,
                             bg,
                             border,
@@ -209,34 +223,30 @@ pub fn open_tabs_bar(
                         .unwrap_or_else(|| String::from("请求"));
                     let close_view = view.clone();
 
-                    Tab::new()
-                        .label(title)
-                        .underline()
-                        .suffix(
-                            div()
-                                .id(("api-tab-close", index))
-                                .size(px(18.0))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .rounded(px(4.0))
-                                .cursor_pointer()
-                                .hover(|s| {
-                                    s.bg(theme::rgba_with_alpha(ui::text_tertiary(cx).into(), 0.12))
-                                })
-                                .on_click(move |_, _, cx| {
-                                    cx.stop_propagation();
-                                    close_view.update(cx, |view, cx| {
-                                        view.close_open_tab(index, cx);
-                                    });
-                                })
-                                .child(
-                                    Icon::new(IconName::Close)
-                                        .size(px(10.0))
-                                        .text_color(ui::text_tertiary(cx)),
-                                ),
-                        )
+                    Tab::new().label(title).underline().suffix(
+                        div()
+                            .id(("api-tab-close", index))
+                            .size(px(18.0))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(4.0))
+                            .cursor_pointer()
+                            .hover(|s| {
+                                s.bg(theme::rgba_with_alpha(ui::text_tertiary(cx).into(), 0.12))
+                            })
+                            .on_click(move |_, _, cx| {
+                                cx.stop_propagation();
+                                close_view.update(cx, |view, cx| {
+                                    view.close_open_tab(index, cx);
+                                });
+                            })
+                            .child(
+                                Icon::new(IconName::Close)
+                                    .size(px(10.0))
+                                    .text_color(ui::text_tertiary(cx)),
+                            ),
+                    )
                 })),
         )
 }
-

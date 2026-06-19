@@ -1,7 +1,7 @@
-use gpui::App;
-use crate::service::ApiEnvironment;
 use super::ApiDebuggerView;
 use super::types::format_rows;
+use crate::service::ApiEnvironment;
+use gpui::App;
 
 impl ApiDebuggerView {
     pub(crate) fn selected_environment(&self) -> &ApiEnvironment {

@@ -4,9 +4,10 @@ use std::{
 };
 
 use gpui::{
-    AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
+    App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
     StatefulInteractiveElement, Styled, Subscription, Window, div, px, relative,
 };
+
 
 use qingqi_plugin::{
     job::{JobId, JobProvider},
@@ -732,7 +733,6 @@ impl Render for DownloadManagerView {
         self.refresh_if_stale();
         let handle = cx.entity();
 
-        let dark = qingqi_ui::theme_mode::is_dark();
         let tasks = self.tasks.clone();
         let filter = self.filter;
         let show_settings = self.show_settings;
@@ -755,24 +755,24 @@ impl Render for DownloadManagerView {
         let cookie_input = self.cookie_input.clone();
         let headers_input = self.headers_input.clone();
 
-        ui::plugin_surface().child(
+        ui::plugin_surface(cx).child(
             ui::plugin_content().child(
                 div()
                     .size_full()
                     .flex()
                     .flex_col()
                     .gap_1p5()
-                    .child(header_bar(job_summary.active_count))
-                    .child(url_input_bar(dark, url_input, handle.clone()))
-                    .child(filter_bar(dark, filter, &task_counts, handle.clone()))
+                    .child(header_bar(job_summary.active_count, cx))
+                    .child(url_input_bar(cx, url_input, handle.clone()))
+                    .child(filter_bar(cx, filter, &task_counts, handle.clone()))
                     .child(task_list(
-                        dark,
+                        cx,
                         tasks,
                         job_summary.progress_by_id,
                         handle.clone(),
                     ))
                     .child(bottom_bar(
-                        dark,
+                        cx,
                         message,
                         &save_dir,
                         &settings,
@@ -781,7 +781,7 @@ impl Render for DownloadManagerView {
                     ))
                     .child(if show_settings {
                         settings_overlay(
-                            dark,
+                            cx,
                             save_root_input,
                             concurrent_input,
                             speed_limit_input,
@@ -831,7 +831,7 @@ impl DownloadJobSummary {
     }
 }
 
-fn header_bar(active_count: usize) -> impl IntoElement {
+fn header_bar(active_count: usize, cx: &App) -> impl IntoElement {
     div()
         .flex()
         .items_center()
@@ -840,7 +840,7 @@ fn header_bar(active_count: usize) -> impl IntoElement {
             div()
                 .text_size(px(14.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme::semantic().text_primary)
+                .text_color(ui::text_primary(cx))
                 .child("下载管理器"),
         )
         .child(
@@ -852,22 +852,22 @@ fn header_bar(active_count: usize) -> impl IntoElement {
                     .bg(if active_count > 0 {
                         theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.12)
                     } else {
-                        theme::rgba_with_alpha(theme::semantic().bg_surface, 0.82)
+                        ui::bg_surface(cx)
                     })
                     .border_1()
                     .border_color(if active_count > 0 {
                         theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.25)
                     } else {
-                        ui::border_light()
+                        ui::border_light(cx)
                     })
                     .flex()
                     .items_center()
                     .justify_center()
                     .text_size(px(10.0))
                     .text_color(if active_count > 0 {
-                        ui::accent_color(PluginAccent::Green)
+                        ui::accent_color(PluginAccent::Green).into()
                     } else {
-                        ui::text_secondary()
+                        ui::text_secondary(cx)
                     })
                     .child(format!("{} 进行中", active_count)),
             ),
@@ -875,7 +875,7 @@ fn header_bar(active_count: usize) -> impl IntoElement {
 }
 
 fn url_input_bar(
-    dark: bool,
+    cx: &App,
     url_input: Entity<TextInput>,
     handle: Entity<DownloadManagerView>,
 ) -> impl IntoElement {
@@ -913,14 +913,14 @@ fn url_input_bar(
                 .flex_1()
                 .h(px(28.0))
                 .rounded(px(6.0))
-                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.88))
+                .bg(ui::bg_surface(cx))
                 .border_1()
-                .border_color(ui::border_light())
+                .border_color(ui::border_light(cx))
                 .flex()
                 .items_center()
                 .child(url_input.into_any_element()),
         )
-        .child(action_button("粘贴", dark).id("download-paste").on_click({
+        .child(action_button("粘贴", cx).id("download-paste").on_click({
             let h = handle.clone();
             move |_, _window, cx| {
                 cx.update_entity(&h, |panel, cx| {
@@ -932,7 +932,7 @@ fn url_input_bar(
             }
         }))
         .child(
-            primary_btn("添加下载", PluginAccent::Green, dark)
+            primary_btn("添加下载", PluginAccent::Green, cx)
                 .id("download-add")
                 .on_click({
                     let h = handle.clone();
@@ -947,7 +947,7 @@ fn url_input_bar(
 }
 
 fn filter_bar(
-    dark: bool,
+    cx: &App,
     active_filter: FilterTab,
     counts: &TaskCounts,
     handle: Entity<DownloadManagerView>,
@@ -982,7 +982,7 @@ fn filter_bar(
                     let active = tab == active_filter;
                     let count = tab.count(counts);
                     let h = handle.clone();
-                    filter_chip(tab.label(), count, active, dark)
+                    filter_chip(tab.label(), count, active, cx)
                         .id(("download-filter", tab as usize))
                         .on_click(move |_, _window, cx| {
                             cx.update_entity(&h, |panel, cx| {
@@ -993,7 +993,7 @@ fn filter_bar(
                 }))
                 .child(div().flex_1())
                 .child(
-                    action_button("全部开始", dark)
+                    action_button("全部开始", cx)
                         .id("download-start-all")
                         .on_click({
                             let h = handle.clone();
@@ -1006,7 +1006,7 @@ fn filter_bar(
                         }),
                 )
                 .child(
-                    action_button("全部暂停", dark)
+                    action_button("全部暂停", cx)
                         .id("download-pause-all")
                         .on_click({
                             let h = handle.clone();
@@ -1019,7 +1019,7 @@ fn filter_bar(
                         }),
                 )
                 .child(
-                    action_button("清除已完成", dark)
+                    action_button("清除已完成", cx)
                         .id("download-clear-done")
                         .on_click({
                             let h = handle.clone();
@@ -1032,7 +1032,7 @@ fn filter_bar(
                         }),
                 )
                 .child(
-                    action_button("清除失败", dark)
+                    action_button("清除失败", cx)
                         .id("download-clear-failed")
                         .on_click({
                             let h = handle.clone();
@@ -1055,7 +1055,7 @@ fn filter_bar(
                     let count = tab.count(counts);
                     if count > 0 || active {
                         let h = handle.clone();
-                        filter_chip(tab.label(), count, active, dark)
+                        filter_chip(tab.label(), count, active, cx)
                             .id(("download-cat-filter", tab as usize))
                             .on_click(move |_, _window, cx| {
                                 cx.update_entity(&h, |panel, cx| {
@@ -1071,7 +1071,7 @@ fn filter_bar(
         )
 }
 
-fn filter_chip(label: &str, count: usize, active: bool, _dark: bool) -> gpui::Div {
+fn filter_chip(label: &str, count: usize, active: bool, cx: &App) -> gpui::Div {
     div()
         .h(px(26.0))
         .px_2()
@@ -1079,13 +1079,13 @@ fn filter_chip(label: &str, count: usize, active: bool, _dark: bool) -> gpui::Di
         .bg(if active {
             theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.12)
         } else {
-            theme::rgba_with_alpha(theme::semantic().bg_surface, 0.82)
+            ui::bg_surface(cx)
         })
         .border_1()
         .border_color(if active {
             theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.25)
         } else {
-            ui::border_light()
+            ui::border_light(cx)
         })
         .hover(|style| style.cursor_pointer())
         .flex()
@@ -1094,25 +1094,25 @@ fn filter_chip(label: &str, count: usize, active: bool, _dark: bool) -> gpui::Di
         .gap_1()
         .text_size(px(10.0))
         .text_color(if active {
-            ui::accent_color(PluginAccent::Green)
+            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 1.0)
         } else {
-            ui::text_secondary()
+            ui::text_secondary(cx)
         })
         .child(label.to_string())
         .child(
             div()
                 .text_size(px(9.0))
                 .text_color(if active {
-                    ui::accent_color(PluginAccent::Green)
+                    theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 1.0)
                 } else {
-                    ui::text_tertiary()
+                    ui::text_tertiary(cx)
                 })
                 .child(format!("{count}")),
         )
 }
 
 fn task_list(
-    dark: bool,
+    cx: &App,
     tasks: Vec<DownloadTask>,
     progress_by_id: HashMap<String, f64>,
     handle: Entity<DownloadManagerView>,
@@ -1121,14 +1121,14 @@ fn task_list(
         return div()
             .flex_1()
             .rounded(px(8.0))
-            .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.74))
+            .bg(ui::bg_surface(cx))
             .border_1()
-            .border_color(ui::border_light())
+            .border_color(ui::border_light(cx))
             .child(components::empty_state(
                 "icons/download.svg",
                 "暂无下载任务",
                 "还没有下载任务",
-                dark,
+                cx,
             ))
             .into_any_element();
     }
@@ -1136,9 +1136,9 @@ fn task_list(
     div()
         .flex_1()
         .rounded(px(8.0))
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.78))
+        .bg(ui::bg_surface(cx))
         .border_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .overflow_hidden()
         .flex()
         .flex_col()
@@ -1146,20 +1146,20 @@ fn task_list(
             div()
                 .h(px(28.0))
                 .px_2()
-                .bg(theme::rgba_with_alpha(theme::semantic().bg_subtle, 0.65))
+                .bg(ui::bg_subtle(cx))
                 .border_b_1()
-                .border_color(ui::border_light())
+                .border_color(ui::border_light(cx))
                 .flex()
                 .items_center()
                 .text_size(px(9.0))
-                .text_color(ui::text_tertiary())
-                .child(components::table_header_cell("", 28.0))
-                .child(components::table_header_flex("文件名", 2.2))
-                .child(components::table_header_cell("大小", 90.0))
-                .child(components::table_header_cell("速度", 80.0))
-                .child(components::table_header_flex("进度", 1.6))
-                .child(components::table_header_cell("状态", 72.0))
-                .child(components::table_header_cell("", 30.0)),
+                .text_color(ui::text_tertiary(cx))
+                .child(components::table_header_cell("", 28.0, cx))
+                .child(components::table_header_flex("文件名", 2.2, cx))
+                .child(components::table_header_cell("大小", 90.0, cx))
+                .child(components::table_header_cell("速度", 80.0, cx))
+                .child(components::table_header_flex("进度", 1.6, cx))
+                .child(components::table_header_cell("状态", 72.0, cx))
+                .child(components::table_header_cell("", 30.0, cx)),
         )
         .child(
             div()
@@ -1170,7 +1170,7 @@ fn task_list(
                 .scrollbar_width(px(6.0))
                 .children(tasks.into_iter().enumerate().map(|(index, task)| {
                     let progress = progress_by_id.get(&task.id).copied();
-                    task_row(task, progress, index, dark, handle.clone())
+                    task_row(task, progress, index, cx, handle.clone())
                 })),
         )
         .into_any_element()
@@ -1180,7 +1180,7 @@ fn task_row(
     task: DownloadTask,
     job_progress: Option<f64>,
     index: usize,
-    dark: bool,
+    cx: &App,
     handle: Entity<DownloadManagerView>,
 ) -> impl IntoElement {
     let status = task.status;
@@ -1199,7 +1199,7 @@ fn task_row(
         .h(px(44.0))
         .px_2()
         .border_b_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .flex()
         .items_center()
         .gap_1()
@@ -1220,14 +1220,14 @@ fn task_row(
                 .child(
                     div()
                         .text_size(px(10.0))
-                        .text_color(theme::semantic().text_primary)
+                        .text_color(ui::text_primary(cx))
                         .child(task.file_name.clone()),
                 )
                 .child(
                     div()
                         .text_size(px(9.0))
                         .font_family("SF Mono")
-                        .text_color(ui::text_tertiary())
+                        .text_color(ui::text_tertiary(cx))
                         .child(truncate_url(&task.url, 56)),
                 ),
         )
@@ -1236,7 +1236,7 @@ fn task_row(
                 .w(px(90.0))
                 .text_size(px(9.0))
                 .font_family("SF Mono")
-                .text_color(ui::text_tertiary())
+                .text_color(ui::text_tertiary(cx))
                 .child(format_progress(&task, true)),
         )
         .child(
@@ -1245,9 +1245,9 @@ fn task_row(
                 .text_size(px(9.0))
                 .font_family("SF Mono")
                 .text_color(if is_active {
-                    ui::accent_color(PluginAccent::Green)
+                    ui::accent_color(PluginAccent::Green).into()
                 } else {
-                    ui::text_tertiary()
+                    ui::text_tertiary(cx)
                 })
                 .child(if is_active {
                     format_speed(task.speed_bps)
@@ -1262,7 +1262,7 @@ fn task_row(
                 .items_center()
                 .gap_1()
                 .child(progress_bar(
-                    dark,
+                    cx,
                     job_progress,
                     task.progress_percent(),
                     is_active,
@@ -1273,7 +1273,7 @@ fn task_row(
                         .text_size(px(9.0))
                         .font_family("SF Mono")
                         .text_align(gpui::TextAlign::Right)
-                        .text_color(ui::text_tertiary())
+                        .text_color(ui::text_tertiary(cx))
                         .child(format!("{:.0}%", task.progress_percent())),
                 ),
         )
@@ -1282,7 +1282,7 @@ fn task_row(
                 .w(px(72.0))
                 .flex()
                 .justify_center()
-                .child(status_tag(status, dark)),
+                .child(status_tag(status, cx)),
         )
         .child(
             div()
@@ -1292,7 +1292,7 @@ fn task_row(
                 .child(if is_active {
                     let h = handle.clone();
                     let id = task_id.clone();
-                    action_icon("\u{23f8}", dark)
+                    action_icon("\u{23f8}", cx)
                         .id(("dl-pause", index))
                         .on_click(move |_, _window, cx| {
                             cx.update_entity(&h, |panel, cx| {
@@ -1304,7 +1304,7 @@ fn task_row(
                 } else if is_paused {
                     let h = handle.clone();
                     let id = task_id2.clone();
-                    action_icon("\u{25b6}", dark)
+                    action_icon("\u{25b6}", cx)
                         .id(("dl-resume", index))
                         .on_click(move |_, _window, cx| {
                             cx.update_entity(&h, |panel, cx| {
@@ -1316,7 +1316,7 @@ fn task_row(
                 } else if is_failed {
                     let h = handle.clone();
                     let id = task_id3.clone();
-                    action_icon("\u{21bb}", dark)
+                    action_icon("\u{21bb}", cx)
                         .id(("dl-retry", index))
                         .on_click(move |_, _window, cx| {
                             cx.update_entity(&h, |panel, cx| {
@@ -1331,7 +1331,7 @@ fn task_row(
                 .child(if !is_terminal {
                     let h = handle.clone();
                     let id = task_id4.clone();
-                    action_icon("\u{23f9}", dark)
+                    action_icon("\u{23f9}", cx)
                         .id(("dl-cancel", index))
                         .on_click(move |_, _window, cx| {
                             cx.update_entity(&h, |panel, cx| {
@@ -1343,7 +1343,7 @@ fn task_row(
                 } else {
                     let h = handle.clone();
                     let id = task.id.clone();
-                    action_icon("\u{1f5d1}", dark)
+                    action_icon("\u{1f5d1}", cx)
                         .id(("dl-delete", index))
                         .on_click(move |_, _window, cx| {
                             cx.update_entity(&h, |panel, cx| {
@@ -1356,7 +1356,7 @@ fn task_row(
                 .child(if is_completed {
                     let h = handle.clone();
                     let t = task_clone.clone();
-                    action_icon("\u{1f4c2}", dark)
+                    action_icon("\u{1f4c2}", cx)
                         .id(("dl-open", index))
                         .on_click(move |_, _window, cx| {
                             cx.update_entity(&h, |panel, cx| {
@@ -1370,7 +1370,7 @@ fn task_row(
                 })
                 .child(if is_completed {
                     let t = task_clone.clone();
-                    action_icon("\u{1f50d}", dark)
+                    action_icon("\u{1f50d}", cx)
                         .id(("dl-reveal", index))
                         .on_click(move |_, _window, _cx| {
                             if let Some(parent) = std::path::Path::new(&t.save_path).parent() {
@@ -1385,7 +1385,7 @@ fn task_row(
 }
 
 fn progress_bar(
-    _dark: bool,
+    cx: &App,
     job_progress: Option<f64>,
     percent: f64,
     is_active: bool,
@@ -1403,7 +1403,7 @@ fn progress_bar(
         .w_full()
         .h(px(6.0))
         .rounded(px(3.0))
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_subtle, 0.8))
+        .bg(ui::bg_subtle(cx))
         .overflow_hidden()
         .child(
             div()
@@ -1414,32 +1414,32 @@ fn progress_bar(
         )
 }
 
-fn status_tag(status: TaskStatus, _dark: bool) -> impl IntoElement {
+fn status_tag(status: TaskStatus, cx: &App) -> impl IntoElement {
     let (bg, text) = match status {
         TaskStatus::Completed => (
-            theme::rgba_with_alpha(theme::semantic().success, 0.1),
-            theme::semantic().success,
+            ui::success(cx),
+            ui::success(cx),
         ),
         TaskStatus::Downloading => (
             theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 0.1),
-            ui::accent_color(PluginAccent::Green),
+            theme::rgba_with_alpha(ui::accent_color(PluginAccent::Green), 1.0),
         ),
         TaskStatus::Pending => (
-            theme::rgba_with_alpha(theme::semantic().warning, 0.1),
-            theme::semantic().warning,
+            ui::warning(cx),
+            ui::warning(cx),
         ),
         TaskStatus::Paused => (
-            theme::rgba_with_alpha(theme::semantic().warning, 0.1),
-            theme::semantic().warning,
+            ui::warning(cx),
+            ui::warning(cx),
         ),
         TaskStatus::Failed => (
-            theme::rgba_with_alpha(theme::semantic().danger, 0.1),
-            theme::semantic().danger,
+            ui::danger(cx),
+            ui::danger(cx),
         ),
-        TaskStatus::Cancelled => (
-            theme::rgba_with_alpha(ui::text_secondary(), 0.1),
-            ui::text_secondary(),
-        ),
+        TaskStatus::Cancelled => {
+            let muted = ui::text_secondary(cx);
+            (gpui::Hsla { a: 0.1, ..muted }, muted)
+        },
     };
 
     div()
@@ -1456,7 +1456,7 @@ fn status_tag(status: TaskStatus, _dark: bool) -> impl IntoElement {
 }
 
 fn bottom_bar(
-    dark: bool,
+    cx: &App,
     message: String,
     save_dir: &str,
     settings: &super::model::DownloadSettings,
@@ -1480,9 +1480,9 @@ fn bottom_bar(
 
     div()
         .rounded(px(6.0))
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
+        .bg(ui::bg_surface(cx))
         .border_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .p_1p5()
         .flex()
         .items_center()
@@ -1491,13 +1491,13 @@ fn bottom_bar(
             div()
                 .flex_1()
                 .text_size(px(10.0))
-                .text_color(theme::semantic().text_body)
+                .text_color(ui::text_secondary(cx))
                 .child(message),
         )
         .child(
             div()
                 .text_size(px(9.0))
-                .text_color(ui::text_tertiary())
+                .text_color(ui::text_tertiary(cx))
                 .overflow_hidden()
                 .child(format!(
                     "目录: {}  并发 {}{}",
@@ -1507,7 +1507,7 @@ fn bottom_bar(
                 )),
         )
         .child(
-            secondary_btn("\u{2699} 设置", dark)
+            secondary_btn("\u{2699} 设置", cx)
                 .id("download-settings")
                 .on_click({
                     let h = handle.clone();
@@ -1520,7 +1520,7 @@ fn bottom_bar(
                 }),
         )
         .child(
-            secondary_btn("打开目录", dark)
+            secondary_btn("打开目录", cx)
                 .id("download-open-dir")
                 .on_click({
                     let h = handle.clone();
@@ -1535,13 +1535,13 @@ fn bottom_bar(
         .child(
             div()
                 .text_size(px(9.0))
-                .text_color(ui::text_tertiary())
+                .text_color(ui::text_tertiary(cx))
                 .child(summary),
         )
 }
 
 fn settings_overlay(
-    dark: bool,
+    cx: &App,
     save_root_input: Option<Entity<TextInput>>,
     concurrent_input: Option<Entity<TextInput>>,
     speed_limit_input: Option<Entity<TextInput>>,
@@ -1557,7 +1557,7 @@ fn settings_overlay(
     div()
         .absolute()
         .inset_0()
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.92))
+        .bg(ui::bg_surface(cx))
         .rounded(px(8.0))
         .flex()
         .flex_col()
@@ -1568,12 +1568,12 @@ fn settings_overlay(
                 .justify_between()
                 .p_2()
                 .border_b_1()
-                .border_color(ui::border_light())
+                .border_color(ui::border_light(cx))
                 .child(
                     div()
                         .text_size(px(12.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(theme::semantic().text_primary)
+                        .text_color(ui::text_primary(cx))
                         .child("下载设置"),
                 )
                 .child(
@@ -1581,7 +1581,7 @@ fn settings_overlay(
                         .flex()
                         .items_center()
                         .gap_1()
-                        .child(secondary_btn("保存", dark).id("settings-save").on_click({
+                        .child(secondary_btn("保存", cx).id("settings-save").on_click({
                             let h = handle.clone();
                             move |_, _window, cx| {
                                 cx.update_entity(&h, |panel, cx| {
@@ -1590,7 +1590,7 @@ fn settings_overlay(
                                 });
                             }
                         }))
-                        .child(secondary_btn("取消", dark).id("settings-cancel").on_click({
+                        .child(secondary_btn("取消", cx).id("settings-cancel").on_click({
                             let h = handle.clone();
                             move |_, _window, cx| {
                                 cx.update_entity(&h, |panel, cx| {
@@ -1610,38 +1610,39 @@ fn settings_overlay(
                 .flex()
                 .flex_col()
                 .gap_1p5()
-                .child(settings_field("保存目录", save_root_input))
+                .child(settings_field("保存目录", save_root_input, cx))
                 .child(
                     div()
                         .flex()
                         .gap_1p5()
-                        .child(settings_field("并发数 (1-16)", concurrent_input))
-                        .child(settings_field("限速 KB/s (0=不限)", speed_limit_input)),
+                        .child(settings_field("并发数 (1-16)", concurrent_input, cx))
+                        .child(settings_field("限速 KB/s (0=不限)", speed_limit_input, cx)),
                 )
                 .child(
                     div()
                         .flex()
                         .gap_1p5()
-                        .child(settings_field("超时 (秒)", timeout_input))
-                        .child(settings_field("重试次数", retry_input)),
+                        .child(settings_field("超时 (秒)", timeout_input, cx))
+                        .child(settings_field("重试次数", retry_input, cx)),
                 )
-                .child(settings_field("代理 URL", proxy_input))
-                .child(settings_field("User-Agent", user_agent_input))
+                .child(settings_field("代理 URL", proxy_input, cx))
+                .child(settings_field("User-Agent", user_agent_input, cx))
                 .child(
                     div()
                         .flex()
                         .gap_1p5()
-                        .child(settings_field("Referer", referer_input))
-                        .child(settings_field("Cookie", cookie_input)),
+                        .child(settings_field("Referer", referer_input, cx))
+                        .child(settings_field("Cookie", cookie_input, cx)),
                 )
                 .child(settings_field(
                     "自定义请求头 (每行 Key: Value)",
                     headers_input,
+                    cx,
                 )),
         )
 }
 
-fn settings_field(label: &str, input: Option<Entity<TextInput>>) -> gpui::Div {
+fn settings_field(label: &str, input: Option<Entity<TextInput>>, cx: &App) -> gpui::Div {
     div()
         .flex_1()
         .flex()
@@ -1650,16 +1651,16 @@ fn settings_field(label: &str, input: Option<Entity<TextInput>>) -> gpui::Div {
         .child(
             div()
                 .text_size(px(9.0))
-                .text_color(ui::text_tertiary())
+                .text_color(ui::text_tertiary(cx))
                 .child(label.to_string()),
         )
         .child(
             div()
                 .h(px(26.0))
                 .rounded(px(6.0))
-                .bg(theme::rgba_with_alpha(theme::semantic().bg_subtle, 0.65))
+                .bg(ui::bg_subtle(cx))
                 .border_1()
-                .border_color(ui::border_light())
+                .border_color(ui::border_light(cx))
                 .flex()
                 .items_center()
                 .children(input.map(|e| e.into_any_element())),
@@ -1668,7 +1669,7 @@ fn settings_field(label: &str, input: Option<Entity<TextInput>>) -> gpui::Div {
 
 // ── Helper Components ──
 
-fn primary_btn(label: &str, accent: PluginAccent, _dark: bool) -> gpui::Div {
+fn primary_btn(label: &str, accent: PluginAccent, cx: &App) -> gpui::Div {
     div()
         .h(px(26.0))
         .px_2()
@@ -1679,45 +1680,45 @@ fn primary_btn(label: &str, accent: PluginAccent, _dark: bool) -> gpui::Div {
         .items_center()
         .justify_center()
         .text_size(px(10.0))
-        .text_color(theme::white())
+        .text_color(ui::white())
         .child(label.to_string())
 }
 
-fn secondary_btn(label: &str, _dark: bool) -> gpui::Div {
+fn secondary_btn(label: &str, cx: &App) -> gpui::Div {
     div()
         .h(px(26.0))
         .px_2()
         .rounded(px(6.0))
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.88))
+        .bg(ui::bg_surface(cx))
         .border_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .hover(|style| style.cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(10.0))
-        .text_color(theme::semantic().text_primary)
+        .text_color(ui::text_primary(cx))
         .child(label.to_string())
 }
 
-fn action_button(label: &str, _dark: bool) -> gpui::Div {
+fn action_button(label: &str, cx: &App) -> gpui::Div {
     div()
         .h(px(26.0))
         .px_1p5()
         .rounded(px(6.0))
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.88))
+        .bg(ui::bg_surface(cx))
         .border_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .hover(|style| style.cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(9.0))
-        .text_color(theme::semantic().text_primary)
+        .text_color(ui::text_primary(cx))
         .child(label.to_string())
 }
 
-fn action_icon(icon: &str, _dark: bool) -> gpui::Div {
+fn action_icon(icon: &str, cx: &App) -> gpui::Div {
     div()
         .size(px(20.0))
         .rounded(px(4.0))
@@ -1726,7 +1727,7 @@ fn action_icon(icon: &str, _dark: bool) -> gpui::Div {
         .items_center()
         .justify_center()
         .text_size(px(11.0))
-        .text_color(ui::text_secondary())
+        .text_color(ui::text_secondary(cx))
         .child(icon.to_string())
 }
 

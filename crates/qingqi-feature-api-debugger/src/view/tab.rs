@@ -94,7 +94,10 @@ impl ApiDebuggerView {
         let draft = self.collect_tab_draft(cx);
         let tab = crate::service::build_http_tab(
             &tab_id,
-            super::types::first_non_empty(self.current_node_id(), self.active_tab.fallback_node_id()),
+            super::types::first_non_empty(
+                self.current_node_id(),
+                self.active_tab.fallback_node_id(),
+            ),
             &request.title,
             request.method.label(),
             &draft,
@@ -109,8 +112,9 @@ impl ApiDebuggerView {
             .update(cx, |input, input_cx| input.set_text(draft.url, input_cx));
         self.params_kv.set_from_text(cx, &draft.params_text);
         self.path_kv.set_from_text(cx, &draft.path_params_text);
-        self.body_input
-            .update(cx, |input, input_cx| input.set_text(draft.body_text, input_cx));
+        self.body_input.update(cx, |input, input_cx| {
+            input.set_text(draft.body_text, input_cx)
+        });
         self.headers_kv.set_from_text(cx, &draft.headers_text);
         self.cookies_kv.set_from_text(cx, &draft.cookies_text);
         self.pre_ops_input.update(cx, |input, input_cx| {

@@ -1,11 +1,13 @@
-use gpui::{App, Entity};
-use crate::service::{AuthType, EditorTab, KeyValueRow};
 use super::ApiDebuggerView;
 use super::types::AuthFormInputs;
+use crate::service::{AuthType, EditorTab, KeyValueRow};
+use gpui::{App, Entity};
 
 impl ApiDebuggerView {
-    pub fn text_editor_input(&self, tab: EditorTab) -> Option<Entity<qingqi_ui::text_input::TextInput>> {
-        
+    pub fn text_editor_input(
+        &self,
+        tab: EditorTab,
+    ) -> Option<Entity<qingqi_ui::text_input::TextInput>> {
         match tab {
             EditorTab::Body => Some(self.body_input.clone()),
             EditorTab::PreOps => Some(self.pre_ops_input.clone()),
@@ -46,8 +48,12 @@ impl ApiDebuggerView {
                 if user.trim().is_empty() && pass.trim().is_empty() {
                     Vec::new()
                 } else {
-                    let encoded = crate::service::base64_encode(format!("{user}:{pass}").as_bytes());
-                    vec![KeyValueRow::new("Authorization", format!("Basic {encoded}"))]
+                    let encoded =
+                        crate::service::base64_encode(format!("{user}:{pass}").as_bytes());
+                    vec![KeyValueRow::new(
+                        "Authorization",
+                        format!("Basic {encoded}"),
+                    )]
                 }
             }
             AuthType::ApiKey => {

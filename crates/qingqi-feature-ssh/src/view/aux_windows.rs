@@ -3,6 +3,7 @@
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::Root;
+use gpui_component::theme::Theme;
 
 use super::SshView;
 use super::app_settings;
@@ -147,7 +148,7 @@ impl Render for ProfileEditorWindow {
 
         div()
             .size_full()
-            .bg(theme_mode_bg())
+            .bg(theme_mode_bg(cx))
             .child(profile_editor::render_profile_editor_panel(
                 handle,
                 &inputs,
@@ -156,6 +157,7 @@ impl Render for ProfileEditorWindow {
                 &advanced_flags,
                 view.form_advanced_expanded,
                 view.editing_profile_id.is_some(),
+                cx,
             ))
     }
 }
@@ -191,18 +193,18 @@ impl Render for AppSettingsWindow {
 
         div()
             .size_full()
-            .bg(theme_mode_bg())
+            .bg(theme_mode_bg(cx))
             .child(app_settings::render_app_settings_panel(
                 handle,
                 &inputs,
                 view.terminal_font_size,
+                cx,
             ))
     }
 }
 
-fn theme_mode_bg() -> Hsla {
-    use qingqi_ui::theme;
-    theme::semantic().bg_elevated.into()
+fn theme_mode_bg(cx: &App) -> Hsla {
+    Theme::global(cx).list.into()
 }
 
 pub fn profile_editor_window_options(is_edit: bool, cx: &App) -> WindowOptions {

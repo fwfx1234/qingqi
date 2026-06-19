@@ -1,14 +1,17 @@
-use gpui::{
-    AnyElement, App, Entity, IntoElement, InteractiveElement, ParentElement,
-    StatefulInteractiveElement, Styled, div, px, prelude::FluentBuilder,
-};
-use gpui_component::theme::Theme;
-use gpui_component::{IconName, Sizable, Size, button::{Button, ButtonVariants}};
-use qingqi_ui::{theme, ui, ui::glass};
+use super::shared::{response_metric, status_badge, transparent_surface};
 use crate::code_gen::CodeLanguage;
 use crate::service::{ApiResponse, HttpHistory, ResponseTab};
 use crate::view::ApiDebuggerView;
-use super::shared::{status_badge, response_metric, transparent_surface};
+use gpui::{
+    AnyElement, App, Entity, InteractiveElement, IntoElement, ParentElement,
+    StatefulInteractiveElement, Styled, div, prelude::FluentBuilder, px,
+};
+use gpui_component::theme::Theme;
+use gpui_component::{
+    IconName, Sizable, Size,
+    button::{Button, ButtonVariants},
+};
+use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn response_panel(
     view: Entity<ApiDebuggerView>,
@@ -61,10 +64,7 @@ pub fn response_panel(
                 .gap(px(8.0))
                 .child(status_badge(&response, cx))
                 .child(div().flex_1())
-                .child(response_metric(
-                    format!("{} ms", response.duration_ms),
-                    cx,
-                ))
+                .child(response_metric(format!("{} ms", response.duration_ms), cx))
                 .child(response_metric(format!("{} B", response.size_bytes), cx)),
         )
         .child(
@@ -91,7 +91,10 @@ pub fn response_panel(
                                 .py(px(5.0))
                                 .rounded(px(4.0))
                                 .bg(if active {
-                                    theme::rgba_with_alpha(Theme::global(cx).foreground.into(), 0.055)
+                                    theme::rgba_with_alpha(
+                                        Theme::global(cx).foreground.into(),
+                                        0.055,
+                                    )
                                 } else {
                                     transparent_surface(cx)
                                 })
@@ -101,9 +104,7 @@ pub fn response_panel(
                                 } else {
                                     ui::text_tertiary(cx)
                                 })
-                                .hover(move |style| {
-                                    style.bg(glass::hover_bg(cx)).cursor_pointer()
-                                })
+                                .hover(move |style| style.bg(glass::hover_bg(cx)).cursor_pointer())
                                 .child(tab.label())
                                 .on_click(move |_, window, cx| {
                                     tab_view.update(cx, |view, _cx| view.set_response_tab(tab));
@@ -200,7 +201,10 @@ fn response_body_view(
                 div()
                     .px(px(10.0))
                     .py(px(6.0))
-                    .bg(theme::rgba_with_alpha(Theme::global(cx).danger.into(), 0.08))
+                    .bg(theme::rgba_with_alpha(
+                        Theme::global(cx).danger.into(),
+                        0.08,
+                    ))
                     .flex()
                     .items_center()
                     .gap(px(6.0))
@@ -254,7 +258,10 @@ fn response_code_view(
                                 .rounded(px(4.0))
                                 .text_size(px(11.0))
                                 .bg(if active {
-                                    theme::rgba_with_alpha(Theme::global(cx).foreground.into(), 0.055)
+                                    theme::rgba_with_alpha(
+                                        Theme::global(cx).foreground.into(),
+                                        0.055,
+                                    )
                                 } else {
                                     transparent_surface(cx)
                                 })
@@ -263,9 +270,7 @@ fn response_code_view(
                                 } else {
                                     ui::text_tertiary(cx)
                                 })
-                                .hover(move |style| {
-                                    style.bg(glass::hover_bg(cx)).cursor_pointer()
-                                })
+                                .hover(move |style| style.bg(glass::hover_bg(cx)).cursor_pointer())
                                 .child(lang.label())
                                 .on_click(move |_, window, cx| {
                                     lang_view

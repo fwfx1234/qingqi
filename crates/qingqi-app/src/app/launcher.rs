@@ -10,9 +10,9 @@ use std::{
 };
 
 use gpui::{
-    App, AppContext, BoxShadow, Context, Entity, Focusable, InteractiveElement, IntoElement,
+    App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
     KeyDownEvent, ParentElement, Render, ScrollStrategy, StatefulInteractiveElement, Styled,
-    Subscription, Task, UniformListScrollHandle, Window, div, point, prelude::FluentBuilder, px,
+    Subscription, Task, UniformListScrollHandle, Window, div, prelude::FluentBuilder, px,
     size, uniform_list,
 };
 use gpui_component::scroll::Scrollbar;
@@ -301,11 +301,7 @@ impl Launcher {
         );
         input.set_chrome(false, cx);
         let t = Theme::global(cx);
-        input.set_text_colors(
-            t.foreground,
-            t.muted_foreground,
-            cx,
-        );
+        input.set_text_colors(t.foreground, t.muted_foreground, cx);
     }
 
     fn default_results(
@@ -1096,7 +1092,8 @@ impl Render for Launcher {
         let dark = t.is_dark();
         let title_color = t.foreground;
         let placeholder_color = t.muted_foreground;
-        let launcher_glass = theme::rgba_with_alpha(t.background.into(), if dark { 0.3 } else { 0.98 });
+        let launcher_glass =
+            theme::rgba_with_alpha(t.background.into(), if dark { 0.3 } else { 0.98 });
         let soft_line = theme::rgba_with_alpha(t.border.into(), if dark { 0.04 } else { 0.9 });
         let keycap_bg = t.muted;
         let muted_fg = t.muted_foreground;
@@ -1390,7 +1387,13 @@ fn plugin_list(
                             .h(px(ROW_SLOT))
                             .flex_none()
                             .pb(px(ROW_GAP))
-                            .child(plugin_list_row(handle.clone(), item, idx == selected, idx, t_closure))
+                            .child(plugin_list_row(
+                                handle.clone(),
+                                item,
+                                idx == selected,
+                                idx,
+                                t_closure,
+                            ))
                     })
                     .collect::<Vec<_>>()
             })
@@ -1431,30 +1434,24 @@ fn plugin_list_row(
 ) -> impl IntoElement {
     let dark = t.is_dark();
     let item_for_click = item.clone();
-    let accent = t.blue;
+    let hover_bg = t.list_hover;
     let row_bg = if selected {
-        theme::rgba_with_alpha(accent.into(), if dark { 0.12 } else { 0.08 })
+        hover_bg
     } else {
         gpui::hsla(0., 0., 0., 0.)
     };
-    let title_color = if selected {
-        accent
-    } else {
-        t.foreground
-    };
+    let title_color = t.foreground;
     let subtitle_color = t.muted_foreground;
-    let icon_surface = if selected {
-        theme::rgba_with_alpha(t.list.into(), if dark { 0.15 } else { 0.9 })
-    } else if dark {
+    let icon_surface = if dark {
         theme::rgba_with_alpha(t.muted.into(), 0.03)
     } else {
         theme::rgba_with_alpha(t.list.into(), 0.78)
     };
-    let icon_border = if selected {
-        theme::rgba_with_alpha(t.border.into(), if dark { 0.2 } else { 0.9 })
-    } else {
-        theme::rgba_with_alpha(t.border.into(), if dark { 0.04 } else { 0.72 })
-    };
+    let icon_border = theme::rgba_with_alpha(t.border.into(), if dark { 0.04 } else { 0.72 });
+
+    let hover_handle = handle.clone();
+    let click_handle = handle;
+
     div()
         .id(("launcher-plugin-row", index))
         .h(px(ROW_HEIGHT))
@@ -1464,11 +1461,23 @@ fn plugin_list_row(
         .rounded(px(12.0))
         .bg(row_bg)
         .cursor_pointer()
+        .on_hover(move |is_hovered, _window, cx| {
+            if *is_hovered {
+                if let Some(ref handle) = hover_handle {
+                    let _ = cx.update_entity(handle, |launcher, entity_cx| {
+                        if let LauncherMode::ListPlugin { selected, .. } = &mut launcher.mode {
+                            *selected = index;
+                        }
+                        entity_cx.notify();
+                    });
+                }
+            }
+        })
         .on_click(move |_, window, cx| {
-            let Some(handle) = handle.clone() else {
+            let Some(ref handle) = click_handle else {
                 return;
             };
-            cx.update_entity(&handle, |launcher: &mut Launcher, entity_cx| {
+            cx.update_entity(handle, |launcher: &mut Launcher, entity_cx| {
                 if let LauncherMode::ListPlugin {
                     view,
                     items,
@@ -1516,11 +1525,11 @@ fn plugin_list_row(
                     div()
                         .text_size(px(15.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(accent)
+                        .text_color(t.foreground)
                         .child("↗")
                         .into_any_element()
                 } else {
-                    ui::icon_element(icon.as_str(), accent.into(), 28.0).into_any_element()
+                    ui::icon_element(icon.as_str(), t.foreground.into(), 28.0).into_any_element()
                 })
                 .into_any_element()
         })
@@ -1586,49 +1595,29 @@ fn result_row(
 ) -> impl IntoElement {
     let dark = t.is_dark();
     let item_for_click = item.clone();
-    let accent = t.blue;
+    let hover_bg = t.list_hover;
 
-    let icon_surface = if selected {
-        theme::rgba_with_alpha(t.list.into(), if dark { 0.15 } else { 0.9 })
-    } else if dark {
+    // 选中时轻量效果 = 当前 hover 的灰底
+    let row_bg = if selected {
+        hover_bg
+    } else {
+        gpui::hsla(0., 0., 0., 0.)
+    };
+    // 图标表面/边框在选中时不变
+    let icon_surface = if dark {
         theme::rgba_with_alpha(t.muted.into(), 0.03)
     } else {
         theme::rgba_with_alpha(t.list.into(), 0.78)
     };
-    let icon_border = if selected {
-        theme::rgba_with_alpha(t.border.into(), if dark { 0.2 } else { 0.9 })
-    } else {
-        theme::rgba_with_alpha(t.border.into(), if dark { 0.04 } else { 0.72 })
-    };
+    let icon_border = theme::rgba_with_alpha(t.border.into(), if dark { 0.04 } else { 0.72 });
 
     let (badge_label, badge_bg, badge_fg) = result_badge(&item, t);
 
-    let row_bg = if selected {
-        if dark {
-            theme::rgba_with_alpha(accent.into(), 0.12)
-        } else {
-            theme::rgba_with_alpha(t.list_active.into(), 0.96)
-        }
-    } else {
-        gpui::hsla(0., 0., 0., 0.)
-    };
-    let row_border = if selected {
-        if dark {
-            theme::rgba_with_alpha(accent.into(), 0.2)
-        } else {
-            theme::rgba_with_alpha(t.list_active_border.into(), 0.95)
-        }
-    } else {
-        gpui::hsla(0., 0., 0., 0.)
-    };
-
-    let title_color = if selected {
-        accent
-    } else {
-        t.foreground
-    };
+    let title_color = t.foreground;
     let subtitle_color = t.muted_foreground;
-    let hover_bg = t.list_hover;
+
+    let hover_handle = handle.clone();
+    let click_handle = handle;
 
     div()
         .id(("launcher-row", index))
@@ -1638,25 +1627,22 @@ fn result_row(
         .px(px(14.0))
         .rounded(px(12.0))
         .bg(row_bg)
-        .border_1()
-        .border_color(row_border)
-        .when(selected && dark, |row| {
-            row.shadow(vec![BoxShadow {
-                color: gpui::hsla(0.72, 0.72, 0.56, 0.04),
-                offset: point(px(0.0), px(0.0)),
-                blur_radius: px(30.0),
-                spread_radius: px(0.0),
-            }])
-        })
         .cursor_pointer()
-        .when(!selected, move |row| {
-            row.hover(move |style| style.bg(hover_bg))
+        .on_hover(move |is_hovered, _window, cx| {
+            if *is_hovered {
+                if let Some(ref handle) = hover_handle {
+                    let _ = cx.update_entity(handle, |launcher, entity_cx| {
+                        launcher.selected = index;
+                        entity_cx.notify();
+                    });
+                }
+            }
         })
         .on_click(move |_, window, cx| {
-            let Some(handle) = handle.clone() else {
+            let Some(ref handle) = click_handle else {
                 return;
             };
-            cx.update_entity(&handle, |launcher, entity_cx| {
+            cx.update_entity(handle, |launcher, entity_cx| {
                 if let Some(index) = launcher
                     .results
                     .iter()

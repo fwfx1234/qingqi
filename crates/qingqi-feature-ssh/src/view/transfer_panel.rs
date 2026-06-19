@@ -24,20 +24,22 @@ fn render_transfer_panel_inner(
     list_scroll: UniformListScrollHandle,
     cx: &mut Context<super::SshView>,
 ) -> impl IntoElement {
+    let hover_bg = ui::bg_hover(cx);
     div()
         .w_full()
         .border_t_1()
-        .border_color(ui::border_light())
-        .bg(ui::bg_surface())
-        .child(render_control_bar(transfers, expanded, cx))
+        .border_color(ui::border_light(cx))
+        .bg(ui::bg_surface(cx))
+        .child(render_control_bar(transfers, expanded, hover_bg, cx))
         .when(expanded, |root| {
-            root.child(render_transfer_list(transfers, list_scroll))
+            root.child(render_transfer_list(transfers, list_scroll, &*cx))
         })
 }
 
 fn render_control_bar(
     transfers: &super::TransferPanelViewModel,
     expanded: bool,
+    hover_bg: Hsla,
     cx: &mut Context<super::SshView>,
 ) -> impl IntoElement {
     div()
@@ -48,12 +50,12 @@ fn render_control_bar(
         .px_3()
         .justify_between()
         .cursor_pointer()
-        .hover(|s| s.bg(ui::bg_hover()))
+        .hover(move |s| s.bg(hover_bg))
         .on_click(cx.listener(|view, _: &ClickEvent, _w, cx| view.toggle_transfer_panel(cx)))
         .child(
             div()
                 .text_size(px(11.0))
-                .text_color(ui::text_secondary())
+                .text_color(ui::text_secondary(cx))
                 .child(format!(
                     "传输记录 ({} 进行中, {} 已完成, {} 失败)",
                     transfers.active_count, transfers.completed_count, transfers.failed_count,
@@ -62,7 +64,7 @@ fn render_control_bar(
         .child(
             div()
                 .text_size(px(11.0))
-                .text_color(ui::text_secondary())
+                .text_color(ui::text_secondary(cx))
                 .child(if expanded { "收起 ▲" } else { "展开 ▼" }),
         )
 }
@@ -70,6 +72,7 @@ fn render_control_bar(
 fn render_transfer_list(
     transfers: &super::TransferPanelViewModel,
     list_scroll: UniformListScrollHandle,
+    cx: &App,
 ) -> impl IntoElement {
     if transfers.rows.is_empty() {
         return div()
@@ -78,7 +81,7 @@ fn render_transfer_list(
             .items_center()
             .justify_center()
             .text_size(px(12.0))
-            .text_color(ui::text_secondary())
+            .text_color(ui::text_secondary(cx))
             .child("暂无传输记录")
             .into_any_element();
     }
@@ -91,23 +94,24 @@ fn render_transfer_list(
         count,
         px(LIST_HEIGHT),
         list_scroll,
-        move |range, _window, _cx| {
+        move |range, _window, cx| {
             range
-                .map(|i| render_transfer_row(&rows[i]).into_any_element())
+                .map(|i| render_transfer_row(&rows[i], cx).into_any_element())
                 .collect()
         },
     )
     .into_any_element()
 }
 
-fn render_transfer_row(row: &super::TransferRowViewModel) -> impl IntoElement {
+fn render_transfer_row(row: &super::TransferRowViewModel, cx: &App) -> impl IntoElement {
+    let hover_bg = ui::bg_hover(cx);
     div()
         .h(px(ROW_HEIGHT))
         .flex()
         .items_center()
         .px_3()
         .text_size(px(12.0))
-        .hover(|s| s.bg(ui::bg_hover()))
+        .hover(move |s| s.bg(hover_bg))
         .child(div().mr_2().text_size(px(14.0)).child(row.direction_icon))
         .child(div().flex_1().child(row.file_name.clone()))
         .child(render_progress_bar(row))
@@ -122,7 +126,7 @@ fn render_transfer_row(row: &super::TransferRowViewModel) -> impl IntoElement {
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(ui::text_tertiary())
+                .text_color(ui::text_tertiary(cx))
                 .child(row.speed_text.clone()),
         )
 }

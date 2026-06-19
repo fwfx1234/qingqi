@@ -82,3 +82,6 @@ codegen-units = 1
 lto = "thin"
 opt-level = "z"
 strip = "symbols"
+
+[patch.crates-io]
+gpui-component = { path = "vendor/gpui-component" }

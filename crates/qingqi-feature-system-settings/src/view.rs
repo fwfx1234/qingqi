@@ -549,12 +549,7 @@ impl Render for SettingsView {
                     .child(components::settings_row(
                         "插件窗口保留",
                         &retention_status,
-                        retention_control(
-                            entity.clone(),
-                            retention_seconds,
-                            retention_message,
-                            cx,
-                        ),
+                        retention_control(entity.clone(), retention_seconds, retention_message, cx),
                         cx,
                     ))
                     .child(components::settings_row(
@@ -926,11 +921,7 @@ fn app_index_row(
         .child(div().flex_shrink_0().child(action))
 }
 
-fn app_index_action_button(
-    entity: Entity<SettingsView>,
-    cx: &App,
-    available: bool,
-) -> AnyElement {
+fn app_index_action_button(entity: Entity<SettingsView>, cx: &App, available: bool) -> AnyElement {
     if available {
         action_button(cx, "重建索引", true, {
             let entity = entity.clone();
@@ -947,11 +938,7 @@ fn app_index_action_button(
     }
 }
 
-fn plugin_dir_button(
-    entity: Entity<SettingsView>,
-    cx: &App,
-    _root_path: &str,
-) -> impl IntoElement {
+fn plugin_dir_button(entity: Entity<SettingsView>, cx: &App, _root_path: &str) -> impl IntoElement {
     let t = Theme::global(cx);
     div()
         .id("system-settings-open-plugin-dir")
@@ -1190,11 +1177,7 @@ fn shortcut_input_shell(input: Entity<TextInput>, editable: bool, cx: &App) -> i
         .rounded(theme::radius_sm())
         .border_1()
         .border_color(t.border)
-        .bg(if editable {
-            t.list
-        } else {
-            t.muted
-        })
+        .bg(if editable { t.list } else { t.muted })
         .child(input.into_any_element())
 }
 
@@ -1232,11 +1215,7 @@ fn shortcut_action_button(
         .hover(move |style| {
             if enabled {
                 style
-                    .bg(if primary {
-                        t.primary_hover
-                    } else {
-                        t.muted
-                    })
+                    .bg(if primary { t.primary_hover } else { t.muted })
                     .cursor_pointer()
             } else {
                 style
@@ -1420,14 +1399,10 @@ fn accessibility_row(
     let text_primary = t.foreground;
 
     let (status_color, status_bg) = match status {
-        PermissionStatus::Authorized => (
-            t.success,
-            theme::rgba_with_alpha(t.success.into(), 0.1),
-        ),
-        PermissionStatus::NotAuthorized => (
-            t.warning,
-            theme::rgba_with_alpha(t.warning.into(), 0.1),
-        ),
+        PermissionStatus::Authorized => (t.success, theme::rgba_with_alpha(t.success.into(), 0.1)),
+        PermissionStatus::NotAuthorized => {
+            (t.warning, theme::rgba_with_alpha(t.warning.into(), 0.1))
+        }
         PermissionStatus::Unknown => (
             t.muted_foreground,
             theme::rgba_with_alpha(t.muted_foreground.into(), 0.08),
@@ -1763,10 +1738,7 @@ fn seg_button(
 
 // ── Theme Selector ───────────────────────────────────────────────────────
 
-fn theme_selector(
-    _entity: Entity<SettingsView>,
-    cx: &App,
-) -> impl IntoElement {
+fn theme_selector(_entity: Entity<SettingsView>, cx: &App) -> impl IntoElement {
     let t = Theme::global(cx);
     div()
         .text_size(theme::font_size_caption())

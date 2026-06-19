@@ -1,7 +1,7 @@
-use gpui::App;
-use crate::model::NodeKind;
 use super::ApiDebuggerView;
 use super::components::collection_tree::MenuKind;
+use crate::model::NodeKind;
+use gpui::App;
 
 impl ApiDebuggerView {
     pub(crate) fn open_collection_menu(
@@ -166,10 +166,9 @@ impl ApiDebuggerView {
             .map(|node| node.name)
             .unwrap_or_default();
         self.renaming_node_id = node_id;
-        self.rename_inline_input
-            .update(cx, |input, input_cx| {
-                input.set_text(current_name, input_cx);
-            });
+        self.rename_inline_input.update(cx, |input, input_cx| {
+            input.set_text(current_name, input_cx);
+        });
         self.close_collection_menu();
     }
 

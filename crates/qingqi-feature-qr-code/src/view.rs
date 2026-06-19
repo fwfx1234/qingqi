@@ -11,10 +11,10 @@ use gpui::{
 };
 
 use crate::service::QrCodeService;
+use gpui_component::theme::Theme;
 use qingqi_plugin::storage::AppPaths;
 use qingqi_ui::{
     text_input::{TextInput, TextInputStyle},
-    theme,
     ui::{self, components},
 };
 
@@ -468,7 +468,7 @@ impl Render for QrView {
         self.ensure_inputs(cx);
 
         let entity = cx.entity();
-        let dark = qingqi_ui::theme_mode::is_dark();
+        let t = Theme::global(cx);
         let input = self.input.clone().expect("qr input missing");
         let qr_matrix = self.qr_matrix.clone();
         let qr_size = self.qr_size;
@@ -476,7 +476,7 @@ impl Render for QrView {
         let tone = self.tone;
         let scanned = self.scanned_image_path.clone();
 
-        ui::plugin_surface().child(
+        ui::plugin_surface(cx).child(
             ui::plugin_scroll_content()
                 .capture_key_down(cx.listener(Self::handle_key_down))
                 .flex()
@@ -492,7 +492,7 @@ impl Render for QrView {
                             div()
                                 .text_size(px(14.0))
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(theme::semantic().text_primary)
+                                .text_color(t.foreground)
                                 .child("二维码"),
                         )
                         .child(
@@ -500,7 +500,7 @@ impl Render for QrView {
                                 .flex()
                                 .items_center()
                                 .gap_2()
-                                .child(action_btn("选择图片", dark).id("qr-choose-img").on_click({
+                                .child(action_btn("选择图片", cx).id("qr-choose-img").on_click({
                                     let e = entity.clone();
                                     move |_, _, cx| {
                                         e.update(cx, |t, cx| {
@@ -509,7 +509,7 @@ impl Render for QrView {
                                         });
                                     }
                                 }))
-                                .child(ghost_btn("清空", dark).id("qr-clear").on_click({
+                                .child(ghost_btn("清空", cx).id("qr-clear").on_click({
                                     let e = entity.clone();
                                     move |_, _, cx| {
                                         e.update(cx, |t, cx| {
@@ -534,12 +534,9 @@ impl Render for QrView {
                                 .child(
                                     div()
                                         .rounded(px(10.0))
-                                        .bg(theme::rgba_with_alpha(
-                                            theme::semantic().bg_surface,
-                                            0.7,
-                                        ))
+                                        .bg(t.list)
                                         .border_1()
-                                        .border_color(ui::border_light())
+                                        .border_color(ui::border_light(cx))
                                         .overflow_hidden()
                                         .child(input),
                                 )
@@ -548,18 +545,16 @@ impl Render for QrView {
                                         .flex()
                                         .items_center()
                                         .gap_2()
-                                        .child(primary_btn("另存为", dark).id("qr-save").on_click(
-                                            {
-                                                let e = entity.clone();
-                                                move |_, _, cx| {
-                                                    e.update(cx, |t, cx| {
-                                                        t.save_current(cx);
-                                                        cx.notify();
-                                                    });
-                                                }
-                                            },
-                                        ))
-                                        .child(action_btn("复制", dark).id("qr-copy").on_click({
+                                        .child(primary_btn("另存为", cx).id("qr-save").on_click({
+                                            let e = entity.clone();
+                                            move |_, _, cx| {
+                                                e.update(cx, |t, cx| {
+                                                    t.save_current(cx);
+                                                    cx.notify();
+                                                });
+                                            }
+                                        }))
+                                        .child(action_btn("复制", cx).id("qr-copy").on_click({
                                             let e = entity.clone();
                                             move |_, _, cx| {
                                                 e.update(cx, |t, cx| {
@@ -568,7 +563,7 @@ impl Render for QrView {
                                                 });
                                             }
                                         }))
-                                        .child(action_btn("粘贴", dark).id("qr-paste").on_click({
+                                        .child(action_btn("粘贴", cx).id("qr-paste").on_click({
                                             let e = entity.clone();
                                             move |_, _, cx| {
                                                 e.update(cx, |t, cx| {
@@ -578,7 +573,7 @@ impl Render for QrView {
                                             }
                                         }))
                                         .child(div().flex_1())
-                                        .child(ghost_btn("生成", dark).id("qr-gen").on_click({
+                                        .child(ghost_btn("生成", cx).id("qr-gen").on_click({
                                             let e = entity.clone();
                                             move |_, _, cx| {
                                                 e.update(cx, |t, cx| {
@@ -589,28 +584,30 @@ impl Render for QrView {
                                             }
                                         })),
                                 )
-                                .child(status_bar(message, tone, dark)),
+                                .child(status_bar(message, tone, cx)),
                         )
-                        .child(preview_panel(dark, qr_matrix, qr_size, scanned)),
+                        .child(preview_panel(qr_matrix, qr_size, scanned, cx)),
                 ),
         )
     }
 }
 
 fn preview_panel(
-    dark: bool,
     qr_matrix: Vec<bool>,
     qr_size: usize,
     scanned: Option<PathBuf>,
+    cx: &App,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
+    let dark = t.mode.is_dark();
     let preview_size = 200.0;
     div().w(px(preview_size)).flex_none().child(
         div()
             .size(px(preview_size))
             .rounded(px(10.0))
-            .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
+            .bg(t.list)
             .border_1()
-            .border_color(ui::border_light())
+            .border_color(ui::border_light(cx))
             .flex()
             .items_center()
             .justify_center()
@@ -661,7 +658,7 @@ fn preview_panel(
                 } else {
                     div()
                         .text_size(px(12.0))
-                        .text_color(ui::text_tertiary())
+                        .text_color(ui::text_tertiary(cx))
                         .child("预览")
                         .into_any_element()
                 }
@@ -669,13 +666,14 @@ fn preview_panel(
     )
 }
 
-fn status_bar(message: String, tone: StatusTone, _dark: bool) -> impl IntoElement {
+fn status_bar(message: String, tone: StatusTone, cx: &App) -> impl IntoElement {
+    let t = Theme::global(cx);
     div()
         .h(px(28.0))
         .rounded(px(8.0))
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.5))
+        .bg(t.list)
         .border_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .px_3()
         .flex()
         .items_center()
@@ -684,35 +682,35 @@ fn status_bar(message: String, tone: StatusTone, _dark: bool) -> impl IntoElemen
                 .flex_1()
                 .text_size(px(11.0))
                 .text_color(match tone {
-                    StatusTone::Neutral => ui::text_secondary(),
-                    StatusTone::Success => theme::semantic().success,
-                    StatusTone::Error => theme::semantic().danger,
+                    StatusTone::Neutral => ui::text_secondary(cx),
+                    StatusTone::Success => t.success,
+                    StatusTone::Error => t.danger,
                 })
                 .child(message),
         )
 }
 
-fn primary_btn(label: &str, dark: bool) -> gpui::Div {
+fn primary_btn(label: &str, cx: &App) -> gpui::Div {
     components::button(
         label.to_string(),
         components::ButtonVariant::Primary,
         Some(qingqi_plugin::plugin_spec::PluginAccent::Blue),
-        dark,
+        cx,
     )
 }
-fn action_btn(label: &str, dark: bool) -> gpui::Div {
+fn action_btn(label: &str, cx: &App) -> gpui::Div {
     components::button(
         label.to_string(),
         components::ButtonVariant::Secondary,
         None,
-        dark,
+        cx,
     )
 }
-fn ghost_btn(label: &str, dark: bool) -> gpui::Div {
+fn ghost_btn(label: &str, cx: &App) -> gpui::Div {
     components::button(
         label.to_string(),
         components::ButtonVariant::Ghost,
         None,
-        dark,
+        cx,
     )
 }

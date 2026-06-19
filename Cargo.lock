@@ -2966,8 +2966,6 @@ dependencies = [
 [[package]]
 name = "gpui-component"
 version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d021d46b4088d3d93a57ccdf443da85695a77272108caca2f6fe5369f584966a"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -5773,6 +5771,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "gpui",
+ "gpui-component",
  "qingqi-plugin",
  "qingqi-ui",
  "serde",
@@ -5826,6 +5825,7 @@ dependencies = [
  "anyhow",
  "dirs 6.0.0",
  "gpui",
+ "gpui-component",
  "qingqi-platform",
  "qingqi-plugin",
  "qingqi-ui",
@@ -5884,6 +5884,7 @@ dependencies = [
  "anyhow",
  "dirs 6.0.0",
  "gpui",
+ "gpui-component",
  "image",
  "qingqi-platform",
  "qingqi-plugin",
@@ -5911,6 +5912,7 @@ dependencies = [
  "anyhow",
  "dirs 6.0.0",
  "gpui",
+ "gpui-component",
  "image",
  "qingqi-platform",
  "qingqi-plugin",
@@ -5928,6 +5930,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "gpui",
+ "gpui-component",
  "libc",
  "qingqi-platform",
  "qingqi-plugin",

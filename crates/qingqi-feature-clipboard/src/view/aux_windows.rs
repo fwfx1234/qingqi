@@ -2,8 +2,9 @@
 
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::scroll::ScrollableElement;
 use gpui_component::Root;
+use gpui_component::scroll::ScrollableElement;
+use gpui_component::theme::Theme;
 
 use super::ClipboardView;
 use super::settings;
@@ -101,10 +102,11 @@ impl AppSettingsWindow {
 
 impl Render for AppSettingsWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = Theme::global(cx);
+        let app: &App = cx;
         let view = self.clipboard_view.read(cx);
         let handle = self.clipboard_view.clone();
         let config = view.settings_snapshot();
-        let dark = qingqi_ui::theme_mode::is_dark();
 
         let ignore_input = view.ignore_patterns_input.clone();
         let max_chars_input = view.max_text_chars_input.clone();
@@ -115,11 +117,11 @@ impl Render for AppSettingsWindow {
         else {
             return div()
                 .size_full()
-                .bg(qingqi_ui::theme::semantic().bg_elevated)
+                .bg(t.popover)
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_color(qingqi_ui::theme::semantic().text_placeholder)
+                .text_color(t.muted_foreground)
                 .child("剪贴板设置加载中...")
                 .into_any_element();
         };
@@ -128,29 +130,25 @@ impl Render for AppSettingsWindow {
             .size_full()
             .flex()
             .flex_col()
-            .bg(qingqi_ui::theme::semantic().bg_elevated)
-            .child(settings_titlebar("剪贴板设置"))
-            .child(
-                div()
-                    .flex_1()
-                    .min_h(px(0.0))
-                    .overflow_y_scrollbar()
-                    .child(settings::settings_panel(
-                        handle,
-                        config,
-                        ignore_patterns_input,
-                        max_text_chars_input,
-                        hotkey_input,
-                        dark,
-                    )),
-            )
+            .bg(t.popover)
+            .child(settings_titlebar("剪贴板设置", app))
+            .child(div().flex_1().min_h(px(0.0)).overflow_y_scrollbar().child(
+                settings::settings_panel(
+                    handle,
+                    config,
+                    ignore_patterns_input,
+                    max_text_chars_input,
+                    hotkey_input,
+                    app,
+                ),
+            ))
             .into_any_element()
     }
 }
 
-fn settings_titlebar(title: impl Into<SharedString>) -> impl IntoElement {
+fn settings_titlebar(title: impl Into<SharedString>, cx: &App) -> impl IntoElement {
     let title = title.into();
-    let s = qingqi_ui::theme::semantic();
+    let t = Theme::global(cx);
     let is_macos = cfg!(target_os = "macos");
 
     div()
@@ -159,9 +157,9 @@ fn settings_titlebar(title: impl Into<SharedString>) -> impl IntoElement {
         .flex_none()
         .flex()
         .items_center()
-        .bg(qingqi_ui::theme::rgba_with_alpha(s.bg_surface, 0.72))
+        .bg(t.list)
         .border_b_1()
-        .border_color(qingqi_ui::ui::border_light())
+        .border_color(qingqi_ui::ui::border_light(cx))
         .child(qingqi_ui::ui::traffic_light::macos_traffic_lights())
         .child(
             div()
@@ -174,16 +172,12 @@ fn settings_titlebar(title: impl Into<SharedString>) -> impl IntoElement {
                     div()
                         .text_size(px(13.0))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(s.text_primary)
+                        .text_color(t.foreground)
                         .child(title),
                 ),
         )
         .child(if is_macos {
-            div()
-                .w(px(86.0))
-                .h_full()
-                .flex_none()
-                .into_any_element()
+            div().w(px(86.0)).h_full().flex_none().into_any_element()
         } else {
             div()
                 .w(px(40.0))
@@ -192,15 +186,14 @@ fn settings_titlebar(title: impl Into<SharedString>) -> impl IntoElement {
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(qingqi_ui::ui::window_close_button())
+                .child(qingqi_ui::ui::window_close_button(cx))
                 .into_any_element()
         })
 }
 
 pub fn app_settings_window_options(cx: &App) -> WindowOptions {
     let window_size = size(px(APP_SETTINGS_SIZE.0), px(APP_SETTINGS_SIZE.1));
-    let (display, bounds) =
-        qingqi_platform::display::centered_on_active_display(cx, window_size);
+    let (display, bounds) = qingqi_platform::display::centered_on_active_display(cx, window_size);
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         display_id: display.map(|display| display.id()),

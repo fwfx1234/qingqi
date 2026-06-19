@@ -1,15 +1,18 @@
+use super::shared::{api_accent, circle_badge, section_micro_label};
+use crate::service::EnvDetailTab;
+use crate::view::ApiDebuggerView;
 use gpui::{
-    App, AppContext, Bounds, Context, Entity, IntoElement, InteractiveElement, ParentElement,
+    App, AppContext, Bounds, Context, Entity, InteractiveElement, IntoElement, ParentElement,
     Render, SharedString, StatefulInteractiveElement, Styled, Subscription, TitlebarOptions,
     Window, WindowBounds, WindowKind, WindowOptions, div, px, size,
 };
 use gpui_component::theme::Theme;
-use gpui_component::{IconName, Root, Sizable, Size, button::{Button, ButtonVariants}};
-use qingqi_ui::{theme, ui, ui::glass};
+use gpui_component::{
+    IconName, Root, Sizable, Size,
+    button::{Button, ButtonVariants},
+};
 use qingqi_ui::text_input::TextInput;
-use crate::service::EnvDetailTab;
-use crate::view::ApiDebuggerView;
-use super::shared::{api_accent, circle_badge, section_micro_label};
+use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn open_env_editor_window(debugger: Entity<ApiDebuggerView>, cx: &mut App) {
     if debugger.read(cx).env_editor_window.is_some() {
@@ -116,55 +119,54 @@ impl Render for EnvEditorWindow {
                     .child(labeled_field("名称", name_input.clone(), app))
                     .child(labeled_field("Base URL", base_url_input.clone(), app))
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(8.0))
-                            .children(
-                                [EnvDetailTab::Variables, EnvDetailTab::Headers]
-                                    .into_iter()
-                                    .enumerate()
-                                    .map({
-                                        let tv = handle.clone();
-                                        move |(index, tab)| {
-                                            let active = tab == detail_tab;
-                                            let tv = tv.clone();
-                                            div()
-                                                .id(("api-env-win-tab", index))
-                                                .px(px(12.0))
-                                                .py(px(5.0))
-                                                .rounded(px(5.0))
-                                                .bg(if active {
-                                                    theme::rgba_with_alpha(api_accent(app), 0.10)
-                                                } else {
-                                                    gpui::transparent_black()
-                                                })
-                                                .text_size(px(11.0))
-                                                .font_weight(if active {
-                                                    gpui::FontWeight::SEMIBOLD
-                                                } else {
-                                                    gpui::FontWeight::NORMAL
-                                                })
-                                                .text_color(if active {
-                                                    api_accent(app).into()
-                                                } else {
-                                                    ui::text_secondary(app)
-                                                })
-                                                .hover(move |style| {
-                                                    style
-                                                        .bg(theme::rgba_with_alpha(api_accent(app), 0.06))
-                                                        .cursor_pointer()
-                                                })
-                                                .child(tab.label())
-                                                .on_click(move |_, window, cx| {
-                                                    tv.update(cx, |view, _cx| {
-                                                        view.env_detail_tab = tab;
-                                                    });
-                                                    window.refresh();
-                                                })
-                                        }
-                                    }),
-                            ),
+                        div().flex().items_center().gap(px(8.0)).children(
+                            [EnvDetailTab::Variables, EnvDetailTab::Headers]
+                                .into_iter()
+                                .enumerate()
+                                .map({
+                                    let tv = handle.clone();
+                                    move |(index, tab)| {
+                                        let active = tab == detail_tab;
+                                        let tv = tv.clone();
+                                        div()
+                                            .id(("api-env-win-tab", index))
+                                            .px(px(12.0))
+                                            .py(px(5.0))
+                                            .rounded(px(5.0))
+                                            .bg(if active {
+                                                theme::rgba_with_alpha(api_accent(app), 0.10)
+                                            } else {
+                                                gpui::transparent_black()
+                                            })
+                                            .text_size(px(11.0))
+                                            .font_weight(if active {
+                                                gpui::FontWeight::SEMIBOLD
+                                            } else {
+                                                gpui::FontWeight::NORMAL
+                                            })
+                                            .text_color(if active {
+                                                api_accent(app).into()
+                                            } else {
+                                                ui::text_secondary(app)
+                                            })
+                                            .hover(move |style| {
+                                                style
+                                                    .bg(theme::rgba_with_alpha(
+                                                        api_accent(app),
+                                                        0.06,
+                                                    ))
+                                                    .cursor_pointer()
+                                            })
+                                            .child(tab.label())
+                                            .on_click(move |_, window, cx| {
+                                                tv.update(cx, |view, _cx| {
+                                                    view.env_detail_tab = tab;
+                                                });
+                                                window.refresh();
+                                            })
+                                    }
+                                }),
+                        ),
                     )
                     .child(
                         div()
@@ -201,58 +203,55 @@ fn env_chips_bar(
         .flex_wrap()
         .children({
             let chip_handle = handle.clone();
-            environments
-                .iter()
-                .enumerate()
-                .map(move |(i, env)| {
-                    let active = i == selected_index;
-                    let h = chip_handle.clone();
-                    div()
-                        .id(("api-env-chip", i))
-                        .px(px(8.0))
-                        .py(px(4.0))
-                        .rounded(px(5.0))
-                        .bg(if active {
-                            theme::rgba_with_alpha(api_accent(cx), 0.12)
+            environments.iter().enumerate().map(move |(i, env)| {
+                let active = i == selected_index;
+                let h = chip_handle.clone();
+                div()
+                    .id(("api-env-chip", i))
+                    .px(px(8.0))
+                    .py(px(4.0))
+                    .rounded(px(5.0))
+                    .bg(if active {
+                        theme::rgba_with_alpha(api_accent(cx), 0.12)
+                    } else {
+                        gpui::transparent_black()
+                    })
+                    .border_1()
+                    .border_color(if active {
+                        theme::rgba_with_alpha(api_accent(cx), 0.24)
+                    } else {
+                        gpui::transparent_black()
+                    })
+                    .flex()
+                    .items_center()
+                    .gap(px(5.0))
+                    .hover(move |style| {
+                        if !active {
+                            style.bg(ui::bg_hover(cx)).cursor_pointer()
                         } else {
-                            gpui::transparent_black()
-                        })
-                        .border_1()
-                        .border_color(if active {
-                            theme::rgba_with_alpha(api_accent(cx), 0.24)
-                        } else {
-                            gpui::transparent_black()
-                        })
-                        .flex()
-                        .items_center()
-                        .gap(px(5.0))
-                        .hover(move |style| {
-                            if !active {
-                                style.bg(ui::bg_hover(cx)).cursor_pointer()
+                            style.cursor_pointer()
+                        }
+                    })
+                    .child(circle_badge(&env.badge, env.color, 16.0))
+                    .child(
+                        div()
+                            .text_size(px(11.0))
+                            .font_weight(if active {
+                                gpui::FontWeight::SEMIBOLD
                             } else {
-                                style.cursor_pointer()
-                            }
-                        })
-                        .child(circle_badge(&env.badge, env.color, 16.0))
-                        .child(
-                            div()
-                                .text_size(px(11.0))
-                                .font_weight(if active {
-                                    gpui::FontWeight::SEMIBOLD
-                                } else {
-                                    gpui::FontWeight::NORMAL
-                                })
-                                .text_color(if active {
-                                    api_accent(cx).into()
-                                } else {
-                                    ui::text_secondary(cx)
-                                })
-                                .child(env.name.clone()),
-                        )
-                        .on_click(move |_, _, cx| {
-                            h.update(cx, |view, cx| view.select_environment(i, cx));
-                        })
-                })
+                                gpui::FontWeight::NORMAL
+                            })
+                            .text_color(if active {
+                                api_accent(cx).into()
+                            } else {
+                                ui::text_secondary(cx)
+                            })
+                            .child(env.name.clone()),
+                    )
+                    .on_click(move |_, _, cx| {
+                        h.update(cx, |view, cx| view.select_environment(i, cx));
+                    })
+            })
         })
         .child(div().flex_1())
         .child(
@@ -269,10 +268,7 @@ fn env_chips_bar(
         )
 }
 
-fn env_bottom_bar(
-    handle: Entity<ApiDebuggerView>,
-    cx: &App,
-) -> impl IntoElement {
+fn env_bottom_bar(handle: Entity<ApiDebuggerView>, cx: &App) -> impl IntoElement {
     div()
         .flex_shrink_0()
         .h(px(40.0))
@@ -369,11 +365,7 @@ fn env_bottom_bar(
         )
 }
 
-fn labeled_field(
-    label: &'static str,
-    input: Entity<TextInput>,
-    cx: &App,
-) -> impl IntoElement {
+fn labeled_field(label: &'static str, input: Entity<TextInput>, cx: &App) -> impl IntoElement {
     div()
         .flex()
         .flex_col()

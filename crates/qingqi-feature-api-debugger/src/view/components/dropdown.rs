@@ -1,4 +1,7 @@
-use gpui::{AnyElement, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Styled, Window, div, px, prelude::FluentBuilder};
+use gpui::{
+    AnyElement, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Styled, Window,
+    div, prelude::FluentBuilder, px,
+};
 use qingqi_ui::theme;
 
 /// A styled dropdown menu item.
@@ -28,10 +31,7 @@ impl DropdownItem {
         self
     }
 
-    pub fn on_select(
-        mut self,
-        f: impl Fn(&mut Window, &mut gpui::App) + 'static,
-    ) -> Self {
+    pub fn on_select(mut self, f: impl Fn(&mut Window, &mut gpui::App) + 'static) -> Self {
         self.on_select = Some(Box::new(f));
         self
     }

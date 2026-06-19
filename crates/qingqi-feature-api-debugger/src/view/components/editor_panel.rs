@@ -1,15 +1,18 @@
-use gpui::{
-    App, Entity, IntoElement, InteractiveElement, ParentElement,
-    StatefulInteractiveElement, Styled, div, hsla, px, prelude::FluentBuilder,
-};
-use gpui_component::theme::Theme;
-use gpui_component::{Sizable, Size, button::{Button, ButtonVariants}};
-use qingqi_ui::{theme, ui, ui::glass};
-use qingqi_ui::text_input::TextInput;
+use super::shared::{section_micro_label, transparent_surface};
 use crate::service::{AuthType, BodyMode, EditorTab};
 use crate::view::ApiDebuggerView;
 use crate::view::types::{AuthFormInputs, KvRow};
-use super::shared::{section_micro_label, transparent_surface};
+use gpui::{
+    App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
+    Styled, div, hsla, prelude::FluentBuilder, px,
+};
+use gpui_component::theme::Theme;
+use gpui_component::{
+    Sizable, Size,
+    button::{Button, ButtonVariants},
+};
+use qingqi_ui::text_input::TextInput;
+use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn editor_panel(
     view: Entity<ApiDebuggerView>,
@@ -186,13 +189,7 @@ pub fn editor_panel(
                         .into_iter()
                         .enumerate()
                         .map(move |(index, tab)| {
-                            editor_tab_button(
-                                tabs_view.clone(),
-                                index,
-                                tab,
-                                tab == editor_tab,
-                                cx,
-                            )
+                            editor_tab_button(tabs_view.clone(), index, tab, tab == editor_tab, cx)
                         }),
                 ),
         )

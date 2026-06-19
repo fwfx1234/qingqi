@@ -2,16 +2,17 @@
 
 use gpui::prelude::*;
 use gpui::*;
+use gpui_component::theme::Theme;
 use qingqi_ui::text_input::TextInput;
+use qingqi_ui::ui;
 use qingqi_ui::ui::components::button::{ButtonVariant, button};
 use qingqi_ui::ui::glass;
-use qingqi_ui::{theme, theme_mode, ui};
 
 pub fn render_file_rename_overlay(
     handle: Entity<super::SshView>,
     rename_input: Entity<TextInput>,
+    cx: &App,
 ) -> impl IntoElement {
-    let dark = theme_mode::is_dark();
     let backdrop = handle.clone();
 
     div()
@@ -39,10 +40,10 @@ pub fn render_file_rename_overlay(
                 .top_1_2()
                 .left_1_2()
                 .w(px(320.0))
-                .rounded(theme::radius_md())
+                .rounded(px(8.0))
                 .border_1()
-                .border_color(glass::border(dark))
-                .bg(theme::semantic().bg_elevated)
+                .border_color(glass::border(cx))
+                .bg(Theme::global(cx).popover)
                 .shadow_lg()
                 .p_4()
                 .flex()
@@ -50,9 +51,9 @@ pub fn render_file_rename_overlay(
                 .gap_3()
                 .child(
                     div()
-                        .text_size(theme::font_size_body())
+                        .text_size(px(13.0))
                         .font_weight(FontWeight::MEDIUM)
-                        .text_color(ui::text_primary())
+                        .text_color(ui::text_primary(cx))
                         .child("重命名"),
                 )
                 .child(
@@ -68,7 +69,7 @@ pub fn render_file_rename_overlay(
                         .gap_2()
                         .child({
                             let h = handle.clone();
-                            button("取消", ButtonVariant::Secondary, None, dark)
+                            button("取消", ButtonVariant::Secondary, None, cx)
                                 .id("file-rename-cancel")
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.close_file_rename(cx));
@@ -76,7 +77,7 @@ pub fn render_file_rename_overlay(
                         })
                         .child({
                             let h = handle;
-                            button("确定", ButtonVariant::Primary, None, dark)
+                            button("确定", ButtonVariant::Primary, None, cx)
                                 .id("file-rename-ok")
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.confirm_file_rename(cx));

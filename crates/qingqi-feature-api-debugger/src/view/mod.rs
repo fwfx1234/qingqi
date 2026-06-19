@@ -3,38 +3,34 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use gpui::{
-    AnyWindowHandle, App, AppContext, Context, Entity,
-    InteractiveElement, IntoElement, ParentElement, Render,
-    Styled, Window, div, prelude::FluentBuilder, px,
+    AnyWindowHandle, App, AppContext, Context, Entity, InteractiveElement, IntoElement,
+    ParentElement, Render, Styled, Window, div, prelude::FluentBuilder, px,
 };
+use gpui_component::tree::TreeState;
 use gpui_component::{
     IconName, Sizable, Size,
     button::{Button, ButtonVariants},
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_component::tree::TreeState;
 
 use crate::code_gen::CodeLanguage;
 use crate::service::{
-    self, ApiEnvironment, ApiGroup, ApiRequest, ApiResponse, ApiService, AuthType,
-    BodyMode, EditorTab, EnvDetailTab, HttpHistory, HttpMethod, ResponseTab,
+    self, ApiEnvironment, ApiGroup, ApiRequest, ApiResponse, ApiService, AuthType, BodyMode,
+    EditorTab, EnvDetailTab, HttpHistory, HttpMethod, ResponseTab,
 };
 use gpui_component::theme::Theme;
-use qingqi_ui::{
-    text_input::TextInput,
-    ui::glass,
-};
+use qingqi_ui::{text_input::TextInput, ui::glass};
 
 use qingqi_plugin::plugin_spec::PluginAccent;
 
-pub mod types;
-pub mod tab;
-pub mod request;
-pub mod editor;
 pub mod collection;
-pub mod env;
-pub mod response;
 pub mod components;
+pub mod editor;
+pub mod env;
+pub mod request;
+pub mod response;
+pub mod tab;
+pub mod types;
 
 pub(crate) const STACK_BREAKPOINT_PX: f32 = 980.0;
 pub(crate) const TAB_BAR_HEIGHT: f32 = 34.0;
@@ -292,7 +288,8 @@ impl ApiDebuggerView {
 
         let tree_state = {
             let mut idx = 0usize;
-            let items = components::collection_tree::build_tree_items(&groups, &mut idx, &HashSet::new());
+            let items =
+                components::collection_tree::build_tree_items(&groups, &mut idx, &HashSet::new());
             cx.new(|cx| TreeState::new(cx).items(items))
         };
 

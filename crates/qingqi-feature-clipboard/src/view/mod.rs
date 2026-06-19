@@ -11,6 +11,7 @@ use gpui::{
 };
 
 use gpui_component::{Icon, IconName, Sizable, Size as ComponentSize};
+use gpui_component::theme::Theme;
 
 use crate::{
     history_store::{self, ClipboardConfig, ClipboardRecord},
@@ -1011,23 +1012,24 @@ impl Render for ClipboardView {
         let items = self.items.clone();
         let selected = self.selected;
         let query = self.query.clone();
+        let t = Theme::global(cx);
+        let app: &App = cx;
 
         let (Some(query_input), Some(preview_input)) =
             (self.query_input.clone(), self.preview_input.clone())
         else {
             return div()
                 .size_full()
-                .bg(theme::semantic().bg_glass)
+                .bg(t.background)
                 .child("剪贴板组件加载中...")
                 .into_any_element();
         };
         let selected_record = self.items.get(self.selected).cloned();
-        let dark = qingqi_ui::theme_mode::is_dark();
 
         // Gear icon button to open independent settings window
         let gear_icon = Icon::new(IconName::Settings)
             .with_size(ComponentSize::Small)
-            .text_color(theme::semantic().text_placeholder)
+            .text_color(t.muted_foreground)
             .into_any_element();
         let gear_handle = handle.clone();
         let gear_button = div()
@@ -1040,7 +1042,7 @@ impl Render for ClipboardView {
             .justify_center()
             .hover(|style| {
                 style
-                    .bg(qingqi_ui::ui::glass::hover_bg(dark))
+                    .bg(qingqi_ui::ui::glass::hover_bg(app))
                     .cursor_pointer()
             })
             .child(gear_icon)
@@ -1059,9 +1061,9 @@ impl Render for ClipboardView {
             .items_center()
             .gap(px(8.0))
             .border_b_1()
-            .border_color(qingqi_ui::ui::glass::divider(dark))
+            .border_color(qingqi_ui::ui::glass::divider(app))
             .child(qingqi_ui::ui::traffic_light::macos_traffic_lights())
-            .child(search_field(query_input, dark).flex_1())
+            .child(search_field(query_input, app).flex_1())
             .child(gear_button);
 
         // Left panel
@@ -1071,9 +1073,9 @@ impl Render for ClipboardView {
             .h_full()
             .flex()
             .flex_col()
-            .bg(qingqi_ui::ui::glass::sidebar(dark))
+            .bg(qingqi_ui::ui::glass::sidebar(app))
             .border_r_1()
-            .border_color(qingqi_ui::ui::glass::border(dark));
+            .border_color(qingqi_ui::ui::glass::border(app));
 
         let left_panel = if let Some(ref fh) = self.focus_handle {
             left_panel.track_focus(fh)
@@ -1090,7 +1092,7 @@ impl Render for ClipboardView {
                 &query,
                 current_filter,
                 self.history_scroll.clone(),
-                dark,
+                app,
             ));
 
         // Right panel
@@ -1100,20 +1102,20 @@ impl Render for ClipboardView {
             .h_full()
             .flex()
             .flex_col()
-            .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.55))
+            .bg(t.list)
             .child(preview_panel(
                 selected_record,
                 preview_input,
                 self.preview_wrap_enabled,
                 handle.clone(),
-                dark,
+                app,
             ));
 
         div()
             .size_full()
             .flex()
-            .bg(theme::semantic().bg_glass)
-            .text_color(theme::semantic().text_primary)
+            .bg(t.background)
+            .text_color(t.foreground)
             .font_family(ui::font_ui())
             .capture_key_down(cx.listener(Self::handle_panel_key))
             .child(left_panel)

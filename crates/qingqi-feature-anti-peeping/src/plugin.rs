@@ -164,7 +164,7 @@ impl WindowView for AntiPeepingView {
         "防窥屏".into()
     }
 
-    fn render(&mut self, _window: &mut Window, _cx: &mut App) -> gpui::AnyElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut App) -> gpui::AnyElement {
         let active = *self.active.borrow();
         let ip = Rc::clone(&self.image_path);
         let paths = self.paths.clone();
@@ -184,14 +184,14 @@ impl WindowView for AntiPeepingView {
             .child(
                 div()
                     .text_size(px(12.0))
-                    .text_color(ui::text_secondary())
+                    .text_color(ui::text_secondary(cx))
                     .child(if active {
                         "已开启 — 按 Esc 键退出"
                     } else {
                         "已关闭"
                     }),
             )
-            .child(div().h(px(1.0)).bg(ui::border_light()))
+            .child(div().h(px(1.0)).bg(ui::border_light(cx)))
             .child(
                 div()
                     .text_size(px(12.0))
@@ -210,8 +210,8 @@ impl WindowView for AntiPeepingView {
                     .py(px(6.0))
                     .rounded(px(6.0))
                     .border_1()
-                    .border_color(ui::border_light())
-                    .bg(ui::bg_subtle())
+                    .border_color(ui::border_light(cx))
+                    .bg(ui::bg_subtle(cx))
                     .text_size(px(12.0))
                     .child(label)
             }))
@@ -224,7 +224,7 @@ impl WindowView for AntiPeepingView {
                     .px(px(16.0))
                     .py(px(8.0))
                     .rounded(px(6.0))
-                    .bg(ui::success())
+                    .bg(ui::success(cx))
                     .text_size(px(13.0))
                     .font_weight(gpui::FontWeight::MEDIUM)
                     .text_color(gpui::white())

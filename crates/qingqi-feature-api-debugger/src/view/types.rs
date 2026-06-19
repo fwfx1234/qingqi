@@ -308,7 +308,11 @@ pub fn multiline_input(cx: &mut App, value: &str, placeholder: &str) -> Entity<T
 }
 
 pub fn request_at(groups: &[ApiGroup], index: usize) -> Option<&ApiRequest> {
-    fn find<'a>(groups: &'a [ApiGroup], target: usize, offset: &mut usize) -> Option<&'a ApiRequest> {
+    fn find<'a>(
+        groups: &'a [ApiGroup],
+        target: usize,
+        offset: &mut usize,
+    ) -> Option<&'a ApiRequest> {
         for group in groups {
             if target < *offset + group.requests.len() {
                 return group.requests.get(target - *offset);
@@ -324,7 +328,11 @@ pub fn request_at(groups: &[ApiGroup], index: usize) -> Option<&ApiRequest> {
 }
 
 pub fn request_at_mut(groups: &mut [ApiGroup], index: usize) -> Option<&mut ApiRequest> {
-    fn find<'a>(groups: &'a mut [ApiGroup], target: usize, offset: &mut usize) -> Option<&'a mut ApiRequest> {
+    fn find<'a>(
+        groups: &'a mut [ApiGroup],
+        target: usize,
+        offset: &mut usize,
+    ) -> Option<&'a mut ApiRequest> {
         for group in groups.iter_mut() {
             if target < *offset + group.requests.len() {
                 return group.requests.get_mut(target - *offset);
@@ -344,7 +352,12 @@ pub fn find_request_index_by_method_url(
     method: &str,
     url: &str,
 ) -> Option<usize> {
-    fn search(groups: &[ApiGroup], method_upper: &str, url: &str, offset: &mut usize) -> Option<usize> {
+    fn search(
+        groups: &[ApiGroup],
+        method_upper: &str,
+        url: &str,
+        offset: &mut usize,
+    ) -> Option<usize> {
         for group in groups {
             for (i, req) in group.requests.iter().enumerate() {
                 if req.method.label() == method_upper && req.path == url {
@@ -365,7 +378,11 @@ pub fn persisted_tab_to_open_tab(
     groups: &[ApiGroup],
     tab: &crate::model::HttpTab,
 ) -> Option<OpenTab> {
-    fn search(groups: &[ApiGroup], tab: &crate::model::HttpTab, offset: &mut usize) -> Option<OpenTab> {
+    fn search(
+        groups: &[ApiGroup],
+        tab: &crate::model::HttpTab,
+        offset: &mut usize,
+    ) -> Option<OpenTab> {
         for group in groups {
             for (request_offset, request) in group.requests.iter().enumerate() {
                 let request_index = *offset + request_offset;

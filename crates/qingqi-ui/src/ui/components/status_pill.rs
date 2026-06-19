@@ -12,7 +12,11 @@ pub enum StatusTone {
 }
 
 /// Unified status pill — replaces locally defined status_tag / status_chip / status_pill.
-pub fn status_pill(label: impl Into<gpui::SharedString>, tone: StatusTone, cx: &App) -> impl IntoElement {
+pub fn status_pill(
+    label: impl Into<gpui::SharedString>,
+    tone: StatusTone,
+    cx: &App,
+) -> impl IntoElement {
     let label = label.into();
     let color = match tone {
         StatusTone::Neutral => ui::text_secondary(cx),

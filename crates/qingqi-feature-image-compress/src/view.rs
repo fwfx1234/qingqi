@@ -13,6 +13,7 @@ use gpui::{
     App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
     StatefulInteractiveElement, Styled, Window, div, img, px,
 };
+use gpui_component::theme::Theme;
 
 use qingqi_plugin::plugin_spec::PluginAccent;
 use qingqi_ui::{
@@ -797,7 +798,8 @@ impl Render for ImageCompressView {
         // Drain background worker results before rendering.
         self.collect_results();
 
-        let dark = qingqi_ui::theme_mode::is_dark();
+        let t = Theme::global(cx);
+        let dark = t.is_dark();
         let items = self.items.clone();
         let mode = self.mode;
         let quality = self.quality;
@@ -813,7 +815,7 @@ impl Render for ImageCompressView {
         let batch_completed = self.batch_completed();
         let handle = cx.entity();
 
-        ui::plugin_surface().child(
+        ui::plugin_surface(cx).child(
             ui::plugin_content().child(
                 div()
                     .size_full()
@@ -829,7 +831,7 @@ impl Render for ImageCompressView {
                                 div()
                                     .text_size(px(14.0))
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .text_color(theme::semantic().text_primary)
+                                    .text_color(t.foreground)
                                     .child("图片压缩"),
                             )
                             .child(
@@ -842,6 +844,7 @@ impl Render for ImageCompressView {
                                             "视觉无损",
                                             mode == CompressionMode::VisuallyLossless,
                                             dark,
+                                            cx,
                                         )
                                         .id("image-compress-mode-lossless")
                                         .on_click({
@@ -861,6 +864,7 @@ impl Render for ImageCompressView {
                                             "普通压缩",
                                             mode == CompressionMode::Standard,
                                             dark,
+                                            cx,
                                         )
                                         .id("image-compress-mode-standard")
                                         .on_click({
@@ -877,11 +881,11 @@ impl Render for ImageCompressView {
                                         div()
                                             .text_size(px(11.0))
                                             .font_family("SF Mono")
-                                            .text_color(theme::semantic().text_body)
+                                            .text_color(t.muted_foreground)
                                             .child(format!("{quality}%")),
                                     )
                                     .child(
-                                        quality_button("−", dark)
+                                        quality_button("−", dark, cx)
                                             .id("image-compress-quality-down")
                                             .on_click({
                                                 let handle = handle.clone();
@@ -894,7 +898,7 @@ impl Render for ImageCompressView {
                                             }),
                                     )
                                     .child(
-                                        quality_button("+", dark)
+                                        quality_button("+", dark, cx)
                                             .id("image-compress-quality-up")
                                             .on_click({
                                                 let handle = handle.clone();
@@ -909,9 +913,9 @@ impl Render for ImageCompressView {
                             ),
                     )
                     .child(
-                        drop_zone(pending_count)
+                        drop_zone(pending_count, cx)
                             .child(
-                                primary_button("粘贴", PluginAccent::Amber, dark)
+                                primary_button("粘贴", PluginAccent::Amber, cx)
                                     .id("image-compress-paste")
                                     .on_click({
                                         let handle = handle.clone();
@@ -924,7 +928,7 @@ impl Render for ImageCompressView {
                                     }),
                             )
                             .child(
-                                secondary_button("选择图片", dark)
+                                secondary_button("选择图片", cx)
                                     .id("image-compress-choose")
                                     .on_click({
                                         let handle = handle.clone();
@@ -937,7 +941,7 @@ impl Render for ImageCompressView {
                                     }),
                             ),
                     )
-                    .child(image_table(items, dark, handle.clone()))
+                    .child(image_table(items, dark, handle.clone(), cx))
                     .child(footer_bar(
                         dark,
                         message,
@@ -951,13 +955,14 @@ impl Render for ImageCompressView {
                         batch_total,
                         batch_completed,
                         handle.clone(),
+                        cx,
                     )),
             ),
         )
     }
 }
 
-fn mode_chip(label: &str, active: bool, _dark: bool) -> gpui::Div {
+fn mode_chip(label: &str, active: bool, _dark: bool, cx: &App) -> gpui::Div {
     div()
         .h(px(28.0))
         .px_3()
@@ -965,13 +970,13 @@ fn mode_chip(label: &str, active: bool, _dark: bool) -> gpui::Div {
         .bg(if active {
             theme::rgba_with_alpha(ui::accent_color(PluginAccent::Amber), 0.12)
         } else {
-            theme::rgba_with_alpha(theme::semantic().bg_surface, 0.82)
+            theme::rgba_with_alpha(Theme::global(cx).list.into(), 0.82)
         })
         .border_1()
         .border_color(if active {
             theme::rgba_with_alpha(ui::accent_color(PluginAccent::Amber), 0.25)
         } else {
-            ui::border_light()
+            ui::border_light(cx)
         })
         .hover(move |style| style.cursor_pointer())
         .flex()
@@ -981,28 +986,28 @@ fn mode_chip(label: &str, active: bool, _dark: bool) -> gpui::Div {
         .text_color(if active {
             ui::accent_color(PluginAccent::Amber)
         } else {
-            ui::text_secondary()
+            ui::text_secondary(cx).into()
         })
         .child(label.to_string())
 }
 
-fn quality_button(label: &str, _dark: bool) -> gpui::Div {
+fn quality_button(label: &str, _dark: bool, cx: &App) -> gpui::Div {
     div()
         .size(px(26.0))
         .rounded(px(8.0))
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.88))
+        .bg(theme::rgba_with_alpha(Theme::global(cx).list.into(), 0.88))
         .border_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .hover(move |style| style.cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(12.0))
-        .text_color(theme::semantic().text_primary)
+        .text_color(Theme::global(cx).foreground)
         .child(label.to_string())
 }
 
-fn drop_zone(pending_count: usize) -> gpui::Div {
+fn drop_zone(pending_count: usize, cx: &App) -> gpui::Div {
     div()
         .rounded(px(10.0))
         .bg(theme::rgba_with_alpha(
@@ -1023,7 +1028,7 @@ fn drop_zone(pending_count: usize) -> gpui::Div {
                 div()
                     .text_size(px(12.0))
                     .font_weight(gpui::FontWeight::MEDIUM)
-                    .text_color(theme::semantic().text_primary)
+                    .text_color(Theme::global(cx).foreground)
                     .child(format!("{pending_count} 张图片")),
             ),
         )
@@ -1033,28 +1038,29 @@ fn image_table(
     items: Vec<QueueItem>,
     dark: bool,
     handle: Entity<ImageCompressView>,
+    cx: &App,
 ) -> impl IntoElement {
     let content = if items.is_empty() {
         div()
             .flex_1()
             .rounded(px(12.0))
-            .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.74))
+            .bg(theme::rgba_with_alpha(Theme::global(cx).list.into(), 0.74))
             .border_1()
-            .border_color(ui::border_light())
+            .border_color(ui::border_light(cx))
             .child(components::empty_state(
                 "icons/image.svg",
                 "暂无图片",
                 "还没有图片，先导入一张试试",
-                dark,
+                cx,
             ))
             .into_any_element()
     } else {
         div()
             .flex_1()
             .rounded(px(12.0))
-            .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.78))
+            .bg(theme::rgba_with_alpha(Theme::global(cx).list.into(), 0.78))
             .border_1()
-            .border_color(ui::border_light())
+            .border_color(ui::border_light(cx))
             .overflow_hidden()
             .flex()
             .flex_col()
@@ -1062,19 +1068,19 @@ fn image_table(
                 div()
                     .h(px(34.0))
                     .px_3()
-                    .bg(theme::rgba_with_alpha(theme::semantic().bg_subtle, 0.65))
+                    .bg(theme::rgba_with_alpha(Theme::global(cx).muted.into(), 0.65))
                     .border_b_1()
-                    .border_color(ui::border_light())
+                    .border_color(ui::border_light(cx))
                     .flex()
                     .items_center()
                     .text_size(px(10.0))
-                    .text_color(ui::text_tertiary())
-                    .child(components::table_header_cell("预览", 76.0))
-                    .child(components::table_header_flex("文件名", 2.4))
-                    .child(components::table_header_flex("原始大小", 1.0))
-                    .child(components::table_header_flex("压缩后", 1.0))
-                    .child(components::table_header_flex("状态", 1.0))
-                    .child(components::table_header_cell("", 30.0)),
+                    .text_color(ui::text_tertiary(cx))
+                    .child(components::table_header_cell("预览", 76.0, cx))
+                    .child(components::table_header_flex("文件名", 2.4, cx))
+                    .child(components::table_header_flex("原始大小", 1.0, cx))
+                    .child(components::table_header_flex("压缩后", 1.0, cx))
+                    .child(components::table_header_flex("状态", 1.0, cx))
+                    .child(components::table_header_cell("", 30.0, cx)),
             )
             .child(
                 div()
@@ -1087,7 +1093,7 @@ fn image_table(
                         items
                             .into_iter()
                             .enumerate()
-                            .map(|(index, item)| image_row(item, index, dark, handle.clone())),
+                            .map(|(index, item)| image_row(item, index, dark, handle.clone(), cx)),
                     ),
             )
             .into_any_element()
@@ -1101,6 +1107,7 @@ fn image_row(
     index: usize,
     dark: bool,
     handle: Entity<ImageCompressView>,
+    cx: &App,
 ) -> impl IntoElement {
     let from_clipboard = item.from_clipboard;
     let is_success = item.status == QueueStatus::Success;
@@ -1112,7 +1119,7 @@ fn image_row(
         .h(px(58.0))
         .px_3()
         .border_b_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .flex()
         .items_center()
         .gap_2()
@@ -1121,7 +1128,7 @@ fn image_row(
                 .w(px(60.0))
                 .flex()
                 .justify_center()
-                .child(thumbnail(&item.source.path, dark)),
+                .child(thumbnail(&item.source.path, dark, cx)),
         )
         .child(
             div()
@@ -1143,14 +1150,14 @@ fn image_row(
                                 .child(
                                     div()
                                         .text_size(px(11.0))
-                                        .text_color(theme::semantic().text_primary)
+                                        .text_color(Theme::global(cx).foreground)
                                         .child(item.source.file_name.clone()),
                                 )
                                 .children(if from_clipboard {
                                     Some(
                                         div()
                                             .text_size(px(9.0))
-                                            .text_color(ui::text_tertiary())
+                                            .text_color(ui::text_tertiary(cx))
                                             .child("📋"),
                                     )
                                 } else {
@@ -1161,7 +1168,7 @@ fn image_row(
                             div()
                                 .text_size(px(10.0))
                                 .font_family("SF Mono")
-                                .text_color(ui::text_tertiary())
+                                .text_color(ui::text_tertiary(cx))
                                 .child(format!(
                                     "{} x {}{}",
                                     item.source.preview.width,
@@ -1179,7 +1186,7 @@ fn image_row(
                         .w(px(96.0))
                         .text_size(px(10.0))
                         .font_family("SF Mono")
-                        .text_color(ui::text_tertiary())
+                        .text_color(ui::text_tertiary(cx))
                         .child(format_size(item.source.original_size)),
                 )
                 .child(
@@ -1187,7 +1194,7 @@ fn image_row(
                         .w(px(96.0))
                         .text_size(px(10.0))
                         .font_family("SF Mono")
-                        .text_color(ui::text_tertiary())
+                        .text_color(ui::text_tertiary(cx))
                         .child(
                             item.output_size
                                 .map(format_size)
@@ -1198,6 +1205,7 @@ fn image_row(
                     item.status,
                     dark,
                     item.reduction_ratio,
+                    cx,
                 )))
                 .child(
                     div()
@@ -1207,7 +1215,7 @@ fn image_row(
                         // "复制" — copy compressed image to clipboard (success only)
                         .children(if is_success {
                             Some(
-                                action_button("复制", dark)
+                                action_button("复制", dark, cx)
                                     .id(("image-compress-copy", index))
                                     .on_click({
                                         let handle = handle.clone();
@@ -1243,7 +1251,7 @@ fn image_row(
                         // "定位" — reveal in Finder (success only)
                         .children(if is_success {
                             Some(
-                                action_button("定位", dark)
+                                action_button("定位", dark, cx)
                                     .id(("image-compress-reveal", index))
                                     .on_click({
                                         let handle = handle.clone();
@@ -1261,7 +1269,7 @@ fn image_row(
                         // "覆盖" — overwrite original (success, real file only)
                         .children(if is_success && !from_clipboard && has_source {
                             Some(
-                                action_button("覆盖", dark)
+                                action_button("覆盖", dark, cx)
                                     .id(("image-compress-overwrite", index))
                                     .on_click({
                                         let handle = handle.clone();
@@ -1279,7 +1287,7 @@ fn image_row(
                         // "另存为" — save-as copy (success only)
                         .children(if is_success {
                             Some(
-                                action_button("另存", dark)
+                                action_button("另存", dark, cx)
                                     .id(("image-compress-save-as", index))
                                     .on_click({
                                         let handle = handle.clone();
@@ -1324,7 +1332,7 @@ fn image_row(
                         // "重试" — retry failed entry
                         .children(if is_failed {
                             Some(
-                                action_button("重试", dark)
+                                action_button("重试", dark, cx)
                                     .id(("image-compress-retry", index))
                                     .on_click({
                                         let handle = handle.clone();
@@ -1346,7 +1354,7 @@ fn image_row(
                                     .id(("image-compress-remove", index))
                                     .w(px(20.0))
                                     .text_size(px(10.0))
-                                    .text_color(ui::text_tertiary())
+                                    .text_color(ui::text_tertiary(cx))
                                     .hover(move |style| style.cursor_pointer())
                                     .child("✕")
                                     .on_click({
@@ -1366,13 +1374,13 @@ fn image_row(
         )
 }
 
-fn thumbnail(path: &Path, _dark: bool) -> impl IntoElement {
+fn thumbnail(path: &Path, _dark: bool, cx: &App) -> impl IntoElement {
     div()
         .size(px(THUMB_SIZE))
         .rounded(px(8.0))
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_subtle, 0.8))
+        .bg(theme::rgba_with_alpha(Theme::global(cx).muted.into(), 0.8))
         .border_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .overflow_hidden()
         .child(
             img(path.to_path_buf())
@@ -1381,23 +1389,28 @@ fn thumbnail(path: &Path, _dark: bool) -> impl IntoElement {
         )
 }
 
-fn status_tag(status: QueueStatus, _dark: bool, reduction_ratio: Option<f32>) -> impl IntoElement {
+fn status_tag(
+    status: QueueStatus,
+    _dark: bool,
+    reduction_ratio: Option<f32>,
+    cx: &App,
+) -> impl IntoElement {
     let (bg, text) = match status {
         QueueStatus::Success => (
-            theme::rgba_with_alpha(theme::semantic().success, 0.1),
-            theme::semantic().success,
+            theme::rgba_with_alpha(Theme::global(cx).success.into(), 0.1),
+            Theme::global(cx).success,
         ),
         QueueStatus::Running => (
             theme::rgba_with_alpha(ui::accent_color(PluginAccent::Blue), 0.1),
-            ui::accent_color(PluginAccent::Blue),
+            ui::accent_color(PluginAccent::Blue).into(),
         ),
         QueueStatus::Pending => (
-            theme::rgba_with_alpha(theme::semantic().warning, 0.1),
-            theme::semantic().warning,
+            theme::rgba_with_alpha(Theme::global(cx).warning.into(), 0.1),
+            Theme::global(cx).warning,
         ),
         QueueStatus::Failed => (
-            theme::rgba_with_alpha(theme::semantic().danger, 0.1),
-            theme::semantic().danger,
+            theme::rgba_with_alpha(Theme::global(cx).danger.into(), 0.1),
+            Theme::global(cx).danger,
         ),
     };
 
@@ -1422,7 +1435,7 @@ fn status_tag(status: QueueStatus, _dark: bool, reduction_ratio: Option<f32>) ->
 }
 
 fn footer_bar(
-    dark: bool,
+    _dark: bool,
     message: String,
     output_dir: String,
     overwrite_original: bool,
@@ -1434,6 +1447,7 @@ fn footer_bar(
     batch_total: usize,
     batch_completed: usize,
     handle: Entity<ImageCompressView>,
+    cx: &App,
 ) -> impl IntoElement {
     let summary = if running && batch_total > 0 {
         format!(
@@ -1455,9 +1469,9 @@ fn footer_bar(
 
     div()
         .rounded(px(10.0))
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
+        .bg(theme::rgba_with_alpha(Theme::global(cx).list.into(), 0.7))
         .border_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .p_3()
         .flex()
         .flex_col()
@@ -1475,7 +1489,7 @@ fn footer_bar(
                             "开始压缩"
                         },
                         PluginAccent::Amber,
-                        dark,
+                        cx,
                     )
                     .id("image-compress-run")
                     .on_click({
@@ -1490,7 +1504,7 @@ fn footer_bar(
                 )
                 .children(if running {
                     Some(
-                        secondary_button("取消", dark)
+                        secondary_button("取消", cx)
                             .id("image-compress-cancel")
                             .on_click({
                                 let handle = handle.clone();
@@ -1512,7 +1526,7 @@ fn footer_bar(
                         } else {
                             "另存为"
                         },
-                        dark,
+                        cx,
                     )
                     .id("image-compress-toggle-overwrite")
                     .on_click({
@@ -1526,7 +1540,7 @@ fn footer_bar(
                     }),
                 )
                 .child(
-                    secondary_button("💾 选择目录", dark)
+                    secondary_button("💾 选择目录", cx)
                         .id("image-compress-output-dir")
                         .on_click({
                             let handle = handle.clone();
@@ -1539,7 +1553,7 @@ fn footer_bar(
                         }),
                 )
                 .child(
-                    secondary_button("打开目录", dark)
+                    secondary_button("打开目录", cx)
                         .id("image-compress-open-dir")
                         .on_click({
                             let handle = handle.clone();
@@ -1552,7 +1566,7 @@ fn footer_bar(
                         }),
                 )
                 .child(
-                    ghost_button("清空", dark)
+                    ghost_button("清空", cx)
                         .id("image-compress-clear")
                         .on_click({
                             let handle = handle.clone();
@@ -1568,7 +1582,7 @@ fn footer_bar(
                 .child(
                     div()
                         .text_size(px(11.0))
-                        .text_color(ui::text_tertiary())
+                        .text_color(ui::text_tertiary(cx))
                         .child(summary),
                 ),
         )
@@ -1581,7 +1595,7 @@ fn footer_bar(
                     div()
                         .flex_1()
                         .text_size(px(11.0))
-                        .text_color(theme::semantic().text_body)
+                        .text_color(Theme::global(cx).muted_foreground)
                         .child(message),
                 )
                 .child(
@@ -1589,53 +1603,53 @@ fn footer_bar(
                         .w(px(320.0))
                         .text_size(px(10.0))
                         .font_family("SF Mono")
-                        .text_color(ui::text_tertiary())
+                        .text_color(ui::text_tertiary(cx))
                         .child(output_dir),
                 ),
         )
 }
 
-fn primary_button(label: &str, accent: PluginAccent, dark: bool) -> gpui::Div {
+fn primary_button(label: &str, accent: PluginAccent, cx: &App) -> gpui::Div {
     components::button(
         label.to_string(),
         components::ButtonVariant::Primary,
         Some(accent),
-        dark,
+        cx,
     )
 }
 
-fn secondary_button(label: &str, dark: bool) -> gpui::Div {
+fn secondary_button(label: &str, cx: &App) -> gpui::Div {
     components::button(
         label.to_string(),
         components::ButtonVariant::Secondary,
         None,
-        dark,
+        cx,
     )
 }
 
-fn ghost_button(label: &str, dark: bool) -> gpui::Div {
+fn ghost_button(label: &str, cx: &App) -> gpui::Div {
     components::button(
         label.to_string(),
         components::ButtonVariant::Ghost,
         None,
-        dark,
+        cx,
     )
 }
 
-fn action_button(label: &str, _dark: bool) -> gpui::Div {
+fn action_button(label: &str, _dark: bool, cx: &App) -> gpui::Div {
     div()
         .h(px(22.0))
         .px_2()
         .rounded(px(6.0))
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.88))
+        .bg(theme::rgba_with_alpha(Theme::global(cx).list.into(), 0.88))
         .border_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .hover(move |style| style.cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(10.0))
-        .text_color(theme::semantic().text_primary)
+        .text_color(Theme::global(cx).foreground)
         .child(label.to_string())
 }
 

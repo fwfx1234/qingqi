@@ -5,6 +5,7 @@ use gpui::{UniformListScrollHandle, hsla, uniform_list};
 use gpui_component::{
     Icon, IconName, Sizable, Size as ComponentSize,
     scroll::{Scrollbar, ScrollbarShow},
+    theme::Theme,
 };
 
 pub(super) fn keyboard_filters() -> [ClipboardFilter; 5] {
@@ -24,7 +25,7 @@ pub(super) fn history_page(
     query: &str,
     current_filter: ClipboardFilter,
     history_scroll: UniformListScrollHandle,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     div()
         .flex_1()
@@ -36,27 +37,33 @@ pub(super) fn history_page(
                 .px(px(12.0))
                 .pt(px(10.0))
                 .pb(px(6.0))
-                .child(render_filter_tabs(handle.clone(), current_filter, dark)),
+                .child(render_filter_tabs(handle.clone(), current_filter, cx)),
         )
-        .child(history_filter_divider(dark))
-        .child(div().flex_1().min_h(px(0.0)).px(px(4.0)).pb(px(6.0)).child(
-            history_list(
-                handle.clone(),
-                items,
-                selected,
-                query,
-                history_scroll,
-                dark,
-            ),
-        ))
+        .child(history_filter_divider(cx))
+        .child(
+            div()
+                .flex_1()
+                .min_h(px(0.0))
+                .px(px(4.0))
+                .pb(px(6.0))
+                .child(history_list(
+                    handle.clone(),
+                    items,
+                    selected,
+                    query,
+                    history_scroll,
+                    cx,
+                )),
+        )
 }
 
-pub(super) fn search_field(query_input: Entity<TextInput>, _dark: bool) -> gpui::Div {
+pub(super) fn search_field(query_input: Entity<TextInput>, cx: &App) -> gpui::Div {
+    let t = Theme::global(cx);
     div()
         .min_w(px(0.0))
         .h(px(30.0))
         .rounded(px(6.0))
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.45))
+        .bg(t.list)
         .px(px(10.0))
         .flex()
         .items_center()
@@ -64,7 +71,7 @@ pub(super) fn search_field(query_input: Entity<TextInput>, _dark: bool) -> gpui:
         .child(
             Icon::new(IconName::Search)
                 .with_size(ComponentSize::Small)
-                .text_color(theme::semantic().text_placeholder),
+                .text_color(t.muted_foreground),
         )
         .child(div().flex_1().child(query_input.into_any_element()))
 }
@@ -74,8 +81,9 @@ pub(super) fn preview_panel(
     preview_input: Entity<TextInput>,
     wrap_enabled: bool,
     panel: Entity<ClipboardView>,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
     div()
         .size_full()
         .flex()
@@ -101,14 +109,14 @@ pub(super) fn preview_panel(
             };
             let kind_color = match item.kind {
                 history_store::ClipboardItemKind::Text => match item.badge_kind() {
-                    history_store::ClipboardBadgeKind::Link => theme::semantic().success,
+                    history_store::ClipboardBadgeKind::Link => t.success.into(),
                     history_store::ClipboardBadgeKind::Json => {
                         ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
                     }
-                    history_store::ClipboardBadgeKind::Other => theme::semantic().text_secondary,
+                    history_store::ClipboardBadgeKind::Other => t.muted_foreground.into(),
                 },
-                history_store::ClipboardItemKind::Image => theme::semantic().warning,
-                history_store::ClipboardItemKind::Files => theme::semantic().danger,
+                history_store::ClipboardItemKind::Image => t.warning.into(),
+                history_store::ClipboardItemKind::Files => t.danger.into(),
             };
 
             div()
@@ -140,13 +148,17 @@ pub(super) fn preview_panel(
                         .child(
                             div()
                                 .text_size(px(11.0))
-                                .text_color(theme::semantic().text_secondary)
+                                .text_color(t.muted_foreground)
                                 .child(item.created_at.clone()),
                         )
                         .child(div().flex_1())
                         .child({
                             let panel_toggle = panel.clone();
-                            let btn_text = if wrap_enabled { "自动换行" } else { "不换行" };
+                            let btn_text = if wrap_enabled {
+                                "自动换行"
+                            } else {
+                                "不换行"
+                            };
                             div()
                                 .px(px(6.0))
                                 .h(px(20.0))
@@ -155,13 +167,10 @@ pub(super) fn preview_panel(
                                 .items_center()
                                 .text_size(px(10.0))
                                 .font_weight(gpui::FontWeight::MEDIUM)
-                                .text_color(theme::semantic().text_secondary)
-                                .bg(theme::rgba_with_alpha(theme::semantic().text_secondary, 0.08))
+                                .text_color(t.muted_foreground)
+                                .bg(t.muted_foreground)
                                 .cursor_pointer()
-                                .hover(|s| s.bg(theme::rgba_with_alpha(
-                                    theme::semantic().text_secondary,
-                                    0.14,
-                                )))
+                                .hover(|s| s.bg(t.muted_foreground))
                                 .on_mouse_down(gpui::MouseButton::Left, move |_event, _, cx| {
                                     panel_toggle.update(cx, |panel, cx| {
                                         panel.toggle_preview_wrap(cx);
@@ -196,28 +205,29 @@ pub(super) fn preview_panel(
                         .flex_1()
                         .flex_col()
                         .min_h(px(0.0))
-                        .child(preview_content(item, preview_input, dark)),
+                        .child(preview_content(item, preview_input, cx)),
                 )
                 .into_any_element()
         } else {
-            preview_empty(dark).into_any_element()
+            preview_empty(cx).into_any_element()
         })
 }
 
-fn history_filter_divider(_dark: bool) -> impl IntoElement {
+fn history_filter_divider(cx: &App) -> impl IntoElement {
     div()
         .w_full()
         .mt(px(6.0))
         .mb(px(4.0))
         .h(px(1.0))
-        .bg(ui::border_light())
+        .bg(ui::border_light(cx))
 }
 
 fn render_filter_tabs(
     handle: Entity<ClipboardView>,
     active: ClipboardFilter,
-    _dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
     let tabs: Vec<gpui::AnyElement> = keyboard_filters()
         .into_iter()
         .enumerate()
@@ -235,7 +245,7 @@ fn render_filter_tabs(
                         0.12,
                     )
                 } else {
-                    theme::rgba_with_alpha(theme::semantic().bg_elevated, 0.35)
+                    t.popover
                 })
                 .border_1()
                 .border_color(if is_active {
@@ -243,12 +253,12 @@ fn render_filter_tabs(
                         qingqi_plugin::plugin_spec::PluginAccent::Blue,
                     ))
                 } else {
-                    ui::border_light()
+                    ui::border_light(cx)
                 })
                 .text_color(if is_active {
                     ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
                 } else {
-                    theme::semantic().text_secondary
+                    t.muted_foreground.into()
                 })
                 .text_size(px(10.0))
                 .font_weight(if is_active {
@@ -259,7 +269,7 @@ fn render_filter_tabs(
                 .hover(move |style| {
                     style
                         .bg(if !is_active {
-                            theme::semantic().bg_hover.into()
+                            t.list_hover
                         } else {
                             hsla(0.0, 0.0, 0.0, 0.0)
                         })
@@ -289,14 +299,14 @@ fn history_list(
     selected: usize,
     query: &str,
     scroll: UniformListScrollHandle,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
     let is_empty = items.is_empty();
 
     div().size_full().flex().flex_col().child(if is_empty {
-        empty_state_text(query, dark, true).into_any_element()
+        empty_state_text(query, cx, true).into_any_element()
     } else {
-        history_virtual_list(handle, items, selected, scroll, dark).into_any_element()
+        history_virtual_list(handle, items, selected, scroll).into_any_element()
     })
 }
 
@@ -305,7 +315,6 @@ fn history_virtual_list(
     items: Arc<Vec<ClipboardRecord>>,
     selected: usize,
     scroll: UniformListScrollHandle,
-    dark: bool,
 ) -> impl IntoElement {
     let item_count = items.len();
     div()
@@ -316,13 +325,33 @@ fn history_virtual_list(
                 "clipboard-history-list",
                 item_count,
                 move |range, _window, cx| {
+                    let t = Theme::global(cx);
+                    let fg = t.foreground;
+                    let muted = t.muted_foreground;
+                    let hover = t.list_hover;
+                    let pop = t.popover;
+                    let warn: gpui::Rgba = t.warning.into();
+                    let border_color = ui::border_light(cx);
+                    let list_bg = t.list;
                     let _ = cx.update_entity(&handle, |panel, cx| {
                         panel.maybe_prefetch_history(range.end, cx);
                     });
                     range
                         .map(|index| {
                             let item = items[index].clone();
-                            history_row(handle.clone(), item, index, index == selected, dark)
+                            history_row(
+                                handle.clone(),
+                                item,
+                                index,
+                                index == selected,
+                                fg,
+                                muted,
+                                hover,
+                                pop,
+                                warn,
+                                border_color,
+                                list_bg,
+                            )
                         })
                         .collect::<Vec<_>>()
                 },
@@ -333,7 +362,8 @@ fn history_virtual_list(
         .child(Scrollbar::vertical(&scroll).scrollbar_show(ScrollbarShow::Scrolling))
 }
 
-fn empty_state_text(query: &str, _dark: bool, is_empty: bool) -> impl IntoElement {
+fn empty_state_text(query: &str, cx: &App, is_empty: bool) -> impl IntoElement {
+    let t = Theme::global(cx);
     let message = if is_empty && query.trim().is_empty() {
         "暂无剪贴板记录"
     } else {
@@ -355,18 +385,18 @@ fn empty_state_text(query: &str, _dark: bool, is_empty: bool) -> impl IntoElemen
         .child(
             Icon::new(IconName::Copy)
                 .with_size(ComponentSize::Large)
-                .text_color(theme::semantic().text_placeholder),
+                .text_color(t.muted_foreground),
         )
         .child(
             div()
                 .text_size(px(12.0))
-                .text_color(theme::semantic().text_placeholder)
+                .text_color(t.muted_foreground)
                 .child(message),
         )
         .child(
             div()
                 .text_size(px(10.0))
-                .text_color(theme::semantic().text_placeholder)
+                .text_color(t.muted_foreground)
                 .child(hint),
         )
 }
@@ -376,8 +406,15 @@ fn history_row(
     item: ClipboardRecord,
     index: usize,
     selected: bool,
-    dark: bool,
+    foreground: gpui::Hsla,
+    muted_foreground: gpui::Hsla,
+    list_hover: gpui::Hsla,
+    popover: gpui::Hsla,
+    warning: gpui::Rgba,
+    border_color: gpui::Hsla,
+    list_bg: gpui::Hsla,
 ) -> impl IntoElement {
+    let icon_color = history_item_icon_color_values(&item, warning, muted_foreground.into());
     let title = history_item_title(&item);
     let meta = history_item_meta(&item);
     let pinned = item.pinned;
@@ -387,7 +424,7 @@ fn history_row(
             0.15,
         )
     } else {
-        theme::rgba_with_alpha(theme::semantic().bg_elevated, 0.5)
+        popover
     };
     let row_bg = if selected {
         theme::rgba_with_alpha(
@@ -416,7 +453,7 @@ fn history_row(
                         0.08,
                     )
                 } else {
-                    theme::semantic().bg_hover.into()
+                    list_hover
                 })
                 .cursor_pointer()
         })
@@ -435,7 +472,7 @@ fn history_row(
         .flex()
         .items_center()
         .gap(px(8.0))
-        .child(history_row_media(&item, icon_surface, dark))
+        .child(history_row_media_values(&item, icon_surface, icon_color, border_color, list_bg))
         .child(
             div()
                 .flex_1()
@@ -455,7 +492,7 @@ fn history_row(
                                 .text_size(px(12.0))
                                 .line_height(px(16.0))
                                 .line_clamp(1)
-                                .text_color(theme::semantic().text_primary)
+                                .text_color(foreground)
                                 .child(title),
                         )
                         .children(pinned.then(|| {
@@ -471,7 +508,7 @@ fn history_row(
                     div()
                         .text_size(px(10.0))
                         .line_height(px(13.0))
-                        .text_color(theme::semantic().text_secondary)
+                        .text_color(muted_foreground)
                         .child(meta),
                 ),
         )
@@ -488,7 +525,7 @@ fn history_row(
                         .flex()
                         .items_center()
                         .justify_center()
-                        .hover(|s| s.bg(theme::semantic().bg_hover).cursor_pointer())
+                        .hover(|s| s.bg(list_hover).cursor_pointer())
                         .child(
                             Icon::new(if pinned {
                                 IconName::Star
@@ -497,9 +534,9 @@ fn history_row(
                             })
                             .with_size(ComponentSize::Small)
                             .text_color(if pinned {
-                                theme::semantic().text_primary
+                                foreground
                             } else {
-                                theme::semantic().text_placeholder
+                                muted_foreground
                             }),
                         )
                         .on_click(move |_event, _, cx| {
@@ -519,11 +556,11 @@ fn history_row(
                         .flex()
                         .items_center()
                         .justify_center()
-                        .hover(|s| s.bg(theme::semantic().bg_hover).cursor_pointer())
+                        .hover(|s| s.bg(list_hover).cursor_pointer())
                         .child(
                             Icon::new(IconName::Delete)
                                 .with_size(ComponentSize::Small)
-                                .text_color(theme::semantic().text_placeholder),
+                                .text_color(muted_foreground),
                         )
                         .on_click(move |_event, _, cx| {
                             let _ = cx.update_entity(&delete_handle, |panel, cx| {
@@ -540,23 +577,27 @@ fn history_row(
 fn history_row_media(
     item: &ClipboardRecord,
     icon_surface: gpui::Hsla,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
+    let border_light = ui::border_light(cx);
+    let list_bg = Theme::global(cx).list;
+    let warning_rgba: gpui::Rgba = Theme::global(cx).warning.into();
+    let icon_color = history_item_icon_color(item, cx);
+
     if item.kind == history_store::ClipboardItemKind::Image {
         return div()
             .size(px(36.0))
             .rounded(px(6.0))
             .border_1()
-            .border_color(ui::border_light())
-            .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
+            .border_color(border_light)
+            .bg(list_bg)
             .overflow_hidden()
             .child(
                 img(PathBuf::from(item.content.clone()))
                     .object_fit(ObjectFit::Cover)
                     .size_full()
                     .with_fallback(move || {
-                        icon_label("IMG", icon_surface, theme::semantic().warning)
-                            .into_any_element()
+                        icon_label("IMG", icon_surface, warning_rgba).into_any_element()
                     })
                     .into_any_element(),
             )
@@ -566,9 +607,89 @@ fn history_row_media(
     icon_label(
         history_item_icon(item),
         icon_surface,
-        history_item_icon_color(item, dark),
+        icon_color,
     )
     .into_any_element()
+}
+
+fn history_row_media_values(
+    item: &ClipboardRecord,
+    icon_surface: gpui::Hsla,
+    icon_color: gpui::Rgba,
+    border_color: gpui::Hsla,
+    list_bg: gpui::Hsla,
+) -> impl IntoElement {
+    let warning_rgba: gpui::Rgba = gpui::Rgba {
+        r: 0.96,
+        g: 0.65,
+        b: 0.14,
+        a: 1.0,
+    };
+    if item.kind == history_store::ClipboardItemKind::Image {
+        return div()
+            .size(px(36.0))
+            .rounded(px(6.0))
+            .border_1()
+            .border_color(border_color)
+            .bg(list_bg)
+            .overflow_hidden()
+            .child(
+                img(PathBuf::from(item.content.clone()))
+                    .object_fit(ObjectFit::Cover)
+                    .size_full()
+                    .with_fallback(move || {
+                        icon_label("IMG", icon_surface, warning_rgba).into_any_element()
+                    })
+                    .into_any_element(),
+            )
+            .into_any_element();
+    }
+
+    icon_label(
+        history_item_icon(item),
+        icon_surface,
+        icon_color,
+    )
+    .into_any_element()
+}
+
+fn history_item_icon_color_values(
+    item: &ClipboardRecord,
+    warning: gpui::Rgba,
+    muted_foreground: gpui::Rgba,
+) -> gpui::Rgba {
+    match item.kind {
+        history_store::ClipboardItemKind::Text => match item.badge_kind() {
+            history_store::ClipboardBadgeKind::Link => {
+                gpui::Rgba {
+                    r: 0.13,
+                    g: 0.77,
+                    b: 0.39,
+                    a: 1.0,
+                }
+            }
+            history_store::ClipboardBadgeKind::Json => {
+                ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
+            }
+            history_store::ClipboardBadgeKind::Other => muted_foreground,
+        },
+        history_store::ClipboardItemKind::Image => warning,
+        history_store::ClipboardItemKind::Files => gpui::Rgba {
+            r: 0.94,
+            g: 0.27,
+            b: 0.22,
+            a: 1.0,
+        },
+    }
+}
+
+fn warning_rgba() -> gpui::Rgba {
+    gpui::Rgba {
+        r: 0.96,
+        g: 0.65,
+        b: 0.14,
+        a: 1.0,
+    }
 }
 
 fn icon_label(label: &'static str, surface: gpui::Hsla, color: gpui::Rgba) -> impl IntoElement {
@@ -638,57 +759,64 @@ fn history_item_icon(item: &ClipboardRecord) -> &'static str {
     }
 }
 
-fn history_item_icon_color(item: &ClipboardRecord, _dark: bool) -> gpui::Rgba {
+fn history_item_icon_color(item: &ClipboardRecord, cx: &App) -> gpui::Rgba {
+    let t = Theme::global(cx);
     match item.kind {
         history_store::ClipboardItemKind::Text => match item.badge_kind() {
-            history_store::ClipboardBadgeKind::Link => theme::semantic().success,
+            history_store::ClipboardBadgeKind::Link => t.success.into(),
             history_store::ClipboardBadgeKind::Json => {
                 ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
             }
-            history_store::ClipboardBadgeKind::Other => theme::semantic().text_secondary,
+            history_store::ClipboardBadgeKind::Other => t.muted_foreground.into(),
         },
-        history_store::ClipboardItemKind::Image => theme::semantic().warning,
-        history_store::ClipboardItemKind::Files => theme::semantic().danger,
+        history_store::ClipboardItemKind::Image => t.warning.into(),
+        history_store::ClipboardItemKind::Files => t.danger.into(),
     }
 }
 
 fn preview_content(
     item: ClipboardRecord,
     preview_input: Entity<TextInput>,
-    dark: bool,
+    cx: &App,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
     match item.kind {
-        history_store::ClipboardItemKind::Image => div()
-            .size_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(
-                img(PathBuf::from(item.content))
-                    .object_fit(ObjectFit::Contain)
-                    .size_full()
-                    .with_fallback(move || {
-                        preview_unavailable("图片文件不可用", dark).into_any_element()
-                    })
-                    .into_any_element(),
-            )
-            .into_any_element(),
-        _ => preview_text(preview_input, dark).into_any_element(),
+        history_store::ClipboardItemKind::Image => {
+            let muted = t.muted_foreground;
+            div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    img(PathBuf::from(item.content))
+                        .object_fit(ObjectFit::Contain)
+                        .size_full()
+                        .with_fallback(move || {
+                            preview_unavailable("图片文件不可用", muted).into_any_element()
+                        })
+                        .into_any_element(),
+                )
+                .into_any_element()
+        }
+        _ => preview_text(preview_input, cx).into_any_element(),
     }
 }
 
-fn preview_text(preview_input: Entity<TextInput>, _dark: bool) -> impl IntoElement {
+fn preview_text(preview_input: Entity<TextInput>, cx: &App) -> impl IntoElement {
+    let t = Theme::global(cx);
     div()
         .size_full()
         .pl(px(10.0))
         .pr(px(4.0))
         .pt(px(2.0))
         .pb(px(8.0))
-        .text_color(theme::semantic().text_body)
+        .text_color(t.muted_foreground)
         .child(preview_input)
 }
 
-fn preview_empty(_dark: bool) -> impl IntoElement {
+fn preview_empty(cx: &App) -> impl IntoElement {
+    let t = Theme::global(cx);
     div()
         .size_full()
         .flex()
@@ -699,29 +827,29 @@ fn preview_empty(_dark: bool) -> impl IntoElement {
         .child(
             Icon::new(IconName::Copy)
                 .with_size(ComponentSize::Large)
-                .text_color(theme::semantic().text_placeholder),
+                .text_color(t.muted_foreground),
         )
         .child(
             div()
                 .text_size(px(13.0))
-                .text_color(theme::semantic().text_placeholder)
+                .text_color(t.muted_foreground)
                 .child("选择一条记录以查看详情"),
         )
         .child(
             div()
                 .text_size(px(11.0))
-                .text_color(theme::semantic().text_placeholder)
+                .text_color(t.muted_foreground)
                 .child("Ctrl+C 复制 · ↑↓ 导航 · Enter 粘贴"),
         )
 }
 
-fn preview_unavailable(message: &'static str, _dark: bool) -> impl IntoElement {
+fn preview_unavailable(message: &'static str, text_color: gpui::Hsla) -> impl IntoElement {
     div()
         .size_full()
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(11.0))
-        .text_color(theme::semantic().text_placeholder)
+        .text_color(text_color)
         .child(message)
 }

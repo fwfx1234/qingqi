@@ -2,15 +2,16 @@
 
 use gpui::prelude::*;
 use gpui::*;
+use gpui_component::theme::Theme;
+use qingqi_ui::ui;
 use qingqi_ui::ui::components::button::{ButtonVariant, button};
 use qingqi_ui::ui::glass;
-use qingqi_ui::{theme, theme_mode, ui};
 
 pub fn render_file_edit_confirm_overlay(
     handle: Entity<super::SshView>,
     file_name: &str,
+    cx: &App,
 ) -> impl IntoElement {
-    let dark = theme_mode::is_dark();
     let backdrop = handle.clone();
 
     div()
@@ -38,10 +39,10 @@ pub fn render_file_edit_confirm_overlay(
                 .top_1_2()
                 .left_1_2()
                 .w(px(360.0))
-                .rounded(theme::radius_md())
+                .rounded(px(8.0))
                 .border_1()
-                .border_color(glass::border(dark))
-                .bg(theme::semantic().bg_elevated)
+                .border_color(glass::border(cx))
+                .bg(Theme::global(cx).popover)
                 .shadow_lg()
                 .p_4()
                 .flex()
@@ -49,15 +50,15 @@ pub fn render_file_edit_confirm_overlay(
                 .gap_3()
                 .child(
                     div()
-                        .text_size(theme::font_size_body())
+                        .text_size(px(13.0))
                         .font_weight(FontWeight::MEDIUM)
-                        .text_color(ui::text_primary())
+                        .text_color(ui::text_primary(cx))
                         .child("上传回服务器？"),
                 )
                 .child(
                     div()
                         .text_size(px(12.0))
-                        .text_color(ui::text_secondary())
+                        .text_color(ui::text_secondary(cx))
                         .child(format!(
                             "「{file_name}」已在系统编辑器中保存，是否将本地更改上传至远程？"
                         )),
@@ -69,7 +70,7 @@ pub fn render_file_edit_confirm_overlay(
                         .gap_2()
                         .child({
                             let h = handle.clone();
-                            button("不上传", ButtonVariant::Secondary, None, dark)
+                            button("不上传", ButtonVariant::Secondary, None, cx)
                                 .id("file-edit-confirm-cancel")
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.cancel_external_edit(cx));
@@ -77,7 +78,7 @@ pub fn render_file_edit_confirm_overlay(
                         })
                         .child({
                             let h = handle;
-                            button("上传", ButtonVariant::Primary, None, dark)
+                            button("上传", ButtonVariant::Primary, None, cx)
                                 .id("file-edit-confirm-upload")
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.confirm_upload_external_edit(cx));

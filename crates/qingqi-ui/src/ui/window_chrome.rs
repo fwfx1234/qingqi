@@ -326,7 +326,9 @@ fn windows_control_button(
             let style = if is_close {
                 style.bg(ui::danger(cx)).text_color(hsla(0., 0., 1., 1.))
             } else {
-                style.bg(Theme::global(cx).muted).text_color(Theme::global(cx).foreground)
+                style
+                    .bg(Theme::global(cx).muted)
+                    .text_color(Theme::global(cx).foreground)
             };
             style.cursor_pointer()
         })

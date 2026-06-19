@@ -1,4 +1,4 @@
-use gpui::{px, rgb, App, IntoElement, ParentElement, Styled, div};
+use gpui::{App, IntoElement, ParentElement, Styled, div, px, rgb};
 use gpui_component::theme::Theme;
 use qingqi_ui::{theme, ui};
 
@@ -53,10 +53,7 @@ pub fn circle_badge(label: &str, color: u32, size: f32) -> impl IntoElement {
         .child(label.to_string())
 }
 
-pub fn status_badge(
-    response: &crate::service::ApiResponse,
-    cx: &App,
-) -> impl IntoElement {
+pub fn status_badge(response: &crate::service::ApiResponse, cx: &App) -> impl IntoElement {
     let color = if response.status_code == 0 {
         Theme::global(cx).muted_foreground
     } else if response.status_code >= 200 && response.status_code < 300 {

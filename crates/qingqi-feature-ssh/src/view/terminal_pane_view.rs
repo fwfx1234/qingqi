@@ -350,9 +350,9 @@ impl Render for TerminalPaneView {
         let pane_entity = cx.entity().clone();
 
         let body = if is_log {
-            render_log_body(term, font_size, line_height).into_any_element()
+            render_log_body(term, font_size, line_height, cx).into_any_element()
         } else {
-            render_shell_grid(term, font_size, &mut self.row_cache, selection)
+            render_shell_grid(term, font_size, &mut self.row_cache, selection, cx)
         };
 
         let frame = div()
@@ -541,8 +541,8 @@ impl Render for TerminalPaneView {
             .flex()
             .flex_col()
             .overflow_hidden()
-            .bg(ui::bg_surface())
-            .child(render_status_bar(term))
+            .bg(ui::bg_surface(cx))
+            .child(render_status_bar(term, cx))
             .child(
                 div()
                     .flex_1()

@@ -2,17 +2,18 @@
 
 use gpui::prelude::*;
 use gpui::*;
+use gpui_component::theme::Theme;
+use qingqi_ui::ui;
 use qingqi_ui::ui::components::button::{ButtonVariant, button};
 use qingqi_ui::ui::glass;
-use qingqi_ui::{theme, theme_mode, ui};
 
 pub fn render_upload_overwrite_overlay(
     handle: Entity<super::SshView>,
     total_items: usize,
     conflict_count: usize,
     sample_name: &str,
+    cx: &App,
 ) -> impl IntoElement {
-    let dark = theme_mode::is_dark();
     let backdrop = handle.clone();
     let single_file = total_items <= 1 && conflict_count <= 1;
     let detail = if single_file {
@@ -50,10 +51,10 @@ pub fn render_upload_overwrite_overlay(
                     cx.stop_propagation();
                 })
                 .w(px(400.0))
-                .rounded(theme::radius_md())
+                .rounded(px(8.0))
                 .border_1()
-                .border_color(glass::border(dark))
-                .bg(theme::semantic().bg_elevated)
+                .border_color(glass::border(cx))
+                .bg(Theme::global(cx).popover)
                 .shadow_lg()
                 .p_4()
                 .flex()
@@ -61,9 +62,9 @@ pub fn render_upload_overwrite_overlay(
                 .gap_3()
                 .child(
                     div()
-                        .text_size(theme::font_size_body())
+                        .text_size(px(13.0))
                         .font_weight(FontWeight::MEDIUM)
-                        .text_color(ui::text_primary())
+                        .text_color(ui::text_primary(cx))
                         .child(if single_file {
                             "文件已存在"
                         } else {
@@ -73,7 +74,7 @@ pub fn render_upload_overwrite_overlay(
                 .child(
                     div()
                         .text_size(px(12.0))
-                        .text_color(ui::text_secondary())
+                        .text_color(ui::text_secondary(cx))
                         .child(detail),
                 )
                 .child(
@@ -83,7 +84,7 @@ pub fn render_upload_overwrite_overlay(
                         .gap_2()
                         .child({
                             let h = handle.clone();
-                            button("取消", ButtonVariant::Secondary, None, dark)
+                            button("取消", ButtonVariant::Secondary, None, cx)
                                 .id("upload-overwrite-cancel")
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.cancel_pending_upload(cx));
@@ -92,7 +93,7 @@ pub fn render_upload_overwrite_overlay(
                         .when(!single_file, |row| {
                             row.child({
                                 let h = handle.clone();
-                                button("跳过已有", ButtonVariant::Secondary, None, dark)
+                                button("跳过已有", ButtonVariant::Secondary, None, cx)
                                     .id("upload-overwrite-skip")
                                     .on_click(
                                         move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
@@ -110,7 +111,7 @@ pub fn render_upload_overwrite_overlay(
                             } else {
                                 "全部覆盖"
                             };
-                            button(label, ButtonVariant::Primary, None, dark)
+                            button(label, ButtonVariant::Primary, None, cx)
                                 .id("upload-overwrite-replace")
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.confirm_pending_upload(true, cx));

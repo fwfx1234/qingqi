@@ -1,13 +1,16 @@
-use gpui::{
-    App, Entity, IntoElement, InteractiveElement, MouseButton, ParentElement,
-    StatefulInteractiveElement, Styled, div, px, prelude::FluentBuilder,
-};
-use gpui_component::theme::Theme;
-use gpui_component::{IconName, Sizable, Size, button::{Button, ButtonVariants}};
-use qingqi_ui::{theme, ui};
-use crate::view::ApiDebuggerView;
 use super::collection_tree::MenuKind;
 use super::shared::api_accent;
+use crate::view::ApiDebuggerView;
+use gpui::{
+    App, Entity, InteractiveElement, IntoElement, MouseButton, ParentElement,
+    StatefulInteractiveElement, Styled, div, prelude::FluentBuilder, px,
+};
+use gpui_component::theme::Theme;
+use gpui_component::{
+    IconName, Sizable, Size,
+    button::{Button, ButtonVariants},
+};
+use qingqi_ui::{theme, ui};
 
 pub fn context_menu_overlay(
     view: Entity<ApiDebuggerView>,
@@ -237,9 +240,7 @@ fn request_menu_items(
                 move |_, cx| {
                     let url = if !nid.is_empty() {
                         let api_view = view.read(cx);
-                        if let Ok(Some(node)) =
-                            api_view.service.get_collection_node(&nid)
-                        {
+                        if let Ok(Some(node)) = api_view.service.get_collection_node(&nid) {
                             Some(node.url.clone())
                         } else {
                             None

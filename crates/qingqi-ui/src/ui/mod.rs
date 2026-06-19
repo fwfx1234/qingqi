@@ -408,7 +408,11 @@ pub fn row_card(selected: bool, cx: &App) -> gpui::Div {
     let selected_border: gpui::Hsla = rgb(0xbfdbfe).into();
     div()
         .rounded(theme::radius_md())
-        .bg(if selected { rgb(0xeff6ff).into() } else { bg_surface(cx) })
+        .bg(if selected {
+            rgb(0xeff6ff).into()
+        } else {
+            bg_surface(cx)
+        })
         .border_1()
         .border_color(if selected {
             selected_border
@@ -459,13 +463,21 @@ pub fn ui_button(
             (
                 t.primary,
                 hsla(0., 0., 1., 1.),
-                if dark { rgb(0x1a1a1a).into() } else { rgb(0x00000010).into() },
+                if dark {
+                    rgb(0x1a1a1a).into()
+                } else {
+                    rgb(0x00000010).into()
+                },
             )
         }
     } else if danger {
         (hsla(0., 0., 1., 1.), t.danger, t.danger)
     } else {
-        let idle = if dark { t.popover } else { hsla(0., 0., 1., 1.) };
+        let idle = if dark {
+            t.popover
+        } else {
+            hsla(0., 0., 1., 1.)
+        };
         (idle, t.foreground, t.border)
     };
 

@@ -8,6 +8,7 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+gpui-component.workspace = true
 gpui.workspace = true
 libc.workspace = true
 qingqi-platform = { path = "../qingqi-platform" }

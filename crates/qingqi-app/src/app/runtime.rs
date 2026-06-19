@@ -204,10 +204,7 @@ pub fn run(host: AppHost) -> Result<()> {
     let plugins = Arc::new(Mutex::new(plugins));
     {
         let mut service = qingqi_core::lock_or_recover(&shortcut_service, "shortcut-service");
-        *service = ShortcutService::new(
-            Arc::clone(&plugins),
-            Some(paths.config("shortcuts.json")),
-        );
+        *service = ShortcutService::new(Arc::clone(&plugins), Some(paths.config("shortcuts.json")));
     }
     let window_controller = Arc::new(Mutex::new(WindowController::new(
         Arc::clone(&plugins),
@@ -235,7 +232,13 @@ pub fn run(host: AppHost) -> Result<()> {
         let (initial_theme, initial_mode) = theme_store
             .read()
             .map(|s| (s.theme().to_string(), s.mode()))
-            .unwrap_or_else(|_| ("Default".to_string(), qingqi_plugin::theme::ThemeMode::default()));
+            .unwrap_or_else(|_| {
+                (
+                    crate::app::theme_store::default_theme_name(),
+                    qingqi_plugin::theme::ThemeMode::default(),
+                )
+            });
+        tracing::info!(initial_theme = %initial_theme, initial_mode = ?initial_mode, "applying initial theme from store");
         ThemeService::apply_theme(&initial_theme, initial_mode, cx);
 
         qingqi_ui::text_input::TextInput::register_bindings(cx);

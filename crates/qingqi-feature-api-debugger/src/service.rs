@@ -568,7 +568,9 @@ impl ApiService {
     pub fn import_from_curl_async(self: &Arc<Self>, curl_text: String) {
         let service = Arc::clone(self);
         thread::spawn(move || match service.import_from_curl(&curl_text) {
-            Ok(node) => service.reload_workspace_with_notice(format!("已导入 cURL 请求: {}", node.name)),
+            Ok(node) => {
+                service.reload_workspace_with_notice(format!("已导入 cURL 请求: {}", node.name))
+            }
             Err(e) => service.publish_notice(format!("cURL 导入失败: {e}")),
         });
     }
@@ -620,9 +622,8 @@ impl ApiService {
     pub fn import_from_openapi_async(self: &Arc<Self>, content: String) {
         let service = Arc::clone(self);
         thread::spawn(move || match service.import_from_openapi(&content) {
-            Ok(nodes) => {
-                service.reload_workspace_with_notice(format!("已从 OpenAPI 导入 {} 个端点", nodes.len()))
-            }
+            Ok(nodes) => service
+                .reload_workspace_with_notice(format!("已从 OpenAPI 导入 {} 个端点", nodes.len())),
             Err(e) => service.publish_notice(format!("OpenAPI 导入失败: {e}")),
         });
     }
@@ -630,9 +631,8 @@ impl ApiService {
     pub fn import_from_postman_async(self: &Arc<Self>, content: String) {
         let service = Arc::clone(self);
         thread::spawn(move || match service.import_from_postman(&content) {
-            Ok(nodes) => {
-                service.reload_workspace_with_notice(format!("已从 Postman 导入 {} 个端点", nodes.len()))
-            }
+            Ok(nodes) => service
+                .reload_workspace_with_notice(format!("已从 Postman 导入 {} 个端点", nodes.len())),
             Err(e) => service.publish_notice(format!("Postman 导入失败: {e}")),
         });
     }

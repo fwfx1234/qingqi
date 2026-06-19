@@ -6,8 +6,15 @@ use std::{
 use anyhow::{Context, Result, bail};
 pub use qingqi_plugin::theme::ThemeMode;
 
-fn default_theme_name() -> String {
-    "Default".into()
+pub(crate) fn default_theme_name() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        "macOS Classic".into()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "Default".into()
+    }
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -34,9 +41,16 @@ impl ThemeStore {
                 error = %error,
                 "failed to load theme config, falling back to default"
             );
-            (ThemeMode::default(), "Default".to_string())
+            (ThemeMode::default(), default_theme_name())
         });
         let system_dark = Self::read_system_dark();
+        tracing::info!(
+            path = %config_path.display(),
+            mode = ?mode,
+            theme = %theme,
+            system_dark = system_dark,
+            "ThemeStore initialized"
+        );
         let store = Self {
             mode,
             theme,
@@ -148,14 +162,14 @@ impl ThemeStore {
 
     fn load_config(path: &Path) -> Result<(ThemeMode, String)> {
         if !path.exists() {
-            return Ok((ThemeMode::default(), "Default".to_string()));
+            return Ok((ThemeMode::default(), default_theme_name()));
         }
 
         let raw = fs::read_to_string(path)
             .with_context(|| format!("cannot read theme config {}", path.display()))?;
         let trimmed = raw.trim();
         if trimmed.is_empty() {
-            return Ok((ThemeMode::default(), "Default".to_string()));
+            return Ok((ThemeMode::default(), default_theme_name()));
         }
 
         if let Ok(config) = serde_json::from_str::<ThemeConfig>(trimmed) {
@@ -163,7 +177,7 @@ impl ThemeStore {
         }
 
         if let Ok(mode) = serde_json::from_str::<ThemeMode>(trimmed) {
-            return Ok((mode, "Default".to_string()));
+            return Ok((mode, default_theme_name()));
         }
 
         bail!("invalid theme config format")

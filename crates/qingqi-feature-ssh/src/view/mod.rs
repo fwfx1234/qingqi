@@ -36,8 +36,8 @@ use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::WindowExt;
 use gpui_component::notification::Notification;
+use gpui_component::theme::Theme;
 use qingqi_ui::text_input::{TextInput, TextInputStyle};
-use qingqi_ui::theme;
 use terminal_input::terminal_editing_key;
 use terminal_pane_view::TerminalPaneView;
 
@@ -253,8 +253,8 @@ fn path_input(cx: &mut Context<TextInput>) -> TextInput {
         cx,
     );
     input.set_text_colors(
-        theme::semantic().text_primary,
-        theme::semantic().text_secondary,
+        Theme::global(cx).foreground,
+        Theme::global(cx).muted_foreground,
         cx,
     );
     input
@@ -2115,6 +2115,7 @@ impl Render for SshView {
                     ),
             )
             .when(self.show_upload_overwrite_confirm, {
+                let app: &App = cx;
                 let confirm_handle = handle.clone();
                 let (total_items, conflict_count, sample) = self
                     .pending_upload_batch
@@ -2138,10 +2139,12 @@ impl Render for SshView {
                         total_items,
                         conflict_count,
                         &sample,
+                        app,
                     ))
                 }
             })
             .when(self.show_file_upload_confirm, {
+                let app: &App = cx;
                 let confirm_handle = handle.clone();
                 let file_name = self
                     .pending_external_edit
@@ -2152,16 +2155,19 @@ impl Render for SshView {
                     root.child(file_edit_confirm::render_file_edit_confirm_overlay(
                         confirm_handle.clone(),
                         &file_name,
+                        app,
                     ))
                 }
             })
             .when(self.show_file_rename, {
+                let app: &App = cx;
                 let rename_handle = handle.clone();
                 let rename_input = self.file_rename_input.clone();
                 move |root| {
                     root.child(file_rename::render_file_rename_overlay(
                         rename_handle.clone(),
                         rename_input.clone(),
+                        app,
                     ))
                 }
             })

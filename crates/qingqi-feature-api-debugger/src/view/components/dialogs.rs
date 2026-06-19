@@ -1,11 +1,11 @@
+use crate::view::ApiDebuggerView;
 use gpui::{
-    App, Entity, IntoElement, InteractiveElement, ParentElement, StatefulInteractiveElement,
+    App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
     Styled, div, hsla, px,
 };
 use gpui_component::theme::Theme;
-use qingqi_ui::{theme, ui, ui::glass};
 use qingqi_ui::text_input::TextInput;
-use crate::view::ApiDebuggerView;
+use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn curl_import_dialog(
     view: Entity<ApiDebuggerView>,
@@ -31,7 +31,11 @@ pub fn curl_import_dialog(
                 .border_color(ui::border_light(cx))
                 .bg(theme::rgba_with_alpha(
                     Theme::global(cx).list.into(),
-                    if Theme::global(cx).is_dark() { 0.34 } else { 0.52 },
+                    if Theme::global(cx).is_dark() {
+                        0.34
+                    } else {
+                        0.52
+                    },
                 ))
                 .flex()
                 .items_center()
@@ -72,7 +76,11 @@ pub fn curl_import_dialog(
                                 .rounded(px(6.0))
                                 .bg(theme::rgba_with_alpha(
                                     Theme::global(cx).list.into(),
-                                    if Theme::global(cx).is_dark() { 0.5 } else { 0.7 },
+                                    if Theme::global(cx).is_dark() {
+                                        0.5
+                                    } else {
+                                        0.7
+                                    },
                                 ))
                                 .text_xs()
                                 .text_color(Theme::global(cx).muted_foreground)
@@ -129,7 +137,11 @@ pub fn rename_dialog(
                 .border_color(ui::border_light(cx))
                 .bg(theme::rgba_with_alpha(
                     Theme::global(cx).list.into(),
-                    if Theme::global(cx).is_dark() { 0.34 } else { 0.52 },
+                    if Theme::global(cx).is_dark() {
+                        0.34
+                    } else {
+                        0.52
+                    },
                 ))
                 .flex()
                 .items_center()
@@ -166,7 +178,11 @@ pub fn rename_dialog(
                                 .rounded(px(6.0))
                                 .bg(theme::rgba_with_alpha(
                                     Theme::global(cx).list.into(),
-                                    if Theme::global(cx).is_dark() { 0.5 } else { 0.7 },
+                                    if Theme::global(cx).is_dark() {
+                                        0.5
+                                    } else {
+                                        0.7
+                                    },
                                 ))
                                 .text_xs()
                                 .text_color(Theme::global(cx).muted_foreground)
@@ -217,7 +233,16 @@ pub fn overlay_shell(
                 .absolute()
                 .top_0()
                 .left_0()
-                .bg(hsla(0.0, 0.0, 0.0, if Theme::global(cx).is_dark() { 0.46 } else { 0.24 }))
+                .bg(hsla(
+                    0.0,
+                    0.0,
+                    0.0,
+                    if Theme::global(cx).is_dark() {
+                        0.46
+                    } else {
+                        0.24
+                    },
+                ))
                 .on_click(move |event, _window, cx| on_close(event, cx)),
         )
         .child(

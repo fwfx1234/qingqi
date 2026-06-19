@@ -7,7 +7,7 @@ use gpui::{
 };
 
 use crate::service::{self, JsonMode, JsonResult, JsonStats};
-use gpui_component::scroll::ScrollableElement;
+use gpui_component::{scroll::ScrollableElement, theme::Theme};
 use qingqi_ui::{
     text_input::{TextInput, TextInputStyle},
     theme, ui,
@@ -223,6 +223,8 @@ impl Render for JsonView {
         self.collect_pending_result(cx);
         self.ensure_inputs(cx);
 
+        let t = Theme::global(cx);
+
         let input = self.input.clone();
         let query = self.query.clone();
         let output = self.output.clone();
@@ -233,12 +235,12 @@ impl Render for JsonView {
         let status_tone = self.status_tone;
         let panel = cx.entity();
 
-        ui::plugin_surface().child(
+        ui::plugin_surface(cx).child(
             ui::plugin_content()
                 .flex()
                 .flex_col()
                 .gap_2()
-                .child(header(&panel))
+                .child(header(&panel, cx))
                 // Left-right layout
                 .child(
                     div()
@@ -259,16 +261,13 @@ impl Render for JsonView {
                                         .flex_1()
                                         .min_h(px(0.0))
                                         .rounded(px(10.0))
-                                        .bg(theme::rgba_with_alpha(
-                                            theme::semantic().bg_surface,
-                                            0.7,
-                                        ))
+                                        .bg(t.list)
                                         .border_1()
-                                        .border_color(ui::border_light())
+                                        .border_color(ui::border_light(cx))
                                         .overflow_hidden()
                                         .child(input.unwrap()),
                                 )
-                                .child(query_row(query.unwrap(), &panel, last_mode)),
+                                .child(query_row(query.unwrap(), &panel, last_mode, cx)),
                         )
                         // Right panel: output
                         .child(
@@ -293,24 +292,28 @@ impl Render for JsonView {
                                                     JsonAction::Format,
                                                     &panel,
                                                     last_mode == JsonMode::Format,
+                                                    cx,
                                                 ))
                                                 .child(mode_pill(
                                                     "压缩",
                                                     JsonAction::Compact,
                                                     &panel,
                                                     last_mode == JsonMode::Compact,
+                                                    cx,
                                                 ))
                                                 .child(mode_pill(
                                                     "验证",
                                                     JsonAction::ValidateOnly,
                                                     &panel,
                                                     last_mode == JsonMode::Validate,
+                                                    cx,
                                                 )),
                                         )
                                         .child(secondary_button(
                                             "复制输出",
                                             JsonAction::CopyOutput,
                                             &panel,
+                                            cx,
                                         )),
                                 )
                                 .child(
@@ -318,12 +321,9 @@ impl Render for JsonView {
                                         .flex_1()
                                         .min_h(px(0.0))
                                         .rounded(px(10.0))
-                                        .bg(theme::rgba_with_alpha(
-                                            theme::semantic().bg_surface,
-                                            0.7,
-                                        ))
+                                        .bg(t.list)
                                         .border_1()
-                                        .border_color(ui::border_light())
+                                        .border_color(ui::border_light(cx))
                                         .overflow_hidden()
                                         // Render output as highlighted JSON
                                         .child({
@@ -338,7 +338,7 @@ impl Render for JsonView {
                                                     .items_center()
                                                     .justify_center()
                                                     .text_size(px(12.0))
-                                                    .text_color(ui::text_tertiary())
+                                                    .text_color(ui::text_tertiary(cx))
                                                     .child("输出结果")
                                                     .into_any_element()
                                             } else {
@@ -348,7 +348,7 @@ impl Render for JsonView {
                                                     .p(px(10.0))
                                                     .font_family(ui::font_mono())
                                                     .text_size(px(12.0))
-                                                    .child(highlight_json(&output_text))
+                                                    .child(highlight_json(&output_text, cx))
                                                     .into_any_element()
                                             }
                                         }),
@@ -360,6 +360,7 @@ impl Render for JsonView {
                     stats_text,
                     error_loc_text,
                     status_tone,
+                    cx,
                 )),
         )
     }
@@ -367,7 +368,8 @@ impl Render for JsonView {
 
 // ── Header ──
 
-fn header(panel: &Entity<JsonView>) -> impl IntoElement {
+fn header(panel: &Entity<JsonView>, cx: &App) -> impl IntoElement {
+    let t = Theme::global(cx);
     div()
         .flex()
         .items_center()
@@ -376,15 +378,15 @@ fn header(panel: &Entity<JsonView>) -> impl IntoElement {
             div()
                 .text_size(px(14.0))
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(theme::semantic().text_primary)
+                .text_color(t.foreground)
                 .child("JSON 解析"),
         )
         .child(
             div()
                 .flex()
                 .gap_2()
-                .child(secondary_button("粘贴", JsonAction::PasteInput, panel))
-                .child(secondary_button("清空", JsonAction::Clear, panel)),
+                .child(secondary_button("粘贴", JsonAction::PasteInput, panel, cx))
+                .child(secondary_button("清空", JsonAction::Clear, panel, cx)),
         )
 }
 
@@ -394,7 +396,9 @@ fn query_row(
     query: Entity<TextInput>,
     panel: &Entity<JsonView>,
     _last_mode: JsonMode,
+    cx: &App,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
     div()
         .flex()
         .flex_col()
@@ -407,17 +411,17 @@ fn query_row(
                 .child(
                     div()
                         .text_size(px(11.0))
-                        .text_color(ui::text_secondary())
+                        .text_color(ui::text_secondary(cx))
                         .child("JSONPath"),
                 )
-                .child(query_execute_button("查询", panel)),
+                .child(query_execute_button("查询", panel, cx)),
         )
         .child(
             div()
                 .rounded(px(8.0))
-                .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.7))
+                .bg(t.list)
                 .border_1()
-                .border_color(ui::border_light())
+                .border_color(ui::border_light(cx))
                 .overflow_hidden()
                 .child(query),
         )
@@ -430,11 +434,13 @@ fn status_footer(
     stats_text: String,
     error_loc_text: String,
     status_tone: StatusTone,
+    cx: &App,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
     let status_color = match status_tone {
-        StatusTone::Neutral => theme::semantic().text_body,
-        StatusTone::Success => theme::semantic().success,
-        StatusTone::Error => theme::semantic().danger,
+        StatusTone::Neutral => t.muted_foreground,
+        StatusTone::Success => t.success,
+        StatusTone::Error => t.danger,
     };
     let tone_icon = match status_tone {
         StatusTone::Success => "✓",
@@ -444,9 +450,9 @@ fn status_footer(
     div()
         .min_h(px(28.0))
         .rounded(px(8.0))
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.5))
+        .bg(t.list)
         .border_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .px_3()
         .py_1()
         .flex()
@@ -474,7 +480,7 @@ fn status_footer(
                 div()
                     .text_size(px(11.0))
                     .font_family(ui::font_mono())
-                    .text_color(theme::semantic().danger)
+                    .text_color(t.danger)
                     .child(error_loc_text),
             )
         })
@@ -483,7 +489,7 @@ fn status_footer(
                 div()
                     .text_size(px(11.0))
                     .font_family(ui::font_mono())
-                    .text_color(ui::text_tertiary())
+                    .text_color(ui::text_tertiary(cx))
                     .child(stats_text),
             )
         })
@@ -491,9 +497,9 @@ fn status_footer(
 
 // ── JSON Syntax Highlighting ──
 
-fn highlight_json(text: &str) -> impl IntoElement {
+fn highlight_json(text: &str, cx: &App) -> impl IntoElement {
     div().flex().flex_col().children(text.lines().map(|line| {
-        let segments = tokenize_line(line);
+        let segments = tokenize_line(line, cx);
         div().flex().children(
             segments
                 .into_iter()
@@ -502,17 +508,18 @@ fn highlight_json(text: &str) -> impl IntoElement {
     }))
 }
 
-fn tokenize_line(line: &str) -> Vec<(String, gpui::Rgba)> {
+fn tokenize_line(line: &str, cx: &App) -> Vec<(String, gpui::Hsla)> {
     let mut out = Vec::new();
     let chars: Vec<char> = line.chars().collect();
     let n = chars.len();
     let mut i = 0;
-    let key_color = theme::semantic().info;
-    let string_color = theme::semantic().success;
-    let number_color = theme::semantic().warning;
-    let bool_null_color = gpui::rgb(0x8B5CF6);
-    let punct_color = theme::semantic().text_body;
-    let default_color = theme::semantic().text_primary;
+    let t = Theme::global(cx);
+    let key_color = t.info;
+    let string_color = t.success;
+    let number_color = t.warning;
+    let bool_null_color = theme::rgba_with_alpha(gpui::rgb(0x8B5CF6), 1.0);
+    let punct_color = t.muted_foreground;
+    let default_color = t.foreground;
 
     while i < n {
         let c = chars[i];
@@ -575,21 +582,23 @@ fn secondary_button(
     label: &'static str,
     action: JsonAction,
     panel: &Entity<JsonView>,
+    cx: &App,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
     div()
         .id(label)
         .h(px(26.0))
         .px_3()
         .rounded(px(5.0))
-        .bg(theme::rgba_with_alpha(theme::semantic().bg_surface, 0.6))
+        .bg(t.list)
         .border_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .hover(move |s| s.cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(11.0))
-        .text_color(theme::semantic().text_primary)
+        .text_color(t.foreground)
         .child(label)
         .on_click({
             let p = panel.clone();
@@ -605,22 +614,24 @@ fn mode_pill(
     action: JsonAction,
     panel: &Entity<JsonView>,
     active: bool,
+    cx: &App,
 ) -> impl IntoElement {
+    let t = Theme::global(cx);
     let accent = theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Green);
     let bg = if active {
         theme::rgba_with_alpha(accent, 0.14)
     } else {
-        theme::rgba_with_alpha(theme::semantic().bg_surface, 0.6)
+        t.list
     };
     let border = if active {
         theme::rgba_with_alpha(accent, 0.24)
     } else {
-        ui::border_light()
+        ui::border_light(cx)
     };
     let tc = if active {
-        accent
+        theme::rgba_with_alpha(accent, 1.0)
     } else {
-        theme::semantic().text_primary
+        t.foreground
     };
     div()
         .id(label)
@@ -651,22 +662,26 @@ fn mode_pill(
         })
 }
 
-fn query_execute_button(label: &'static str, panel: &Entity<JsonView>) -> impl IntoElement {
-    let accent = theme::blue_500();
+fn query_execute_button(
+    label: &'static str,
+    panel: &Entity<JsonView>,
+    cx: &App,
+) -> impl IntoElement {
+    let t = Theme::global(cx);
     div()
         .id(label)
         .h(px(26.0))
         .px_3()
         .rounded(px(5.0))
-        .bg(accent)
-        .hover(move |s| s.bg(theme::blue_600()).cursor_pointer())
+        .bg(t.primary)
+        .hover(move |s| s.bg(t.primary_hover).cursor_pointer())
         .flex()
         .items_center()
         .justify_center()
         .gap_1()
         .text_size(px(11.0))
         .font_weight(FontWeight::MEDIUM)
-        .text_color(theme::white())
+        .text_color(ui::white())
         .child("▶")
         .child(label)
         .on_click({

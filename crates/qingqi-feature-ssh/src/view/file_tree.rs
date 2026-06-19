@@ -43,9 +43,9 @@ pub fn render_file_tree(
         .min_h(px(0.0))
         .flex()
         .flex_col()
-        .bg(ui::bg_surface())
+        .bg(ui::bg_surface(cx))
         .border_r_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .can_drop(|payload, _, _| payload.is::<ExternalPaths>())
         .drag_over::<ExternalPaths>(move |style, _, _, _| {
             style
@@ -61,8 +61,8 @@ pub fn render_file_tree(
             can_follow_terminal,
             cx,
         ))
-        .child(render_list_header())
-        .child(render_entry_list(tree, tree_id, list_scroll, handle))
+        .child(render_list_header(&*cx))
+        .child(render_entry_list(tree, tree_id, list_scroll, handle, &*cx))
 }
 
 fn render_toolbar(
@@ -73,6 +73,8 @@ fn render_toolbar(
 ) -> impl IntoElement {
     let accent = ui::accent_color(ACCENT);
     let accent_soft = theme::rgba_with_alpha(accent, 0.14);
+    let hover_bg = ui::bg_hover(cx);
+    let hover_text = ui::text_primary(cx);
 
     div()
         .h(px(36.0))
@@ -81,8 +83,8 @@ fn render_toolbar(
         .px_3()
         .gap(px(6.0))
         .border_b_1()
-        .border_color(ui::border_light())
-        .bg(ui::bg_surface())
+        .border_color(ui::border_light(cx))
+        .bg(ui::bg_surface(cx))
         .child(path_slot(path_input))
         .when(can_follow_terminal, |el| {
             el.child(
@@ -102,9 +104,9 @@ fn render_toolbar(
                     .text_color(if follow_terminal {
                         accent
                     } else {
-                        ui::text_secondary()
+                        ui::text_secondary(cx).into()
                     })
-                    .hover(|s| s.bg(ui::bg_hover()))
+                    .hover(move |s| s.bg(hover_bg))
                     .on_click(cx.listener(|view, _: &ClickEvent, _w, cx| {
                         view.toggle_follow_terminal(cx);
                     }))
@@ -119,9 +121,9 @@ fn render_toolbar(
                 .py(px(3.0))
                 .rounded(px(5.0))
                 .text_size(px(11.0))
-                .text_color(ui::text_secondary())
+                .text_color(ui::text_secondary(cx))
                 .cursor_pointer()
-                .hover(|s| s.bg(ui::bg_hover()).text_color(ui::text_primary()))
+                .hover(move |s| s.bg(hover_bg).text_color(hover_text))
                 .on_click(cx.listener(|view, _: &ClickEvent, _w, cx| {
                     view.jump_to_path_in_input(cx);
                 }))
@@ -146,8 +148,8 @@ fn path_slot(path_input: Entity<TextInput>) -> impl IntoElement {
         .child(path_input)
 }
 
-fn render_list_header() -> impl IntoElement {
-    let header_bg = theme::rgba_with_alpha(ui::text_tertiary(), 0.06);
+fn render_list_header(cx: &App) -> impl IntoElement {
+    let header_bg = theme::rgba_with_alpha(ui::text_tertiary(cx).into(), 0.06);
     div()
         .w_full()
         .h(px(26.0))
@@ -157,29 +159,29 @@ fn render_list_header() -> impl IntoElement {
         .px_3()
         .bg(header_bg)
         .border_b_1()
-        .border_color(ui::border_light())
+        .border_color(ui::border_light(cx))
         .child(
             div()
                 .flex_1()
                 .min_w(px(0.0))
                 .text_size(px(10.0))
                 .font_weight(FontWeight::MEDIUM)
-                .text_color(ui::text_tertiary())
+                .text_color(ui::text_tertiary(cx))
                 .child("名称"),
         )
-        .child(meta_group_header())
+        .child(meta_group_header(cx))
 }
 
-fn meta_group_header() -> impl IntoElement {
+fn meta_group_header(cx: &App) -> impl IntoElement {
     div()
         .flex_shrink_0()
         .flex()
         .items_center()
-        .child(meta_header("大小", COL_SIZE))
-        .child(meta_header("修改时间", COL_TIME))
+        .child(meta_header("大小", COL_SIZE, cx))
+        .child(meta_header("修改时间", COL_TIME, cx))
 }
 
-fn meta_header(label: &'static str, width: f32) -> impl IntoElement {
+fn meta_header(label: &'static str, width: f32, cx: &App) -> impl IntoElement {
     div()
         .w(px(width))
         .flex_shrink_0()
@@ -188,7 +190,7 @@ fn meta_header(label: &'static str, width: f32) -> impl IntoElement {
         .text_size(px(10.0))
         .font_weight(FontWeight::MEDIUM)
         .font_family(MONO)
-        .text_color(ui::text_tertiary())
+        .text_color(ui::text_tertiary(cx))
         .child(label)
 }
 
@@ -197,6 +199,7 @@ fn render_entry_list(
     tree_id: u64,
     list_scroll: UniformListScrollHandle,
     handle: Entity<super::SshView>,
+    cx: &App,
 ) -> impl IntoElement {
     if tree.entries.is_empty() {
         return file_list_shell(
@@ -211,7 +214,7 @@ fn render_entry_list(
                 .child(
                     div()
                         .text_size(px(12.0))
-                        .text_color(ui::text_tertiary())
+                        .text_color(ui::text_tertiary(cx))
                         .child(if tree.current_path.is_empty() {
                             "连接后显示远程文件，可拖入本地文件上传".to_string()
                         } else {
@@ -232,10 +235,10 @@ fn render_entry_list(
             ("ssh-file-list", tree_id),
             count,
             list_scroll,
-            move |range, _window, _cx| {
+            move |range, _window, cx| {
                 range
                     .clone()
-                    .map(|i| file_row(&entries[i], i, list_handle.clone()))
+                    .map(|i| file_row(&entries[i], i, list_handle.clone(), cx))
                     .collect()
             },
         ),
@@ -263,7 +266,7 @@ fn file_list_shell(handle: Entity<super::SshView>, child: impl IntoElement) -> i
         .child(child)
 }
 
-fn file_row(entry: &FileEntryRow, index: usize, handle: Entity<super::SshView>) -> AnyElement {
+fn file_row(entry: &FileEntryRow, index: usize, handle: Entity<super::SshView>, cx: &App) -> AnyElement {
     let is_parent = entry.is_parent;
     let is_dir = entry.is_dir;
     let is_selected = entry.is_selected;
@@ -271,6 +274,7 @@ fn file_row(entry: &FileEntryRow, index: usize, handle: Entity<super::SshView>) 
     let entry_for_menu = entry.clone();
     let h = handle.clone();
     let h_select = handle.clone();
+    let hover_bg = ui::bg_hover(cx);
 
     div()
         .id(("ssh-file", index as u64))
@@ -283,15 +287,15 @@ fn file_row(entry: &FileEntryRow, index: usize, handle: Entity<super::SshView>) 
         .text_size(px(12.0))
         .cursor_pointer()
         .border_b_1()
-        .border_color(theme::rgba_with_alpha(ui::text_tertiary(), 0.08))
+        .border_color(theme::rgba_with_alpha(ui::text_tertiary(cx).into(), 0.08))
         .bg(if is_selected {
             theme::rgba_with_alpha(ui::accent_color(ACCENT), 0.10)
         } else {
             hsla(0.0, 0.0, 0.0, 0.0)
         })
-        .hover(|s| {
+        .hover(move |s| {
             if !is_selected {
-                s.bg(ui::bg_hover())
+                s.bg(hover_bg)
             } else {
                 s
             }
@@ -331,7 +335,7 @@ fn file_row(entry: &FileEntryRow, index: usize, handle: Entity<super::SshView>) 
                 .child(if is_parent {
                     Icon::new(IconName::ChevronLeft)
                         .size(px(14.0))
-                        .text_color(ui::text_secondary())
+                        .text_color(ui::text_secondary(cx))
                         .into_any_element()
                 } else if is_dir {
                     Icon::new(IconName::Folder)
@@ -341,7 +345,7 @@ fn file_row(entry: &FileEntryRow, index: usize, handle: Entity<super::SshView>) 
                 } else {
                     Icon::new(IconName::File)
                         .size(px(14.0))
-                        .text_color(ui::text_tertiary())
+                        .text_color(ui::text_tertiary(cx))
                         .into_any_element()
                 })
                 .child(
@@ -356,9 +360,9 @@ fn file_row(entry: &FileEntryRow, index: usize, handle: Entity<super::SshView>) 
                             FontWeight::NORMAL
                         })
                         .text_color(if is_dir || is_parent {
-                            ui::text_primary()
+                            ui::text_primary(cx)
                         } else {
-                            ui::text_secondary()
+                            ui::text_secondary(cx)
                         })
                         .child(entry.name.clone()),
                 ),
@@ -366,20 +370,21 @@ fn file_row(entry: &FileEntryRow, index: usize, handle: Entity<super::SshView>) 
         .child(meta_group_cells(
             if is_parent { "" } else { &entry.size_text },
             if is_parent { "" } else { &entry.modified_text },
+            cx,
         ))
         .into_any_element()
 }
 
-fn meta_group_cells(size: &str, modified: &str) -> impl IntoElement {
+fn meta_group_cells(size: &str, modified: &str, cx: &App) -> impl IntoElement {
     div()
         .flex_shrink_0()
         .flex()
         .items_center()
-        .child(meta_cell(size, COL_SIZE))
-        .child(meta_cell(modified, COL_TIME))
+        .child(meta_cell(size, COL_SIZE, cx))
+        .child(meta_cell(modified, COL_TIME, cx))
 }
 
-fn meta_cell(text: &str, width: f32) -> impl IntoElement {
+fn meta_cell(text: &str, width: f32, cx: &App) -> impl IntoElement {
     div()
         .w(px(width))
         .flex_shrink_0()
@@ -387,6 +392,6 @@ fn meta_cell(text: &str, width: f32) -> impl IntoElement {
         .justify_end()
         .text_size(px(10.0))
         .font_family(MONO)
-        .text_color(ui::text_tertiary())
+        .text_color(ui::text_tertiary(cx))
         .child(text.to_string())
 }

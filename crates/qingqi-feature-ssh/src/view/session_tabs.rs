@@ -4,7 +4,8 @@ use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::{Icon, IconName};
 use qingqi_plugin::plugin_spec::PluginAccent;
-use qingqi_ui::{theme, ui};
+use qingqi_ui::theme;
+use qingqi_ui::ui;
 
 use crate::model::SessionId;
 
@@ -17,7 +18,7 @@ pub fn render_session_tabs(
     scroll: &ScrollHandle,
     cx: &mut Context<super::SshView>,
 ) -> impl IntoElement {
-    let border = ui::border_light();
+    let border = ui::border_light(cx);
 
     div()
         .id("ssh-session-tab-bar")
@@ -26,7 +27,7 @@ pub fn render_session_tabs(
         .min_h(px(TAB_BAR_HEIGHT))
         .flex_shrink_0()
         .relative()
-        .bg(ui::bg_surface())
+        .bg(ui::bg_surface(cx))
         .child(
             div()
                 .absolute()
@@ -37,20 +38,20 @@ pub fn render_session_tabs(
                 .bg(border),
         )
         .child(if sessions.is_empty() {
-            empty_tab_bar().into_any_element()
+            empty_tab_bar(cx).into_any_element()
         } else {
             tab_strip(sessions, scroll, cx).into_any_element()
         })
 }
 
-fn empty_tab_bar() -> impl IntoElement {
+fn empty_tab_bar(cx: &App) -> impl IntoElement {
     div()
         .size_full()
         .flex()
         .items_center()
         .pl(px(14.0))
         .text_size(px(12.0))
-        .text_color(ui::text_tertiary())
+        .text_color(ui::text_tertiary(cx))
         .child("双击左侧连接以打开会话")
 }
 
@@ -61,6 +62,7 @@ fn tab_strip(
 ) -> impl IntoElement {
     let accent: Hsla = ui::accent_color(ACCENT).into();
     let handle = cx.entity().clone();
+    let hover_bg = ui::bg_hover(cx);
 
     div()
         .id("ssh-session-tabs")
@@ -94,7 +96,7 @@ fn tab_strip(
                 } else {
                     hsla(0.0, 0.0, 0.0, 0.0)
                 })
-                .when(!is_selected, |tab| tab.hover(|s| s.bg(ui::bg_hover())))
+                .when(!is_selected, move |tab| tab.hover(move |s| s.bg(hover_bg)))
                 .on_click(
                     cx.listener(move |view, _: &ClickEvent, _w, cx| view.select_session(sid, cx)),
                 )
@@ -113,11 +115,11 @@ fn tab_strip(
                         .text_color(if is_selected {
                             accent
                         } else {
-                            ui::text_secondary().into()
+                            ui::text_secondary(cx).into()
                         })
                         .child(title),
                 )
-                .child(close_button(sid_close, is_selected, handle.clone()))
+                .child(close_button(sid_close, is_selected, handle.clone(), cx))
         }))
 }
 
@@ -129,6 +131,7 @@ fn close_button(
     session_id: SessionId,
     is_selected: bool,
     handle: Entity<super::SshView>,
+    cx: &App,
 ) -> impl IntoElement {
     div()
         .id(("ssh-tab-close", session_id.0.as_u128() as u64))
@@ -142,7 +145,7 @@ fn close_button(
         .opacity(if is_selected { 0.55 } else { 0.28 })
         .group_hover("ssh-session-tab", |s| {
             s.opacity(1.0)
-                .bg(theme::rgba_with_alpha(ui::text_tertiary(), 0.12))
+                .bg(theme::rgba_with_alpha(ui::text_tertiary(cx).into(), 0.12))
         })
         .on_mouse_down(MouseButton::Left, |_, _, cx| {
             cx.stop_propagation();
@@ -153,6 +156,6 @@ fn close_button(
         .child(
             Icon::new(IconName::Close)
                 .size(px(10.0))
-                .text_color(ui::text_tertiary()),
+                .text_color(ui::text_tertiary(cx)),
         )
 }

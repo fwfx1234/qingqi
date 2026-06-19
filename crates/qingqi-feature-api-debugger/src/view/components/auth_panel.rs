@@ -1,11 +1,14 @@
-use gpui::{App, Entity, IntoElement, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled, div, hsla, px};
-use gpui_component::theme::Theme;
-use qingqi_ui::text_input::TextInput;
-use qingqi_ui::{theme, ui, ui::glass};
+use super::shared::section_micro_label;
 use crate::service::AuthType;
 use crate::view::ApiDebuggerView;
 use crate::view::types::AuthFormInputs;
-use super::shared::section_micro_label;
+use gpui::{
+    App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
+    Styled, div, hsla, px,
+};
+use gpui_component::theme::Theme;
+use qingqi_ui::text_input::TextInput;
+use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn auth_form_panel(
     view: Entity<ApiDebuggerView>,
@@ -133,7 +136,11 @@ fn labeled_field(label: &'static str, input: Entity<TextInput>, cx: &App) -> imp
                 .border_color(ui::border_light(cx))
                 .bg(theme::rgba_with_alpha(
                     Theme::global(cx).list.into(),
-                    if Theme::global(cx).is_dark() { 0.34 } else { 0.58 },
+                    if Theme::global(cx).is_dark() {
+                        0.34
+                    } else {
+                        0.58
+                    },
                 ))
                 .overflow_hidden()
                 .child(input),

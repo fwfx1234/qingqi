@@ -1,14 +1,17 @@
-use gpui::{
-    App, Entity, IntoElement, InteractiveElement, ParentElement,
-    StatefulInteractiveElement, Styled, div, hsla, px, prelude::FluentBuilder,
-};
-use gpui_component::theme::Theme;
-use gpui_component::{IconName, Sizable, Size, button::{Button, ButtonVariants}};
-use qingqi_ui::{theme, ui, ui::glass};
+use super::shared::{api_accent, transparent_surface};
 use crate::service::EditorTab;
 use crate::view::ApiDebuggerView;
 use crate::view::types::KvRow;
-use super::shared::{api_accent, transparent_surface};
+use gpui::{
+    App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
+    Styled, div, hsla, prelude::FluentBuilder, px,
+};
+use gpui_component::theme::Theme;
+use gpui_component::{
+    IconName, Sizable, Size,
+    button::{Button, ButtonVariants},
+};
+use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn kv_editor_table(
     view: Entity<ApiDebuggerView>,

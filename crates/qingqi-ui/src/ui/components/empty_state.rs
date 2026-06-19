@@ -20,7 +20,11 @@ pub fn empty_state(
         .justify_center()
         .flex_col()
         .gap(px(12.0))
-        .child(ui::icon_element(icon_svg, ui::text_tertiary(cx).into(), 48.0))
+        .child(ui::icon_element(
+            icon_svg,
+            ui::text_tertiary(cx).into(),
+            48.0,
+        ))
         .child(
             div()
                 .text_size(theme::font_size_heading())

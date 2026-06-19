@@ -1,8 +1,8 @@
-use gpui::App;
-use super::components::collection_tree::build_tree_items;
-use crate::service::{ApiRequest, HttpMethod, BodyMode};
 use super::ApiDebuggerView;
+use super::components::collection_tree::build_tree_items;
 use super::types::{OpenTab, request_at, request_at_mut};
+use crate::service::{ApiRequest, BodyMode, HttpMethod};
+use gpui::App;
 
 impl ApiDebuggerView {
     pub(crate) fn placeholder_request() -> ApiRequest {
@@ -48,7 +48,11 @@ impl ApiDebuggerView {
             self.active_tab = OpenTab::new_request(0);
             self.open_tabs = vec![self.active_tab.clone()];
         } else {
-            let request_count: usize = self.groups.iter().map(|group| group.total_request_count()).sum();
+            let request_count: usize = self
+                .groups
+                .iter()
+                .map(|group| group.total_request_count())
+                .sum();
             if self.selected_request >= request_count {
                 self.selected_request = 0;
                 self.selected_scenario = None;
@@ -108,7 +112,8 @@ impl ApiDebuggerView {
                     self.groups = workspace.groups;
                     self.environments = workspace.environments;
                     self.ensure_renderable_workspace();
-                    let items = build_tree_items(&self.groups, &mut 0, &self.collapsed_nodes.borrow());
+                    let items =
+                        build_tree_items(&self.groups, &mut 0, &self.collapsed_nodes.borrow());
                     let saved_ix = self.tree_state.read(cx).selected_index();
                     self.tree_state.update(cx, |tree, cx| {
                         tree.set_items(items, cx);
@@ -171,8 +176,8 @@ impl ApiDebuggerView {
     }
 
     pub(crate) fn selected_request_mut(&mut self) -> &mut ApiRequest {
-        let request = request_at_mut(&mut self.groups, self.selected_request)
-            .expect("request should exist");
+        let request =
+            request_at_mut(&mut self.groups, self.selected_request).expect("request should exist");
         if let Some(scenario_index) = self.selected_scenario {
             let base_request = request.clone();
             let scenario = request

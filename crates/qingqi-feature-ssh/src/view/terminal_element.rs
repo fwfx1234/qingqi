@@ -479,6 +479,7 @@ pub fn render_shell_grid(
     font_size: f32,
     cache: &mut TerminalRowCache,
     selection: Option<TerminalSelection>,
+    cx: &App,
 ) -> AnyElement {
     let line_height = (font_size * LINE_HEIGHT_RATIO).max(15.0);
     let cols = term
@@ -498,7 +499,7 @@ pub fn render_shell_grid(
             .font_family(TERM_FONT)
             .text_size(px(font_size))
             .line_height(px(line_height))
-            .text_color(ui::text_secondary())
+            .text_color(ui::text_secondary(cx))
             .child("已连接，点击此处开始输入…")
             .into_any_element();
     }

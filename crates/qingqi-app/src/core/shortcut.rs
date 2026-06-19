@@ -247,7 +247,10 @@ impl ShortcutService {
             .ok()
             .and_then(|content| serde_json::from_str(&content).ok())
             .unwrap_or_default();
-        map.insert(OPEN_LAUNCHER_SHORTCUT_ID.to_string(), accelerator.to_string());
+        map.insert(
+            OPEN_LAUNCHER_SHORTCUT_ID.to_string(),
+            accelerator.to_string(),
+        );
         if let Ok(json) = serde_json::to_string_pretty(&map) {
             let _ = fs::write(path, json);
         }

@@ -20,7 +20,7 @@ fn line_text_color(line: &TerminalLine) -> Hsla {
         .unwrap_or_else(term_text)
 }
 
-pub(crate) fn render_status_bar(term: &TerminalViewModel) -> impl IntoElement {
+pub(crate) fn render_status_bar(term: &TerminalViewModel, cx: &App) -> impl IntoElement {
     div()
         .h(px(30.0))
         .flex_shrink_0()
@@ -29,13 +29,19 @@ pub(crate) fn render_status_bar(term: &TerminalViewModel) -> impl IntoElement {
         .px_3()
         .bg(hsla(0.0, 0.0, 0.97, 1.0))
         .border_b_1()
-        .border_color(ui::border_light())
-        .child(div().size(px(6.0)).rounded_full().bg(ui::success()).mr_2())
+        .border_color(ui::border_light(cx))
+        .child(
+            div()
+                .size(px(6.0))
+                .rounded_full()
+                .bg(ui::success(cx))
+                .mr_2(),
+        )
         .child(
             div()
                 .text_size(px(11.0))
                 .font_family(TERM_FONT)
-                .text_color(ui::text_secondary())
+                .text_color(ui::text_secondary(cx))
                 .child(term.status.clone()),
         )
         .child(div().flex_1())
@@ -67,13 +73,14 @@ pub(crate) fn render_log_body(
     term: &TerminalViewModel,
     font_size: f32,
     line_height: f32,
+    cx: &App,
 ) -> AnyElement {
     if term.lines.is_empty() {
         return div()
             .font_family(TERM_FONT)
             .text_size(px(font_size))
             .line_height(px(line_height))
-            .text_color(ui::text_secondary())
+            .text_color(ui::text_secondary(cx))
             .child(log_placeholder(term))
             .into_any_element();
     }

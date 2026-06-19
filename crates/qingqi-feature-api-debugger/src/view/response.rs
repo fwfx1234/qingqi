@@ -1,7 +1,7 @@
-use gpui::App;
+use super::ApiDebuggerView;
 use crate::code_gen::CodeLanguage;
 use crate::service::ResponseTab;
-use super::ApiDebuggerView;
+use gpui::App;
 
 impl ApiDebuggerView {
     pub(crate) fn response_text(&self) -> String {
@@ -79,8 +79,7 @@ impl ApiDebuggerView {
             return;
         };
         let created_at = entry.created_at.clone();
-        self.response.status_line =
-            format!("{} {} · {}", entry.method, entry.status, entry.url);
+        self.response.status_line = format!("{} {} · {}", entry.method, entry.status, entry.url);
         self.response.status_code = entry.status.max(0) as u16;
         self.response.body = entry.response.clone();
         self.response.headers = String::new();

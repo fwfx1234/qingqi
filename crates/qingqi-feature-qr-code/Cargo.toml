@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 dirs.workspace = true
+gpui-component.workspace = true
 gpui.workspace = true
 image.workspace = true
 qrcode.workspace = true

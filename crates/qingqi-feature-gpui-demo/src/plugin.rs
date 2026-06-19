@@ -318,7 +318,12 @@ fn state_column(accent: PluginAccent, cx: &App) -> impl IntoElement {
             "窗口生命周期，只持有 UI entity state",
             cx,
         ))
-        .child(demo_row(accent, "Service", "可单测业务逻辑，不依赖 GPUI", cx))
+        .child(demo_row(
+            accent,
+            "Service",
+            "可单测业务逻辑，不依赖 GPUI",
+            cx,
+        ))
         .child(demo_row(
             accent,
             "Store",
@@ -359,7 +364,12 @@ fn panel(title: &'static str, cx: &App) -> gpui::Div {
         )
 }
 
-fn demo_row(accent: PluginAccent, title: &'static str, body: &'static str, cx: &App) -> impl IntoElement {
+fn demo_row(
+    accent: PluginAccent,
+    title: &'static str,
+    body: &'static str,
+    cx: &App,
+) -> impl IntoElement {
     let t = Theme::global(cx);
     div()
         .rounded(theme::radius_md())
