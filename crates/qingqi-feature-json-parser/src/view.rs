@@ -7,7 +7,7 @@ use gpui::{
 };
 
 use crate::service::{self, JsonMode, JsonResult, JsonStats};
-use gpui_component::{scroll::ScrollableElement, theme::Theme};
+use gpui_component::{Selectable, scroll::ScrollableElement, theme::Theme};
 use qingqi_ui::{
     text_input::{TextInput, TextInputStyle},
     theme, ui,
@@ -596,51 +596,14 @@ fn mode_pill(
     action: JsonAction,
     panel: &Entity<JsonView>,
     active: bool,
-    cx: &App,
+    _cx: &App,
 ) -> impl IntoElement {
-    let t = Theme::global(cx);
-    let accent = theme::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Green);
-    let bg = if active {
-        theme::rgba_with_alpha(accent, 0.14)
-    } else {
-        t.list
-    };
-    let border = if active {
-        theme::rgba_with_alpha(accent, 0.24)
-    } else {
-        ui::border_light(cx)
-    };
-    let tc = if active {
-        theme::rgba_with_alpha(accent, 1.0)
-    } else {
-        t.foreground
-    };
-    div()
-        .id(label)
-        .h(px(24.0))
-        .px_2()
-        .rounded(px(5.0))
-        .bg(bg)
-        .border_1()
-        .border_color(border)
-        .hover(move |s| s.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .font_weight(if active {
-            FontWeight::SEMIBOLD
-        } else {
-            FontWeight::default()
-        })
-        .text_color(tc)
-        .child(label)
-        .on_click({
-            let p = panel.clone();
-            move |_, w, cx| {
-                run_action(action, &p, cx);
-                w.refresh();
-            }
+    let p = panel.clone();
+    ui::secondary_btn(label, label)
+        .selected(active)
+        .on_click(move |_, w, cx| {
+            run_action(action, &p, cx);
+            w.refresh();
         })
 }
 
