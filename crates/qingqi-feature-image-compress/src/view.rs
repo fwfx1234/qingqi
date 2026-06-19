@@ -915,8 +915,7 @@ impl Render for ImageCompressView {
                     .child(
                         drop_zone(pending_count, cx)
                             .child(
-                                primary_button("粘贴", PluginAccent::Amber, cx)
-                                    .id("image-compress-paste")
+                                primary_button("image-compress-paste", "粘贴", PluginAccent::Amber, cx)
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -928,8 +927,7 @@ impl Render for ImageCompressView {
                                     }),
                             )
                             .child(
-                                secondary_button("选择图片", cx)
-                                    .id("image-compress-choose")
+                                secondary_button("image-compress-choose", "选择图片", cx)
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1483,6 +1481,7 @@ fn footer_bar(
                 .gap_2()
                 .child(
                     primary_button(
+                        "image-compress-run",
                         if running {
                             "压缩中…"
                         } else {
@@ -1491,7 +1490,6 @@ fn footer_bar(
                         PluginAccent::Amber,
                         cx,
                     )
-                    .id("image-compress-run")
                     .on_click({
                         let handle = handle.clone();
                         move |_, window, cx| {
@@ -1504,8 +1502,7 @@ fn footer_bar(
                 )
                 .children(if running {
                     Some(
-                        secondary_button("取消", cx)
-                            .id("image-compress-cancel")
+                        secondary_button("image-compress-cancel", "取消", cx)
                             .on_click({
                                 let handle = handle.clone();
                                 move |_, window, cx| {
@@ -1521,6 +1518,7 @@ fn footer_bar(
                 })
                 .child(
                     secondary_button(
+                        "image-compress-toggle-overwrite",
                         if overwrite_original {
                             "覆盖原图"
                         } else {
@@ -1528,7 +1526,6 @@ fn footer_bar(
                         },
                         cx,
                     )
-                    .id("image-compress-toggle-overwrite")
                     .on_click({
                         let handle = handle.clone();
                         move |_, window, cx| {
@@ -1540,8 +1537,7 @@ fn footer_bar(
                     }),
                 )
                 .child(
-                    secondary_button("💾 选择目录", cx)
-                        .id("image-compress-output-dir")
+                    secondary_button("image-compress-output-dir", "💾 选择目录", cx)
                         .on_click({
                             let handle = handle.clone();
                             move |_, window, cx| {
@@ -1553,8 +1549,7 @@ fn footer_bar(
                         }),
                 )
                 .child(
-                    secondary_button("打开目录", cx)
-                        .id("image-compress-open-dir")
+                    secondary_button("image-compress-open-dir", "打开目录", cx)
                         .on_click({
                             let handle = handle.clone();
                             move |_, window, cx| {
@@ -1566,8 +1561,7 @@ fn footer_bar(
                         }),
                 )
                 .child(
-                    ghost_button("清空", cx)
-                        .id("image-compress-clear")
+                    ghost_button("image-compress-clear", "清空", cx)
                         .on_click({
                             let handle = handle.clone();
                             move |_, window, cx| {
@@ -1609,31 +1603,29 @@ fn footer_bar(
         )
 }
 
-fn primary_button(label: &str, accent: PluginAccent, cx: &App) -> gpui::Div {
-    components::button(
-        label.to_string(),
-        components::ButtonVariant::Primary,
-        Some(accent),
-        cx,
-    )
+fn primary_button(
+    id: impl Into<gpui::ElementId>,
+    label: &str,
+    accent: PluginAccent,
+    cx: &App,
+) -> gpui_component::button::Button {
+    ui::accent_btn(id, label.to_string(), accent, cx)
 }
 
-fn secondary_button(label: &str, cx: &App) -> gpui::Div {
-    components::button(
-        label.to_string(),
-        components::ButtonVariant::Secondary,
-        None,
-        cx,
-    )
+fn secondary_button(
+    id: impl Into<gpui::ElementId>,
+    label: &str,
+    _cx: &App,
+) -> gpui_component::button::Button {
+    ui::secondary_btn(id, label.to_string())
 }
 
-fn ghost_button(label: &str, cx: &App) -> gpui::Div {
-    components::button(
-        label.to_string(),
-        components::ButtonVariant::Ghost,
-        None,
-        cx,
-    )
+fn ghost_button(
+    id: impl Into<gpui::ElementId>,
+    label: &str,
+    _cx: &App,
+) -> gpui_component::button::Button {
+    ui::ghost_btn(id, label.to_string())
 }
 
 fn action_button(label: &str, _dark: bool, cx: &App) -> gpui::Div {

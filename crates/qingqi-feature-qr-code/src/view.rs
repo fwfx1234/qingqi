@@ -6,7 +6,7 @@ use std::{
 use anyhow::Result;
 use gpui::{
     App, AppContext, Context, Entity, InteractiveElement, IntoElement, KeyDownEvent, ObjectFit,
-    ParentElement, Render, StatefulInteractiveElement, Styled, StyledImage, Subscription, Window,
+    ParentElement, Render, Styled, StyledImage, Subscription, Window,
     div, hsla, img, px,
 };
 
@@ -15,7 +15,7 @@ use gpui_component::theme::Theme;
 use qingqi_plugin::storage::AppPaths;
 use qingqi_ui::{
     text_input::{TextInput, TextInputStyle},
-    ui::{self, components},
+    ui,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -500,7 +500,7 @@ impl Render for QrView {
                                 .flex()
                                 .items_center()
                                 .gap_2()
-                                .child(action_btn("选择图片", cx).id("qr-choose-img").on_click({
+                                .child(action_btn("qr-choose-img", "选择图片", cx).on_click({
                                     let e = entity.clone();
                                     move |_, _, cx| {
                                         e.update(cx, |t, cx| {
@@ -509,7 +509,7 @@ impl Render for QrView {
                                         });
                                     }
                                 }))
-                                .child(ghost_btn("清空", cx).id("qr-clear").on_click({
+                                .child(ghost_btn("qr-clear", "清空", cx).on_click({
                                     let e = entity.clone();
                                     move |_, _, cx| {
                                         e.update(cx, |t, cx| {
@@ -545,7 +545,7 @@ impl Render for QrView {
                                         .flex()
                                         .items_center()
                                         .gap_2()
-                                        .child(primary_btn("另存为", cx).id("qr-save").on_click({
+                                        .child(primary_btn("qr-save", "另存为", cx).on_click({
                                             let e = entity.clone();
                                             move |_, _, cx| {
                                                 e.update(cx, |t, cx| {
@@ -554,7 +554,7 @@ impl Render for QrView {
                                                 });
                                             }
                                         }))
-                                        .child(action_btn("复制", cx).id("qr-copy").on_click({
+                                        .child(action_btn("qr-copy", "复制", cx).on_click({
                                             let e = entity.clone();
                                             move |_, _, cx| {
                                                 e.update(cx, |t, cx| {
@@ -563,7 +563,7 @@ impl Render for QrView {
                                                 });
                                             }
                                         }))
-                                        .child(action_btn("粘贴", cx).id("qr-paste").on_click({
+                                        .child(action_btn("qr-paste", "粘贴", cx).on_click({
                                             let e = entity.clone();
                                             move |_, _, cx| {
                                                 e.update(cx, |t, cx| {
@@ -573,7 +573,7 @@ impl Render for QrView {
                                             }
                                         }))
                                         .child(div().flex_1())
-                                        .child(ghost_btn("生成", cx).id("qr-gen").on_click({
+                                        .child(ghost_btn("qr-gen", "生成", cx).on_click({
                                             let e = entity.clone();
                                             move |_, _, cx| {
                                                 e.update(cx, |t, cx| {
@@ -690,27 +690,29 @@ fn status_bar(message: String, tone: StatusTone, cx: &App) -> impl IntoElement {
         )
 }
 
-fn primary_btn(label: &str, cx: &App) -> gpui::Div {
-    components::button(
+fn primary_btn(
+    id: impl Into<gpui::ElementId>,
+    label: &str,
+    cx: &App,
+) -> gpui_component::button::Button {
+    ui::accent_btn(
+        id,
         label.to_string(),
-        components::ButtonVariant::Primary,
-        Some(qingqi_plugin::plugin_spec::PluginAccent::Blue),
+        qingqi_plugin::plugin_spec::PluginAccent::Blue,
         cx,
     )
 }
-fn action_btn(label: &str, cx: &App) -> gpui::Div {
-    components::button(
-        label.to_string(),
-        components::ButtonVariant::Secondary,
-        None,
-        cx,
-    )
+fn action_btn(
+    id: impl Into<gpui::ElementId>,
+    label: &str,
+    _cx: &App,
+) -> gpui_component::button::Button {
+    ui::secondary_btn(id, label.to_string())
 }
-fn ghost_btn(label: &str, cx: &App) -> gpui::Div {
-    components::button(
-        label.to_string(),
-        components::ButtonVariant::Ghost,
-        None,
-        cx,
-    )
+fn ghost_btn(
+    id: impl Into<gpui::ElementId>,
+    label: &str,
+    _cx: &App,
+) -> gpui_component::button::Button {
+    ui::ghost_btn(id, label.to_string())
 }
