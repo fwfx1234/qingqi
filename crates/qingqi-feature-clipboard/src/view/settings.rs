@@ -31,7 +31,7 @@ pub(super) fn settings_panel(
                     config.capture_text,
                     {
                         let handle = handle.clone();
-                        move |_, cx| {
+                        move |cx| {
                             let _ = cx.update_entity(&handle, |panel, cx| {
                                 panel.toggle_capture_text(cx);
                                 cx.notify();
@@ -50,7 +50,7 @@ pub(super) fn settings_panel(
                     config.capture_image,
                     {
                         let handle = handle.clone();
-                        move |_, cx| {
+                        move |cx| {
                             let _ = cx.update_entity(&handle, |panel, cx| {
                                 panel.toggle_capture_image(cx);
                                 cx.notify();
@@ -69,7 +69,7 @@ pub(super) fn settings_panel(
                     config.capture_files,
                     {
                         let handle = handle.clone();
-                        move |_, cx| {
+                        move |cx| {
                             let _ = cx.update_entity(&handle, |panel, cx| {
                                 panel.toggle_capture_files(cx);
                                 cx.notify();
@@ -211,7 +211,7 @@ fn settings_toggle_row(
     label: &'static str,
     description: impl Into<String>,
     enabled: bool,
-    on_toggle: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
+    on_toggle: impl Fn(&mut App) + 'static,
     cx: &App,
 ) -> gpui::AnyElement {
     let t = Theme::global(cx);
@@ -245,7 +245,7 @@ fn settings_toggle_row(
                         .child(description.into()),
                 ),
         )
-        .child(toggle_control(enabled, cx, on_toggle))
+        .child(toggle_control(label, enabled, on_toggle))
         .into_any_element()
 }
 

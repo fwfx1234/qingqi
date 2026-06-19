@@ -1,5 +1,5 @@
+use gpui_component::switch::Switch;
 use gpui_component::theme::Theme;
-use qingqi_ui::ui::components::toggle;
 
 use super::*;
 
@@ -51,11 +51,11 @@ pub(super) fn pill_button(
 }
 
 pub(super) fn toggle_control(
+    id: impl Into<gpui::ElementId>,
     enabled: bool,
-    cx: &App,
-    handler: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
+    handler: impl Fn(&mut App) + 'static,
 ) -> impl IntoElement {
-    toggle(enabled, cx)
-        .id("toggle")
-        .on_click(move |event, _window, cx| handler(event, cx))
+    Switch::new(id)
+        .checked(enabled)
+        .on_click(move |_checked, _window, cx| handler(cx))
 }
