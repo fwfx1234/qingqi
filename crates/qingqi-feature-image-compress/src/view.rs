@@ -1213,8 +1213,7 @@ fn image_row(
                         // "复制" — copy compressed image to clipboard (success only)
                         .children(if is_success {
                             Some(
-                                action_button("复制", dark, cx)
-                                    .id(("image-compress-copy", index))
+                                action_button(("image-compress-copy", index), "复制", dark, cx)
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1249,8 +1248,7 @@ fn image_row(
                         // "定位" — reveal in Finder (success only)
                         .children(if is_success {
                             Some(
-                                action_button("定位", dark, cx)
-                                    .id(("image-compress-reveal", index))
+                                action_button(("image-compress-reveal", index), "定位", dark, cx)
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1267,8 +1265,7 @@ fn image_row(
                         // "覆盖" — overwrite original (success, real file only)
                         .children(if is_success && !from_clipboard && has_source {
                             Some(
-                                action_button("覆盖", dark, cx)
-                                    .id(("image-compress-overwrite", index))
+                                action_button(("image-compress-overwrite", index), "覆盖", dark, cx)
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1285,8 +1282,7 @@ fn image_row(
                         // "另存为" — save-as copy (success only)
                         .children(if is_success {
                             Some(
-                                action_button("另存", dark, cx)
-                                    .id(("image-compress-save-as", index))
+                                action_button(("image-compress-save-as", index), "另存", dark, cx)
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1330,8 +1326,7 @@ fn image_row(
                         // "重试" — retry failed entry
                         .children(if is_failed {
                             Some(
-                                action_button("重试", dark, cx)
-                                    .id(("image-compress-retry", index))
+                                action_button(("image-compress-retry", index), "重试", dark, cx)
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1628,21 +1623,13 @@ fn ghost_button(
     ui::ghost_btn(id, label.to_string())
 }
 
-fn action_button(label: &str, _dark: bool, cx: &App) -> gpui::Div {
-    div()
-        .h(px(22.0))
-        .px_2()
-        .rounded(px(6.0))
-        .bg(theme::rgba_with_alpha(Theme::global(cx).list.into(), 0.88))
-        .border_1()
-        .border_color(ui::border_light(cx))
-        .hover(move |style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(10.0))
-        .text_color(Theme::global(cx).foreground)
-        .child(label.to_string())
+fn action_button(
+    id: impl Into<gpui::ElementId>,
+    label: &str,
+    _dark: bool,
+    _cx: &App,
+) -> gpui_component::button::Button {
+    ui::secondary_btn(id, label.to_string())
 }
 
 fn format_size(bytes: u64) -> String {
