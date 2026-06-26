@@ -573,39 +573,6 @@ fn history_row(
         )
 }
 
-fn history_row_media(
-    item: &ClipboardRecord,
-    icon_surface: gpui::Hsla,
-    cx: &App,
-) -> impl IntoElement {
-    let border_light = ui::border_light(cx);
-    let list_bg = Theme::global(cx).list;
-    let warning_rgba: gpui::Rgba = Theme::global(cx).warning.into();
-    let icon_color = history_item_icon_color(item, cx);
-
-    if item.kind == history_store::ClipboardItemKind::Image {
-        return div()
-            .size(px(36.0))
-            .rounded(px(6.0))
-            .border_1()
-            .border_color(border_light)
-            .bg(list_bg)
-            .overflow_hidden()
-            .child(
-                img(PathBuf::from(item.content.clone()))
-                    .object_fit(ObjectFit::Cover)
-                    .size_full()
-                    .with_fallback(move || {
-                        icon_label("IMG", icon_surface, warning_rgba).into_any_element()
-                    })
-                    .into_any_element(),
-            )
-            .into_any_element();
-    }
-
-    icon_label(history_item_icon(item), icon_surface, icon_color).into_any_element()
-}
-
 fn history_row_media_values(
     item: &ClipboardRecord,
     icon_surface: gpui::Hsla,
@@ -667,15 +634,6 @@ fn history_item_icon_color_values(
             b: 0.22,
             a: 1.0,
         },
-    }
-}
-
-fn warning_rgba() -> gpui::Rgba {
-    gpui::Rgba {
-        r: 0.96,
-        g: 0.65,
-        b: 0.14,
-        a: 1.0,
     }
 }
 
@@ -743,21 +701,6 @@ fn history_item_icon(item: &ClipboardRecord) -> &'static str {
         },
         history_store::ClipboardItemKind::Image => "IMG",
         history_store::ClipboardItemKind::Files => "FIL",
-    }
-}
-
-fn history_item_icon_color(item: &ClipboardRecord, cx: &App) -> gpui::Rgba {
-    let t = Theme::global(cx);
-    match item.kind {
-        history_store::ClipboardItemKind::Text => match item.badge_kind() {
-            history_store::ClipboardBadgeKind::Link => t.success.into(),
-            history_store::ClipboardBadgeKind::Json => {
-                ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
-            }
-            history_store::ClipboardBadgeKind::Other => t.muted_foreground.into(),
-        },
-        history_store::ClipboardItemKind::Image => t.warning.into(),
-        history_store::ClipboardItemKind::Files => t.danger.into(),
     }
 }
 

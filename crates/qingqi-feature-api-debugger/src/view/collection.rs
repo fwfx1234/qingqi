@@ -4,6 +4,7 @@ use crate::model::NodeKind;
 use gpui::App;
 
 impl ApiDebuggerView {
+    #[allow(dead_code)]
     pub(crate) fn open_collection_menu(
         &mut self,
         title: impl Into<String>,

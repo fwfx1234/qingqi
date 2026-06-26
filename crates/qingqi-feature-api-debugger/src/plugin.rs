@@ -68,7 +68,7 @@ impl Plugin for ApiDebuggerPlugin {
         ]
     }
 
-    fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
+    fn open(&mut self, _cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let service = self.service();
         Ok(PluginView::Window(Box::new(ApiDebuggerWindow {
             service,

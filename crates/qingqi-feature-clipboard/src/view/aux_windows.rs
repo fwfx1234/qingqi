@@ -11,6 +11,7 @@ use super::settings;
 
 const APP_SETTINGS_SIZE: (f32, f32) = (520.0, 560.0);
 
+#[allow(dead_code)]
 pub fn dialog_window_options(
     title: impl Into<SharedString>,
     width: f32,

@@ -1,8 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use gpui::{
-    App, AppContext, AsyncApp, Context, Entity, FontWeight, InteractiveElement, IntoElement,
-    ParentElement, Render, StatefulInteractiveElement, Styled, Window, div, prelude::FluentBuilder,
+    App, AppContext, AsyncApp, Context, Entity, FontWeight, IntoElement,
+    ParentElement, Render, Styled, Window, div, prelude::FluentBuilder,
     px,
 };
 
