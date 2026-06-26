@@ -8,6 +8,7 @@ use gpui::{
 
 use gpui_component::Disableable;
 use gpui_component::Selectable;
+use gpui_component::sidebar::{Sidebar, SidebarMenu, SidebarMenuItem};
 use gpui_component::theme::Theme;
 use qingqi_platform::macos::PermissionStatus;
 use qingqi_plugin::{
@@ -41,6 +42,8 @@ pub struct SettingsView {
     shortcut_inputs: HashMap<String, Entity<TextInput>>,
     shortcut_drafts: HashMap<String, String>,
     shortcut_message: String,
+    /// 设置中心当前选中的分区（侧边栏导航）
+    selected_section: usize,
 }
 
 impl SettingsView {
@@ -71,6 +74,7 @@ impl SettingsView {
             shortcut_inputs: HashMap::new(),
             shortcut_drafts: HashMap::new(),
             shortcut_message: String::new(),
+            selected_section: 0,
         }
     }
 
@@ -447,237 +451,250 @@ impl SettingsView {
 impl Render for SettingsView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let entity = cx.entity();
-        let current_mode = self.current_mode();
-        let system_dark = self.system_dark();
-        let config_path = self.theme_config_path();
+        let selected = self.selected_section;
+        // shortcut_rows 需 &mut self + Context，必须在 render 体内预算（用于「快捷键」分区）
+        let shortcut_rows = self.shortcut_rows(cx);
+        let shortcut_message = self.shortcut_message_text().to_string();
 
-        let retention_seconds = self.retention_seconds();
-        let retention_status = self.retention_status();
-        let retention_message = self.retention_message_text().to_string();
+        const SECTIONS: [&str; 6] = [
+            "主题与外观",
+            "插件管理",
+            "快捷键",
+            "应用索引",
+            "macOS 权限",
+            "开发诊断",
+        ];
 
-        let app_index_available = self.app_index_available();
-        let app_snapshot: Option<AppIndexSnapshot> = self.app_index_snapshot();
-
-        let data_dir = self.data_dir_path();
-        let config_dir = self.config_dir_path();
-        let log_dir = self.log_dir_path();
-
-        let accessibility_status = self.accessibility_status();
-        let accessibility_text = self.accessibility_status_text();
-
-        let imported_plugin_root = self.imported_plugin_root_path();
-
-        let icon_cache_dir = self.icon_cache_dir_path();
-        let icon_cache_message = self.icon_cache_message_text().to_string();
-
-        let has_app_snapshot = app_index_available && app_snapshot.is_some();
-
-        let (shortcut_rows, shortcut_message) = {
-            let rows = self.shortcut_rows(cx);
-            let message = self.shortcut_message_text().to_string();
-            (rows, message)
+        let content = match selected {
+            0 => theme_section(entity.clone(), cx),
+            1 => plugin_section(entity.clone(), cx),
+            2 => shortcuts_section(entity.clone(), shortcut_rows, shortcut_message, cx)
+                .into_any_element(),
+            3 => app_index_section(entity.clone(), cx),
+            4 => permissions_section(entity.clone(), cx),
+            _ => diagnostics_section(entity.clone(), cx),
         };
-
-        let t = Theme::global(cx);
-        let page_bg = t.background;
-        let text_primary = t.foreground;
-        let text_secondary = t.muted_foreground;
 
         div()
             .size_full()
-            .bg(page_bg)
-            .font_family(ui::font_ui())
-            .text_color(text_primary)
             .flex()
-            .flex_col()
-            .p(theme::space_4())
-            .gap(theme::space_4())
-            // ── Header ──
+            .bg(Theme::global(cx).background)
+            .font_family(ui::font_ui())
+            .text_color(Theme::global(cx).foreground)
             .child(
-                div().flex().items_center().justify_between().child(
-                    div()
-                        .text_size(px(14.0))
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .child("系统设置"),
-                ),
-            )
-            // ── Theme & Appearance ──
-            .child(components::settings_card(
-                "主题与外观",
-                Some("控制台视觉样式"),
-                div()
-                    .flex()
-                    .flex_col()
-                    .child(components::settings_row(
-                        "主题模式",
-                        "切换浅色 / 深色 / 跟随系统外观",
-                        mode_segment(entity.clone(), current_mode, cx),
-                        cx,
-                    ))
-                    .child(components::settings_row(
-                        "系统检测",
-                        if system_dark {
-                            "当前系统外观: 深色"
-                        } else {
-                            "当前系统外观: 浅色"
-                        },
+                Sidebar::left()
+                    .collapsible(false)
+                    .w(px(190.0))
+                    .header(
                         div()
-                            .h(px(24.0))
-                            .px_2()
-                            .rounded(px(999.0))
-                            .bg(t.muted)
-                            .flex()
-                            .items_center()
-                            .text_size(theme::font_size_caption())
-                            .text_color(text_secondary)
-                            .child(if system_dark { "深色" } else { "浅色" }),
-                        cx,
-                    ))
-                    .child(components::settings_row(
-                        "主题选择",
-                        "选择内置主题配色方案",
-                        theme_selector(entity.clone(), cx),
-                        cx,
-                    )),
-                cx,
-            ))
-            // ── Plugin Retention ──
-            .child(components::settings_card(
-                "插件管理",
-                Some("窗口保留与导入管理"),
+                            .text_size(px(14.0))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child("系统设置"),
+                    )
+                    .child(SidebarMenu::new().children(SECTIONS.into_iter().enumerate().map(
+                        move |(ix, title)| {
+                            let entity = entity.clone();
+                            SidebarMenuItem::new(title).active(ix == selected).on_click(
+                                move |_, _, cx| {
+                                    entity.update(cx, |view, cx| {
+                                        view.selected_section = ix;
+                                        cx.notify();
+                                    });
+                                },
+                            )
+                        },
+                    ))),
+            )
+            .child(
                 div()
-                    .flex()
-                    .flex_col()
-                    .child(components::settings_row(
-                        "插件窗口保留",
-                        &retention_status,
-                        retention_control(entity.clone(), retention_seconds, retention_message, cx),
-                        cx,
-                    ))
-                    .child(components::settings_row(
-                        "导入插件",
-                        "目录/ZIP 导入尚未实现；可打开目标目录查看",
-                        plugin_dir_button(entity.clone(), cx, &imported_plugin_root),
-                        cx,
-                    ))
-                    .child(components::settings_row(
-                        "已安装插件管理",
-                        "管理已安装插件的启用/卸载",
-                        disabled_badge("尚未实现", cx),
-                        cx,
-                    )),
-                cx,
-            ))
-            // ── Shortcuts ──
-            .child(components::settings_card(
-                "快捷键",
-                Some("全局与应用内快捷键"),
-                shortcuts_section(entity.clone(), shortcut_rows, shortcut_message, cx),
-                cx,
-            ))
-            // ── App Index ──
-            .child(components::settings_card(
-                "应用索引",
-                Some("软件快速启动的应用缓存"),
-                div().flex().flex_col().child(app_index_row(
-                    entity.clone(),
-                    cx,
-                    has_app_snapshot,
-                    app_snapshot,
-                )),
-                cx,
-            ))
-            // ── macOS Permissions ──
-            .child(components::settings_card(
-                "macOS 权限",
-                Some("系统级访问授权状态"),
-                div()
-                    .flex()
-                    .flex_col()
-                    .child(accessibility_row(
-                        entity.clone(),
-                        cx,
-                        accessibility_status,
-                        &accessibility_text,
-                    ))
-                    .child(permission_row(
-                        cx,
-                        "剪贴板访问",
-                        "读取系统剪贴板内容",
-                        PermissionStatus::Unknown,
-                    ))
-                    .child(permission_row(
-                        cx,
-                        "文件访问",
-                        "读取用户目录与应用目录",
-                        PermissionStatus::Unknown,
-                    ))
-                    .child(permission_row(
-                        cx,
-                        "屏幕录制",
-                        "截图、取色等插件可能用到",
-                        PermissionStatus::Unknown,
-                    )),
-                cx,
-            ))
-            // ── Diagnostics ──
-            .child(components::settings_card(
-                "开发诊断",
-                Some("数据、缓存与日志路径"),
-                div()
-                    .flex()
-                    .flex_col()
-                    .child(diag_path_row(
-                        entity.clone(),
-                        cx,
-                        "数据目录",
-                        "Qingqi 应用数据根目录",
-                        &data_dir,
-                        DiagAction::DataDir,
-                    ))
-                    .child(diag_path_row(
-                        entity.clone(),
-                        cx,
-                        "配置目录",
-                        "配置文件与数据库路径",
-                        &config_dir,
-                        DiagAction::ConfigDir,
-                    ))
-                    .child(diag_path_row(
-                        entity.clone(),
-                        cx,
-                        "日志目录",
-                        "运行日志输出目录",
-                        &log_dir,
-                        DiagAction::LogDir,
-                    ))
-                    .child(components::settings_row(
-                        "主题配置",
-                        "当前主题持久化文件",
-                        path_badge(&config_path, cx),
-                        cx,
-                    ))
-                    .child(components::settings_row(
-                        "应用索引维护",
-                        "手动重建软件快速启动的应用索引",
-                        app_index_action_button(entity.clone(), cx, has_app_snapshot),
-                        cx,
-                    ))
-                    .child(components::settings_row(
-                        "清理图标缓存",
-                        &icon_cache_dir,
-                        icon_cache_clear_button(entity.clone(), cx, icon_cache_message),
-                        cx,
-                    ))
-                    .child(components::settings_row(
-                        "日志诊断",
-                        "后台服务状态、最近错误、警告统计",
-                        disabled_badge("尚未实现", cx),
-                        cx,
-                    )),
-                cx,
-            ))
+                    .id("settings-content")
+                    .flex_1()
+                    .min_w_0()
+                    .p(theme::space_4())
+                    .overflow_y_scroll()
+                    .child(content),
+            )
     }
+}
+
+fn theme_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
+    let current_mode = entity.read(cx).current_mode();
+    let system_dark = entity.read(cx).system_dark();
+    let t = Theme::global(cx);
+    div()
+        .flex()
+        .flex_col()
+        .gap(theme::space_3())
+        .child(components::settings_row(
+            "主题模式",
+            "切换浅色 / 深色 / 跟随系统外观",
+            mode_segment(entity.clone(), current_mode, cx),
+            cx,
+        ))
+        .child(components::settings_row(
+            "系统检测",
+            if system_dark {
+                "当前系统外观: 深色"
+            } else {
+                "当前系统外观: 浅色"
+            },
+            div()
+                .h(px(24.0))
+                .px_2()
+                .rounded(px(999.0))
+                .bg(t.muted)
+                .flex()
+                .items_center()
+                .text_size(theme::font_size_caption())
+                .text_color(t.muted_foreground)
+                .child(if system_dark { "深色" } else { "浅色" }),
+            cx,
+        ))
+        .child(components::settings_row(
+            "主题选择",
+            "选择内置主题配色方案",
+            theme_selector(entity.clone(), cx),
+            cx,
+        ))
+        .into_any_element()
+}
+
+fn plugin_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
+    let retention_seconds = entity.read(cx).retention_seconds();
+    let retention_status = entity.read(cx).retention_status();
+    let retention_message = entity.read(cx).retention_message_text().to_string();
+    let imported_plugin_root = entity.read(cx).imported_plugin_root_path();
+    div()
+        .flex()
+        .flex_col()
+        .gap(theme::space_3())
+        .child(components::settings_row(
+            "插件窗口保留",
+            retention_status,
+            retention_control(entity.clone(), retention_seconds, retention_message, cx),
+            cx,
+        ))
+        .child(components::settings_row(
+            "导入插件",
+            "目录/ZIP 导入尚未实现；可打开目标目录查看",
+            plugin_dir_button(entity.clone(), cx, &imported_plugin_root),
+            cx,
+        ))
+        .child(components::settings_row(
+            "已安装插件管理",
+            "管理已安装插件的启用/卸载",
+            disabled_badge("尚未实现", cx),
+            cx,
+        ))
+        .into_any_element()
+}
+
+fn app_index_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
+    let app_index_available = entity.read(cx).app_index_available();
+    let app_snapshot = entity.read(cx).app_index_snapshot();
+    let has_app_snapshot = app_index_available && app_snapshot.is_some();
+    div()
+        .flex()
+        .flex_col()
+        .child(app_index_row(entity.clone(), cx, has_app_snapshot, app_snapshot))
+        .into_any_element()
+}
+
+fn permissions_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
+    let accessibility_status = entity.read(cx).accessibility_status();
+    let accessibility_text = entity.read(cx).accessibility_status_text();
+    div()
+        .flex()
+        .flex_col()
+        .gap(theme::space_2())
+        .child(accessibility_row(
+            entity.clone(),
+            cx,
+            accessibility_status,
+            &accessibility_text,
+        ))
+        .child(permission_row(
+            cx,
+            "剪贴板访问",
+            "读取系统剪贴板内容",
+            PermissionStatus::Unknown,
+        ))
+        .child(permission_row(
+            cx,
+            "文件访问",
+            "读取用户目录与应用目录",
+            PermissionStatus::Unknown,
+        ))
+        .child(permission_row(
+            cx,
+            "屏幕录制",
+            "截图、取色等插件可能用到",
+            PermissionStatus::Unknown,
+        ))
+        .into_any_element()
+}
+
+fn diagnostics_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
+    let data_dir = entity.read(cx).data_dir_path();
+    let config_dir = entity.read(cx).config_dir_path();
+    let log_dir = entity.read(cx).log_dir_path();
+    let config_path = entity.read(cx).theme_config_path();
+    let app_index_available = entity.read(cx).app_index_available();
+    let has_app_snapshot = app_index_available && entity.read(cx).app_index_snapshot().is_some();
+    let icon_cache_dir = entity.read(cx).icon_cache_dir_path();
+    let icon_cache_message = entity.read(cx).icon_cache_message_text().to_string();
+    div()
+        .flex()
+        .flex_col()
+        .child(diag_path_row(
+            entity.clone(),
+            cx,
+            "数据目录",
+            "Qingqi 应用数据根目录",
+            &data_dir,
+            DiagAction::DataDir,
+        ))
+        .child(diag_path_row(
+            entity.clone(),
+            cx,
+            "配置目录",
+            "配置文件与数据库路径",
+            &config_dir,
+            DiagAction::ConfigDir,
+        ))
+        .child(diag_path_row(
+            entity.clone(),
+            cx,
+            "日志目录",
+            "运行日志输出目录",
+            &log_dir,
+            DiagAction::LogDir,
+        ))
+        .child(components::settings_row(
+            "主题配置",
+            "当前主题持久化文件",
+            path_badge(&config_path, cx),
+            cx,
+        ))
+        .child(components::settings_row(
+            "应用索引维护",
+            "手动重建软件快速启动的应用索引",
+            app_index_action_button(entity.clone(), cx, has_app_snapshot),
+            cx,
+        ))
+        .child(components::settings_row(
+            "清理图标缓存",
+            icon_cache_dir,
+            icon_cache_clear_button(entity.clone(), cx, icon_cache_message),
+            cx,
+        ))
+        .child(components::settings_row(
+            "日志诊断",
+            "后台服务状态、最近错误、警告统计",
+            disabled_badge("尚未实现", cx),
+            cx,
+        ))
+        .into_any_element()
 }
 
 // ── Retention control ──

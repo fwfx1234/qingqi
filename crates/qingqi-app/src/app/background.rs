@@ -11,12 +11,14 @@ use gpui_component::theme::Theme;
 use crate::{
     app::{
         theme_store::ThemeStore,
+        tray_manager::{NetworkSpeedProvider, TrayManager, TrayManagerHandle},
         window_controller::{WindowController, WindowControllerHandle},
     },
     core::shortcut::{self, ShortcutGlobal},
 };
 use qingqi_core::lock_or_recover;
 use qingqi_platform::{
+    network::NetworkSampler,
     power::{PowerChangeListener, PowerManager},
     theme::ThemeChangeListener,
 };
@@ -37,6 +39,7 @@ impl BackgroundSupervisor {
     pub fn start_tray_events(
         &mut self,
         window_controller: WindowControllerHandle,
+        tray_manager: TrayManagerHandle,
         power_manager: Arc<Mutex<PowerManager>>,
         cx: &mut App,
     ) {
@@ -47,19 +50,21 @@ impl BackgroundSupervisor {
         // Tray-icon left-clicks → show launcher. Event-driven: the helper parks
         // on the tray channel, so there is no idle polling wakeup.
         let icon_wc = Arc::clone(&window_controller);
+        let icon_tm = tray_manager.clone();
         let icon_pm = Arc::clone(&power_manager);
         let icon_task = cx.spawn(async move |async_cx| {
             loop {
                 let action = async_cx
                     .background_executor()
-                    .spawn(async { qingqi_platform::tray::next_tray_action() })
+                    .spawn(async { qingqi_platform::tray::next_tray_icon_action() })
                     .await;
                 let Some(action) = action else {
                     break;
                 };
                 let wc = Arc::clone(&icon_wc);
+                let tm = icon_tm.clone();
                 let pm = Arc::clone(&icon_pm);
-                let _ = async_cx.update(move |cx| handle_tray_action(action, wc, pm, cx));
+                let _ = async_cx.update(move |cx| handle_tray_icon_action(action, wc, tm, pm, cx));
             }
         });
         self.tasks.push(icon_task);
@@ -80,6 +85,36 @@ impl BackgroundSupervisor {
             }
         });
         self.tasks.push(menu_task);
+    }
+
+    pub fn start_tray_providers(&mut self, tray_manager: TrayManagerHandle, cx: &mut App) {
+        if !self.mark_started("tray-providers") {
+            return;
+        }
+
+        let task = cx.spawn(async move |async_cx| {
+            let mut sampler = NetworkSampler::new();
+            loop {
+                let provider = async_cx
+                    .background_executor()
+                    .spawn(async move {
+                        let provider = NetworkSpeedProvider::sample(&mut sampler);
+                        (provider, sampler)
+                    })
+                    .await;
+                let (provider, next_sampler) = provider;
+                sampler = next_sampler;
+                let tm = tray_manager.clone();
+                let _ = async_cx.update(move |_cx| {
+                    lock_or_recover(&tm.0, "tray-manager").update_provider(Box::new(provider));
+                });
+                async_cx
+                    .background_executor()
+                    .timer(NetworkSpeedProvider::sampling_interval())
+                    .await;
+            }
+        });
+        self.tasks.push(task);
     }
 
     pub fn start_hotkey_events(&mut self, window_controller: WindowControllerHandle, cx: &mut App) {
@@ -264,5 +299,29 @@ fn handle_tray_action(
             cx.quit();
         }
         TrayAction::Quit => cx.quit(),
+    }
+}
+
+fn handle_tray_icon_action(
+    action: qingqi_platform::tray::TrayIconAction,
+    window_controller: WindowControllerHandle,
+    tray_manager: TrayManagerHandle,
+    power_manager: Arc<Mutex<PowerManager>>,
+    cx: &mut App,
+) {
+    use qingqi_platform::tray::TrayIconAction;
+
+    match action {
+        TrayIconAction::Main => {
+            handle_tray_action(
+                qingqi_platform::tray::TrayAction::Show,
+                window_controller,
+                power_manager,
+                cx,
+            );
+        }
+        TrayIconAction::Item(id) => {
+            TrayManager::handle_item_click(tray_manager, id, cx);
+        }
     }
 }

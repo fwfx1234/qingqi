@@ -26,6 +26,7 @@ use crate::{
         background::BackgroundSupervisor,
         theme_service::ThemeService,
         theme_store::ThemeStore,
+        tray_manager::{NetworkSpeedProvider, TrayManager, TrayManagerHandle},
         window_controller::{PluginOpenTrace, WindowController, WindowControllerHandle},
     },
     core::{
@@ -211,6 +212,7 @@ pub fn run(host: AppHost) -> Result<()> {
         Arc::clone(&app_catalog),
         build_cx.events.clone(),
     )));
+    let tray_manager = TrayManagerHandle::new(TrayManager::new());
     let app = gpui::Application::new().with_assets(qingqi_ui::assets::ProjectAssets);
     let plugins_for_shutdown = Arc::clone(&plugins);
     app.on_reopen({
@@ -308,16 +310,21 @@ pub fn run(host: AppHost) -> Result<()> {
         let initial_mode = qingqi_core::lock_or_recover(&power_manager, "power-manager").mode();
         match qingqi_platform::tray::install_tray(initial_mode) {
             Ok(()) => {
+                qingqi_core::lock_or_recover(&tray_manager.0, "tray-manager")
+                    .register_provider(Box::new(NetworkSpeedProvider::new(Default::default())));
                 background.start_tray_events(
                     Arc::clone(&window_controller),
+                    tray_manager.clone(),
                     Arc::clone(&power_manager),
                     cx,
                 );
+                background.start_tray_providers(tray_manager.clone(), cx);
                 background.start_power_listener(Arc::clone(&power_manager), cx);
             }
             Err(error) => tracing::warn!(error, "system tray install failed"),
         }
         cx.set_global(ShortcutGlobal::new(Arc::clone(&shortcut_service)));
+        cx.set_global(tray_manager.clone());
         cx.set_global(background);
     });
     qingqi_core::lock_or_recover(&plugins_for_shutdown, "plugin-manager").shutdown();

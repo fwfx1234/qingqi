@@ -1,6 +1,8 @@
 //! System tray: show window, prevent sleep, restart, quit.
 
 use std::{
+    cell::RefCell,
+    collections::HashMap,
     process::Command,
     sync::atomic::{AtomicBool, Ordering},
     thread,
@@ -9,7 +11,7 @@ use std::{
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tray_icon::{
-    Icon, TrayIconBuilder,
+    Icon, TrayIconBuilder, TrayIconId,
     menu::{CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu},
 };
 
@@ -24,6 +26,63 @@ pub enum TrayAction {
     Quit,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TrayItemId(String);
+
+impl TrayItemId {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    fn tray_icon_id(&self) -> String {
+        format!("qingqi.tray.item.{}", self.0)
+    }
+}
+
+impl From<&str> for TrayItemId {
+    fn from(value: &str) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<String> for TrayItemId {
+    fn from(value: String) -> Self {
+        Self::new(value)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TrayItemIcon {
+    Default,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TrayItemSpec {
+    pub id: TrayItemId,
+    pub icon: TrayItemIcon,
+    pub title: String,
+    pub tooltip: String,
+    pub menu: Vec<String>,
+    pub priority: i32,
+    pub visible: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TrayItemState {
+    pub spec: TrayItemSpec,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TrayIconAction {
+    Main,
+    Item(TrayItemId),
+}
+
+const MAIN_TRAY_ID: &str = "qingqi.tray.main";
 const MENU_SHOW: &str = "qingqi.tray.show";
 const MENU_SLEEP_DISABLED: &str = "qingqi.tray.sleep.disabled";
 const MENU_SLEEP_ALWAYS: &str = "qingqi.tray.sleep.always";
@@ -41,6 +100,7 @@ pub fn install_tray(mode: PreventSleepMode) -> Result<(), String> {
         let menu = build_menu(mode)?;
         let icon = default_icon()?;
         let mut builder = TrayIconBuilder::new()
+            .with_id(MAIN_TRAY_ID)
             .with_menu(Box::new(menu))
             .with_menu_on_left_click(false)
             .with_tooltip("Qingqi");
@@ -85,12 +145,142 @@ pub fn rebuild_menu(mode: PreventSleepMode) -> Result<(), String> {
     }
 }
 
+pub fn register_item(spec: TrayItemSpec) -> Result<(), String> {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        let icon = icon_for_tray_item(&spec.icon)?;
+        let mut builder = TrayIconBuilder::new()
+            .with_id(spec.id.tray_icon_id())
+            .with_icon(icon)
+            .with_tooltip(spec.tooltip.as_str())
+            .with_menu_on_left_click(false);
+
+        if !spec.title.is_empty() {
+            builder = builder.with_title(spec.title.as_str());
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            builder = builder.with_icon_as_template(true);
+        }
+
+        let tray = builder.build().map_err(|error| error.to_string())?;
+        tray.set_visible(spec.visible)
+            .map_err(|error| error.to_string())?;
+        with_item_trays(|items| {
+            items.insert(spec.id.clone(), TrayItemEntry { state: TrayItemState { spec }, tray });
+        });
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = spec;
+        Err(String::from("system tray not supported on this platform"))
+    }
+}
+
+pub fn update_item(spec: TrayItemSpec) -> Result<(), String> {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        let mut found = false;
+        let mut result = Ok(());
+        with_item_trays(|items| {
+            if let Some(entry) = items.get_mut(&spec.id) {
+                found = true;
+                entry.tray.set_title(Some(spec.title.as_str()));
+                if let Err(error) = entry.tray.set_tooltip(Some(spec.tooltip.as_str())) {
+                    result = Err(error.to_string());
+                    return;
+                }
+                if let Err(error) = entry.tray.set_visible(spec.visible) {
+                    result = Err(error.to_string());
+                    return;
+                }
+                entry.state = TrayItemState { spec: spec.clone() };
+            }
+        });
+        if !found {
+            return register_item(spec);
+        }
+        result
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = spec;
+        Ok(())
+    }
+}
+
+pub fn remove_item(id: &TrayItemId) {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    with_item_trays(|items| {
+        items.remove(id);
+    });
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let _ = id;
+}
+
+pub fn set_item_visible(id: &TrayItemId, visible: bool) -> Result<(), String> {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        let mut result = Ok(());
+        with_item_trays(|items| {
+            if let Some(entry) = items.get_mut(id) {
+                entry.state.spec.visible = visible;
+                if let Err(error) = entry.tray.set_visible(visible) {
+                    result = Err(error.to_string());
+                }
+            }
+        });
+        result
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = id;
+        let _ = visible;
+        Ok(())
+    }
+}
+
+pub fn item_states() -> Vec<TrayItemState> {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        let mut states = Vec::new();
+        with_item_trays(|items| {
+            states.extend(items.values().map(|entry| entry.state.clone()));
+        });
+        states.sort_by(|a, b| {
+            a.spec
+                .priority
+                .cmp(&b.spec.priority)
+                .then_with(|| a.spec.id.as_str().cmp(b.spec.id.as_str()))
+        });
+        states
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        Vec::new()
+    }
+}
+
 /// Block until the next tray-icon left-click, returning the resulting action.
 ///
 /// Event-driven: parks on the `tray-icon` event channel instead of polling, so
 /// it adds no idle CPU wakeups. Returns `None` when the channel is disconnected
 /// (or on platforms without a tray), which signals callers to stop looping.
 pub fn next_tray_action() -> Option<TrayAction> {
+    next_tray_icon_action().map(|action| match action {
+        TrayIconAction::Main => TrayAction::Show,
+        TrayIconAction::Item(_) => TrayAction::Show,
+    })
+}
+
+pub fn next_tray_icon_action() -> Option<TrayIconAction> {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
         use tray_icon::{MouseButton, MouseButtonState, TrayIconEvent};
@@ -98,12 +288,13 @@ pub fn next_tray_action() -> Option<TrayAction> {
         loop {
             let event = TrayIconEvent::receiver().recv().ok()?;
             if let TrayIconEvent::Click {
+                id,
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
                 ..
             } = event
             {
-                return Some(TrayAction::Show);
+                return Some(action_for_tray_icon_id(&id));
             }
             // Other tray events (right-click, enter/leave, …) are ignored; keep
             // blocking until a left-click arrives.
@@ -159,24 +350,35 @@ pub fn relaunch() {
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tray_icon::TrayIcon;
 
-/// Stored tray icon. Only accessed from the main thread (GPUI event loop).
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-static mut CURRENT_TRAY: Option<TrayIcon> = None;
+thread_local! {
+    static CURRENT_TRAY: RefCell<Option<TrayIcon>> = const { RefCell::new(None) };
+    static ITEM_TRAYS: RefCell<HashMap<TrayItemId, TrayItemEntry>> = RefCell::new(HashMap::new());
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+struct TrayItemEntry {
+    state: TrayItemState,
+    tray: TrayIcon,
+}
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 fn replace_tray(tray: TrayIcon) {
-    unsafe {
-        CURRENT_TRAY = Some(tray);
-    }
+    CURRENT_TRAY.with(|current| *current.borrow_mut() = Some(tray));
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 fn with_tray(f: impl FnOnce(&TrayIcon)) {
-    unsafe {
-        if let Some(ref tray) = CURRENT_TRAY {
+    CURRENT_TRAY.with(|current| {
+        if let Some(tray) = current.borrow().as_ref() {
             f(tray);
         }
-    }
+    });
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn with_item_trays(f: impl FnOnce(&mut HashMap<TrayItemId, TrayItemEntry>)) {
+    ITEM_TRAYS.with(|items| f(&mut items.borrow_mut()));
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -316,6 +518,13 @@ fn default_icon() -> Result<Icon, String> {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
+fn icon_for_tray_item(icon: &TrayItemIcon) -> Result<Icon, String> {
+    match icon {
+        TrayItemIcon::Default => default_icon(),
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn load_tray_svg_icon() -> Option<Icon> {
     // macOS 菜单栏标准逻辑尺寸为 22pt，使用 2x 位图保证 Retina 清晰
     const SIZE: u32 = 44;
@@ -350,5 +559,60 @@ fn action_for_menu_id(id: &str) -> Option<TrayAction> {
         MENU_RESTART => Some(TrayAction::Restart),
         MENU_QUIT => Some(TrayAction::Quit),
         _ => None,
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn action_for_tray_icon_id(id: &TrayIconId) -> TrayIconAction {
+    let id = id.as_ref();
+    if id == MAIN_TRAY_ID {
+        return TrayIconAction::Main;
+    }
+    if let Some(item_id) = id.strip_prefix("qingqi.tray.item.") {
+        return TrayIconAction::Item(TrayItemId::new(item_id));
+    }
+    TrayIconAction::Main
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TrayItemIcon, TrayItemId, TrayItemSpec, TrayItemState};
+
+    #[test]
+    fn tray_item_id_maps_to_internal_icon_id() {
+        let id = TrayItemId::new("network-speed");
+        assert_eq!(id.as_str(), "network-speed");
+        assert_eq!(id.tray_icon_id(), "qingqi.tray.item.network-speed");
+    }
+
+    #[test]
+    fn tray_item_states_sort_by_priority_then_id() {
+        let mut states = [
+            state("zeta", 20),
+            state("alpha", 10),
+            state("beta", 10),
+        ];
+        states.sort_by(|a, b| {
+            a.spec
+                .priority
+                .cmp(&b.spec.priority)
+                .then_with(|| a.spec.id.as_str().cmp(b.spec.id.as_str()))
+        });
+        let ids: Vec<&str> = states.iter().map(|state| state.spec.id.as_str()).collect();
+        assert_eq!(ids, vec!["alpha", "beta", "zeta"]);
+    }
+
+    fn state(id: &str, priority: i32) -> TrayItemState {
+        TrayItemState {
+            spec: TrayItemSpec {
+                id: TrayItemId::new(id),
+                icon: TrayItemIcon::Default,
+                title: String::new(),
+                tooltip: String::new(),
+                menu: Vec::new(),
+                priority,
+                visible: true,
+            },
+        }
     }
 }

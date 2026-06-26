@@ -5996,6 +5996,7 @@ dependencies = [
  "resvg",
  "serde",
  "serde_json",
+ "sysinfo",
  "tiny-skia",
  "tracing",
  "tray-icon",

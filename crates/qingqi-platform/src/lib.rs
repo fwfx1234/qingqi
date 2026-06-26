@@ -6,6 +6,7 @@ pub mod icon_raster;
 #[cfg(target_os = "windows")]
 pub mod low_level_hook;
 pub mod macos;
+pub mod network;
 pub mod power;
 pub mod shell;
 pub mod svg_icon;

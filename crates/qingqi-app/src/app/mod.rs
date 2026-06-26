@@ -6,4 +6,5 @@ pub mod launcher;
 pub mod runtime;
 pub mod theme_service;
 pub mod theme_store;
+pub mod tray_manager;
 pub mod window_controller;
