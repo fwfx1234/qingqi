@@ -11,7 +11,9 @@ use gpui_component::theme::Theme;
 use crate::{
     app::{
         theme_store::ThemeStore,
-        tray_manager::{NetworkSpeedProvider, TrayManager, TrayManagerHandle},
+        tray_manager::{
+            NetworkSpeedProvider, TrayManager, TrayManagerHandle, load_current_tray_settings,
+        },
         window_controller::{WindowController, WindowControllerHandle},
     },
     core::shortcut::{self, ShortcutGlobal},
@@ -88,6 +90,16 @@ impl BackgroundSupervisor {
     }
 
     pub fn start_tray_providers(&mut self, tray_manager: TrayManagerHandle, cx: &mut App) {
+        let paths = qingqi_plugin::storage::AppPaths::resolve().ok();
+        self.start_tray_providers_with_paths(tray_manager, paths, cx);
+    }
+
+    pub fn start_tray_providers_with_paths(
+        &mut self,
+        tray_manager: TrayManagerHandle,
+        paths: Option<qingqi_plugin::storage::AppPaths>,
+        cx: &mut App,
+    ) {
         if !self.mark_started("tray-providers") {
             return;
         }
@@ -95,10 +107,14 @@ impl BackgroundSupervisor {
         let task = cx.spawn(async move |async_cx| {
             let mut sampler = NetworkSampler::new();
             loop {
+                let settings = paths
+                    .as_ref()
+                    .map(load_current_tray_settings)
+                    .unwrap_or_default();
                 let provider = async_cx
                     .background_executor()
                     .spawn(async move {
-                        let provider = NetworkSpeedProvider::sample(&mut sampler);
+                        let provider = NetworkSpeedProvider::sample(&mut sampler, settings);
                         (provider, sampler)
                     })
                     .await;

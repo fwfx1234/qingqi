@@ -57,6 +57,7 @@ impl From<String> for TrayItemId {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TrayItemIcon {
+    None,
     Default,
 }
 
@@ -148,12 +149,13 @@ pub fn rebuild_menu(mode: PreventSleepMode) -> Result<(), String> {
 pub fn register_item(spec: TrayItemSpec) -> Result<(), String> {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
-        let icon = icon_for_tray_item(&spec.icon)?;
         let mut builder = TrayIconBuilder::new()
             .with_id(spec.id.tray_icon_id())
-            .with_icon(icon)
             .with_tooltip(spec.tooltip.as_str())
             .with_menu_on_left_click(false);
+        if let Some(icon) = icon_for_tray_item(&spec.icon)? {
+            builder = builder.with_icon(icon);
+        }
 
         if !spec.title.is_empty() {
             builder = builder.with_title(spec.title.as_str());
@@ -518,9 +520,13 @@ fn default_icon() -> Result<Icon, String> {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn icon_for_tray_item(icon: &TrayItemIcon) -> Result<Icon, String> {
+fn icon_for_tray_item(icon: &TrayItemIcon) -> Result<Option<Icon>, String> {
     match icon {
-        TrayItemIcon::Default => default_icon(),
+        #[cfg(target_os = "macos")]
+        TrayItemIcon::None => Ok(None),
+        #[cfg(not(target_os = "macos"))]
+        TrayItemIcon::None => default_icon().map(Some),
+        TrayItemIcon::Default => default_icon().map(Some),
     }
 }
 

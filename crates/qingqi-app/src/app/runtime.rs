@@ -26,7 +26,9 @@ use crate::{
         background::BackgroundSupervisor,
         theme_service::ThemeService,
         theme_store::ThemeStore,
-        tray_manager::{NetworkSpeedProvider, TrayManager, TrayManagerHandle},
+        tray_manager::{
+            NetworkSpeedProvider, TrayManager, TrayManagerHandle, load_current_tray_settings,
+        },
         window_controller::{PluginOpenTrace, WindowController, WindowControllerHandle},
     },
     core::{
@@ -310,15 +312,23 @@ pub fn run(host: AppHost) -> Result<()> {
         let initial_mode = qingqi_core::lock_or_recover(&power_manager, "power-manager").mode();
         match qingqi_platform::tray::install_tray(initial_mode) {
             Ok(()) => {
+                let initial_tray_settings = load_current_tray_settings(&paths);
                 qingqi_core::lock_or_recover(&tray_manager.0, "tray-manager")
-                    .register_provider(Box::new(NetworkSpeedProvider::new(Default::default())));
+                    .register_provider(Box::new(NetworkSpeedProvider::new(
+                        Default::default(),
+                        initial_tray_settings,
+                    )));
                 background.start_tray_events(
                     Arc::clone(&window_controller),
                     tray_manager.clone(),
                     Arc::clone(&power_manager),
                     cx,
                 );
-                background.start_tray_providers(tray_manager.clone(), cx);
+                background.start_tray_providers_with_paths(
+                    tray_manager.clone(),
+                    Some(paths.clone()),
+                    cx,
+                );
                 background.start_power_listener(Arc::clone(&power_manager), cx);
             }
             Err(error) => tracing::warn!(error, "system tray install failed"),

@@ -13,14 +13,24 @@ const MAX_RETENTION_SECONDS: u64 = 3600;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct SettingsData {
     plugin_window_retention_seconds: u64,
+    #[serde(default = "default_network_speed_visible")]
+    tray_network_speed_visible: bool,
+    #[serde(default)]
+    tray_network_speed_show_icon: bool,
 }
 
 impl Default for SettingsData {
     fn default() -> Self {
         Self {
             plugin_window_retention_seconds: DEFAULT_PLUGIN_WINDOW_RETENTION_SECONDS,
+            tray_network_speed_visible: default_network_speed_visible(),
+            tray_network_speed_show_icon: false,
         }
     }
+}
+
+fn default_network_speed_visible() -> bool {
+    true
 }
 
 pub struct SettingsStore {
@@ -56,6 +66,37 @@ impl SettingsStore {
         self.data.plugin_window_retention_seconds = DEFAULT_PLUGIN_WINDOW_RETENTION_SECONDS;
         self.save()?;
         Ok(DEFAULT_PLUGIN_WINDOW_RETENTION_SECONDS)
+    }
+
+    pub fn tray_network_speed_visible(&self) -> bool {
+        self.data.tray_network_speed_visible
+    }
+
+    pub fn tray_network_speed_show_icon(&self) -> bool {
+        self.data.tray_network_speed_show_icon
+    }
+
+    pub fn set_tray_network_speed_visible(&mut self, visible: bool) -> Result<()> {
+        self.data.tray_network_speed_visible = visible;
+        self.save()?;
+        self.save_tray_settings()
+    }
+
+    pub fn set_tray_network_speed_show_icon(&mut self, show_icon: bool) -> Result<()> {
+        self.data.tray_network_speed_show_icon = show_icon;
+        self.save()?;
+        self.save_tray_settings()
+    }
+
+    fn save_tray_settings(&self) -> Result<()> {
+        let mut store = qingqi_platform::tray_settings::TraySettingsStore::new(
+            self.path
+                .parent()
+                .map(|parent| parent.join("tray.json"))
+                .unwrap_or_else(|| PathBuf::from("tray.json")),
+        );
+        store.set_network_speed_visible(self.data.tray_network_speed_visible)?;
+        store.set_network_speed_show_icon(self.data.tray_network_speed_show_icon)
     }
 
     fn load(path: &Path) -> Result<SettingsData> {
@@ -116,6 +157,8 @@ mod tests {
     fn defaults_to_300_seconds() {
         let store = SettingsStore::new(temp_path("settings.json"));
         assert_eq!(store.plugin_window_retention_seconds(), 300);
+        assert!(store.tray_network_speed_visible());
+        assert!(!store.tray_network_speed_show_icon());
     }
 
     #[test]
@@ -171,5 +214,30 @@ mod tests {
         assert_eq!(retention_status_text(60), "内联插件退出后保留 1 分钟");
         assert_eq!(retention_status_text(90), "内联插件退出后保留 1 分 30 秒");
         assert_eq!(retention_status_text(300), "内联插件退出后保留 5 分钟");
+    }
+
+    #[test]
+    fn persists_tray_settings() {
+        let path = temp_path("settings.json");
+        {
+            let mut store = SettingsStore::new(path.clone());
+            store
+                .set_tray_network_speed_visible(false)
+                .expect("visible");
+            store
+                .set_tray_network_speed_show_icon(true)
+                .expect("show icon");
+        }
+        let store = SettingsStore::new(path.clone());
+        assert!(!store.tray_network_speed_visible());
+        assert!(store.tray_network_speed_show_icon());
+
+        let tray_settings =
+            qingqi_platform::tray_settings::load_tray_settings(&path.parent().unwrap().join("tray.json"))
+                .expect("tray settings");
+        assert!(!tray_settings.network_speed_visible);
+        assert!(tray_settings.network_speed_show_icon);
+
+        let _ = std::fs::remove_dir_all(path.parent().expect("temp parent"));
     }
 }

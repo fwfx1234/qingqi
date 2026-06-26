@@ -13,6 +13,7 @@ use qingqi_core::lock_or_recover;
 use qingqi_platform::{
     network::{NetworkSampler, NetworkSnapshot, format_bytes, format_rate},
     tray::{TrayItemIcon, TrayItemId, TrayItemSpec},
+    tray_settings::{TraySettings, load_tray_settings},
 };
 use qingqi_ui::ui;
 
@@ -155,15 +156,17 @@ impl Default for TrayManager {
 
 pub struct NetworkSpeedProvider {
     snapshot: NetworkSnapshot,
+    settings: TraySettings,
     updated_at_unix: u64,
 }
 
 impl NetworkSpeedProvider {
     pub const ID: &'static str = "network-speed";
 
-    pub fn new(snapshot: NetworkSnapshot) -> Self {
+    pub fn new(snapshot: NetworkSnapshot, settings: TraySettings) -> Self {
         Self {
             snapshot,
+            settings,
             updated_at_unix: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map(|duration| duration.as_secs())
@@ -175,18 +178,21 @@ impl NetworkSpeedProvider {
         Duration::from_secs(1)
     }
 
-    pub fn sample(sampler: &mut NetworkSampler) -> Self {
-        Self::new(sampler.sample())
+    pub fn sample(sampler: &mut NetworkSampler, settings: TraySettings) -> Self {
+        Self::new(sampler.sample(), settings)
     }
 
     fn title(&self) -> String {
         if !self.snapshot.ready {
-            return String::from("Net ...");
+            return String::from("0K");
+        }
+        let down = format_compact_rate(self.snapshot.received_per_sec);
+        let up = format_compact_rate(self.snapshot.transmitted_per_sec);
+        if self.snapshot.transmitted_per_sec > self.snapshot.received_per_sec {
+            return format!("↑{up}");
         }
         format!(
-            "↓{} ↑{}",
-            format_compact_rate(self.snapshot.received_per_sec),
-            format_compact_rate(self.snapshot.transmitted_per_sec)
+            "↓{down}"
         )
     }
 
@@ -208,12 +214,16 @@ impl TrayItemProvider for NetworkSpeedProvider {
     fn spec(&self) -> TrayItemSpec {
         TrayItemSpec {
             id: TrayItemId::new(Self::ID),
-            icon: TrayItemIcon::Default,
+            icon: if self.settings.network_speed_show_icon {
+                TrayItemIcon::Default
+            } else {
+                TrayItemIcon::None
+            },
             title: self.title(),
             tooltip: self.tooltip(),
             menu: Vec::new(),
             priority: 10,
-            visible: true,
+            visible: self.settings.network_speed_visible,
         }
     }
 
@@ -293,10 +303,13 @@ impl Render for TrayPopupWindow {
                             .flex()
                             .items_center()
                             .justify_between()
-                            .child(div().text_lg().font_weight(gpui::FontWeight::SEMIBOLD).child(self.popup.title.clone()))
                             .child(
-                                ui::window_close_button(cx),
-                            ),
+                                div()
+                                    .text_size(px(15.0))
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .child(self.popup.title.clone()),
+                            )
+                            .child(ui::window_close_button(cx)),
                     )
                     .child(div().text_sm().text_color(ui::text_secondary(cx)).child(self.popup.subtitle.clone()))
                     .child(
@@ -314,7 +327,7 @@ impl Render for TrayPopupWindow {
                                     .border_b_1()
                                     .border_color(ui::border_light(cx))
                                     .child(div().text_sm().text_color(ui::text_secondary(cx)).child(row.label.clone()))
-                                    .child(div().text_sm().font_family("monospace").child(row.value.clone()))
+                                    .child(div().text_xs().font_family("monospace").child(row.value.clone()))
                             })),
                     ),
             )
@@ -352,4 +365,8 @@ fn close_popup_window(
 fn format_compact_rate(bytes_per_sec: u64) -> String {
     let formatted = format_rate(bytes_per_sec);
     formatted.strip_suffix("/s").unwrap_or(&formatted).to_string()
+}
+
+pub fn load_current_tray_settings(paths: &qingqi_plugin::storage::AppPaths) -> TraySettings {
+    load_tray_settings(&paths.config("tray.json")).unwrap_or_default()
 }

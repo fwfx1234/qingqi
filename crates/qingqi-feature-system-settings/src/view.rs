@@ -42,6 +42,7 @@ pub struct SettingsView {
     shortcut_inputs: HashMap<String, Entity<TextInput>>,
     shortcut_drafts: HashMap<String, String>,
     shortcut_message: String,
+    tray_message: String,
     /// 设置中心当前选中的分区（侧边栏导航）
     selected_section: usize,
 }
@@ -74,6 +75,7 @@ impl SettingsView {
             shortcut_inputs: HashMap::new(),
             shortcut_drafts: HashMap::new(),
             shortcut_message: String::new(),
+            tray_message: String::new(),
             selected_section: 0,
         }
     }
@@ -175,6 +177,44 @@ impl SettingsView {
             Err(_) => {
                 self.retention_message = String::from("设置存储不可用");
             }
+        }
+    }
+
+    pub fn tray_network_speed_visible(&self) -> bool {
+        self.settings_store
+            .lock()
+            .map(|store| store.tray_network_speed_visible())
+            .unwrap_or(true)
+    }
+
+    pub fn tray_network_speed_show_icon(&self) -> bool {
+        self.settings_store
+            .lock()
+            .map(|store| store.tray_network_speed_show_icon())
+            .unwrap_or(false)
+    }
+
+    pub fn tray_message_text(&self) -> &str {
+        &self.tray_message
+    }
+
+    pub fn set_tray_network_speed_visible(&mut self, visible: bool) {
+        match self.settings_store.lock() {
+            Ok(mut store) => match store.set_tray_network_speed_visible(visible) {
+                Ok(()) => self.tray_message = String::from("已保存，托盘将在数秒内更新"),
+                Err(error) => self.tray_message = format!("保存失败: {error}"),
+            },
+            Err(_) => self.tray_message = String::from("设置存储不可用"),
+        }
+    }
+
+    pub fn set_tray_network_speed_show_icon(&mut self, show_icon: bool) {
+        match self.settings_store.lock() {
+            Ok(mut store) => match store.set_tray_network_speed_show_icon(show_icon) {
+                Ok(()) => self.tray_message = String::from("已保存，托盘将在数秒内更新"),
+                Err(error) => self.tray_message = format!("保存失败: {error}"),
+            },
+            Err(_) => self.tray_message = String::from("设置存储不可用"),
         }
     }
 
@@ -456,9 +496,10 @@ impl Render for SettingsView {
         let shortcut_rows = self.shortcut_rows(cx);
         let shortcut_message = self.shortcut_message_text().to_string();
 
-        const SECTIONS: [&str; 6] = [
+        const SECTIONS: [&str; 7] = [
             "主题与外观",
             "插件管理",
+            "托盘",
             "快捷键",
             "应用索引",
             "macOS 权限",
@@ -468,10 +509,11 @@ impl Render for SettingsView {
         let content = match selected {
             0 => theme_section(entity.clone(), cx),
             1 => plugin_section(entity.clone(), cx),
-            2 => shortcuts_section(entity.clone(), shortcut_rows, shortcut_message, cx)
+            2 => tray_section(entity.clone(), cx),
+            3 => shortcuts_section(entity.clone(), shortcut_rows, shortcut_message, cx)
                 .into_any_element(),
-            3 => app_index_section(entity.clone(), cx),
-            4 => permissions_section(entity.clone(), cx),
+            4 => app_index_section(entity.clone(), cx),
+            5 => permissions_section(entity.clone(), cx),
             _ => diagnostics_section(entity.clone(), cx),
         };
 
@@ -586,6 +628,51 @@ fn plugin_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
             disabled_badge("尚未实现", cx),
             cx,
         ))
+        .into_any_element()
+}
+
+fn tray_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
+    let visible = entity.read(cx).tray_network_speed_visible();
+    let show_icon = entity.read(cx).tray_network_speed_show_icon();
+    let message = entity.read(cx).tray_message_text().to_string();
+    div()
+        .flex()
+        .flex_col()
+        .gap(theme::space_3())
+        .child(components::settings_row(
+            "网速托盘项",
+            "在系统菜单栏显示当前网速；默认使用纯文字，避免贴着主图标",
+            toggle_button(
+                entity.clone(),
+                cx,
+                "system-settings-tray-network-visible",
+                visible,
+                |view, value| view.set_tray_network_speed_visible(value),
+            ),
+            cx,
+        ))
+        .child(components::settings_row(
+            "显示图标",
+            "开启后网速项会显示独立图标；关闭后 macOS 使用纯文字",
+            toggle_button(
+                entity.clone(),
+                cx,
+                "system-settings-tray-network-icon",
+                show_icon,
+                |view, value| view.set_tray_network_speed_show_icon(value),
+            ),
+            cx,
+        ))
+        .when(!message.is_empty(), |el| {
+            el.child(
+                div()
+                    .px(theme::space_4())
+                    .py(theme::space_2())
+                    .text_size(theme::font_size_caption())
+                    .text_color(Theme::global(cx).muted_foreground)
+                    .child(message),
+            )
+        })
         .into_any_element()
 }
 
@@ -1553,6 +1640,41 @@ fn disabled_badge(text: &'static str, cx: &App) -> impl IntoElement {
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(status_color)
         .child(text)
+}
+
+fn toggle_button(
+    entity: Entity<SettingsView>,
+    cx: &App,
+    id: &'static str,
+    value: bool,
+    apply: fn(&mut SettingsView, bool),
+) -> impl IntoElement {
+    let t = Theme::global(cx);
+    let label = if value { "开启" } else { "关闭" };
+    div()
+        .id(id)
+        .h(px(28.0))
+        .min_w(px(56.0))
+        .px_3()
+        .rounded(px(999.0))
+        .bg(if value { t.primary } else { t.muted })
+        .hover(move |style| {
+            style
+                .bg(if value { t.primary_hover } else { t.list_hover })
+                .cursor_pointer()
+        })
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(theme::font_size_caption())
+        .text_color(if value { hsla(0., 0., 1., 1.) } else { t.foreground })
+        .child(label)
+        .on_click(move |_, _window, cx| {
+            entity.update(cx, |this, cx| {
+                apply(this, !value);
+                cx.notify();
+            });
+        })
 }
 
 fn path_badge(path: &str, cx: &App) -> impl IntoElement {
