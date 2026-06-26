@@ -14,10 +14,13 @@ use crate::{
     parameters::{join_shell_words, split_shell_words},
     service::{QuickLaunchService, RunSummary},
 };
-use gpui_component::Selectable;
 use gpui_component::theme::Theme;
+use gpui_component::{
+    Selectable, Sizable,
+    button::{Button, ButtonVariants},
+    input::{Input, InputState},
+};
 use qingqi_ui::{
-    text_input::{TextInput, TextInputStyle},
     theme,
     ui::{self, components},
 };
@@ -30,13 +33,11 @@ struct RowTheme {
     border: gpui::Hsla,
     bg_subtle: gpui::Hsla,
     text_secondary: gpui::Hsla,
-    text_primary: gpui::Hsla,
     accent: gpui::Rgba,
     success: gpui::Rgba,
     warning: gpui::Rgba,
     danger: gpui::Rgba,
     primary: gpui::Hsla,
-    primary_active: gpui::Hsla,
     background: gpui::Hsla,
     is_dark: bool,
 }
@@ -50,13 +51,11 @@ impl RowTheme {
             border: ui::border_light(cx),
             bg_subtle: ui::bg_subtle(cx),
             text_secondary: ui::text_secondary(cx),
-            text_primary: ui::text_primary(cx),
             accent: ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue),
             success: gpui::Rgba::from(ui::success(cx)),
             warning: gpui::Rgba::from(ui::warning(cx)),
             danger: gpui::Rgba::from(ui::danger(cx)),
             primary: theme.primary,
-            primary_active: theme.primary_active,
             background: theme.background,
             is_dark: theme.is_dark(),
         }
@@ -68,7 +67,7 @@ const HISTORY_LIMIT: usize = 8;
 #[derive(Clone)]
 struct PendingParameterField {
     name: String,
-    input: Entity<TextInput>,
+    input: Option<Entity<InputState>>,
 }
 
 #[derive(Clone)]
@@ -112,17 +111,17 @@ enum ActionEditorMode {
 #[derive(Clone)]
 struct ActionEditorState {
     mode: ActionEditorMode,
-    name_input: Entity<TextInput>,
-    description_input: Entity<TextInput>,
-    target_input: Entity<TextInput>,
-    args_input: Entity<TextInput>,
-    cwd_input: Entity<TextInput>,
-    interpreter_input: Entity<TextInput>,
-    env_input: Entity<TextInput>,
-    keywords_input: Entity<TextInput>,
-    prefixes_input: Entity<TextInput>,
-    icon_input: Entity<TextInput>,
-    timeout_input: Entity<TextInput>,
+    name_input: Entity<InputState>,
+    description_input: Entity<InputState>,
+    target_input: Entity<InputState>,
+    args_input: Entity<InputState>,
+    cwd_input: Entity<InputState>,
+    interpreter_input: Entity<InputState>,
+    env_input: Entity<InputState>,
+    keywords_input: Entity<InputState>,
+    prefixes_input: Entity<InputState>,
+    icon_input: Entity<InputState>,
+    timeout_input: Entity<InputState>,
     kind: ActionKind,
     script_type: ScriptType,
     script_source: ScriptSource,
@@ -139,7 +138,7 @@ enum FocusTarget {
 
 pub struct QuickLaunchView {
     service: Arc<QuickLaunchService>,
-    query_input: Entity<TextInput>,
+    query_input: Option<Entity<InputState>>,
     actions: Vec<QuickAction>,
     running_action_ids: Vec<i64>,
     latest_run_summaries: HashMap<i64, RunSummary>,
@@ -167,22 +166,9 @@ pub struct QuickLaunchView {
 impl QuickLaunchView {
     pub fn new(service: Arc<QuickLaunchService>, cx: &mut Context<Self>) -> Self {
         let snapshot = service.runtime_snapshot();
-        let query_input = cx.new(|cx| {
-            let mut input = TextInput::new(cx, "搜索动作", "");
-            input.set_style(
-                TextInputStyle {
-                    height: 28.0,
-                    font_size: 12.0,
-                    padding: 6.0,
-                },
-                cx,
-            );
-            input
-        });
-
         let mut this = Self {
             service,
-            query_input,
+            query_input: None,
             actions: Vec::new(),
             running_action_ids: snapshot.running_action_ids,
             latest_run_summaries: HashMap::new(),
@@ -207,12 +193,16 @@ impl QuickLaunchView {
             subscriptions: Vec::new(),
         };
         this.reload_actions(cx);
-        this.observe_query_input(cx);
         this
     }
 
     fn observe_query_input(&mut self, cx: &mut Context<Self>) {
-        let query_input = self.query_input.clone();
+        if !self.subscriptions.is_empty() {
+            return;
+        }
+        let Some(query_input) = self.query_input.clone() else {
+            return;
+        };
         let subscription = cx.observe(&query_input, |view, _, cx| {
             view.sync_query(cx);
         });
@@ -220,11 +210,36 @@ impl QuickLaunchView {
     }
 
     fn sync_query(&mut self, cx: &mut Context<Self>) {
-        self.query = self.query_input.read(cx).text();
+        let Some(query_input) = self.query_input.as_ref() else {
+            return;
+        };
+        self.query = query_input.read(cx).value().to_string();
         self.selected = 0;
         self.notice = None;
         self.pending_selected_action_id = None;
         self.reload_actions(cx);
+    }
+
+    fn ensure_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.query_input.is_none() {
+            let query = self.query.clone();
+            let input = cx.new(|cx| {
+                let mut input = InputState::new(window, cx);
+                input.set_placeholder("搜索动作", window, cx);
+                input.reset_value(query, cx);
+                input
+            });
+            self.query_input = Some(input);
+        }
+
+        if let Some(pending) = self.pending.as_mut() {
+            for field in &mut pending.fields {
+                if field.input.is_none() {
+                    let placeholder = format!("输入 {}", field.name);
+                    field.input = Some(sheet_input(window, cx, placeholder, ""));
+                }
+            }
+        }
     }
 
     fn reload_actions(&mut self, cx: &mut Context<Self>) {
@@ -341,7 +356,11 @@ impl QuickLaunchView {
         cx.notify();
     }
 
-    fn rerun_action_by_id(&mut self, action_id: i64, cx: &mut Context<Self>) {
+    fn rerun_action_by_id(
+        &mut self,
+        action_id: i64,
+        cx: &mut Context<Self>,
+    ) {
         if let Some(action) = self.actions.iter().find(|a| a.id == action_id).cloned() {
             self.run_action(action, cx);
         } else {
@@ -414,8 +433,8 @@ impl QuickLaunchView {
         cx.notify();
     }
 
-    fn open_create_editor(&mut self, cx: &mut Context<Self>) {
-        self.editor = Some(build_editor_state(None, cx));
+    fn open_create_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.editor = Some(build_editor_state(None, window, cx));
         self.pending = None;
         self.history = None;
         self.result = None;
@@ -426,17 +445,22 @@ impl QuickLaunchView {
         cx.notify();
     }
 
-    fn open_selected_editor(&mut self, cx: &mut Context<Self>) {
+    fn open_selected_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(action) = self.selected_action() else {
             self.notice = Some(String::from("当前没有可编辑的动作"));
             cx.notify();
             return;
         };
-        self.open_edit_editor(action, cx);
+        self.open_edit_editor(action, window, cx);
     }
 
-    fn open_edit_editor(&mut self, action: QuickAction, cx: &mut Context<Self>) {
-        self.editor = Some(build_editor_state(Some(action.clone()), cx));
+    fn open_edit_editor(
+        &mut self,
+        action: QuickAction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.editor = Some(build_editor_state(Some(action.clone()), window, cx));
         self.pending = None;
         self.history = None;
         self.result = None;
@@ -490,16 +514,6 @@ impl QuickLaunchView {
     fn set_editor_kind(&mut self, kind: ActionKind, cx: &mut Context<Self>) {
         if let Some(editor) = self.editor.as_mut() {
             editor.kind = kind;
-            let placeholder = editor_target_placeholder(editor.kind, editor.script_source);
-            editor.target_input.update(cx, |input, input_cx| {
-                configure_editor_target_input(
-                    input,
-                    editor.kind,
-                    editor.script_source,
-                    placeholder,
-                    input_cx,
-                );
-            });
         }
         cx.notify();
     }
@@ -514,16 +528,6 @@ impl QuickLaunchView {
     fn set_editor_script_source(&mut self, script_source: ScriptSource, cx: &mut Context<Self>) {
         if let Some(editor) = self.editor.as_mut() {
             editor.script_source = script_source;
-            let placeholder = editor_target_placeholder(editor.kind, editor.script_source);
-            editor.target_input.update(cx, |input, input_cx| {
-                configure_editor_target_input(
-                    input,
-                    editor.kind,
-                    editor.script_source,
-                    placeholder,
-                    input_cx,
-                );
-            });
         }
         cx.notify();
     }
@@ -559,7 +563,7 @@ impl QuickLaunchView {
             Ok(Some(path)) => {
                 if let Some(editor) = self.editor.as_mut() {
                     editor.target_input.update(cx, |input, input_cx| {
-                        input.set_text(path.display().to_string(), input_cx);
+                        input.reset_value(path.display().to_string(), input_cx);
                     });
                 }
                 self.notice = Some(format!("已选择 {}", path.display()));
@@ -582,7 +586,7 @@ impl QuickLaunchView {
         match qingqi_platform::shell::choose_directory("选择工作目录") {
             Ok(Some(path)) => {
                 editor.cwd_input.update(cx, |input, input_cx| {
-                    input.set_text(path.display().to_string(), input_cx);
+                    input.reset_value(path.display().to_string(), input_cx);
                 });
                 self.notice = Some(format!("已选择目录 {}", path.display()));
             }
@@ -943,18 +947,7 @@ impl QuickLaunchView {
             .into_iter()
             .map(|spec| PendingParameterField {
                 name: spec.name.clone(),
-                input: cx.new(|cx| {
-                    let mut input = TextInput::new(cx, format!("输入 {}", spec.name), "");
-                    input.set_style(
-                        TextInputStyle {
-                            height: 28.0,
-                            font_size: 11.0,
-                            padding: 6.0,
-                        },
-                        cx,
-                    );
-                    input
-                }),
+                input: None,
             })
             .collect::<Vec<_>>();
         let count = fields.len();
@@ -976,7 +969,14 @@ impl QuickLaunchView {
 
         let mut values = HashMap::new();
         for field in &pending.fields {
-            values.insert(field.name.clone(), field.input.read(cx).text());
+            values.insert(
+                field.name.clone(),
+                field
+                    .input
+                    .as_ref()
+                    .map(|input| input.read(cx).value().to_string())
+                    .unwrap_or_default(),
+            );
         }
 
         match self
@@ -1002,8 +1002,9 @@ impl QuickLaunchView {
     }
 
     fn clear_query(&mut self, cx: &mut Context<Self>) {
-        self.query_input
-            .update(cx, |input, input_cx| input.clear(input_cx));
+        if let Some(query_input) = self.query_input.as_ref() {
+            query_input.update(cx, |input, input_cx| input.reset_value("", input_cx));
+        }
         self.query.clear();
         self.selected = 0;
         self.notice = None;
@@ -1018,18 +1019,18 @@ impl QuickLaunchView {
             .editor
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("编辑器尚未打开"))?;
-        let name = editor.name_input.read(cx).text().trim().to_string();
-        let description = editor.description_input.read(cx).text().trim().to_string();
-        let target = editor.target_input.read(cx).text().trim().to_string();
-        let args = split_shell_words(&editor.args_input.read(cx).text())
+        let name = editor.name_input.read(cx).value().trim().to_string();
+        let description = editor.description_input.read(cx).value().trim().to_string();
+        let target = editor.target_input.read(cx).value().trim().to_string();
+        let args = split_shell_words(editor.args_input.read(cx).value().as_ref())
             .map_err(|error| anyhow::anyhow!("运行参数格式错误: {error}"))?;
-        let cwd = editor.cwd_input.read(cx).text().trim().to_string();
-        let interpreter = editor.interpreter_input.read(cx).text().trim().to_string();
-        let env = parse_env_lines(&editor.env_input.read(cx).text());
-        let keywords = split_csv(&editor.keywords_input.read(cx).text());
-        let prefixes = split_csv(&editor.prefixes_input.read(cx).text());
-        let icon = editor.icon_input.read(cx).text().trim().to_string();
-        let timeout_text = editor.timeout_input.read(cx).text();
+        let cwd = editor.cwd_input.read(cx).value().trim().to_string();
+        let interpreter = editor.interpreter_input.read(cx).value().trim().to_string();
+        let env = parse_env_lines(editor.env_input.read(cx).value().as_ref());
+        let keywords = split_csv(editor.keywords_input.read(cx).value().as_ref());
+        let prefixes = split_csv(editor.prefixes_input.read(cx).value().as_ref());
+        let icon = editor.icon_input.read(cx).value().trim().to_string();
+        let timeout_text = editor.timeout_input.read(cx).value().to_string();
         let timeout_sec = if timeout_text.trim().is_empty() {
             300
         } else {
@@ -1110,16 +1111,23 @@ impl QuickLaunchView {
 
 impl Render for QuickLaunchView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.ensure_inputs(window, cx);
+        self.observe_query_input(cx);
         self.sync_runtime_state();
 
         if let Some(target) = self.focus_target.take() {
             match target {
-                FocusTarget::Query => window.focus(&self.query_input.focus_handle(cx)),
+                FocusTarget::Query => {
+                    if let Some(query_input) = self.query_input.as_ref() {
+                        window.focus(&query_input.focus_handle(cx));
+                    }
+                }
                 FocusTarget::Pending(index) => {
                     if let Some(pending) = self.pending.as_ref()
                         && let Some(field) = pending.fields.get(index)
+                        && let Some(input) = field.input.as_ref()
                     {
-                        window.focus(&field.input.focus_handle(cx));
+                        window.focus(&input.focus_handle(cx));
                     }
                 }
                 FocusTarget::EditorName => {
@@ -1138,7 +1146,7 @@ impl Render for QuickLaunchView {
             .get(selected)
             .map(|action| running_action_ids.contains(&action.id))
             .unwrap_or(false);
-        let query_input = self.query_input.clone();
+        let query_input = self.query_input.clone().expect("query input missing");
         let message = self.status_text();
         let has_query = !self.query.trim().is_empty();
         let pending = self.pending.clone();
@@ -1355,7 +1363,7 @@ impl Render for QuickLaunchView {
 
 fn search_row(
     handle: Entity<QuickLaunchView>,
-    query_input: Entity<TextInput>,
+    query_input: Entity<InputState>,
     selected_running: bool,
     cx: &App,
 ) -> impl IntoElement {
@@ -1373,7 +1381,14 @@ fn search_row(
                 .border_1()
                 .border_color(ui::border_light(cx))
                 .bg(ui::bg_surface(cx))
-                .child(query_input),
+                .child(
+                    Input::new(&query_input)
+                        .appearance(false)
+                        .bordered(false)
+                        .focus_bordered(false)
+                        .h(px(28.0))
+                        .text_size(px(12.0)),
+                ),
         )
         .child(if selected_running {
             action_button("停止选中项", sr_theme, {
@@ -1404,10 +1419,12 @@ fn search_row(
                 let _ = cx.update_entity(&handle, |view, cx| view.open_selected_result(cx));
             }
         }))
-        .child(action_button("新建动作", sr_theme, {
+        .child(window_action_button("新建动作", sr_theme, {
             let handle = handle.clone();
-            move |_, cx| {
-                let _ = cx.update_entity(&handle, |view, cx| view.open_create_editor(cx));
+            move |_, window, cx| {
+                let _ = cx.update_entity(&handle, |view, cx| {
+                    view.open_create_editor(window, cx)
+                });
             }
         }))
         .child(action_button("清空", sr_theme, move |_, cx| {
@@ -1452,17 +1469,28 @@ fn management_row(
                         .gap_1()
                         .child(kind_chip(action.kind.label().to_string(), mgmt_theme))
                         .child(if action.feedback_mode != FeedbackMode::Notification {
-                            subtle_chip(feedback_label(action.feedback_mode).to_string(), mgmt_theme)
-                                .into_any_element()
+                            subtle_chip(
+                                feedback_label(action.feedback_mode).to_string(),
+                                mgmt_theme,
+                            )
+                            .into_any_element()
                         } else {
                             div().into_any_element()
                         })
                         .child(if action.enabled {
-                            status_chip(String::from("已启用"), gpui::Rgba::from(ui::success(cx)), mgmt_theme)
-                                .into_any_element()
+                            status_chip(
+                                String::from("已启用"),
+                                gpui::Rgba::from(ui::success(cx)),
+                                mgmt_theme,
+                            )
+                            .into_any_element()
                         } else {
-                            status_chip(String::from("已停用"), gpui::Rgba::from(ui::warning(cx)), mgmt_theme)
-                                .into_any_element()
+                            status_chip(
+                                String::from("已停用"),
+                                gpui::Rgba::from(ui::warning(cx)),
+                                mgmt_theme,
+                            )
+                            .into_any_element()
                         })
                         .child(
                             div()
@@ -1472,10 +1500,12 @@ fn management_row(
                         ),
                 ),
         )
-        .child(action_button("编辑", mgmt_theme, {
+        .child(window_action_button("编辑", mgmt_theme, {
             let handle = handle.clone();
-            move |_, cx| {
-                let _ = cx.update_entity(&handle, |view, cx| view.open_selected_editor(cx));
+            move |_, window, cx| {
+                let _ = cx.update_entity(&handle, |view, cx| {
+                    view.open_selected_editor(window, cx)
+                });
             }
         }))
         .child(action_button("复制", mgmt_theme, {
@@ -1651,20 +1681,26 @@ fn action_row(
                 let _ = cx.update_entity(&handle, |view, cx| view.open_history(action, cx));
             }
         }))
-        .child(action_button("编辑", theme, {
+        .child(window_action_button("编辑", theme, {
             let handle = handle.clone();
-            move |_, cx| {
+            move |_, window, cx| {
                 let action = action_for_edit.clone();
-                let _ = cx.update_entity(&handle, |view, cx| view.open_edit_editor(action, cx));
+                let _ = cx.update_entity(&handle, |view, cx| {
+                    view.open_edit_editor(action, window, cx);
+                });
             }
         }))
-        .child(icon_action_button("⋯", theme, move |event, window, cx| {
-            let action = action_for_menu.clone();
-            let position = menu_position(event.position(), window);
-            let _ = cx.update_entity(&menu_handle, |view, cx| {
-                view.open_action_menu(action, position, cx);
-            });
-        }))
+        .child(icon_action_button(
+            "⋯",
+            theme,
+            move |event, window, cx| {
+                let action = action_for_menu.clone();
+                let position = menu_position(event.position(), window);
+                let _ = cx.update_entity(&menu_handle, |view, cx| {
+                    view.open_action_menu(action, position, cx);
+                });
+            },
+        ))
         .child(if running {
             action_button("停止", theme, move |_, cx| {
                 let _ = cx.update_entity(&handle, |view, cx| view.stop_action(action.id, cx));
@@ -2159,7 +2195,7 @@ fn editor_target_placeholder(kind: ActionKind, script_source: ScriptSource) -> &
     }
 }
 
-fn editor_field(label: &'static str, input: Entity<TextInput>, cx: &App) -> impl IntoElement {
+fn editor_field(label: &'static str, input: Entity<InputState>, cx: &App) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -2176,7 +2212,7 @@ fn editor_field(label: &'static str, input: Entity<TextInput>, cx: &App) -> impl
                 .border_1()
                 .border_color(ui::border_light(cx))
                 .bg(ui::bg_surface(cx))
-                .child(input),
+                .child(sheet_input_element(input, px(28.0))),
         )
 }
 
@@ -2184,7 +2220,7 @@ fn editor_picker_field(
     handle: Entity<QuickLaunchView>,
     label: &'static str,
     button_label: &'static str,
-    input: Entity<TextInput>,
+    input: Entity<InputState>,
     cx: &App,
     on_pick: fn(&mut QuickLaunchView, &mut Context<QuickLaunchView>),
 ) -> impl IntoElement {
@@ -2211,7 +2247,7 @@ fn editor_picker_field(
                         .border_1()
                         .border_color(ui::border_light(cx))
                         .bg(ui::bg_surface(cx))
-                        .child(input),
+                        .child(sheet_input_element(input, px(28.0))),
                 )
                 .child(action_button(button_label, epf_theme, move |_, cx| {
                     let _ = cx.update_entity(&handle, |view, cx| on_pick(view, cx));
@@ -2299,6 +2335,7 @@ fn pending_sheet(
 }
 
 fn parameter_row(field: PendingParameterField, index: usize, cx: &App) -> impl IntoElement {
+    let input = field.input;
     div()
         .id(("quick-launch-parameter", index))
         .flex()
@@ -2316,8 +2353,17 @@ fn parameter_row(field: PendingParameterField, index: usize, cx: &App) -> impl I
                 .border_1()
                 .border_color(ui::border_light(cx))
                 .bg(ui::bg_surface(cx))
-                .child(field.input),
+                .children(input.map(|input| sheet_input_element(input, px(28.0)))),
         )
+}
+
+fn sheet_input_element(state: Entity<InputState>, height: Pixels) -> Input {
+    Input::new(&state)
+        .appearance(false)
+        .bordered(false)
+        .focus_bordered(false)
+        .h(height)
+        .text_size(px(11.0))
 }
 
 fn history_sheet(
@@ -2402,13 +2448,7 @@ fn history_sheet(
                 .flex_col()
                 .gap_1p5()
                 .children(history.runs.into_iter().enumerate().map(|(index, run)| {
-                    history_row(
-                        handle.clone(),
-                        history.action_name.clone(),
-                        run,
-                        index,
-                        cx,
-                    )
+                    history_row(handle.clone(), history.action_name.clone(), run, index, cx)
                 }))
                 .into_any_element()
         })
@@ -2644,9 +2684,13 @@ fn result_sheet(
                         view.rerun_action_by_id(rerun_action_id, cx);
                     });
                 }))
-                .child(primary_action_button("完成", result_theme, move |_, cx| {
-                    let _ = cx.update_entity(&handle, |view, cx| view.close_result(cx));
-                })),
+                .child(primary_action_button(
+                    "完成",
+                    result_theme,
+                    move |_, cx| {
+                        let _ = cx.update_entity(&handle, |view, cx| view.close_result(cx));
+                    },
+                )),
         )
 }
 
@@ -2764,7 +2808,11 @@ fn primary_action_button(
     _theme: RowTheme,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement + 'static {
-    ui::primary_btn(label, label).on_click(move |event, _window, cx| on_click(event, cx))
+    Button::new(label)
+        .label(label)
+        .small()
+        .primary()
+        .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
 fn action_button(
@@ -2772,29 +2820,33 @@ fn action_button(
     _theme: RowTheme,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement + 'static {
-    ui::secondary_btn(label, label).on_click(move |event, _window, cx| on_click(event, cx))
+    Button::new(label)
+        .label(label)
+        .small()
+        .on_click(move |event, _window, cx| on_click(event, cx))
+}
+
+fn window_action_button(
+    label: &'static str,
+    _theme: RowTheme,
+    on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
+) -> impl IntoElement + 'static {
+    Button::new(label)
+        .label(label)
+        .small()
+        .on_click(move |event, window, cx| on_click(event, window, cx))
 }
 
 fn icon_action_button(
     label: &'static str,
-    theme: RowTheme,
+    _theme: RowTheme,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement + 'static {
-    let hover_bg = theme.hover_bg;
-    div()
-        .id(label)
-        .size(px(26.0))
-        .rounded(px(4.0))
-        .border_1()
-        .border_color(theme.border)
-        .bg(theme.bg_surface)
-        .hover(move |style| style.bg(hover_bg).cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(12.0))
-        .text_color(theme.text_primary)
-        .child(label)
+    Button::new(label)
+        .label(label)
+        .small()
+        .with_size(gpui_component::Size::Size(px(26.0)))
+        .compact()
         .on_click(move |event, window, cx| on_click(event, window, cx))
 }
 
@@ -2998,7 +3050,11 @@ fn destructive_action_button(
     _cx: &App,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement {
-    ui::danger_btn(label, label).on_click(move |event, _window, cx| on_click(event, cx))
+    Button::new(label)
+        .label(label)
+        .small()
+        .danger()
+        .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
 fn kind_chip(label: String, theme: RowTheme) -> impl IntoElement + 'static {
@@ -3078,45 +3134,45 @@ fn segment_button(
     _cx: &App,
     on_click: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement {
-    ui::secondary_btn(label, label)
+    Button::new(label)
+        .label(label)
+        .small()
         .selected(active)
         .on_click(move |event, _window, cx| on_click(event, cx))
 }
 
 fn build_editor_state(
     action: Option<QuickAction>,
+    window: &mut Window,
     cx: &mut Context<QuickLaunchView>,
 ) -> ActionEditorState {
-    let name_input = sheet_input(cx, "为该动作起一个名字", "");
-    let description_input = sheet_input(cx, "可选描述", "");
-    let args_input = sheet_input(cx, "--flag value", "");
-    let cwd_input = sheet_input(cx, "可选，默认当前目录", "");
-    let interpreter_input = sheet_input(cx, "如 /opt/homebrew/bin/ruby", "");
-    let env_input = multiline_sheet_input(cx, "每行 KEY=VALUE", "");
-    let keywords_input = sheet_input(cx, "逗号分隔，便于搜索", "");
-    let prefixes_input = sheet_input(cx, "逗号分隔，如 ql, git", "");
-    let icon_input = sheet_input(cx, "如：⌘ / 🌐 / 📁", "");
-    let timeout_input = sheet_input(cx, "300", "300");
+    let name_input = sheet_input(window, cx, "为该动作起一个名字", "");
+    let description_input = sheet_input(window, cx, "可选描述", "");
+    let args_input = sheet_input(window, cx, "--flag value", "");
+    let cwd_input = sheet_input(window, cx, "可选，默认当前目录", "");
+    let interpreter_input = sheet_input(window, cx, "如 /opt/homebrew/bin/ruby", "");
+    let env_input = multiline_sheet_input(window, cx, "每行 KEY=VALUE", "");
+    let keywords_input = sheet_input(window, cx, "逗号分隔，便于搜索", "");
+    let prefixes_input = sheet_input(window, cx, "逗号分隔，如 ql, git", "");
+    let icon_input = sheet_input(window, cx, "如：⌘ / 🌐 / 📁", "");
+    let timeout_input = sheet_input(window, cx, "300", "300");
 
     if let Some(action) = action {
         let placeholder = editor_target_placeholder(action.kind, action.script_source);
-        let target_input = cx.new(move |cx| {
-            let mut input = TextInput::new(cx, placeholder, "");
-            configure_editor_target_input(
-                &mut input,
-                action.kind,
-                action.script_source,
-                placeholder,
-                cx,
-            );
-            input
-        });
-        name_input.update(cx, |input, cx| input.set_text(action.name.clone(), cx));
+        let target_input = editor_target_input(
+            window,
+            cx,
+            action.kind,
+            action.script_source,
+            placeholder,
+            "",
+        );
+        name_input.update(cx, |input, cx| input.reset_value(action.name.clone(), cx));
         description_input.update(cx, |input, cx| {
-            input.set_text(action.description.clone(), cx)
+            input.reset_value(action.description.clone(), cx)
         });
         target_input.update(cx, |input, cx| {
-            input.set_text(
+            input.reset_value(
                 match action.kind {
                     ActionKind::Script => match action.script_source {
                         ScriptSource::Inline => action.script_body.clone(),
@@ -3129,24 +3185,24 @@ fn build_editor_state(
             )
         });
         args_input.update(cx, |input, cx| {
-            input.set_text(join_shell_words(&action.args), cx)
+            input.reset_value(join_shell_words(&action.args), cx)
         });
-        cwd_input.update(cx, |input, cx| input.set_text(action.cwd.clone(), cx));
+        cwd_input.update(cx, |input, cx| input.reset_value(action.cwd.clone(), cx));
         interpreter_input.update(cx, |input, cx| {
-            input.set_text(action.interpreter.clone(), cx)
+            input.reset_value(action.interpreter.clone(), cx)
         });
         env_input.update(cx, |input, cx| {
-            input.set_text(format_env_lines(&action.env), cx)
+            input.reset_value(format_env_lines(&action.env), cx)
         });
         keywords_input.update(cx, |input, cx| {
-            input.set_text(action.keywords.join(", "), cx)
+            input.reset_value(action.keywords.join(", "), cx)
         });
         prefixes_input.update(cx, |input, cx| {
-            input.set_text(action.prefixes.join(", "), cx)
+            input.reset_value(action.prefixes.join(", "), cx)
         });
-        icon_input.update(cx, |input, cx| input.set_text(action.icon.clone(), cx));
+        icon_input.update(cx, |input, cx| input.reset_value(action.icon.clone(), cx));
         timeout_input.update(cx, |input, cx| {
-            input.set_text(action.timeout_sec.to_string(), cx);
+            input.reset_value(action.timeout_sec.to_string(), cx);
         });
 
         ActionEditorState {
@@ -3170,17 +3226,14 @@ fn build_editor_state(
         }
     } else {
         let placeholder = editor_target_placeholder(ActionKind::Script, ScriptSource::Inline);
-        let target_input = cx.new(move |cx| {
-            let mut input = TextInput::new(cx, placeholder, "");
-            configure_editor_target_input(
-                &mut input,
-                ActionKind::Script,
-                ScriptSource::Inline,
-                placeholder,
-                cx,
-            );
-            input
-        });
+        let target_input = editor_target_input(
+            window,
+            cx,
+            ActionKind::Script,
+            ScriptSource::Inline,
+            placeholder,
+            "",
+        );
         ActionEditorState {
             mode: ActionEditorMode::Create,
             name_input,
@@ -3204,75 +3257,62 @@ fn build_editor_state(
 }
 
 fn sheet_input(
+    window: &mut Window,
     cx: &mut Context<QuickLaunchView>,
     placeholder: impl Into<String>,
     value: impl Into<String>,
-) -> Entity<TextInput> {
+) -> Entity<InputState> {
     let placeholder = placeholder.into();
     let value = value.into();
     cx.new(move |cx| {
-        let mut input = TextInput::new(cx, placeholder.clone(), value.clone());
-        input.set_style(
-            TextInputStyle {
-                height: 28.0,
-                font_size: 11.0,
-                padding: 6.0,
-            },
-            cx,
-        );
+        let mut input = InputState::new(window, cx);
+        input.set_placeholder(placeholder.clone(), window, cx);
+        input.reset_value(value.clone(), cx);
         input
     })
 }
 
-fn editor_target_style(kind: ActionKind, script_source: ScriptSource) -> TextInputStyle {
-    if kind == ActionKind::Script && script_source == ScriptSource::Inline {
-        TextInputStyle {
-            height: 100.0,
-            font_size: 11.0,
-            padding: 6.0,
-        }
-    } else {
-        TextInputStyle {
-            height: 28.0,
-            font_size: 11.0,
-            padding: 6.0,
-        }
-    }
-}
-
-fn configure_editor_target_input(
-    input: &mut TextInput,
+fn editor_target_input(
+    window: &mut Window,
+    cx: &mut Context<QuickLaunchView>,
     kind: ActionKind,
     script_source: ScriptSource,
     placeholder: &str,
-    cx: &mut Context<TextInput>,
-) {
-    input.set_placeholder(placeholder.to_string(), cx);
+    value: impl Into<String>,
+) -> Entity<InputState> {
+    let placeholder = placeholder.to_string();
+    let value = value.into();
     let is_inline_script = kind == ActionKind::Script && script_source == ScriptSource::Inline;
-    input.set_multiline(is_inline_script, cx);
-    input.set_monospace(is_inline_script, cx);
-    input.set_style(editor_target_style(kind, script_source), cx);
+    cx.new(move |cx| {
+        let mut input = if is_inline_script {
+            InputState::new(window, cx)
+                .multi_line(true)
+                .searchable(true)
+                .soft_wrap(true)
+        } else {
+            InputState::new(window, cx)
+        };
+        input.set_placeholder(placeholder.clone(), window, cx);
+        input.reset_value(value.clone(), cx);
+        input
+    })
 }
 
 fn multiline_sheet_input(
+    window: &mut Window,
     cx: &mut Context<QuickLaunchView>,
     placeholder: impl Into<String>,
     value: impl Into<String>,
-) -> Entity<TextInput> {
+) -> Entity<InputState> {
     let placeholder = placeholder.into();
     let value = value.into();
     cx.new(move |cx| {
-        let mut input = TextInput::new(cx, placeholder.clone(), value.clone());
-        input.set_style(
-            TextInputStyle {
-                height: 72.0,
-                font_size: 11.0,
-                padding: 6.0,
-            },
-            cx,
-        );
-        input.set_multiline(true, cx);
-        input.set_monospace(true, cx);
+        let mut input = InputState::new(window, cx)
+            .multi_line(true)
+            .searchable(true)
+            .soft_wrap(true);
+        input.set_placeholder(placeholder.clone(), window, cx);
+        input.reset_value(value.clone(), cx);
         input
     })
 }

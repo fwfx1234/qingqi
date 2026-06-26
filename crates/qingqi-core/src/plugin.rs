@@ -85,12 +85,12 @@ impl PluginManager {
             })
             .flat_map(|(id, plugin)| {
                 let plugin_id = id.clone();
-                match catch_unwind(AssertUnwindSafe(|| plugin.shortcuts())) {
+                match call_plugin_value(&plugin_id, || plugin.shortcuts()) {
                     Ok(shortcuts) => shortcuts,
                     Err(error) => {
                         tracing::error!(
                             plugin_id = %plugin_id,
-                            error = %panic_message(error),
+                            error = %error,
                             "plugin panicked in shortcuts()"
                         );
                         Vec::new()
@@ -114,15 +114,8 @@ impl PluginManager {
         let pid = plugin_id.to_string();
         let sid = shortcut_id.to_string();
         let acc = accelerator.to_string();
-        catch_unwind(AssertUnwindSafe(|| {
-            plugin.set_shortcut(&sid, &acc, enabled)
-        }))
-        .unwrap_or_else(|error| {
-            Err(anyhow::anyhow!(
-                "plugin {pid} panicked in set_shortcut: {}",
-                panic_message(error)
-            ))
-        })
+        call_plugin(&pid, || plugin.set_shortcut(&sid, &acc, enabled))
+            .with_context(|| format!("plugin {pid} panicked in set_shortcut"))
     }
 
     pub fn commands_with_clipboard(&mut self, boost_map: &HashMap<String, i32>) -> Vec<Command> {
@@ -137,12 +130,12 @@ impl PluginManager {
                 commands.extend(default_plugin_command(plugin.manifest()));
             } else {
                 let id = plugin_id.clone();
-                match catch_unwind(AssertUnwindSafe(|| plugin.commands(""))) {
+                match call_plugin_value(id.as_ref(), || plugin.commands("")) {
                     Ok(plugin_commands) => commands.extend(plugin_commands),
                     Err(error) => {
                         tracing::error!(
                             plugin_id = %id,
-                            error = %panic_message(error),
+                            error = %error,
                             "plugin panicked in commands()"
                         );
                     }
@@ -244,7 +237,18 @@ impl PluginManager {
             if !self.dynamic_plugin_ids.contains(plugin_id) {
                 continue;
             }
-            let dynamic_commands = plugin.commands(plugin_query);
+            let dynamic_commands =
+                match call_plugin_value(plugin_id.as_ref(), || plugin.commands(plugin_query)) {
+                    Ok(commands) => commands,
+                    Err(error) => {
+                        tracing::error!(
+                            plugin_id = %plugin_id,
+                            error = %error,
+                            "plugin panicked in commands()"
+                        );
+                        continue;
+                    }
+                };
             for command in dynamic_commands {
                 if !seen.insert(command.id.clone()) {
                     continue;
@@ -299,13 +303,13 @@ impl PluginManager {
             .iter()
             .filter_map(|(id, plugin)| {
                 let plugin_id = id.clone();
-                match catch_unwind(AssertUnwindSafe(|| plugin.clipboard_boost(payload))) {
+                match call_plugin_value(&plugin_id, || plugin.clipboard_boost(payload)) {
                     Ok(Some(boost)) => Some((plugin_id.to_string(), boost)),
                     Ok(None) => None,
                     Err(error) => {
                         tracing::error!(
                             plugin_id = %plugin_id,
-                            error = %panic_message(error),
+                            error = %error,
                             "plugin panicked in clipboard_boost()"
                         );
                         None
@@ -500,11 +504,12 @@ impl PluginManager {
             }
             let id = plugin.manifest().id.clone();
             let events = self.events.clone();
-            let result = catch_unwind(AssertUnwindSafe(|| plugin.start_background(events, cx)));
-            if let Err(error) = result {
+            if let Err(error) =
+                call_plugin_value(id.as_ref(), || plugin.start_background(events, cx))
+            {
                 tracing::error!(
                     plugin_id = %id,
-                    error = %panic_message(error),
+                    error = %error,
                     "plugin panicked in start_background"
                 );
             }
@@ -514,11 +519,10 @@ impl PluginManager {
     pub fn shutdown(&mut self) {
         for plugin in self.plugins.values_mut() {
             let id = plugin.manifest().id.clone();
-            let result = catch_unwind(AssertUnwindSafe(|| plugin.shutdown()));
-            if let Err(error) = result {
+            if let Err(error) = call_plugin_value(id.as_ref(), || plugin.shutdown()) {
                 tracing::error!(
                     plugin_id = %id,
-                    error = %panic_message(error),
+                    error = %error,
                     "plugin panicked in shutdown"
                 );
             }
@@ -530,11 +534,10 @@ impl PluginManager {
             let background = plugin.manifest().background;
             if !background {
                 let id = plugin.manifest().id.clone();
-                let result = catch_unwind(AssertUnwindSafe(|| plugin.close_idle()));
-                if let Err(error) = result {
+                if let Err(error) = call_plugin_value(id.as_ref(), || plugin.close_idle()) {
                     tracing::error!(
                         plugin_id = %id,
-                        error = %panic_message(error),
+                        error = %error,
                         "plugin panicked in close_idle"
                     );
                 }
@@ -544,12 +547,14 @@ impl PluginManager {
 }
 
 fn call_plugin<T>(plugin_id: &str, f: impl FnOnce() -> anyhow::Result<T>) -> anyhow::Result<T> {
-    catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|error| {
-        Err(anyhow::anyhow!(
-            "plugin {plugin_id} panicked: {}",
-            panic_message(error)
-        ))
-    })
+    call_plugin_value(plugin_id, f)?
+}
+
+fn call_plugin_value<T>(plugin_id: &str, f: impl FnOnce() -> T) -> anyhow::Result<T> {
+    let span = tracing::info_span!("plugin", plugin_id = %plugin_id);
+    let _enter = span.enter();
+    catch_unwind(AssertUnwindSafe(f))
+        .map_err(|error| anyhow::anyhow!("plugin {plugin_id} panicked: {}", panic_message(error)))
 }
 
 fn default_plugin_command(manifest: Manifest) -> Vec<Command> {

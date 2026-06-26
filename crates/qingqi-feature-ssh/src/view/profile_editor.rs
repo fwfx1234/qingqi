@@ -3,7 +3,11 @@
 use gpui::prelude::*;
 use gpui::{point, *};
 use gpui_component::scroll::ScrollableElement;
-use gpui_component::theme::Theme;
+use gpui_component::{
+    Sizable,
+    button::{Button, ButtonVariants},
+    theme::Theme,
+};
 use qingqi_ui::text_input::TextInput;
 use qingqi_ui::ui::glass;
 use qingqi_ui::{theme, ui};
@@ -211,7 +215,11 @@ fn render_advanced_section(
                     h.update(cx, |v, cx| v.toggle_form_advanced(cx));
                 })
                 .child("高级选项")
-                .child(ui::icon_element(chevron, ui::text_tertiary(cx).into(), 18.0)),
+                .child(ui::icon_element(
+                    chevron,
+                    ui::text_tertiary(cx).into(),
+                    18.0,
+                )),
         )
         .when(expanded, |el| {
             el.child(render_advanced_fields(
@@ -755,7 +763,10 @@ fn render_footer(handle: &Entity<super::SshView>, is_edit: bool, cx: &App) -> im
         .bg(Theme::global(cx).popover)
         .child(if is_edit {
             let h = handle.clone();
-            ui::ghost_btn("btn-delete-profile", "删除连接")
+            Button::new("btn-delete-profile")
+                .label("删除连接")
+                .small()
+                .ghost()
                 .text_color(ui::danger(cx))
                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                     h.update(cx, |v, cx| {
@@ -775,14 +786,16 @@ fn render_footer(handle: &Entity<super::SshView>, is_edit: bool, cx: &App) -> im
             div()
                 .flex()
                 .gap(theme::space_2())
+                .child(Button::new("btn-cancel").label("取消").small().on_click(
+                    move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
+                        h_cancel.update(cx, |v, cx| v.close_profile_editor(cx));
+                    },
+                ))
                 .child(
-                    ui::secondary_btn("btn-cancel", "取消")
-                        .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
-                            h_cancel.update(cx, |v, cx| v.close_profile_editor(cx));
-                        }),
-                )
-                .child(
-                    ui::primary_btn("btn-save-profile", "保存")
+                    Button::new("btn-save-profile")
+                        .label("保存")
+                        .small()
+                        .primary()
                         .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                             h_save.update(cx, |v, cx| v.save_profile_from_form(cx));
                         }),

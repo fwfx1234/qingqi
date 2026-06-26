@@ -1,4 +1,5 @@
-use gpui_component::switch::Switch;
+use gpui::ElementId;
+use gpui_component::{Sizable, Size, button::Button, switch::Switch};
 
 use super::*;
 
@@ -7,7 +8,11 @@ pub(super) fn pill_button(
     _cx: &App,
     handler: impl Fn(&gpui::ClickEvent, &mut App) + 'static,
 ) -> impl IntoElement {
-    ui::secondary_btn(label, label).on_click(move |event, _window, cx| handler(event, cx))
+    Button::new(ElementId::Name(format!("clipboard-pill-{label}").into()))
+        .label(label)
+        .compact()
+        .with_size(Size::Small)
+        .on_click(move |event, _window, cx| handler(event, cx))
 }
 
 pub(super) fn toggle_control(

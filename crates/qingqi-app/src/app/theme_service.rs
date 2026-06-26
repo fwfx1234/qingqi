@@ -54,7 +54,11 @@ impl ThemeService {
 
         // 打印已注册的所有主题名，确认 macOS Classic 在内
         let registry = ThemeRegistry::global(cx);
-        let names: Vec<_> = registry.themes().values().map(|c| c.name.as_ref()).collect();
+        let names: Vec<_> = registry
+            .themes()
+            .values()
+            .map(|c| c.name.as_ref())
+            .collect();
         tracing::info!(themes = ?names, "ThemeRegistry initialized");
 
         Ok(())

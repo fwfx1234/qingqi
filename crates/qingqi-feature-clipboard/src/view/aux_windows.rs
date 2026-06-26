@@ -101,7 +101,10 @@ impl AppSettingsWindow {
 }
 
 impl Render for AppSettingsWindow {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.clipboard_view.update(cx, |view, cx| {
+            view.ensure_inputs(window, cx);
+        });
         let t = Theme::global(cx);
         let app: &App = cx;
         let view = self.clipboard_view.read(cx);

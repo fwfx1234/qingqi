@@ -14,6 +14,7 @@ gpui.workspace = true
 image.workspace = true
 plist.workspace = true
 resvg.workspace = true
+rfd.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sysinfo.workspace = true
@@ -24,6 +25,11 @@ usvg.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSApplication", "NSAttributedString", "NSButton", "NSControl", "NSFont", "NSFontDescriptor", "NSParagraphStyle", "NSRunningApplication", "NSStatusBar", "NSStatusBarButton", "NSStatusItem", "NSText", "std", "objc2-core-foundation"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["NSDictionary", "NSAttributedString", "NSRange", "NSString", "NSValue", "std"] }
 
 [build-dependencies]
 image = { workspace = true, default-features = false, features = ["png"] }

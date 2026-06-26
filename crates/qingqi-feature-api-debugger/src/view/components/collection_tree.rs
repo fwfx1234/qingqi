@@ -136,7 +136,7 @@ pub fn collection_tree(
                             )
                             .on_click(move |_, window, cx| {
                                 v.update(cx, |view, cx| {
-                                    view.select_scenario(req_idx, scn_idx, cx);
+                                    view.select_scenario(req_idx, scn_idx, window, cx);
                                 });
                                 window.refresh();
                             })
@@ -520,7 +520,7 @@ pub fn collection_tree(
                                                     tree.set_selected_index(Some(ix), cx);
                                                 });
                                                 v.update(cx, |view, cx| {
-                                                    view.select_request(req_idx, cx)
+                                                    view.select_request(req_idx, window, cx)
                                                 });
                                                 window.refresh();
                                             },

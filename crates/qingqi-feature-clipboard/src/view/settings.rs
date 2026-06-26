@@ -6,9 +6,9 @@ use super::*;
 pub(super) fn settings_panel(
     handle: Entity<ClipboardView>,
     config: ClipboardConfig,
-    ignore_patterns_input: Entity<TextInput>,
-    max_text_chars_input: Entity<TextInput>,
-    hotkey_input: Entity<TextInput>,
+    ignore_patterns_input: Entity<InputState>,
+    max_text_chars_input: Entity<InputState>,
+    hotkey_input: Entity<InputState>,
     cx: &App,
 ) -> impl IntoElement {
     let app = cx;
@@ -290,14 +290,21 @@ fn settings_input_row(
         .into_any_element()
 }
 
-fn input_shell(input: Entity<TextInput>, cx: &App) -> impl IntoElement {
+fn input_shell(input: Entity<InputState>, cx: &App) -> impl IntoElement {
     let t = Theme::global(cx);
     div()
         .rounded(theme::radius_md())
         .border_1()
         .border_color(ui::border_light(cx))
         .bg(t.list)
-        .child(input.into_any_element())
+        .child(
+            Input::new(&input)
+                .appearance(false)
+                .bordered(false)
+                .focus_bordered(false)
+                .h(px(28.0))
+                .text_size(px(11.0)),
+        )
 }
 
 pub(super) fn format_ignore_patterns(config: &ClipboardConfig) -> String {

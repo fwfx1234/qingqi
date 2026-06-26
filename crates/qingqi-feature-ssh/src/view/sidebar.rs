@@ -71,10 +71,7 @@ fn render_top_bar(cx: &mut Context<super::SshView>) -> impl IntoElement {
                 .text_size(px(15.0))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(ui::text_secondary(cx))
-                .hover(move |s| {
-                    s.bg(hover_bg)
-                        .text_color(ui::accent_color(ACCENT))
-                })
+                .hover(move |s| s.bg(hover_bg).text_color(ui::accent_color(ACCENT)))
                 .on_click(
                     cx.listener(|view, _: &ClickEvent, _w, cx| view.open_profile_editor(None, cx)),
                 )

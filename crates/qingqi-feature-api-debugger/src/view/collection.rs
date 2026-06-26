@@ -89,7 +89,7 @@ impl ApiDebuggerView {
     }
 
     pub(crate) fn import_curl(&mut self, cx: &App) {
-        let curl_text = self.curl_import_input.read(cx).text();
+        let curl_text = self.curl_import_input.read(cx).value().to_string();
         if !curl_text.is_empty() {
             self.service.import_from_curl_async(curl_text);
         }
@@ -167,13 +167,13 @@ impl ApiDebuggerView {
             .unwrap_or_default();
         self.renaming_node_id = node_id;
         self.rename_inline_input.update(cx, |input, input_cx| {
-            input.set_text(current_name, input_cx);
+            input.reset_value(current_name, input_cx);
         });
         self.close_collection_menu();
     }
 
     pub(crate) fn confirm_inline_rename(&mut self, cx: &App) {
-        let new_name = self.rename_inline_input.read(cx).text().trim().to_string();
+        let new_name = self.rename_inline_input.read(cx).value().to_string().trim().to_string();
         let node_id = std::mem::take(&mut self.renaming_node_id);
         if node_id.is_empty() {
             return;
@@ -192,7 +192,7 @@ impl ApiDebuggerView {
     }
 
     pub(crate) fn confirm_rename(&mut self, cx: &App) {
-        let new_name = self.rename_input.read(cx).text().trim().to_string();
+        let new_name = self.rename_input.read(cx).value().to_string().trim().to_string();
         let node_id = self.rename_node_id.clone();
         if node_id.is_empty() {
         } else if new_name.is_empty() {

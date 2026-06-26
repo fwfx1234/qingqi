@@ -12,10 +12,6 @@ use gpui::{
     App, InteractiveElement, IntoElement, ParentElement, SharedString, StatefulInteractiveElement,
     Styled, Window, div, hsla, img, px, rgb, svg,
 };
-use gpui_component::Sizable;
-use gpui_component::button::{Button, ButtonCustomVariant, ButtonVariants};
-use gpui_component::divider::Divider;
-use gpui_component::tag::Tag;
 use gpui_component::theme::Theme;
 
 use crate::{assets, theme};
@@ -167,10 +163,6 @@ pub fn page_title(
         )
 }
 
-pub fn separator(cx: &App) -> impl IntoElement {
-    Divider::horizontal().color(border_light(cx))
-}
-
 pub fn status_bar(
     message: impl Into<SharedString>,
     color: gpui::Hsla,
@@ -259,41 +251,6 @@ pub fn icon_tile(icon: &str, accent: PluginAccent, size_px: f32) -> impl IntoEle
         .items_center()
         .justify_center()
         .child(icon_element(icon, accent_rgba, size_px * 0.52))
-}
-
-pub fn toolbar_button(label: impl Into<SharedString>, cx: &App) -> gpui::Div {
-    let label = label.into();
-    div()
-        .h(px(34.0))
-        .px_3()
-        .rounded(theme::radius_md())
-        .bg(bg_surface(cx))
-        .border_1()
-        .border_color(border_light(cx))
-        .hover(|style| style.bg(Theme::global(cx).list_hover).cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(12.0))
-        .text_color(text_primary(cx))
-        .child(label)
-}
-
-pub fn primary_button(label: impl Into<SharedString>, cx: &App) -> gpui::Div {
-    let label = label.into();
-    let accent = Theme::global(cx).primary;
-    div()
-        .h(px(34.0))
-        .px_3()
-        .rounded(theme::radius_md())
-        .bg(accent)
-        .hover(|style| style.bg(Theme::global(cx).primary_hover).cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(12.0))
-        .text_color(rgb(0xffffff))
-        .child(label)
 }
 
 pub fn text_input_shell(
@@ -444,88 +401,6 @@ pub fn plugin_scroll_content() -> gpui::Stateful<gpui::Div> {
         .scrollbar_width(px(6.0))
 }
 
-// ── Shared UI Component Library ──────────────────────────────────────────
-
-pub fn ui_button(
-    label: impl Into<SharedString>,
-    variant: &str,
-    dark: bool,
-    icon: Option<SharedString>,
-    danger: bool,
-    cx: &App,
-) -> gpui::Div {
-    let label = label.into();
-    let is_primary = variant == "primary";
-    let is_ghost = variant == "ghost";
-
-    let t = Theme::global(cx);
-
-    let (bg_idle, text_col, border_col) = if is_primary {
-        if danger {
-            (t.danger, hsla(0., 0., 1., 1.), t.border)
-        } else {
-            (
-                t.primary,
-                hsla(0., 0., 1., 1.),
-                if dark {
-                    rgb(0x1a1a1a).into()
-                } else {
-                    rgb(0x00000010).into()
-                },
-            )
-        }
-    } else if danger {
-        (hsla(0., 0., 1., 1.), t.danger, t.danger)
-    } else {
-        let idle = if dark {
-            t.popover
-        } else {
-            hsla(0., 0., 1., 1.)
-        };
-        (idle, t.foreground, t.border)
-    };
-
-    let mut btn = div()
-        .h(px(30.0))
-        .px(px(12.0))
-        .rounded(theme::radius_md())
-        .flex()
-        .items_center()
-        .justify_center()
-        .gap_1()
-        .text_size(theme::font_size_body())
-        .text_color(text_col);
-
-    if is_ghost {
-        btn = btn.bg(hsla(0.0, 0.0, 0.0, 0.0));
-    } else {
-        btn = btn.bg(bg_idle).border_1().border_color(border_col);
-    }
-
-    if let Some(icon_name) = icon {
-        btn = btn.child(div().text_size(px(15.0)).child(icon_name));
-    }
-
-    btn.child(label).min_w(px(76.0))
-}
-
-pub fn ui_icon_button(icon_text: SharedString, size_px: f32, cx: &App) -> gpui::Div {
-    let t = Theme::global(cx);
-    div()
-        .size(px(size_px))
-        .rounded(theme::radius_md())
-        .hover(|style| style.bg(t.list_hover).cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .child(
-            div()
-                .text_size(px(size_px * 0.5))
-                .text_color(t.muted_foreground)
-                .child(icon_text),
-        )
-}
-
 pub fn window_close_button(cx: &App) -> impl IntoElement {
     div()
         .id("qingqi-window-close")
@@ -571,37 +446,6 @@ pub fn ui_empty_state(message: impl Into<SharedString>, cx: &App) -> impl IntoEl
         )
 }
 
-/// Accent 色 Tag（替换原 chip / 各 feature 本地彩色 chip）；`Tag::custom` 传硬编码 accent 色，无需 cx。
-pub fn accent_tag(label: impl Into<SharedString>, accent: PluginAccent) -> impl IntoElement {
-    let label: SharedString = label.into();
-    let color: gpui::Hsla = accent_color(accent).into();
-    let soft: gpui::Hsla = accent_soft(accent).into();
-    Tag::custom(soft, color, soft).small().child(label)
-}
-
-/// 状态 Tag（替换 status_pill / 各 feature 本地 status badge）；内置 variant 在 render 时取主题色，无需 cx。
-pub fn status_tag(label: impl Into<SharedString>, tone: components::StatusTone) -> impl IntoElement {
-    use components::StatusTone;
-    let label: SharedString = label.into();
-    match tone {
-        StatusTone::Success => Tag::success(),
-        StatusTone::Warning => Tag::warning(),
-        StatusTone::Danger => Tag::danger(),
-        StatusTone::Info => Tag::info(),
-        StatusTone::Neutral => Tag::secondary(),
-    }
-    .small()
-    .child(label)
-}
-
-pub fn ui_divider(label: Option<impl Into<SharedString>>, cx: &App) -> impl IntoElement {
-    let mut divider = Divider::horizontal().color(border_light(cx));
-    if let Some(l) = label {
-        divider = divider.label(l);
-    }
-    divider
-}
-
 pub fn focus_ring(active: bool, accent: PluginAccent, cx: &App) -> gpui::Hsla {
     if active {
         accent_color(accent).into()
@@ -622,40 +466,4 @@ pub fn notify_window(window: &mut Window) {
 
 pub fn asset_path(relative: &str) -> String {
     assets::resolve_string(relative)
-}
-
-// ── Button 工厂（gpui_component Button）─────────────────────────────────────
-
-/// 主按钮
-pub fn primary_btn(id: impl Into<gpui::ElementId>, label: impl Into<SharedString>) -> Button {
-    Button::new(id).label(label).small().primary()
-}
-
-/// 次要按钮（Secondary 是 Button 默认 variant，无需 .secondary()）
-pub fn secondary_btn(id: impl Into<gpui::ElementId>, label: impl Into<SharedString>) -> Button {
-    Button::new(id).label(label).small()
-}
-
-/// Ghost 按钮（无边框）
-pub fn ghost_btn(id: impl Into<gpui::ElementId>, label: impl Into<SharedString>) -> Button {
-    Button::new(id).label(label).small().ghost()
-}
-
-/// 危险按钮
-pub fn danger_btn(id: impl Into<gpui::ElementId>, label: impl Into<SharedString>) -> Button {
-    Button::new(id).label(label).small().danger()
-}
-
-/// accent 色按钮（自定义 variant，需 cx 读主题构造默认色）
-pub fn accent_btn(
-    id: impl Into<gpui::ElementId>,
-    label: impl Into<SharedString>,
-    accent: PluginAccent,
-    cx: &App,
-) -> Button {
-    let c: gpui::Hsla = accent_color(accent).into();
-    Button::new(id)
-        .label(label)
-        .small()
-        .custom(ButtonCustomVariant::new(cx).color(c).foreground(white()))
 }

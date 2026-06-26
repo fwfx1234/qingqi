@@ -6,12 +6,11 @@ use gpui::{
     Render, SharedString, StatefulInteractiveElement, Styled, Subscription, TitlebarOptions,
     Window, WindowBounds, WindowKind, WindowOptions, div, px, size,
 };
-use gpui_component::theme::Theme;
+use gpui_component::{input::{Input, InputState}, theme::Theme};
 use gpui_component::{
     IconName, Root, Sizable, Size,
     button::{Button, ButtonVariants},
 };
-use qingqi_ui::text_input::TextInput;
 use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn open_env_editor_window(debugger: Entity<ApiDebuggerView>, cx: &mut App) {
@@ -365,7 +364,7 @@ fn env_bottom_bar(handle: Entity<ApiDebuggerView>, cx: &App) -> impl IntoElement
         )
 }
 
-fn labeled_field(label: &'static str, input: Entity<TextInput>, cx: &App) -> impl IntoElement {
+fn labeled_field(label: &'static str, input: Entity<InputState>, cx: &App) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -379,6 +378,15 @@ fn labeled_field(label: &'static str, input: Entity<TextInput>, cx: &App) -> imp
                 .border_color(glass::divider(cx))
                 .bg(glass::inset(cx))
                 .overflow_hidden()
-                .child(input),
+                .child(api_input(input, 32.0)),
         )
+}
+
+fn api_input(input: Entity<InputState>, height: f32) -> Input {
+    Input::new(&input)
+        .appearance(false)
+        .bordered(false)
+        .focus_bordered(false)
+        .h(px(height))
+        .text_size(px(11.0))
 }

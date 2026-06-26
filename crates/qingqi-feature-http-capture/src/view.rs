@@ -20,14 +20,17 @@ use gpui::{
     ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task,
     Window, div, px,
 };
-use gpui_component::theme::Theme;
+use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::divider::Divider;
+use gpui_component::input::{Input, InputState};
 use gpui_component::scroll::ScrollableElement;
+use gpui_component::theme::Theme;
+use gpui_component::{Disableable, Sizable};
 use qingqi_plugin::{
     events::{AppEventBus, AppEventKind},
     plugin_spec::PluginAccent,
 };
 use qingqi_ui::{
-    text_input::{TextInput, TextInputStyle},
     theme,
     ui::{self, components},
 };
@@ -39,8 +42,8 @@ pub struct CaptureView {
     store: Arc<Mutex<CaptureStore>>,
     engine: Arc<CaptureEngine>,
     ca_manager: Arc<Mutex<CaManager>>,
-    search_input: Entity<TextInput>,
-    host_input: Entity<TextInput>,
+    search_input: Option<Entity<InputState>>,
+    host_input: Option<Entity<InputState>>,
     filter: FilterState,
     exchanges: Vec<CapturedExchange>,
     total: i64,
@@ -69,40 +72,13 @@ impl CaptureView {
         events: AppEventBus,
         cx: &mut Context<Self>,
     ) -> Self {
-        let search_input = cx.new(|cx| {
-            let mut input = TextInput::new(cx, "搜索 URL 关键词", "");
-            input.set_style(
-                TextInputStyle {
-                    height: 32.0,
-                    font_size: 12.0,
-                    padding: 8.0,
-                },
-                cx,
-            );
-            input.set_chrome(false, cx);
-            input
-        });
-        let host_input = cx.new(|cx| {
-            let mut input = TextInput::new(cx, "Host 过滤", "");
-            input.set_style(
-                TextInputStyle {
-                    height: 32.0,
-                    font_size: 12.0,
-                    padding: 8.0,
-                },
-                cx,
-            );
-            input.set_chrome(false, cx);
-            input
-        });
-
         let setup_info = build_setup_info(&engine, &ca_manager, DEFAULT_PROXY_PORT);
         let mut this = Self {
             store,
             engine,
             ca_manager,
-            search_input,
-            host_input,
+            search_input: None,
+            host_input: None,
             filter: FilterState::default(),
             exchanges: Vec::new(),
             total: 0,
@@ -121,24 +97,39 @@ impl CaptureView {
             event_task: None,
             subscriptions: Vec::new(),
         };
-        this.observe_inputs(cx);
         this.start_event_watch(events, cx);
         this.refresh_from_store(cx);
         this
     }
 
+    fn ensure_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.search_input.is_none() {
+            self.search_input = Some(cx.new(|cx| {
+                InputState::new(window, cx).placeholder("搜索 URL 关键词")
+            }));
+        }
+        if self.host_input.is_none() {
+            self.host_input = Some(cx.new(|cx| InputState::new(window, cx).placeholder("Host 过滤")));
+        }
+        self.observe_inputs(cx);
+    }
+
     fn observe_inputs(&mut self, cx: &mut Context<Self>) {
-        let search = self.search_input.clone();
-        let sub = cx.observe(&search, |panel, _, cx| {
-            panel.filter.search = panel.search_input.read(cx).text();
+        if !self.subscriptions.is_empty() {
+            return;
+        }
+
+        let search = self.search_input.clone().expect("search input initialized");
+        let sub = cx.observe(&search, |panel, search, cx| {
+            panel.filter.search = search.read(cx).value().to_string();
             panel.offset = 0;
             panel.refresh_from_store(cx);
         });
         self.subscriptions.push(sub);
 
-        let host = self.host_input.clone();
-        let sub = cx.observe(&host, |panel, _, cx| {
-            panel.filter.host = panel.host_input.read(cx).text();
+        let host = self.host_input.clone().expect("host input initialized");
+        let sub = cx.observe(&host, |panel, host, cx| {
+            panel.filter.host = host.read(cx).value().to_string();
             panel.offset = 0;
             panel.refresh_from_store(cx);
         });
@@ -440,12 +431,12 @@ impl CaptureView {
 
     fn reset_filters(&mut self, cx: &mut Context<Self>) {
         self.filter = FilterState::default();
-        self.search_input.update(cx, |input, cx| {
-            input.clear(cx);
-        });
-        self.host_input.update(cx, |input, cx| {
-            input.clear(cx);
-        });
+        if let Some(search_input) = self.search_input.as_ref() {
+            search_input.update(cx, |input, cx| input.reset_value("", cx));
+        }
+        if let Some(host_input) = self.host_input.as_ref() {
+            host_input.update(cx, |input, cx| input.reset_value("", cx));
+        }
         self.offset = 0;
         self.refresh_from_store(cx);
     }
@@ -587,7 +578,7 @@ fn section_label(label: &str, cx: &App) -> gpui::AnyElement {
 fn proxy_value_row(
     label: &str,
     value: String,
-    action: gpui::Stateful<gpui::Div>,
+    action: impl IntoElement,
     cx: &App,
 ) -> gpui::AnyElement {
     div()
@@ -620,23 +611,17 @@ fn proxy_value_row(
         .into_any_element()
 }
 
-fn small_action(id: &'static str, label: &str, cx: &App) -> gpui::Stateful<gpui::Div> {
-    div()
-        .id(id)
-        .h(px(24.0))
-        .px_2()
-        .rounded(theme::radius_sm())
-        .bg(ui::bg_surface(cx))
-        .border_1()
-        .border_color(ui::border_light(cx))
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .text_color(ui::text_primary(cx))
-        .cursor_pointer()
-        .hover(|s| s.bg(ui::bg_hover(cx)))
-        .child(label.to_string())
+fn small_action(id: &'static str, label: &str, _cx: &App) -> gpui_component::button::Button {
+    Button::new(id).label(label.to_string()).small().compact()
+}
+
+fn capture_input(state: Entity<InputState>) -> Input {
+    Input::new(&state)
+        .appearance(false)
+        .bordered(false)
+        .focus_bordered(false)
+        .h(px(32.0))
+        .text_size(px(12.0))
 }
 
 fn guide_step(index: &str, text: &str, cx: &App) -> gpui::AnyElement {
@@ -706,7 +691,8 @@ fn short_path(path: &str) -> String {
 }
 
 impl Render for CaptureView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.ensure_inputs(window, cx);
         let dark = Theme::global(cx).is_dark();
         let exchanges = self.exchanges.clone();
         let total = self.total;
@@ -714,8 +700,8 @@ impl Render for CaptureView {
         let selected_detail = self.selected_detail.clone();
         let offset = self.offset;
         let engine_running = self.engine_running;
-        let search_input = self.search_input.clone();
-        let host_input = self.host_input.clone();
+        let search_input = self.search_input.clone().expect("search input initialized");
+        let host_input = self.host_input.clone().expect("host input initialized");
         let filter_method = self.filter.method.clone();
         let filter_error_only = self.filter.error_only;
         let filter_https_only = self.filter.https_only;
@@ -835,45 +821,29 @@ impl Render for CaptureView {
                         },
                     ))
                     .child(if engine_running {
-                        ui::ui_button("停止代理", "secondary", dark, None, true, cx)
-                            .id("stop-proxy-btn")
-                            .cursor_pointer()
+                        Button::new("stop-proxy-btn").label("停止代理").small().danger()
                             .on_click(cx.listener(|panel, _, _, cx| {
                                 panel.stop_proxy(cx);
                             }))
                     } else {
-                        ui::ui_button("启动代理", "primary", dark, None, false, cx)
-                            .id("start-proxy-btn")
-                            .cursor_pointer()
+                        Button::new("start-proxy-btn").label("启动代理").small().primary()
                             .on_click(cx.listener(|panel, _, _, cx| {
                                 panel.start_proxy(cx);
                             }))
                     })
                     .child({
-                        let reset_btn = ui::ui_button("重置过滤", "ghost", dark, None, false, cx)
-                            .id("reset-filter-btn");
-                        if has_active_filter {
-                            reset_btn
-                                .cursor_pointer()
-                                .on_click(cx.listener(|panel, _, _, cx| {
-                                    panel.reset_filters(cx);
-                                }))
-                        } else {
-                            reset_btn.opacity(0.4)
-                        }
+                        Button::new("reset-filter-btn").label("重置过滤").small().ghost()
+                            .disabled(!has_active_filter)
+                            .on_click(cx.listener(|panel, _, _, cx| {
+                                panel.reset_filters(cx);
+                            }))
                     })
                     .child({
-                        let clear_btn =
-                            ui::ui_button("清空记录", "ghost", dark, None, true, cx).id("clear-btn");
-                        if total > 0 {
-                            clear_btn
-                                .cursor_pointer()
-                                .on_click(cx.listener(|panel, _, _, cx| {
-                                    panel.clear_all(cx);
-                                }))
-                        } else {
-                            clear_btn.opacity(0.4)
-                        }
+                        Button::new("clear-btn").label("清空记录").small().danger()
+                            .disabled(total == 0)
+                            .on_click(cx.listener(|panel, _, _, cx| {
+                                panel.clear_all(cx);
+                            }))
                     }),
             )
             // ── Main content: filter + list + detail ──
@@ -1053,14 +1023,14 @@ impl Render for CaptureView {
                                             ),
                                     ),
                             )
-                            .child(ui::separator(cx))
+                            .child(Divider::horizontal().color(ui::border_light(cx)))
                             .child(
                                 div()
                                     .rounded(theme::radius_md())
                                     .bg(ui::bg_subtle(cx))
                                     .border_1()
                                     .border_color(ui::border_light(cx))
-                                    .child(search_input.clone()),
+                                    .child(capture_input(search_input.clone())),
                             )
                             .child(
                                 div()
@@ -1068,7 +1038,7 @@ impl Render for CaptureView {
                                     .bg(ui::bg_subtle(cx))
                                     .border_1()
                                     .border_color(ui::border_light(cx))
-                                    .child(host_input.clone()),
+                                    .child(capture_input(host_input.clone())),
                             )
                             // Method filter chips
                             .child(div().flex().flex_wrap().gap_1().children(
@@ -1224,7 +1194,7 @@ impl Render for CaptureView {
                                             .child("隐藏静态")
                                     }),
                             )
-                            .child(ui::separator(cx))
+                            .child(Divider::horizontal().color(ui::border_light(cx)))
                             .child(ui::metric_pill(
                                 "总计",
                                 format!("{total}"),
@@ -1692,7 +1662,12 @@ impl Render for CaptureView {
     }
 }
 
-fn detail_mini(key: &str, value: &str, value_color: impl Into<gpui::Hsla>, cx: &App) -> gpui::AnyElement {
+fn detail_mini(
+    key: &str,
+    value: &str,
+    value_color: impl Into<gpui::Hsla>,
+    cx: &App,
+) -> gpui::AnyElement {
     let key = key.to_string();
     let value_color: gpui::Hsla = value_color.into();
     div()
@@ -1700,11 +1675,7 @@ fn detail_mini(key: &str, value: &str, value_color: impl Into<gpui::Hsla>, cx: &
         .flex_col()
         .items_center()
         .text_size(px(11.0))
-        .child(
-            div()
-                .text_color(ui::text_secondary(cx))
-                .child(key),
-        )
+        .child(div().text_color(ui::text_secondary(cx)).child(key))
         .child(
             div()
                 .text_color(value_color)
@@ -1728,9 +1699,7 @@ fn render_detail_tab_content(
             detail.has_request_headers(),
             cx,
         ),
-        DetailTab::RequestBody => {
-            render_body_section("请求体", detail.request_body_display(), cx)
-        }
+        DetailTab::RequestBody => render_body_section("请求体", detail.request_body_display(), cx),
         DetailTab::ResponseHeaders => render_headers_section(
             "响应头",
             &detail.response_headers_entries(),
@@ -1764,12 +1733,7 @@ fn render_timing_section(detail: &CapturedExchange, cx: &App) -> gpui::AnyElemen
                         .text_color(ui::text_secondary(cx))
                         .child(key.to_string()),
                 )
-                .child(
-                    div()
-                        .flex_1()
-                        .text_color(ui::text_primary(cx))
-                        .child(value),
-                )
+                .child(div().flex_1().text_color(ui::text_primary(cx)).child(value))
         }))
         .into_any_element()
 }
@@ -1878,12 +1842,7 @@ fn render_overview_section(detail: &CapturedExchange, cx: &App) -> gpui::AnyElem
                         .text_color(ui::text_secondary(cx))
                         .child(key.to_string()),
                 )
-                .child(
-                    div()
-                        .flex_1()
-                        .text_color(ui::text_primary(cx))
-                        .child(value),
-                )
+                .child(div().flex_1().text_color(ui::text_primary(cx)).child(value))
         }))
         .into_any_element()
 }

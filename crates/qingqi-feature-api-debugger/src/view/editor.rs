@@ -2,12 +2,13 @@ use super::ApiDebuggerView;
 use super::types::AuthFormInputs;
 use crate::service::{AuthType, EditorTab, KeyValueRow};
 use gpui::{App, Entity};
+use gpui_component::input::InputState;
 
 impl ApiDebuggerView {
     pub fn text_editor_input(
         &self,
         tab: EditorTab,
-    ) -> Option<Entity<qingqi_ui::text_input::TextInput>> {
+    ) -> Option<Entity<InputState>> {
         match tab {
             EditorTab::Body => Some(self.body_input.clone()),
             EditorTab::PreOps => Some(self.pre_ops_input.clone()),
@@ -35,7 +36,7 @@ impl ApiDebuggerView {
         match self.auth_type {
             AuthType::None => Vec::new(),
             AuthType::BearerToken => {
-                let token = self.auth_bearer_input.read(cx).text().trim().to_string();
+                let token = self.auth_bearer_input.read(cx).value().to_string().trim().to_string();
                 if token.is_empty() {
                     Vec::new()
                 } else {
@@ -43,8 +44,8 @@ impl ApiDebuggerView {
                 }
             }
             AuthType::BasicAuth => {
-                let user = self.auth_basic_user_input.read(cx).text();
-                let pass = self.auth_basic_pass_input.read(cx).text();
+                let user = self.auth_basic_user_input.read(cx).value().to_string();
+                let pass = self.auth_basic_pass_input.read(cx).value().to_string();
                 if user.trim().is_empty() && pass.trim().is_empty() {
                     Vec::new()
                 } else {
@@ -60,13 +61,13 @@ impl ApiDebuggerView {
                 let name = self
                     .auth_apikey_name_input
                     .read(cx)
-                    .text()
+                    .value()
                     .trim()
                     .to_string();
                 let value = self
                     .auth_apikey_value_input
                     .read(cx)
-                    .text()
+                    .value()
                     .trim()
                     .to_string();
                 if name.is_empty() {
@@ -90,19 +91,19 @@ impl ApiDebuggerView {
         self.auth_type = values.auth_type.unwrap_or(AuthType::None);
         self.auth_apikey_in_query = values.in_query;
         self.auth_bearer_input.update(cx, |input, input_cx| {
-            input.set_text(values.bearer.clone(), input_cx)
+            input.reset_value(values.bearer.clone(), input_cx)
         });
         self.auth_basic_user_input.update(cx, |input, input_cx| {
-            input.set_text(values.basic_user.clone(), input_cx)
+            input.reset_value(values.basic_user.clone(), input_cx)
         });
         self.auth_basic_pass_input.update(cx, |input, input_cx| {
-            input.set_text(values.basic_pass.clone(), input_cx)
+            input.reset_value(values.basic_pass.clone(), input_cx)
         });
         self.auth_apikey_name_input.update(cx, |input, input_cx| {
-            input.set_text(values.apikey_name.clone(), input_cx)
+            input.reset_value(values.apikey_name.clone(), input_cx)
         });
         self.auth_apikey_value_input.update(cx, |input, input_cx| {
-            input.set_text(values.apikey_value.clone(), input_cx)
+            input.reset_value(values.apikey_value.clone(), input_cx)
         });
     }
 
@@ -127,12 +128,12 @@ impl ApiDebuggerView {
     }
 
     pub fn format_json_body(&mut self, cx: &mut App) {
-        let text = self.body_input.read(cx).text();
+        let text = self.body_input.read(cx).value().to_string();
         match serde_json::from_str::<serde_json::Value>(&text) {
             Ok(value) => {
                 let pretty = serde_json::to_string_pretty(&value).unwrap_or_else(|_| text.clone());
                 self.body_input
-                    .update(cx, |input, input_cx| input.set_text(pretty, input_cx));
+                    .update(cx, |input, input_cx| input.reset_value(pretty, input_cx));
                 self.sync_models(cx);
                 self.persist_current_tab_state(cx);
                 self.notice = String::from("JSON 已格式化");
@@ -153,7 +154,7 @@ impl ApiDebuggerView {
         };
         let path_string = path.display().to_string();
         self.body_input.update(cx, |input, input_cx| {
-            input.set_text(path_string.clone(), input_cx)
+            input.reset_value(path_string.clone(), input_cx)
         });
         self.sync_models(cx);
         self.persist_current_tab_state(cx);

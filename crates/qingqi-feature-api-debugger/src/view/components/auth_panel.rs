@@ -7,7 +7,7 @@ use gpui::{
     Styled, div, hsla, px,
 };
 use gpui_component::theme::Theme;
-use qingqi_ui::text_input::TextInput;
+use gpui_component::input::{Input, InputState};
 use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn auth_form_panel(
@@ -122,7 +122,7 @@ fn auth_location_button(
         })
 }
 
-fn labeled_field(label: &'static str, input: Entity<TextInput>, cx: &App) -> impl IntoElement {
+fn labeled_field(label: &'static str, input: Entity<InputState>, cx: &App) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -143,6 +143,15 @@ fn labeled_field(label: &'static str, input: Entity<TextInput>, cx: &App) -> imp
                     },
                 ))
                 .overflow_hidden()
-                .child(input),
+                .child(api_input(input, 32.0)),
         )
+}
+
+fn api_input(input: Entity<InputState>, height: f32) -> Input {
+    Input::new(&input)
+        .appearance(false)
+        .bordered(false)
+        .focus_bordered(false)
+        .h(px(height))
+        .text_size(px(11.0))
 }

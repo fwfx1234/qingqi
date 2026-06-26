@@ -208,10 +208,10 @@ pub fn open_tabs_bar(
                 .on_click({
                     let view = view.clone();
                     let tabs = tabs.clone();
-                    move |&index, _window, cx| {
+                    move |&index, window, cx| {
                         if let Some(tab) = tabs.get(index) {
                             view.update(cx, |view, cx| {
-                                view.select_open_tab(tab.clone(), cx);
+                                view.select_open_tab(tab.clone(), window, cx);
                             });
                         }
                     }
@@ -235,10 +235,10 @@ pub fn open_tabs_bar(
                             .hover(|s| {
                                 s.bg(theme::rgba_with_alpha(ui::text_tertiary(cx).into(), 0.12))
                             })
-                            .on_click(move |_, _, cx| {
+                            .on_click(move |_, window, cx| {
                                 cx.stop_propagation();
                                 close_view.update(cx, |view, cx| {
-                                    view.close_open_tab(index, cx);
+                                    view.close_open_tab(index, window, cx);
                                 });
                             })
                             .child(

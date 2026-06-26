@@ -7,8 +7,12 @@ use gpui::{
     App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
     StatefulInteractiveElement, Styled, Subscription, Window, div, px,
 };
-use gpui_component::Selectable;
-
+use gpui_component::{
+    Selectable, Sizable,
+    button::{Button, ButtonCustomVariant, ButtonVariants},
+    input::{Input, InputState},
+    tag::Tag,
+};
 
 use qingqi_plugin::{
     job::{JobId, JobProvider},
@@ -16,7 +20,6 @@ use qingqi_plugin::{
     plugin_spec::PluginAccent,
 };
 use qingqi_ui::{
-    text_input::{TextInput, TextInputStyle},
     theme,
     ui::{self, components},
 };
@@ -88,7 +91,7 @@ pub struct DownloadManagerView {
     save_dir_snapshot: String,
     stats_snapshot: DownloadStats,
     filter: FilterTab,
-    url_input_entity: Option<Entity<TextInput>>,
+    url_input_entity: Option<Entity<InputState>>,
     url_text: String,
     message: String,
     service_revision: u64,
@@ -96,16 +99,16 @@ pub struct DownloadManagerView {
     show_settings: bool,
     settings_need_reload: bool,
     // Settings input entities
-    save_root_input: Option<Entity<TextInput>>,
-    concurrent_input: Option<Entity<TextInput>>,
-    speed_limit_input: Option<Entity<TextInput>>,
-    timeout_input: Option<Entity<TextInput>>,
-    retry_input: Option<Entity<TextInput>>,
-    proxy_input: Option<Entity<TextInput>>,
-    user_agent_input: Option<Entity<TextInput>>,
-    referer_input: Option<Entity<TextInput>>,
-    cookie_input: Option<Entity<TextInput>>,
-    headers_input: Option<Entity<TextInput>>,
+    save_root_input: Option<Entity<InputState>>,
+    concurrent_input: Option<Entity<InputState>>,
+    speed_limit_input: Option<Entity<InputState>>,
+    timeout_input: Option<Entity<InputState>>,
+    retry_input: Option<Entity<InputState>>,
+    proxy_input: Option<Entity<InputState>>,
+    user_agent_input: Option<Entity<InputState>>,
+    referer_input: Option<Entity<InputState>>,
+    cookie_input: Option<Entity<InputState>>,
+    headers_input: Option<Entity<InputState>>,
 }
 
 impl DownloadManagerView {
@@ -162,25 +165,15 @@ impl DownloadManagerView {
         }
     }
 
-    pub fn init(&mut self, cx: &mut Context<Self>) {
-        self.ensure_inputs(cx);
-    }
+    pub fn init(&mut self, _cx: &mut Context<Self>) {}
 
-    fn ensure_inputs(&mut self, cx: &mut Context<Self>) {
+    fn ensure_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.url_input_entity.is_none() {
             let current_text = self.url_text.clone();
             let input = cx.new(|cx| {
-                let mut input = TextInput::new(cx, "输入下载链接...", current_text);
-                input.set_chrome(false, cx);
-                input.set_monospace(true, cx);
-                input.set_style(
-                    TextInputStyle {
-                        height: 28.0,
-                        font_size: 11.0,
-                        padding: 8.0,
-                    },
-                    cx,
-                );
+                let mut input = InputState::new(window, cx);
+                input.set_placeholder("输入下载链接...", window, cx);
+                input.reset_value(current_text, cx);
                 input
             });
             self.url_input_entity = Some(input);
@@ -189,11 +182,12 @@ impl DownloadManagerView {
         let settings = lock_or_recover(&self.service, "download-service").settings_snapshot();
 
         if self.save_root_input.is_none() {
-            self.save_root_input = Some(self.make_settings_input(cx, settings.save_root.clone()));
+            self.save_root_input =
+                Some(self.make_settings_input(window, cx, settings.save_root.clone()));
         }
         if self.concurrent_input.is_none() {
             self.concurrent_input =
-                Some(self.make_settings_input(cx, settings.max_concurrent.to_string()));
+                Some(self.make_settings_input(window, cx, settings.max_concurrent.to_string()));
         }
         if self.speed_limit_input.is_none() {
             let speed_val = if settings.speed_limit_kbps > 0 {
@@ -201,30 +195,35 @@ impl DownloadManagerView {
             } else {
                 String::new()
             };
-            self.speed_limit_input = Some(self.make_settings_input(cx, speed_val));
+            self.speed_limit_input = Some(self.make_settings_input(window, cx, speed_val));
         }
         if self.timeout_input.is_none() {
             self.timeout_input =
-                Some(self.make_settings_input(cx, settings.timeout_secs.to_string()));
+                Some(self.make_settings_input(window, cx, settings.timeout_secs.to_string()));
         }
         if self.retry_input.is_none() {
-            self.retry_input = Some(self.make_settings_input(cx, settings.retry_limit.to_string()));
+            self.retry_input =
+                Some(self.make_settings_input(window, cx, settings.retry_limit.to_string()));
         }
         if self.proxy_input.is_none() {
-            self.proxy_input = Some(self.make_settings_input(cx, settings.proxy_url.clone()));
+            self.proxy_input =
+                Some(self.make_settings_input(window, cx, settings.proxy_url.clone()));
         }
         if self.user_agent_input.is_none() {
-            self.user_agent_input = Some(self.make_settings_input(cx, settings.user_agent.clone()));
+            self.user_agent_input =
+                Some(self.make_settings_input(window, cx, settings.user_agent.clone()));
         }
         if self.referer_input.is_none() {
-            self.referer_input = Some(self.make_settings_input(cx, settings.referer.clone()));
+            self.referer_input =
+                Some(self.make_settings_input(window, cx, settings.referer.clone()));
         }
         if self.cookie_input.is_none() {
-            self.cookie_input = Some(self.make_settings_input(cx, settings.cookie.clone()));
+            self.cookie_input =
+                Some(self.make_settings_input(window, cx, settings.cookie.clone()));
         }
         if self.headers_input.is_none() {
             self.headers_input =
-                Some(self.make_settings_input(cx, settings.custom_headers.clone()));
+                Some(self.make_settings_input(window, cx, settings.custom_headers.clone()));
         }
 
         if self.settings_need_reload {
@@ -233,19 +232,15 @@ impl DownloadManagerView {
         }
     }
 
-    fn make_settings_input(&self, cx: &mut Context<Self>, value: String) -> Entity<TextInput> {
+    fn make_settings_input(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        value: String,
+    ) -> Entity<InputState> {
         cx.new(|cx| {
-            let mut input = TextInput::new(cx, "", &value);
-            input.set_chrome(false, cx);
-            input.set_monospace(true, cx);
-            input.set_style(
-                TextInputStyle {
-                    height: 26.0,
-                    font_size: 10.0,
-                    padding: 6.0,
-                },
-                cx,
-            );
+            let mut input = InputState::new(window, cx);
+            input.reset_value(value, cx);
             input
         })
     }
@@ -331,7 +326,7 @@ impl DownloadManagerView {
         };
         let observed_input = input.clone();
         let subscription = cx.observe(&input, move |this, _, cx| {
-            let text = observed_input.read(cx).text();
+            let text = observed_input.read(cx).value().to_string();
             this.url_text = text;
         });
         self.subscriptions.push(subscription);
@@ -340,14 +335,14 @@ impl DownloadManagerView {
     fn clear_url_input(&mut self, cx: &mut Context<Self>) {
         self.url_text.clear();
         if let Some(input) = self.url_input_entity.as_ref() {
-            input.update(cx, |input, input_cx| input.clear(input_cx));
+            input.update(cx, |input, input_cx| input.reset_value("", input_cx));
         }
     }
 
     fn set_url_input_text(&mut self, text: String, cx: &mut Context<Self>) {
         self.url_text = text.clone();
         if let Some(input) = self.url_input_entity.as_ref() {
-            input.update(cx, |input, input_cx| input.set_text(text, input_cx));
+            input.update(cx, |input, input_cx| input.reset_value(text, input_cx));
         }
     }
 
@@ -431,7 +426,7 @@ impl DownloadManagerView {
         self.url_text = trimmed.to_string();
         if let Some(input) = self.url_input_entity.as_ref() {
             input.update(cx, |input, input_cx| {
-                input.set_text(trimmed.to_string(), input_cx)
+                input.reset_value(trimmed.to_string(), input_cx)
             });
         }
     }
@@ -452,12 +447,12 @@ impl DownloadManagerView {
         let settings = lock_or_recover(&self.service, "download-service").settings_snapshot();
         if let Some(input) = &self.save_root_input {
             input.update(cx, |input, input_cx| {
-                input.set_text(settings.save_root.clone(), input_cx)
+                input.reset_value(settings.save_root.clone(), input_cx)
             });
         }
         if let Some(input) = &self.concurrent_input {
             input.update(cx, |input, input_cx| {
-                input.set_text(settings.max_concurrent.to_string(), input_cx)
+                input.reset_value(settings.max_concurrent.to_string(), input_cx)
             });
         }
         if let Some(input) = &self.speed_limit_input {
@@ -466,41 +461,41 @@ impl DownloadManagerView {
             } else {
                 String::new()
             };
-            input.update(cx, |input, input_cx| input.set_text(val, input_cx));
+            input.update(cx, |input, input_cx| input.reset_value(val, input_cx));
         }
         if let Some(input) = &self.timeout_input {
             input.update(cx, |input, input_cx| {
-                input.set_text(settings.timeout_secs.to_string(), input_cx)
+                input.reset_value(settings.timeout_secs.to_string(), input_cx)
             });
         }
         if let Some(input) = &self.retry_input {
             input.update(cx, |input, input_cx| {
-                input.set_text(settings.retry_limit.to_string(), input_cx)
+                input.reset_value(settings.retry_limit.to_string(), input_cx)
             });
         }
         if let Some(input) = &self.proxy_input {
             input.update(cx, |input, input_cx| {
-                input.set_text(settings.proxy_url.clone(), input_cx)
+                input.reset_value(settings.proxy_url.clone(), input_cx)
             });
         }
         if let Some(input) = &self.user_agent_input {
             input.update(cx, |input, input_cx| {
-                input.set_text(settings.user_agent.clone(), input_cx)
+                input.reset_value(settings.user_agent.clone(), input_cx)
             });
         }
         if let Some(input) = &self.referer_input {
             input.update(cx, |input, input_cx| {
-                input.set_text(settings.referer.clone(), input_cx)
+                input.reset_value(settings.referer.clone(), input_cx)
             });
         }
         if let Some(input) = &self.cookie_input {
             input.update(cx, |input, input_cx| {
-                input.set_text(settings.cookie.clone(), input_cx)
+                input.reset_value(settings.cookie.clone(), input_cx)
             });
         }
         if let Some(input) = &self.headers_input {
             input.update(cx, |input, input_cx| {
-                input.set_text(settings.custom_headers.clone(), input_cx)
+                input.reset_value(settings.custom_headers.clone(), input_cx)
             });
         }
     }
@@ -509,52 +504,52 @@ impl DownloadManagerView {
         let save_root = self
             .save_root_input
             .as_ref()
-            .map(|e| e.read(cx).text())
+            .map(|e| e.read(cx).value().to_string())
             .unwrap_or_default();
         let concurrent: usize = self
             .concurrent_input
             .as_ref()
-            .map(|e| e.read(cx).text().parse().unwrap_or(3))
+            .map(|e| e.read(cx).value().parse().unwrap_or(3))
             .unwrap_or(3);
         let speed_limit: u32 = self
             .speed_limit_input
             .as_ref()
-            .map(|e| e.read(cx).text().parse().unwrap_or(0))
+            .map(|e| e.read(cx).value().parse().unwrap_or(0))
             .unwrap_or(0);
         let timeout: u32 = self
             .timeout_input
             .as_ref()
-            .map(|e| e.read(cx).text().parse().unwrap_or(30))
+            .map(|e| e.read(cx).value().parse().unwrap_or(30))
             .unwrap_or(30);
         let retry: u32 = self
             .retry_input
             .as_ref()
-            .map(|e| e.read(cx).text().parse().unwrap_or(2))
+            .map(|e| e.read(cx).value().parse().unwrap_or(2))
             .unwrap_or(2);
         let proxy = self
             .proxy_input
             .as_ref()
-            .map(|e| e.read(cx).text())
+            .map(|e| e.read(cx).value().to_string())
             .unwrap_or_default();
         let user_agent = self
             .user_agent_input
             .as_ref()
-            .map(|e| e.read(cx).text())
+            .map(|e| e.read(cx).value().to_string())
             .unwrap_or_default();
         let referer = self
             .referer_input
             .as_ref()
-            .map(|e| e.read(cx).text())
+            .map(|e| e.read(cx).value().to_string())
             .unwrap_or_default();
         let cookie = self
             .cookie_input
             .as_ref()
-            .map(|e| e.read(cx).text())
+            .map(|e| e.read(cx).value().to_string())
             .unwrap_or_default();
         let headers = self
             .headers_input
             .as_ref()
-            .map(|e| e.read(cx).text())
+            .map(|e| e.read(cx).value().to_string())
             .unwrap_or_default();
 
         if !save_root.is_empty() {
@@ -728,8 +723,8 @@ impl DownloadManagerView {
 }
 
 impl Render for DownloadManagerView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.ensure_inputs(cx);
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.ensure_inputs(window, cx);
         self.observe_inputs(cx);
         self.refresh_if_stale();
         let handle = cx.entity();
@@ -877,7 +872,7 @@ fn header_bar(active_count: usize, cx: &App) -> impl IntoElement {
 
 fn url_input_bar(
     cx: &App,
-    url_input: Entity<TextInput>,
+    url_input: Entity<InputState>,
     handle: Entity<DownloadManagerView>,
 ) -> impl IntoElement {
     div()
@@ -919,7 +914,7 @@ fn url_input_bar(
                 .border_color(ui::border_light(cx))
                 .flex()
                 .items_center()
-                .child(url_input.into_any_element()),
+                .child(download_input(url_input)),
         )
         .child(action_button("download-paste", "粘贴", cx).on_click({
             let h = handle.clone();
@@ -933,16 +928,15 @@ fn url_input_bar(
             }
         }))
         .child(
-            primary_btn("download-add", "添加下载", PluginAccent::Green, cx)
-                .on_click({
-                    let h = handle.clone();
-                    move |_, _window, cx| {
-                        cx.update_entity(&h, |panel, cx| {
-                            panel.add_download(cx);
-                            cx.notify();
-                        });
-                    }
-                }),
+            primary_btn("download-add", "添加下载", PluginAccent::Green, cx).on_click({
+                let h = handle.clone();
+                move |_, _window, cx| {
+                    cx.update_entity(&h, |panel, cx| {
+                        panel.add_download(cx);
+                        cx.notify();
+                    });
+                }
+            }),
         )
 }
 
@@ -982,62 +976,64 @@ fn filter_bar(
                     let active = tab == active_filter;
                     let count = tab.count(counts);
                     let h = handle.clone();
-                    filter_chip(("download-filter", tab as usize), tab.label(), count, active, cx)
-                        .on_click(move |_, _window, cx| {
-                            cx.update_entity(&h, |panel, cx| {
-                                panel.set_filter(tab);
-                                cx.notify();
-                            });
-                        })
+                    filter_chip(
+                        ("download-filter", tab as usize),
+                        tab.label(),
+                        count,
+                        active,
+                        cx,
+                    )
+                    .on_click(move |_, _window, cx| {
+                        cx.update_entity(&h, |panel, cx| {
+                            panel.set_filter(tab);
+                            cx.notify();
+                        });
+                    })
                 }))
                 .child(div().flex_1())
                 .child(
-                    action_button("download-start-all", "全部开始", cx)
-                        .on_click({
-                            let h = handle.clone();
-                            move |_, _window, cx| {
-                                cx.update_entity(&h, |panel, cx| {
-                                    panel.start_all();
-                                    cx.notify();
-                                });
-                            }
-                        }),
+                    action_button("download-start-all", "全部开始", cx).on_click({
+                        let h = handle.clone();
+                        move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.start_all();
+                                cx.notify();
+                            });
+                        }
+                    }),
                 )
                 .child(
-                    action_button("download-pause-all", "全部暂停", cx)
-                        .on_click({
-                            let h = handle.clone();
-                            move |_, _window, cx| {
-                                cx.update_entity(&h, |panel, cx| {
-                                    panel.pause_all();
-                                    cx.notify();
-                                });
-                            }
-                        }),
+                    action_button("download-pause-all", "全部暂停", cx).on_click({
+                        let h = handle.clone();
+                        move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.pause_all();
+                                cx.notify();
+                            });
+                        }
+                    }),
                 )
                 .child(
-                    action_button("download-clear-done", "清除已完成", cx)
-                        .on_click({
-                            let h = handle.clone();
-                            move |_, _window, cx| {
-                                cx.update_entity(&h, |panel, cx| {
-                                    panel.clear_completed();
-                                    cx.notify();
-                                });
-                            }
-                        }),
+                    action_button("download-clear-done", "清除已完成", cx).on_click({
+                        let h = handle.clone();
+                        move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.clear_completed();
+                                cx.notify();
+                            });
+                        }
+                    }),
                 )
                 .child(
-                    action_button("download-clear-failed", "清除失败", cx)
-                        .on_click({
-                            let h = handle.clone();
-                            move |_, _window, cx| {
-                                cx.update_entity(&h, |panel, cx| {
-                                    panel.clear_failed();
-                                    cx.notify();
-                                });
-                            }
-                        }),
+                    action_button("download-clear-failed", "清除失败", cx).on_click({
+                        let h = handle.clone();
+                        move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.clear_failed();
+                                cx.notify();
+                            });
+                        }
+                    }),
                 ),
         )
         .child(
@@ -1050,14 +1046,20 @@ fn filter_bar(
                     let count = tab.count(counts);
                     if count > 0 || active {
                         let h = handle.clone();
-                        filter_chip(("download-cat-filter", tab as usize), tab.label(), count, active, cx)
-                            .on_click(move |_, _window, cx| {
-                                cx.update_entity(&h, |panel, cx| {
-                                    panel.set_filter(tab);
-                                    cx.notify();
-                                });
-                            })
-                            .into_any_element()
+                        filter_chip(
+                            ("download-cat-filter", tab as usize),
+                            tab.label(),
+                            count,
+                            active,
+                            cx,
+                        )
+                        .on_click(move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.set_filter(tab);
+                                cx.notify();
+                            });
+                        })
+                        .into_any_element()
                     } else {
                         div().into_any_element()
                     }
@@ -1072,7 +1074,10 @@ fn filter_chip(
     active: bool,
     _cx: &App,
 ) -> gpui_component::button::Button {
-    ui::secondary_btn(id, format!("{label} {count}")).selected(active)
+    Button::new(id)
+        .label(format!("{label} {count}"))
+        .small()
+        .selected(active)
 }
 
 fn task_list(
@@ -1255,8 +1260,7 @@ fn task_row(
                 .child(if is_active {
                     let h = handle.clone();
                     let id = task_id.clone();
-                    action_icon("\u{23f8}", cx)
-                        .id(("dl-pause", index))
+                    action_icon(("dl-pause", index), "\u{23f8}", cx)
                         .on_click(move |_, _window, cx| {
                             cx.update_entity(&h, |panel, cx| {
                                 panel.pause_task(&id);
@@ -1267,8 +1271,7 @@ fn task_row(
                 } else if is_paused {
                     let h = handle.clone();
                     let id = task_id2.clone();
-                    action_icon("\u{25b6}", cx)
-                        .id(("dl-resume", index))
+                    action_icon(("dl-resume", index), "\u{25b6}", cx)
                         .on_click(move |_, _window, cx| {
                             cx.update_entity(&h, |panel, cx| {
                                 panel.resume_task(&id);
@@ -1279,8 +1282,7 @@ fn task_row(
                 } else if is_failed {
                     let h = handle.clone();
                     let id = task_id3.clone();
-                    action_icon("\u{21bb}", cx)
-                        .id(("dl-retry", index))
+                    action_icon(("dl-retry", index), "\u{21bb}", cx)
                         .on_click(move |_, _window, cx| {
                             cx.update_entity(&h, |panel, cx| {
                                 panel.retry_task(&id);
@@ -1294,8 +1296,7 @@ fn task_row(
                 .child(if !is_terminal {
                     let h = handle.clone();
                     let id = task_id4.clone();
-                    action_icon("\u{23f9}", cx)
-                        .id(("dl-cancel", index))
+                    action_icon(("dl-cancel", index), "\u{23f9}", cx)
                         .on_click(move |_, _window, cx| {
                             cx.update_entity(&h, |panel, cx| {
                                 panel.cancel_task(&id);
@@ -1306,8 +1307,7 @@ fn task_row(
                 } else {
                     let h = handle.clone();
                     let id = task.id.clone();
-                    action_icon("\u{1f5d1}", cx)
-                        .id(("dl-delete", index))
+                    action_icon(("dl-delete", index), "\u{1f5d1}", cx)
                         .on_click(move |_, _window, cx| {
                             cx.update_entity(&h, |panel, cx| {
                                 panel.delete_task(&id);
@@ -1319,8 +1319,7 @@ fn task_row(
                 .child(if is_completed {
                     let h = handle.clone();
                     let t = task_clone.clone();
-                    action_icon("\u{1f4c2}", cx)
-                        .id(("dl-open", index))
+                    action_icon(("dl-open", index), "\u{1f4c2}", cx)
                         .on_click(move |_, _window, cx| {
                             cx.update_entity(&h, |panel, cx| {
                                 panel.open_file(&t);
@@ -1333,8 +1332,7 @@ fn task_row(
                 })
                 .child(if is_completed {
                     let t = task_clone.clone();
-                    action_icon("\u{1f50d}", cx)
-                        .id(("dl-reveal", index))
+                    action_icon(("dl-reveal", index), "\u{1f50d}", cx)
                         .on_click(move |_, _window, _cx| {
                             if let Some(parent) = std::path::Path::new(&t.save_path).parent() {
                                 let _ = qingqi_platform::shell::open_path(parent);
@@ -1365,16 +1363,14 @@ fn progress_bar(job_progress: Option<f64>, percent: f64, is_active: bool) -> imp
 }
 
 fn status_tag(status: TaskStatus) -> impl IntoElement {
-    use qingqi_ui::ui::components::StatusTone;
-    let tone = match status {
-        TaskStatus::Completed => StatusTone::Success,
-        TaskStatus::Downloading => StatusTone::Info,
-        TaskStatus::Pending => StatusTone::Warning,
-        TaskStatus::Paused => StatusTone::Warning,
-        TaskStatus::Failed => StatusTone::Danger,
-        TaskStatus::Cancelled => StatusTone::Neutral,
+    let tag = match status {
+        TaskStatus::Completed => Tag::success(),
+        TaskStatus::Downloading => Tag::info(),
+        TaskStatus::Pending | TaskStatus::Paused => Tag::warning(),
+        TaskStatus::Failed => Tag::danger(),
+        TaskStatus::Cancelled => Tag::secondary(),
     };
-    ui::status_tag(status.label(), tone)
+    tag.small().child(status.label())
 }
 
 fn bottom_bar(
@@ -1429,28 +1425,26 @@ fn bottom_bar(
                 )),
         )
         .child(
-            secondary_btn("download-settings", "\u{2699} 设置", cx)
-                .on_click({
-                    let h = handle.clone();
-                    move |_, _window, cx| {
-                        cx.update_entity(&h, |panel, cx| {
-                            panel.toggle_settings();
-                            cx.notify();
-                        });
-                    }
-                }),
+            secondary_btn("download-settings", "\u{2699} 设置", cx).on_click({
+                let h = handle.clone();
+                move |_, _window, cx| {
+                    cx.update_entity(&h, |panel, cx| {
+                        panel.toggle_settings();
+                        cx.notify();
+                    });
+                }
+            }),
         )
         .child(
-            secondary_btn("download-open-dir", "打开目录", cx)
-                .on_click({
-                    let h = handle.clone();
-                    move |_, _window, cx| {
-                        cx.update_entity(&h, |panel, cx| {
-                            panel.open_save_dir();
-                            cx.notify();
-                        });
-                    }
-                }),
+            secondary_btn("download-open-dir", "打开目录", cx).on_click({
+                let h = handle.clone();
+                move |_, _window, cx| {
+                    cx.update_entity(&h, |panel, cx| {
+                        panel.open_save_dir();
+                        cx.notify();
+                    });
+                }
+            }),
         )
         .child(
             div()
@@ -1462,16 +1456,16 @@ fn bottom_bar(
 
 fn settings_overlay(
     cx: &App,
-    save_root_input: Option<Entity<TextInput>>,
-    concurrent_input: Option<Entity<TextInput>>,
-    speed_limit_input: Option<Entity<TextInput>>,
-    timeout_input: Option<Entity<TextInput>>,
-    retry_input: Option<Entity<TextInput>>,
-    proxy_input: Option<Entity<TextInput>>,
-    user_agent_input: Option<Entity<TextInput>>,
-    referer_input: Option<Entity<TextInput>>,
-    cookie_input: Option<Entity<TextInput>>,
-    headers_input: Option<Entity<TextInput>>,
+    save_root_input: Option<Entity<InputState>>,
+    concurrent_input: Option<Entity<InputState>>,
+    speed_limit_input: Option<Entity<InputState>>,
+    timeout_input: Option<Entity<InputState>>,
+    retry_input: Option<Entity<InputState>>,
+    proxy_input: Option<Entity<InputState>>,
+    user_agent_input: Option<Entity<InputState>>,
+    referer_input: Option<Entity<InputState>>,
+    cookie_input: Option<Entity<InputState>>,
+    headers_input: Option<Entity<InputState>>,
     handle: Entity<DownloadManagerView>,
 ) -> impl IntoElement {
     div()
@@ -1562,7 +1556,7 @@ fn settings_overlay(
         )
 }
 
-fn settings_field(label: &str, input: Option<Entity<TextInput>>, cx: &App) -> gpui::Div {
+fn settings_field(label: &str, input: Option<Entity<InputState>>, cx: &App) -> gpui::Div {
     div()
         .flex_1()
         .flex()
@@ -1583,11 +1577,29 @@ fn settings_field(label: &str, input: Option<Entity<TextInput>>, cx: &App) -> gp
                 .border_color(ui::border_light(cx))
                 .flex()
                 .items_center()
-                .children(input.map(|e| e.into_any_element())),
+                .children(input.map(settings_input)),
         )
 }
 
 // ── Helper Components ──
+
+fn download_input(state: Entity<InputState>) -> Input {
+    Input::new(&state)
+        .appearance(false)
+        .bordered(false)
+        .focus_bordered(false)
+        .h(px(28.0))
+        .text_size(px(11.0))
+}
+
+fn settings_input(state: Entity<InputState>) -> Input {
+    Input::new(&state)
+        .appearance(false)
+        .bordered(false)
+        .focus_bordered(false)
+        .h(px(26.0))
+        .text_size(px(10.0))
+}
 
 fn primary_btn(
     id: impl Into<gpui::ElementId>,
@@ -1595,7 +1607,12 @@ fn primary_btn(
     accent: PluginAccent,
     cx: &App,
 ) -> gpui_component::button::Button {
-    ui::accent_btn(id, label.to_string(), accent, cx)
+    let accent: gpui::Hsla = ui::accent_color(accent).into();
+    Button::new(id).label(label.to_string()).small().custom(
+        ButtonCustomVariant::new(cx)
+            .color(accent)
+            .foreground(ui::white()),
+    )
 }
 
 fn secondary_btn(
@@ -1603,7 +1620,7 @@ fn secondary_btn(
     label: &str,
     _cx: &App,
 ) -> gpui_component::button::Button {
-    ui::secondary_btn(id, label.to_string())
+    Button::new(id).label(label.to_string()).small()
 }
 
 fn action_button(
@@ -1611,20 +1628,19 @@ fn action_button(
     label: &str,
     _cx: &App,
 ) -> gpui_component::button::Button {
-    ui::secondary_btn(id, label.to_string())
+    Button::new(id).label(label.to_string()).small()
 }
 
-fn action_icon(icon: &str, cx: &App) -> gpui::Div {
-    div()
-        .size(px(20.0))
-        .rounded(px(4.0))
-        .hover(|style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(11.0))
-        .text_color(ui::text_secondary(cx))
-        .child(icon.to_string())
+fn action_icon(
+    id: impl Into<gpui::ElementId>,
+    icon: &str,
+    _cx: &App,
+) -> gpui_component::button::Button {
+    Button::new(id)
+        .label(icon.to_string())
+        .small()
+        .with_size(gpui_component::Size::Size(px(20.0)))
+        .compact()
 }
 
 // ── Formatting Helpers ──

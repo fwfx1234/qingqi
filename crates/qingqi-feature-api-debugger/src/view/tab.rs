@@ -1,4 +1,4 @@
-use gpui::App;
+use gpui::{App, Window};
 
 use super::ApiDebuggerView;
 use super::types::{OpenTab, request_at};
@@ -60,15 +60,15 @@ impl ApiDebuggerView {
 
     fn collect_tab_draft(&self, cx: &App) -> crate::service::TabDraft {
         crate::service::TabDraft {
-            url: self.path_input.read(cx).text(),
+            url: self.path_input.read(cx).value().to_string(),
             params_text: self.params_kv.to_text(cx),
             path_params_text: self.path_kv.to_text(cx),
-            body_text: self.body_input.read(cx).text(),
+            body_text: self.body_input.read(cx).value().to_string(),
             headers_text: self.headers_kv.to_text(cx),
             cookies_text: self.cookies_kv.to_text(cx),
             auth_text: super::types::format_rows(&self.auth_rows(cx)),
-            pre_ops_text: self.pre_ops_input.read(cx).text(),
-            post_ops_text: self.post_ops_input.read(cx).text(),
+            pre_ops_text: self.pre_ops_input.read(cx).value().to_string(),
+            post_ops_text: self.post_ops_input.read(cx).value().to_string(),
             active_request_tab: crate::service::editor_tab_index(self.editor_tab),
         }
     }
@@ -106,28 +106,41 @@ impl ApiDebuggerView {
         self.pending_persist = false;
     }
 
-    pub(crate) fn restore_inputs_from_tab(&mut self, tab: &crate::model::HttpTab, cx: &mut App) {
+    pub(crate) fn restore_inputs_from_tab(
+        &mut self,
+        tab: &crate::model::HttpTab,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
         let draft = crate::service::restore_tab_draft(tab);
         self.path_input
-            .update(cx, |input, input_cx| input.set_text(draft.url, input_cx));
-        self.params_kv.set_from_text(cx, &draft.params_text);
-        self.path_kv.set_from_text(cx, &draft.path_params_text);
+            .update(cx, |input, input_cx| input.reset_value(draft.url, input_cx));
+        self.params_kv.set_from_text(window, cx, &draft.params_text);
+        self.path_kv
+            .set_from_text(window, cx, &draft.path_params_text);
         self.body_input.update(cx, |input, input_cx| {
-            input.set_text(draft.body_text, input_cx)
+            input.reset_value(draft.body_text, input_cx)
         });
-        self.headers_kv.set_from_text(cx, &draft.headers_text);
-        self.cookies_kv.set_from_text(cx, &draft.cookies_text);
+        self.headers_kv
+            .set_from_text(window, cx, &draft.headers_text);
+        self.cookies_kv
+            .set_from_text(window, cx, &draft.cookies_text);
         self.pre_ops_input.update(cx, |input, input_cx| {
-            input.set_text(draft.pre_ops_text, input_cx)
+            input.reset_value(draft.pre_ops_text, input_cx)
         });
         self.post_ops_input.update(cx, |input, input_cx| {
-            input.set_text(draft.post_ops_text, input_cx)
+            input.reset_value(draft.post_ops_text, input_cx)
         });
         let auth_rows = super::types::parse_rows(&draft.auth_text);
         self.load_auth_form(cx, &auth_rows);
     }
 
-    pub(crate) fn close_open_tab(&mut self, tab_index: usize, cx: &mut App) {
+    pub(crate) fn close_open_tab(
+        &mut self,
+        tab_index: usize,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
         if tab_index >= self.open_tabs.len() {
             return;
         }
@@ -142,7 +155,7 @@ impl ApiDebuggerView {
             self.selected_request = 0;
             self.selected_scenario = None;
             self.open_tabs.push(self.active_tab.clone());
-            self.reload_request_inputs(cx);
+            self.reload_request_inputs(window, cx);
         } else if was_active {
             let new_index = tab_index.min(self.open_tabs.len() - 1);
             let tab = self.open_tabs[new_index].clone();
@@ -161,11 +174,11 @@ impl ApiDebuggerView {
                     self.selected_scenario = Some(*scenario_index);
                 }
             }
-            self.reload_request_inputs(cx);
+            self.reload_request_inputs(window, cx);
         }
     }
 
-    pub(crate) fn select_open_tab(&mut self, tab: OpenTab, cx: &mut App) {
+    pub(crate) fn select_open_tab(&mut self, tab: OpenTab, window: &mut Window, cx: &mut App) {
         self.sync_models(cx);
         self.flush_pending_persist(cx);
         self.active_tab = tab.clone();
@@ -174,14 +187,14 @@ impl ApiDebuggerView {
                 self.selected_request = index;
                 self.selected_scenario = None;
                 if let Some(persisted) = self.service.load_persisted_tab_by_id(&tab_id) {
-                    self.restore_inputs_from_tab(&persisted, cx);
+                    self.restore_inputs_from_tab(&persisted, window, cx);
                     if let Some(et) =
                         crate::service::index_to_editor_tab(persisted.active_request_tab)
                     {
                         self.editor_tab = et;
                     }
                 } else {
-                    self.reload_request_inputs(cx);
+                    self.reload_request_inputs(window, cx);
                 }
             }
             OpenTab::Scenario {
@@ -193,14 +206,14 @@ impl ApiDebuggerView {
                 self.selected_request = request_index;
                 self.selected_scenario = Some(scenario_index);
                 if let Some(persisted) = self.service.load_persisted_tab_by_id(&tab_id) {
-                    self.restore_inputs_from_tab(&persisted, cx);
+                    self.restore_inputs_from_tab(&persisted, window, cx);
                     if let Some(et) =
                         crate::service::index_to_editor_tab(persisted.active_request_tab)
                     {
                         self.editor_tab = et;
                     }
                 } else {
-                    self.reload_request_inputs(cx);
+                    self.reload_request_inputs(window, cx);
                 }
             }
         }

@@ -627,6 +627,37 @@ impl InputState {
         cx.notify();
     }
 
+    /// Reset the text of the input field without requiring a window.
+    ///
+    /// This is useful when external state needs to replace the whole value outside
+    /// of an input event.
+    pub fn reset_value(&mut self, value: impl Into<SharedString>, cx: &mut Context<Self>) {
+        let text: SharedString = value.into();
+        self.history.ignore = true;
+        self.text = Rope::from(text.as_str());
+        self.text_wrapper.set_default_text(&self.text);
+        self.history.ignore = false;
+
+        if self.mode.is_single_line() {
+            self.selected_range = (self.text.len()..self.text.len()).into();
+        } else {
+            self.selected_range.clear();
+        }
+
+        if let Some(diagnostics) = self.mode.diagnostics_mut() {
+            diagnostics.reset(&self.text);
+        }
+
+        if self.mode.is_code_editor() {
+            self._pending_update = true;
+            self.lsp.reset();
+        }
+
+        self.reset_highlighter(cx);
+        self.scroll_handle.set_offset(point(px(0.), px(0.)));
+        cx.notify();
+    }
+
     /// Insert text at the current cursor position.
     ///
     /// And the cursor will be moved to the end of inserted text.

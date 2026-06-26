@@ -3,13 +3,12 @@ use gpui::{
     App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
     Styled, div, hsla, px,
 };
-use gpui_component::theme::Theme;
-use qingqi_ui::text_input::TextInput;
+use gpui_component::{input::{Input, InputState}, theme::Theme};
 use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn curl_import_dialog(
     view: Entity<ApiDebuggerView>,
-    curl_import_input: Entity<TextInput>,
+    curl_import_input: Entity<InputState>,
     cx: &App,
 ) -> impl IntoElement {
     let import_view = view.clone();
@@ -61,7 +60,7 @@ pub fn curl_import_dialog(
                 .child(
                     div()
                         .id("curl-import-textarea-wrapper")
-                        .child(curl_import_input),
+                        .child(api_input(curl_import_input, 220.0)),
                 )
                 .child(
                     div()
@@ -115,7 +114,7 @@ pub fn curl_import_dialog(
 
 pub fn rename_dialog(
     view: Entity<ApiDebuggerView>,
-    rename_input: Entity<TextInput>,
+    rename_input: Entity<InputState>,
     cx: &App,
 ) -> impl IntoElement {
     let confirm_view = view.clone();
@@ -164,7 +163,11 @@ pub fn rename_dialog(
                         .text_color(Theme::global(cx).muted_foreground)
                         .child("输入新的名称"),
                 )
-                .child(div().id("api-rename-input-wrapper").child(rename_input))
+                .child(
+                    div()
+                        .id("api-rename-input-wrapper")
+                        .child(api_input(rename_input, 32.0)),
+                )
                 .child(
                     div()
                         .flex()
@@ -213,6 +216,15 @@ pub fn rename_dialog(
                         ),
                 ),
         )
+}
+
+fn api_input(input: Entity<InputState>, height: f32) -> Input {
+    Input::new(&input)
+        .appearance(false)
+        .bordered(false)
+        .focus_bordered(false)
+        .h(px(height))
+        .text_size(px(11.0))
 }
 
 pub fn overlay_shell(

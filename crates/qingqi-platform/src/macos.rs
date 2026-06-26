@@ -90,6 +90,26 @@ fn prompt_accessibility() {
 #[cfg(not(target_os = "macos"))]
 fn prompt_accessibility() {}
 
+/// Hide the app from the macOS Dock while keeping menu bar/status item behavior available.
+#[cfg(target_os = "macos")]
+pub fn hide_dock_icon() {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
+
+    let Some(mtm) = MainThreadMarker::new() else {
+        tracing::warn!("cannot hide Dock icon outside the macOS main thread");
+        return;
+    };
+
+    let app = NSApplication::sharedApplication(mtm);
+    if !app.setActivationPolicy(NSApplicationActivationPolicy::Accessory) {
+        tracing::warn!("failed to set macOS activation policy to accessory");
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn hide_dock_icon() {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

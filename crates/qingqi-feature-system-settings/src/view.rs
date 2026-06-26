@@ -2,15 +2,23 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use gpui::{
-    AnyElement, App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement,
-    Render, StatefulInteractiveElement, Styled, Window, div, hsla, prelude::FluentBuilder, px,
+    AnyElement, App, AppContext, Context, ElementId, Entity, InteractiveElement, IntoElement,
+    ParentElement, Render, StatefulInteractiveElement, Styled, Subscription, Window, div,
+    prelude::FluentBuilder, px,
 };
 
 use gpui_component::Disableable;
 use gpui_component::Selectable;
+use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::input::{Input, InputState};
 use gpui_component::sidebar::{Sidebar, SidebarMenu, SidebarMenuItem};
+use gpui_component::slider::{Slider, SliderEvent, SliderState, SliderValue};
+use gpui_component::switch::Switch;
+use gpui_component::tab::{Tab, TabBar};
 use gpui_component::theme::Theme;
+use gpui_component::{Sizable, Size as ComponentSize};
 use qingqi_platform::macos::PermissionStatus;
+use qingqi_platform::tray_settings::{NetworkSpeedDisplayMode, NetworkSpeedTextMode};
 use qingqi_plugin::{
     app::AppIndexSnapshot,
     host::{AppIndexHandleRef, ShortcutHandleRef, ThemeHandleRef},
@@ -19,7 +27,6 @@ use qingqi_plugin::{
     theme::ThemeMode,
 };
 use qingqi_ui::{
-    text_input::{TextInput, TextInputStyle},
     theme,
     ui::{self, components},
 };
@@ -39,10 +46,16 @@ pub struct SettingsView {
     retention_message: String,
     accessibility_status: PermissionStatus,
     icon_cache_message: String,
-    shortcut_inputs: HashMap<String, Entity<TextInput>>,
+    shortcut_inputs: HashMap<String, Entity<InputState>>,
     shortcut_drafts: HashMap<String, String>,
     shortcut_message: String,
     tray_message: String,
+    tray_interval_slider: Option<Entity<SliderState>>,
+    tray_popup_width_slider: Option<Entity<SliderState>>,
+    tray_popup_height_slider: Option<Entity<SliderState>>,
+    tray_interface_count_slider: Option<Entity<SliderState>>,
+    tray_slider_subscriptions: Vec<Subscription>,
+    settings_chrome: bool,
     /// 设置中心当前选中的分区（侧边栏导航）
     selected_section: usize,
 }
@@ -54,6 +67,24 @@ impl SettingsView {
         app_index_handle: Option<AppIndexHandleRef>,
         shortcut_handle: Option<ShortcutHandleRef>,
         app_paths: AppPaths,
+    ) -> Self {
+        Self::new_with_initial_section(
+            theme_handle,
+            settings_store,
+            app_index_handle,
+            shortcut_handle,
+            app_paths,
+            0,
+        )
+    }
+
+    pub fn new_with_initial_section(
+        theme_handle: ThemeHandleRef,
+        settings_store: Arc<Mutex<SettingsStore>>,
+        app_index_handle: Option<AppIndexHandleRef>,
+        shortcut_handle: Option<ShortcutHandleRef>,
+        app_paths: AppPaths,
+        initial_section: usize,
     ) -> Self {
         let retention = settings_store
             .lock()
@@ -76,8 +107,33 @@ impl SettingsView {
             shortcut_drafts: HashMap::new(),
             shortcut_message: String::new(),
             tray_message: String::new(),
-            selected_section: 0,
+            tray_interval_slider: None,
+            tray_popup_width_slider: None,
+            tray_popup_height_slider: None,
+            tray_interface_count_slider: None,
+            tray_slider_subscriptions: Vec::new(),
+            settings_chrome: true,
+            selected_section: initial_section.min(6),
         }
+    }
+
+    pub fn tray_manager(
+        theme_handle: ThemeHandleRef,
+        settings_store: Arc<Mutex<SettingsStore>>,
+        app_index_handle: Option<AppIndexHandleRef>,
+        shortcut_handle: Option<ShortcutHandleRef>,
+        app_paths: AppPaths,
+    ) -> Self {
+        let mut view = Self::new_with_initial_section(
+            theme_handle,
+            settings_store,
+            app_index_handle,
+            shortcut_handle,
+            app_paths,
+            2,
+        );
+        view.settings_chrome = false;
+        view
     }
 
     // ── Theme ──
@@ -194,6 +250,62 @@ impl SettingsView {
             .unwrap_or(false)
     }
 
+    pub fn tray_network_speed_display_mode(&self) -> NetworkSpeedDisplayMode {
+        self.settings_store
+            .lock()
+            .map(|store| store.tray_network_speed_display_mode())
+            .unwrap_or_default()
+    }
+
+    pub fn tray_network_speed_text_mode(&self) -> NetworkSpeedTextMode {
+        self.settings_store
+            .lock()
+            .map(|store| store.tray_network_speed_text_mode())
+            .unwrap_or_default()
+    }
+
+    pub fn tray_network_speed_update_interval_ms(&self) -> u64 {
+        self.settings_store
+            .lock()
+            .map(|store| store.tray_network_speed_update_interval_ms())
+            .unwrap_or(1000)
+    }
+
+    pub fn tray_popup_width(&self) -> u32 {
+        self.settings_store
+            .lock()
+            .map(|store| store.tray_popup_width())
+            .unwrap_or(340)
+    }
+
+    pub fn tray_popup_height(&self) -> u32 {
+        self.settings_store
+            .lock()
+            .map(|store| store.tray_popup_height())
+            .unwrap_or(360)
+    }
+
+    pub fn tray_network_speed_show_totals(&self) -> bool {
+        self.settings_store
+            .lock()
+            .map(|store| store.tray_network_speed_show_totals())
+            .unwrap_or(true)
+    }
+
+    pub fn tray_network_speed_show_interfaces(&self) -> bool {
+        self.settings_store
+            .lock()
+            .map(|store| store.tray_network_speed_show_interfaces())
+            .unwrap_or(true)
+    }
+
+    pub fn tray_network_speed_max_interfaces(&self) -> u8 {
+        self.settings_store
+            .lock()
+            .map(|store| store.tray_network_speed_max_interfaces())
+            .unwrap_or(5)
+    }
+
     pub fn tray_message_text(&self) -> &str {
         &self.tray_message
     }
@@ -215,6 +327,171 @@ impl SettingsView {
                 Err(error) => self.tray_message = format!("保存失败: {error}"),
             },
             Err(_) => self.tray_message = String::from("设置存储不可用"),
+        }
+    }
+
+    pub fn set_tray_network_speed_display_mode(&mut self, mode: NetworkSpeedDisplayMode) {
+        match self.settings_store.lock() {
+            Ok(mut store) => match store.set_tray_network_speed_display_mode(mode) {
+                Ok(()) => self.tray_message = String::from("已保存，托盘将在数秒内更新"),
+                Err(error) => self.tray_message = format!("保存失败: {error}"),
+            },
+            Err(_) => self.tray_message = String::from("设置存储不可用"),
+        }
+    }
+
+    pub fn set_tray_network_speed_text_mode(&mut self, mode: NetworkSpeedTextMode) {
+        match self.settings_store.lock() {
+            Ok(mut store) => match store.set_tray_network_speed_text_mode(mode) {
+                Ok(()) => self.tray_message = String::from("已保存，托盘将在数秒内更新"),
+                Err(error) => self.tray_message = format!("保存失败: {error}"),
+            },
+            Err(_) => self.tray_message = String::from("设置存储不可用"),
+        }
+    }
+
+    pub fn set_tray_network_speed_update_interval_ms(&mut self, interval_ms: u64) {
+        match self.settings_store.lock() {
+            Ok(mut store) => match store.set_tray_network_speed_update_interval_ms(interval_ms) {
+                Ok(()) => self.tray_message = String::from("已保存，托盘将在数秒内更新"),
+                Err(error) => self.tray_message = format!("保存失败: {error}"),
+            },
+            Err(_) => self.tray_message = String::from("设置存储不可用"),
+        }
+    }
+
+    pub fn set_tray_popup_width(&mut self, width: u32) {
+        match self.settings_store.lock() {
+            Ok(mut store) => match store.set_tray_popup_width(width) {
+                Ok(()) => self.tray_message = String::from("已保存，托盘将在数秒内更新"),
+                Err(error) => self.tray_message = format!("保存失败: {error}"),
+            },
+            Err(_) => self.tray_message = String::from("设置存储不可用"),
+        }
+    }
+
+    pub fn set_tray_popup_height(&mut self, height: u32) {
+        match self.settings_store.lock() {
+            Ok(mut store) => match store.set_tray_popup_height(height) {
+                Ok(()) => self.tray_message = String::from("已保存，托盘将在数秒内更新"),
+                Err(error) => self.tray_message = format!("保存失败: {error}"),
+            },
+            Err(_) => self.tray_message = String::from("设置存储不可用"),
+        }
+    }
+
+    pub fn set_tray_network_speed_show_totals(&mut self, show: bool) {
+        match self.settings_store.lock() {
+            Ok(mut store) => match store.set_tray_network_speed_show_totals(show) {
+                Ok(()) => self.tray_message = String::from("已保存，托盘将在数秒内更新"),
+                Err(error) => self.tray_message = format!("保存失败: {error}"),
+            },
+            Err(_) => self.tray_message = String::from("设置存储不可用"),
+        }
+    }
+
+    pub fn set_tray_network_speed_show_interfaces(&mut self, show: bool) {
+        match self.settings_store.lock() {
+            Ok(mut store) => match store.set_tray_network_speed_show_interfaces(show) {
+                Ok(()) => self.tray_message = String::from("已保存，托盘将在数秒内更新"),
+                Err(error) => self.tray_message = format!("保存失败: {error}"),
+            },
+            Err(_) => self.tray_message = String::from("设置存储不可用"),
+        }
+    }
+
+    pub fn set_tray_network_speed_max_interfaces(&mut self, max_interfaces: u8) {
+        match self.settings_store.lock() {
+            Ok(mut store) => match store.set_tray_network_speed_max_interfaces(max_interfaces) {
+                Ok(()) => self.tray_message = String::from("已保存，托盘将在数秒内更新"),
+                Err(error) => self.tray_message = format!("保存失败: {error}"),
+            },
+            Err(_) => self.tray_message = String::from("设置存储不可用"),
+        }
+    }
+
+    fn ensure_tray_sliders(&mut self, cx: &mut Context<Self>) {
+        if self.tray_interval_slider.is_none() {
+            let value = self.tray_network_speed_update_interval_ms();
+            self.tray_interval_slider = Some(cx.new(|_| {
+                SliderState::new()
+                    .max(5000.0)
+                    .min(500.0)
+                    .step(500.0)
+                    .default_value(value as f32)
+            }));
+        }
+        if self.tray_popup_width_slider.is_none() {
+            let value = self.tray_popup_width();
+            self.tray_popup_width_slider = Some(cx.new(|_| {
+                SliderState::new()
+                    .max(520.0)
+                    .min(280.0)
+                    .step(20.0)
+                    .default_value(value as f32)
+            }));
+        }
+        if self.tray_popup_height_slider.is_none() {
+            let value = self.tray_popup_height();
+            self.tray_popup_height_slider = Some(cx.new(|_| {
+                SliderState::new()
+                    .max(640.0)
+                    .min(240.0)
+                    .step(20.0)
+                    .default_value(value as f32)
+            }));
+        }
+        if self.tray_interface_count_slider.is_none() {
+            let value = self.tray_network_speed_max_interfaces();
+            self.tray_interface_count_slider = Some(cx.new(|_| {
+                SliderState::new()
+                    .min(0.0)
+                    .max(10.0)
+                    .step(1.0)
+                    .default_value(value as f32)
+            }));
+        }
+        if self.tray_slider_subscriptions.is_empty() {
+            self.attach_tray_slider_subscriptions(cx);
+        }
+    }
+
+    fn attach_tray_slider_subscriptions(&mut self, cx: &mut Context<Self>) {
+        if let Some(slider) = self.tray_interval_slider.clone() {
+            self.tray_slider_subscriptions
+                .push(cx.subscribe(&slider, |view, _, event, cx| {
+                    if let SliderEvent::Change(SliderValue::Single(value)) = event {
+                        view.set_tray_network_speed_update_interval_ms(*value as u64);
+                        cx.notify();
+                    }
+                }));
+        }
+        if let Some(slider) = self.tray_popup_width_slider.clone() {
+            self.tray_slider_subscriptions
+                .push(cx.subscribe(&slider, |view, _, event, cx| {
+                    if let SliderEvent::Change(SliderValue::Single(value)) = event {
+                        view.set_tray_popup_width(*value as u32);
+                        cx.notify();
+                    }
+                }));
+        }
+        if let Some(slider) = self.tray_popup_height_slider.clone() {
+            self.tray_slider_subscriptions
+                .push(cx.subscribe(&slider, |view, _, event, cx| {
+                    if let SliderEvent::Change(SliderValue::Single(value)) = event {
+                        view.set_tray_popup_height(*value as u32);
+                        cx.notify();
+                    }
+                }));
+        }
+        if let Some(slider) = self.tray_interface_count_slider.clone() {
+            self.tray_slider_subscriptions
+                .push(cx.subscribe(&slider, |view, _, event, cx| {
+                    if let SliderEvent::Change(SliderValue::Single(value)) = event {
+                        view.set_tray_network_speed_max_interfaces(*value as u8);
+                        cx.notify();
+                    }
+                }));
         }
     }
 
@@ -377,8 +654,9 @@ impl SettingsView {
 
     pub fn shortcut_rows(
         &mut self,
+        window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Vec<(ShortcutView, Entity<TextInput>)> {
+    ) -> Vec<(ShortcutView, Entity<InputState>)> {
         let views = self
             .shortcut_handle
             .as_ref()
@@ -391,26 +669,15 @@ impl SettingsView {
                 .normalized_accelerator
                 .clone()
                 .unwrap_or_else(|| view.descriptor.current_accelerator.clone());
-            let editable = view.descriptor.editable;
             self.shortcut_drafts
                 .entry(id.clone())
                 .or_insert_with(|| value.clone());
-            let input = self.shortcut_inputs.entry(id).or_insert_with(|| {
+            self.shortcut_inputs.entry(id).or_insert_with(|| {
                 cx.new(|cx| {
-                    let mut input = TextInput::new(cx, "例如 Alt+V", value);
-                    input.set_style(
-                        TextInputStyle {
-                            height: 30.0,
-                            font_size: 12.0,
-                            padding: 8.0,
-                        },
-                        cx,
-                    );
-                    input
+                    InputState::new(window, cx)
+                        .placeholder("例如 Alt+V")
+                        .default_value(value)
                 })
-            });
-            input.update(cx, |input, input_cx| {
-                input.set_read_only(!editable, input_cx);
             });
         }
 
@@ -428,11 +695,11 @@ impl SettingsView {
     pub fn save_shortcut(
         &mut self,
         shortcut_id: &str,
-        input: Entity<TextInput>,
+        input: Entity<InputState>,
         enabled: bool,
         cx: &mut Context<Self>,
     ) {
-        let accelerator = input.read(cx).text();
+        let accelerator = input.read(cx).value().to_string();
         let result = self
             .shortcut_handle
             .as_ref()
@@ -475,7 +742,7 @@ impl SettingsView {
                     self.shortcut_drafts
                         .insert(shortcut_id.to_string(), value.clone());
                     if let Some(input) = self.shortcut_inputs.get(shortcut_id) {
-                        input.update(cx, |input, input_cx| input.set_text(value, input_cx));
+                        input.update(cx, |input, input_cx| input.reset_value(value, input_cx));
                     }
                 }
             }
@@ -489,11 +756,98 @@ impl SettingsView {
 // ── Render ──
 
 impl Render for SettingsView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.ensure_tray_sliders(cx);
         let entity = cx.entity();
         let selected = self.selected_section;
+        let theme_snapshot = ThemeSectionSnapshot {
+            current_mode: self.current_mode(),
+            system_dark: self.system_dark(),
+        };
+        let plugin_snapshot = PluginSectionSnapshot {
+            retention_seconds: self.retention_seconds(),
+            retention_status: self.retention_status(),
+            retention_message: self.retention_message_text().to_string(),
+            imported_plugin_root: self.imported_plugin_root_path(),
+        };
+        let tray_snapshot = TraySectionSnapshot {
+            visible: self.tray_network_speed_visible(),
+            show_icon: self.tray_network_speed_show_icon(),
+            display_mode: self.tray_network_speed_display_mode(),
+            text_mode: self.tray_network_speed_text_mode(),
+            update_interval_ms: self.tray_network_speed_update_interval_ms(),
+            popup_width: self.tray_popup_width(),
+            popup_height: self.tray_popup_height(),
+            show_totals: self.tray_network_speed_show_totals(),
+            show_interfaces: self.tray_network_speed_show_interfaces(),
+            max_interfaces: self.tray_network_speed_max_interfaces(),
+            interval_slider: self.tray_interval_slider.clone(),
+            popup_width_slider: self.tray_popup_width_slider.clone(),
+            popup_height_slider: self.tray_popup_height_slider.clone(),
+            interface_count_slider: self.tray_interface_count_slider.clone(),
+            message: self.tray_message_text().to_string(),
+        };
+        if !self.settings_chrome {
+            return div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .bg(Theme::global(cx).background)
+                .font_family(ui::font_ui())
+                .text_color(Theme::global(cx).foreground)
+                .child(
+                    div()
+                        .px(theme::space_4())
+                        .pt(theme::space_4())
+                        .pb(theme::space_3())
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_size(px(18.0))
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .child("托盘管理"),
+                        )
+                        .child(
+                            div()
+                                .text_size(theme::font_size_caption())
+                                .text_color(Theme::global(cx).muted_foreground)
+                                .child("管理菜单栏托盘项、显示内容和详情弹窗"),
+                        ),
+                )
+                .child(
+                    div()
+                        .id("tray-manager-content")
+                        .flex_1()
+                        .min_w_0()
+                        .px(theme::space_4())
+                        .pb(theme::space_4())
+                        .overflow_y_scroll()
+                        .child(tray_section(entity.clone(), tray_snapshot, cx)),
+                );
+        }
+        let app_index_available = self.app_index_available();
+        let app_snapshot = self.app_index_snapshot();
+        let app_index_snapshot = AppIndexSectionSnapshot {
+            has_app_snapshot: app_index_available && app_snapshot.is_some(),
+            app_snapshot,
+        };
+        let permissions_snapshot = PermissionsSectionSnapshot {
+            accessibility_status: self.accessibility_status(),
+            accessibility_text: self.accessibility_status_text(),
+        };
+        let diagnostics_snapshot = DiagnosticsSectionSnapshot {
+            data_dir: self.data_dir_path(),
+            config_dir: self.config_dir_path(),
+            log_dir: self.log_dir_path(),
+            config_path: self.theme_config_path(),
+            has_app_snapshot: app_index_snapshot.has_app_snapshot,
+            icon_cache_dir: self.icon_cache_dir_path(),
+            icon_cache_message: self.icon_cache_message_text().to_string(),
+        };
         // shortcut_rows 需 &mut self + Context，必须在 render 体内预算（用于「快捷键」分区）
-        let shortcut_rows = self.shortcut_rows(cx);
+        let shortcut_rows = self.shortcut_rows(window, cx);
         let shortcut_message = self.shortcut_message_text().to_string();
 
         const SECTIONS: [&str; 7] = [
@@ -507,14 +861,14 @@ impl Render for SettingsView {
         ];
 
         let content = match selected {
-            0 => theme_section(entity.clone(), cx),
-            1 => plugin_section(entity.clone(), cx),
-            2 => tray_section(entity.clone(), cx),
+            0 => theme_section(entity.clone(), theme_snapshot, cx),
+            1 => plugin_section(entity.clone(), plugin_snapshot, cx),
+            2 => tray_section(entity.clone(), tray_snapshot, cx),
             3 => shortcuts_section(entity.clone(), shortcut_rows, shortcut_message, cx)
                 .into_any_element(),
-            4 => app_index_section(entity.clone(), cx),
-            5 => permissions_section(entity.clone(), cx),
-            _ => diagnostics_section(entity.clone(), cx),
+            4 => app_index_section(entity.clone(), app_index_snapshot, cx),
+            5 => permissions_section(entity.clone(), permissions_snapshot, cx),
+            _ => diagnostics_section(entity.clone(), diagnostics_snapshot, cx),
         };
 
         div()
@@ -533,19 +887,21 @@ impl Render for SettingsView {
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .child("系统设置"),
                     )
-                    .child(SidebarMenu::new().children(SECTIONS.into_iter().enumerate().map(
-                        move |(ix, title)| {
-                            let entity = entity.clone();
-                            SidebarMenuItem::new(title).active(ix == selected).on_click(
-                                move |_, _, cx| {
-                                    entity.update(cx, |view, cx| {
-                                        view.selected_section = ix;
-                                        cx.notify();
-                                    });
-                                },
-                            )
-                        },
-                    ))),
+                    .child(
+                        SidebarMenu::new().children(SECTIONS.into_iter().enumerate().map(
+                            move |(ix, title)| {
+                                let entity = entity.clone();
+                                SidebarMenuItem::new(title).active(ix == selected).on_click(
+                                    move |_, _, cx| {
+                                        entity.update(cx, |view, cx| {
+                                            view.selected_section = ix;
+                                            cx.notify();
+                                        });
+                                    },
+                                )
+                            },
+                        )),
+                    ),
             )
             .child(
                 div()
@@ -559,9 +915,61 @@ impl Render for SettingsView {
     }
 }
 
-fn theme_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
-    let current_mode = entity.read(cx).current_mode();
-    let system_dark = entity.read(cx).system_dark();
+struct ThemeSectionSnapshot {
+    current_mode: ThemeMode,
+    system_dark: bool,
+}
+
+struct PluginSectionSnapshot {
+    retention_seconds: u64,
+    retention_status: String,
+    retention_message: String,
+    imported_plugin_root: String,
+}
+
+struct TraySectionSnapshot {
+    visible: bool,
+    show_icon: bool,
+    display_mode: NetworkSpeedDisplayMode,
+    text_mode: NetworkSpeedTextMode,
+    update_interval_ms: u64,
+    popup_width: u32,
+    popup_height: u32,
+    show_totals: bool,
+    show_interfaces: bool,
+    max_interfaces: u8,
+    interval_slider: Option<Entity<SliderState>>,
+    popup_width_slider: Option<Entity<SliderState>>,
+    popup_height_slider: Option<Entity<SliderState>>,
+    interface_count_slider: Option<Entity<SliderState>>,
+    message: String,
+}
+
+struct AppIndexSectionSnapshot {
+    has_app_snapshot: bool,
+    app_snapshot: Option<AppIndexSnapshot>,
+}
+
+struct PermissionsSectionSnapshot {
+    accessibility_status: PermissionStatus,
+    accessibility_text: String,
+}
+
+struct DiagnosticsSectionSnapshot {
+    data_dir: String,
+    config_dir: String,
+    log_dir: String,
+    config_path: String,
+    has_app_snapshot: bool,
+    icon_cache_dir: String,
+    icon_cache_message: String,
+}
+
+fn theme_section(
+    entity: Entity<SettingsView>,
+    snapshot: ThemeSectionSnapshot,
+    cx: &App,
+) -> AnyElement {
     let t = Theme::global(cx);
     div()
         .flex()
@@ -570,12 +978,12 @@ fn theme_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
         .child(components::settings_row(
             "主题模式",
             "切换浅色 / 深色 / 跟随系统外观",
-            mode_segment(entity.clone(), current_mode, cx),
+            mode_segment(entity.clone(), snapshot.current_mode, cx),
             cx,
         ))
         .child(components::settings_row(
             "系统检测",
-            if system_dark {
+            if snapshot.system_dark {
                 "当前系统外观: 深色"
             } else {
                 "当前系统外观: 浅色"
@@ -589,7 +997,11 @@ fn theme_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
                 .items_center()
                 .text_size(theme::font_size_caption())
                 .text_color(t.muted_foreground)
-                .child(if system_dark { "深色" } else { "浅色" }),
+                .child(if snapshot.system_dark {
+                    "深色"
+                } else {
+                    "浅色"
+                }),
             cx,
         ))
         .child(components::settings_row(
@@ -601,25 +1013,30 @@ fn theme_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-fn plugin_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
-    let retention_seconds = entity.read(cx).retention_seconds();
-    let retention_status = entity.read(cx).retention_status();
-    let retention_message = entity.read(cx).retention_message_text().to_string();
-    let imported_plugin_root = entity.read(cx).imported_plugin_root_path();
+fn plugin_section(
+    entity: Entity<SettingsView>,
+    snapshot: PluginSectionSnapshot,
+    cx: &App,
+) -> AnyElement {
     div()
         .flex()
         .flex_col()
         .gap(theme::space_3())
         .child(components::settings_row(
             "插件窗口保留",
-            retention_status,
-            retention_control(entity.clone(), retention_seconds, retention_message, cx),
+            snapshot.retention_status,
+            retention_control(
+                entity.clone(),
+                snapshot.retention_seconds,
+                snapshot.retention_message,
+                cx,
+            ),
             cx,
         ))
         .child(components::settings_row(
             "导入插件",
             "目录/ZIP 导入尚未实现；可打开目标目录查看",
-            plugin_dir_button(entity.clone(), cx, &imported_plugin_root),
+            plugin_dir_button(entity.clone(), cx, &snapshot.imported_plugin_root),
             cx,
         ))
         .child(components::settings_row(
@@ -631,10 +1048,11 @@ fn plugin_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-fn tray_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
-    let visible = entity.read(cx).tray_network_speed_visible();
-    let show_icon = entity.read(cx).tray_network_speed_show_icon();
-    let message = entity.read(cx).tray_message_text().to_string();
+fn tray_section(
+    entity: Entity<SettingsView>,
+    snapshot: TraySectionSnapshot,
+    cx: &App,
+) -> AnyElement {
     div()
         .flex()
         .flex_col()
@@ -646,7 +1064,7 @@ fn tray_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
                 entity.clone(),
                 cx,
                 "system-settings-tray-network-visible",
-                visible,
+                snapshot.visible,
                 |view, value| view.set_tray_network_speed_visible(value),
             ),
             cx,
@@ -658,38 +1076,122 @@ fn tray_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
                 entity.clone(),
                 cx,
                 "system-settings-tray-network-icon",
-                show_icon,
+                snapshot.show_icon,
                 |view, value| view.set_tray_network_speed_show_icon(value),
             ),
             cx,
         ))
-        .when(!message.is_empty(), |el| {
+        .child(components::settings_row(
+            "显示形式",
+            "控制托盘项占位方式；Windows 文字会降级到 tooltip",
+            tray_display_mode_control(entity.clone(), snapshot.display_mode, cx),
+            cx,
+        ))
+        .child(components::settings_row(
+            "文字内容",
+            "选择菜单栏文字展示下载、上传或双向速度",
+            tray_text_mode_control(entity.clone(), snapshot.text_mode, cx),
+            cx,
+        ))
+        .child(components::settings_row(
+            "刷新间隔",
+            "采样越频繁越实时；默认 1 秒",
+            tray_slider_control(
+                snapshot.interval_slider.clone(),
+                format!("{} ms", snapshot.update_interval_ms),
+                cx,
+            ),
+            cx,
+        ))
+        .child(components::settings_row(
+            "弹窗宽度",
+            "控制托盘详情弹窗宽度",
+            tray_slider_control(
+                snapshot.popup_width_slider.clone(),
+                format!("{} px", snapshot.popup_width),
+                cx,
+            ),
+            cx,
+        ))
+        .child(components::settings_row(
+            "弹窗高度",
+            "控制托盘详情弹窗高度",
+            tray_slider_control(
+                snapshot.popup_height_slider.clone(),
+                format!("{} px", snapshot.popup_height),
+                cx,
+            ),
+            cx,
+        ))
+        .child(components::settings_row(
+            "显示总流量",
+            "在详情弹窗里展示累计接收和发送",
+            toggle_button(
+                entity.clone(),
+                cx,
+                "system-settings-tray-network-totals",
+                snapshot.show_totals,
+                |view, value| view.set_tray_network_speed_show_totals(value),
+            ),
+            cx,
+        ))
+        .child(components::settings_row(
+            "显示网卡列表",
+            "在详情弹窗里展示活跃网络接口",
+            toggle_button(
+                entity.clone(),
+                cx,
+                "system-settings-tray-network-interfaces",
+                snapshot.show_interfaces,
+                |view, value| view.set_tray_network_speed_show_interfaces(value),
+            ),
+            cx,
+        ))
+        .child(components::settings_row(
+            "网卡数量",
+            "限制详情弹窗最多展示的接口数量",
+            tray_slider_control(
+                snapshot.interface_count_slider.clone(),
+                format!("{} 个", snapshot.max_interfaces),
+                cx,
+            ),
+            cx,
+        ))
+        .when(!snapshot.message.is_empty(), |el| {
             el.child(
                 div()
                     .px(theme::space_4())
                     .py(theme::space_2())
                     .text_size(theme::font_size_caption())
                     .text_color(Theme::global(cx).muted_foreground)
-                    .child(message),
+                    .child(snapshot.message),
             )
         })
         .into_any_element()
 }
 
-fn app_index_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
-    let app_index_available = entity.read(cx).app_index_available();
-    let app_snapshot = entity.read(cx).app_index_snapshot();
-    let has_app_snapshot = app_index_available && app_snapshot.is_some();
+fn app_index_section(
+    entity: Entity<SettingsView>,
+    snapshot: AppIndexSectionSnapshot,
+    cx: &App,
+) -> AnyElement {
     div()
         .flex()
         .flex_col()
-        .child(app_index_row(entity.clone(), cx, has_app_snapshot, app_snapshot))
+        .child(app_index_row(
+            entity.clone(),
+            cx,
+            snapshot.has_app_snapshot,
+            snapshot.app_snapshot,
+        ))
         .into_any_element()
 }
 
-fn permissions_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
-    let accessibility_status = entity.read(cx).accessibility_status();
-    let accessibility_text = entity.read(cx).accessibility_status_text();
+fn permissions_section(
+    entity: Entity<SettingsView>,
+    snapshot: PermissionsSectionSnapshot,
+    cx: &App,
+) -> AnyElement {
     div()
         .flex()
         .flex_col()
@@ -697,8 +1199,8 @@ fn permissions_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
         .child(accessibility_row(
             entity.clone(),
             cx,
-            accessibility_status,
-            &accessibility_text,
+            snapshot.accessibility_status,
+            &snapshot.accessibility_text,
         ))
         .child(permission_row(
             cx,
@@ -721,15 +1223,11 @@ fn permissions_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-fn diagnostics_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
-    let data_dir = entity.read(cx).data_dir_path();
-    let config_dir = entity.read(cx).config_dir_path();
-    let log_dir = entity.read(cx).log_dir_path();
-    let config_path = entity.read(cx).theme_config_path();
-    let app_index_available = entity.read(cx).app_index_available();
-    let has_app_snapshot = app_index_available && entity.read(cx).app_index_snapshot().is_some();
-    let icon_cache_dir = entity.read(cx).icon_cache_dir_path();
-    let icon_cache_message = entity.read(cx).icon_cache_message_text().to_string();
+fn diagnostics_section(
+    entity: Entity<SettingsView>,
+    snapshot: DiagnosticsSectionSnapshot,
+    cx: &App,
+) -> AnyElement {
     div()
         .flex()
         .flex_col()
@@ -738,7 +1236,7 @@ fn diagnostics_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
             cx,
             "数据目录",
             "Qingqi 应用数据根目录",
-            &data_dir,
+            &snapshot.data_dir,
             DiagAction::DataDir,
         ))
         .child(diag_path_row(
@@ -746,7 +1244,7 @@ fn diagnostics_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
             cx,
             "配置目录",
             "配置文件与数据库路径",
-            &config_dir,
+            &snapshot.config_dir,
             DiagAction::ConfigDir,
         ))
         .child(diag_path_row(
@@ -754,25 +1252,25 @@ fn diagnostics_section(entity: Entity<SettingsView>, cx: &App) -> AnyElement {
             cx,
             "日志目录",
             "运行日志输出目录",
-            &log_dir,
+            &snapshot.log_dir,
             DiagAction::LogDir,
         ))
         .child(components::settings_row(
             "主题配置",
             "当前主题持久化文件",
-            path_badge(&config_path, cx),
+            path_badge(&snapshot.config_path, cx),
             cx,
         ))
         .child(components::settings_row(
             "应用索引维护",
             "手动重建软件快速启动的应用索引",
-            app_index_action_button(entity.clone(), cx, has_app_snapshot),
+            app_index_action_button(entity.clone(), cx, snapshot.has_app_snapshot),
             cx,
         ))
         .child(components::settings_row(
             "清理图标缓存",
-            icon_cache_dir,
-            icon_cache_clear_button(entity.clone(), cx, icon_cache_message),
+            snapshot.icon_cache_dir,
+            icon_cache_clear_button(entity.clone(), cx, snapshot.icon_cache_message),
             cx,
         ))
         .child(components::settings_row(
@@ -793,7 +1291,6 @@ fn retention_control(
     cx: &App,
 ) -> impl IntoElement {
     let t = Theme::global(cx);
-    let text_primary = t.foreground;
     let text_secondary = t.muted_foreground;
 
     div()
@@ -801,22 +1298,10 @@ fn retention_control(
         .items_center()
         .gap(px(4.0))
         .child(
-            // Decrement button
-            div()
-                .id("system-settings-retention-decrement")
-                .h(px(28.0))
-                .w(px(28.0))
-                .rounded(theme::radius_sm())
-                .border_1()
-                .border_color(t.border)
-                .bg(t.list)
-                .hover(|style| style.bg(t.muted).cursor_pointer())
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(theme::font_size_body())
-                .text_color(text_primary)
-                .child("−")
+            Button::new("system-settings-retention-decrement")
+                .label("-")
+                .compact()
+                .with_size(ComponentSize::Small)
                 .on_click({
                     let entity = entity.clone();
                     move |_, _window, cx| {
@@ -828,7 +1313,6 @@ fn retention_control(
                 }),
         )
         .child(
-            // Value display
             div()
                 .h(px(28.0))
                 .min_w(px(56.0))
@@ -840,26 +1324,14 @@ fn retention_control(
                 .items_center()
                 .justify_center()
                 .text_size(theme::font_size_body())
-                .text_color(text_primary)
+                .text_color(t.foreground)
                 .child(format!("{seconds}秒")),
         )
         .child(
-            // Increment button
-            div()
-                .id("system-settings-retention-increment")
-                .h(px(28.0))
-                .w(px(28.0))
-                .rounded(theme::radius_sm())
-                .border_1()
-                .border_color(t.border)
-                .bg(t.list)
-                .hover(|style| style.bg(t.muted).cursor_pointer())
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(theme::font_size_body())
-                .text_color(text_primary)
-                .child("+")
+            Button::new("system-settings-retention-increment")
+                .label("+")
+                .compact()
+                .with_size(ComponentSize::Small)
                 .on_click({
                     let entity = entity.clone();
                     move |_, _window, cx| {
@@ -871,21 +1343,11 @@ fn retention_control(
                 }),
         )
         .child(
-            // Save button
-            div()
-                .id("system-settings-retention-save")
-                .h(px(28.0))
-                .px_2()
-                .ml(px(4.0))
-                .rounded(theme::radius_sm())
-                .bg(t.primary)
-                .hover(|style| style.bg(t.primary_hover).cursor_pointer())
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(theme::font_size_caption())
-                .text_color(hsla(0., 0., 1., 1.))
-                .child("保存")
+            Button::new("system-settings-retention-save")
+                .label("保存")
+                .primary()
+                .compact()
+                .with_size(ComponentSize::Small)
                 .on_click({
                     let entity = entity.clone();
                     move |_, _window, cx| {
@@ -897,22 +1359,10 @@ fn retention_control(
                 }),
         )
         .child(
-            // Restore default
-            div()
-                .id("system-settings-retention-default")
-                .h(px(28.0))
-                .px_2()
-                .rounded(theme::radius_sm())
-                .border_1()
-                .border_color(t.border)
-                .bg(t.list)
-                .hover(|style| style.bg(t.muted).cursor_pointer())
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(theme::font_size_caption())
-                .text_color(text_primary)
-                .child("默认")
+            Button::new("system-settings-retention-default")
+                .label("默认")
+                .compact()
+                .with_size(ComponentSize::Small)
                 .on_click({
                     let entity = entity.clone();
                     move |_, _window, cx| {
@@ -978,7 +1428,7 @@ fn app_index_row(
     };
 
     let action = if show_rescan {
-        action_button(cx, "重扫描", true, {
+        action_button("重扫描", true, {
             let entity = entity.clone();
             move |_, _window, cx| {
                 entity.update(cx, |this, cx| {
@@ -1029,7 +1479,7 @@ fn app_index_row(
 
 fn app_index_action_button(entity: Entity<SettingsView>, cx: &App, available: bool) -> AnyElement {
     if available {
-        action_button(cx, "重建索引", true, {
+        action_button("重建索引", true, {
             let entity = entity.clone();
             move |_, _window, cx| {
                 entity.update(cx, |this, cx| {
@@ -1044,13 +1494,20 @@ fn app_index_action_button(entity: Entity<SettingsView>, cx: &App, available: bo
     }
 }
 
-fn plugin_dir_button(entity: Entity<SettingsView>, _cx: &App, _root_path: &str) -> impl IntoElement {
-    ui::secondary_btn("system-settings-open-plugin-dir", "打开目录").on_click(move |_, _window, cx| {
-        entity.update(cx, |this, cx| {
-            this.open_plugin_dir();
-            cx.notify();
-        });
-    })
+fn plugin_dir_button(
+    entity: Entity<SettingsView>,
+    _cx: &App,
+    _root_path: &str,
+) -> impl IntoElement {
+    Button::new("system-settings-open-plugin-dir")
+        .label("打开目录")
+        .with_size(ComponentSize::Small)
+        .on_click(move |_, _window, cx| {
+            entity.update(cx, |this, cx| {
+                this.open_plugin_dir();
+                cx.notify();
+            });
+        })
 }
 
 fn icon_cache_clear_button(
@@ -1066,19 +1523,10 @@ fn icon_cache_clear_button(
         .items_center()
         .gap(px(8.0))
         .child(
-            div()
-                .id("system-settings-clear-icon-cache")
-                .h(px(28.0))
-                .px_3()
-                .rounded(theme::radius_md())
-                .bg(t.primary)
-                .hover(|style| style.bg(t.primary_hover).cursor_pointer())
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(theme::font_size_caption())
-                .text_color(hsla(0., 0., 1., 1.))
-                .child("清理缓存")
+            Button::new("system-settings-clear-icon-cache")
+                .label("清理缓存")
+                .primary()
+                .with_size(ComponentSize::Small)
                 .on_click(move |_, _window, cx| {
                     entity.update(cx, |this, cx| {
                         this.clear_icon_cache();
@@ -1100,7 +1548,7 @@ fn icon_cache_clear_button(
 
 fn shortcuts_section(
     entity: Entity<SettingsView>,
-    rows: Vec<(ShortcutView, Entity<TextInput>)>,
+    rows: Vec<(ShortcutView, Entity<InputState>)>,
     message: String,
     cx: &App,
 ) -> impl IntoElement {
@@ -1141,7 +1589,7 @@ fn shortcuts_section(
 fn shortcut_row(
     entity: Entity<SettingsView>,
     view: ShortcutView,
-    input: Entity<TextInput>,
+    input: Entity<InputState>,
     cx: &App,
 ) -> impl IntoElement {
     let t = Theme::global(cx);
@@ -1219,7 +1667,7 @@ fn shortcut_row(
                 .items_center()
                 .gap(px(8.0))
                 .child(shortcut_input_shell(input.clone(), editable, cx))
-                .child(shortcut_action_button(cx, "保存", true, save_enabled, {
+                .child(shortcut_action_button("保存", true, save_enabled, {
                     let entity = entity.clone();
                     let shortcut_id = shortcut_id.clone();
                     let input = input.clone();
@@ -1231,7 +1679,6 @@ fn shortcut_row(
                     }
                 }))
                 .child(shortcut_action_button(
-                    cx,
                     if enabled { "禁用" } else { "启用" },
                     false,
                     editable,
@@ -1247,7 +1694,7 @@ fn shortcut_row(
                         }
                     },
                 ))
-                .child(shortcut_action_button(cx, "默认", false, editable, {
+                .child(shortcut_action_button("默认", false, editable, {
                     let entity = entity.clone();
                     let shortcut_id = shortcut_id.clone();
                     move |_, _window, cx| {
@@ -1260,7 +1707,7 @@ fn shortcut_row(
         )
 }
 
-fn shortcut_input_shell(input: Entity<TextInput>, editable: bool, cx: &App) -> impl IntoElement {
+fn shortcut_input_shell(input: Entity<InputState>, editable: bool, cx: &App) -> impl IntoElement {
     let t = Theme::global(cx);
     div()
         .w(px(160.0))
@@ -1268,22 +1715,31 @@ fn shortcut_input_shell(input: Entity<TextInput>, editable: bool, cx: &App) -> i
         .border_1()
         .border_color(t.border)
         .bg(if editable { t.list } else { t.muted })
-        .child(input.into_any_element())
+        .child(
+            Input::new(&input)
+                .appearance(false)
+                .bordered(false)
+                .focus_bordered(false)
+                .disabled(!editable)
+                .h(px(30.0))
+                .text_size(px(12.0)),
+        )
 }
 
 fn shortcut_action_button(
-    _cx: &App,
     label: &'static str,
     primary: bool,
     enabled: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    let btn = if primary {
-        ui::primary_btn(label, label)
-    } else {
-        ui::secondary_btn(label, label)
-    };
-    btn.disabled(!enabled).on_click(on_click)
+    let button = Button::new(ElementId::Name(
+        format!("system-settings-shortcut-{label}").into(),
+    ))
+    .label(label)
+    .compact()
+    .with_size(ComponentSize::Small);
+    let button = if primary { button.primary() } else { button };
+    button.disabled(!enabled).on_click(on_click)
 }
 
 fn shortcut_status(view: &ShortcutView) -> String {
@@ -1515,19 +1971,10 @@ fn accessibility_row(
                         .child(text.to_string()),
                 )
                 .child(
-                    div()
-                        .id("system-settings-open-accessibility")
-                        .h(px(28.0))
-                        .px_3()
-                        .rounded(theme::radius_md())
-                        .bg(t.primary)
-                        .hover(|style| style.bg(t.primary_hover).cursor_pointer())
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .text_size(theme::font_size_caption())
-                        .text_color(hsla(0., 0., 1., 1.))
-                        .child("打开设置")
+                    Button::new("system-settings-open-accessibility")
+                        .label("打开设置")
+                        .primary()
+                        .with_size(ComponentSize::Small)
                         .on_click({
                             let entity = entity.clone();
                             move |_, _window, cx| {
@@ -1592,21 +2039,9 @@ fn diag_path_row(
                 .child(path_badge(path, cx)),
         )
         .child(
-            div()
-                .id(id_key)
-                .h(px(28.0))
-                .px_3()
-                .rounded(theme::radius_md())
-                .border_1()
-                .border_color(t.border)
-                .bg(t.list)
-                .hover(|style| style.bg(t.muted).cursor_pointer())
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(theme::font_size_caption())
-                .text_color(t.foreground)
-                .child("打开")
+            Button::new(id_key)
+                .label("打开")
+                .with_size(ComponentSize::Small)
                 .on_click({
                     let entity = entity.clone();
                     move |_, _window, cx| {
@@ -1644,37 +2079,147 @@ fn disabled_badge(text: &'static str, cx: &App) -> impl IntoElement {
 
 fn toggle_button(
     entity: Entity<SettingsView>,
-    cx: &App,
+    _cx: &App,
     id: &'static str,
     value: bool,
     apply: fn(&mut SettingsView, bool),
 ) -> impl IntoElement {
-    let t = Theme::global(cx);
-    let label = if value { "开启" } else { "关闭" };
-    div()
-        .id(id)
-        .h(px(28.0))
-        .min_w(px(56.0))
-        .px_3()
-        .rounded(px(999.0))
-        .bg(if value { t.primary } else { t.muted })
-        .hover(move |style| {
-            style
-                .bg(if value { t.primary_hover } else { t.list_hover })
-                .cursor_pointer()
-        })
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(theme::font_size_caption())
-        .text_color(if value { hsla(0., 0., 1., 1.) } else { t.foreground })
-        .child(label)
-        .on_click(move |_, _window, cx| {
+    Switch::new(id)
+        .checked(value)
+        .on_click(move |checked, _window, cx| {
             entity.update(cx, |this, cx| {
-                apply(this, !value);
+                apply(this, *checked);
                 cx.notify();
             });
         })
+}
+
+fn tray_display_mode_control(
+    entity: Entity<SettingsView>,
+    current: NetworkSpeedDisplayMode,
+    cx: &App,
+) -> impl IntoElement {
+    segmented_buttons(
+        "system-settings-tray-display-mode",
+        [
+            (
+                "文字",
+                "system-settings-tray-display-text",
+                NetworkSpeedDisplayMode::TextOnly,
+            ),
+            (
+                "图标",
+                "system-settings-tray-display-icon",
+                NetworkSpeedDisplayMode::IconOnly,
+            ),
+            (
+                "图标+文字",
+                "system-settings-tray-display-both",
+                NetworkSpeedDisplayMode::IconAndText,
+            ),
+        ],
+        current,
+        cx,
+        move |mode, cx| {
+            entity.update(cx, |view, cx| {
+                view.set_tray_network_speed_display_mode(mode);
+                cx.notify();
+            });
+        },
+    )
+}
+
+fn tray_text_mode_control(
+    entity: Entity<SettingsView>,
+    current: NetworkSpeedTextMode,
+    cx: &App,
+) -> impl IntoElement {
+    segmented_buttons(
+        "system-settings-tray-text-mode",
+        [
+            (
+                "下载",
+                "system-settings-tray-text-down",
+                NetworkSpeedTextMode::DownloadOnly,
+            ),
+            (
+                "上传",
+                "system-settings-tray-text-up",
+                NetworkSpeedTextMode::UploadOnly,
+            ),
+            (
+                "双向",
+                "system-settings-tray-text-both",
+                NetworkSpeedTextMode::Both,
+            ),
+            (
+                "主速",
+                "system-settings-tray-text-dominant",
+                NetworkSpeedTextMode::Dominant,
+            ),
+        ],
+        current,
+        cx,
+        move |mode, cx| {
+            entity.update(cx, |view, cx| {
+                view.set_tray_network_speed_text_mode(mode);
+                cx.notify();
+            });
+        },
+    )
+}
+
+fn segmented_buttons<T: Copy + PartialEq + 'static, const N: usize>(
+    id: &'static str,
+    items: [(&'static str, &'static str, T); N],
+    current: T,
+    _cx: &App,
+    on_select: impl Fn(T, &mut App) + Clone + 'static,
+) -> impl IntoElement {
+    let selected = items
+        .iter()
+        .position(|(_, _, value)| *value == current)
+        .unwrap_or(0);
+    TabBar::new(id)
+        .segmented()
+        .with_size(ComponentSize::Small)
+        .selected_index(selected)
+        .children(items.iter().map(|(label, _id, _)| Tab::new().child(*label)))
+        .on_click(move |index, _window, cx| {
+            if let Some((_, _, value)) = items.get(*index) {
+                on_select(*value, cx);
+            }
+        })
+}
+
+fn tray_slider_control(
+    slider: Option<Entity<SliderState>>,
+    value_label: String,
+    cx: &App,
+) -> impl IntoElement {
+    let t = Theme::global(cx);
+    div()
+        .w(px(220.0))
+        .flex()
+        .items_center()
+        .gap_3()
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(120.0))
+                .when_some(slider, |el, slider| {
+                    el.child(Slider::new(&slider).horizontal())
+                }),
+        )
+        .child(
+            div()
+                .min_w(px(54.0))
+                .text_right()
+                .font_family("SF Mono")
+                .text_size(theme::font_size_caption())
+                .text_color(t.muted_foreground)
+                .child(value_label),
+        )
 }
 
 fn path_badge(path: &str, cx: &App) -> impl IntoElement {
@@ -1695,17 +2240,17 @@ fn path_badge(path: &str, cx: &App) -> impl IntoElement {
 }
 
 fn action_button(
-    _cx: &App,
     label: &'static str,
     primary: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    let btn = if primary {
-        ui::primary_btn(label, label)
-    } else {
-        ui::secondary_btn(label, label)
-    };
-    btn.on_click(on_click)
+    let button = Button::new(ElementId::Name(
+        format!("system-settings-action-{label}").into(),
+    ))
+    .label(label)
+    .with_size(ComponentSize::Small);
+    let button = if primary { button.primary() } else { button };
+    button.on_click(on_click)
 }
 
 // ── Segmented Control for Theme Mode ──
@@ -1751,14 +2296,19 @@ fn seg_button(
     _cx: &App,
 ) -> impl IntoElement {
     let active = current_mode == mode;
-    ui::secondary_btn(mode.persisted_value(), mode_short_label(mode))
-        .selected(active)
-        .on_click(move |_, _window, cx| {
-            entity.update(cx, |this, cx| {
-                this.set_theme_mode(mode);
-                cx.notify();
-            });
-        })
+    Button::new(ElementId::Name(
+        format!("system-settings-theme-mode-{}", mode.persisted_value()).into(),
+    ))
+    .label(mode_short_label(mode))
+    .compact()
+    .with_size(ComponentSize::Small)
+    .selected(active)
+    .on_click(move |_, _window, cx| {
+        entity.update(cx, |this, cx| {
+            this.set_theme_mode(mode);
+            cx.notify();
+        });
+    })
 }
 
 // ── Theme Selector ───────────────────────────────────────────────────────

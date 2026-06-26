@@ -6,7 +6,7 @@ use gpui::{
     App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
     Styled, div, hsla, prelude::FluentBuilder, px,
 };
-use gpui_component::theme::Theme;
+use gpui_component::{input::{Input, InputState}, theme::Theme};
 use gpui_component::{
     IconName, Sizable, Size,
     button::{Button, ButtonVariants},
@@ -142,10 +142,10 @@ pub fn kv_editor_table(
                     .icon(IconName::Plus)
                     .label("新增")
                     .with_size(Size::XSmall)
-                    .on_click(move |_, _, cx| {
+                    .on_click(move |_, window, cx| {
                         add_view.update(cx, |view, cx| {
                             if let Some(editor) = view.kv_editor_mut(tab) {
-                                editor.add_row(cx);
+                                editor.add_row(window, cx);
                             }
                             view.persist_current_tab_state(cx);
                         });
@@ -154,12 +154,12 @@ pub fn kv_editor_table(
         )
 }
 
-fn kv_cell(input: Entity<qingqi_ui::text_input::TextInput>, enabled: bool, cx: &App) -> gpui::Div {
+fn kv_cell(input: Entity<InputState>, enabled: bool, cx: &App) -> gpui::Div {
     kv_cell_base(input, enabled, cx).flex_1()
 }
 
 fn kv_cell_fixed(
-    input: Entity<qingqi_ui::text_input::TextInput>,
+    input: Entity<InputState>,
     enabled: bool,
     cx: &App,
     width: f32,
@@ -168,7 +168,7 @@ fn kv_cell_fixed(
 }
 
 fn kv_cell_base(
-    input: Entity<qingqi_ui::text_input::TextInput>,
+    input: Entity<InputState>,
     enabled: bool,
     cx: &App,
 ) -> gpui::Div {
@@ -183,5 +183,13 @@ fn kv_cell_base(
         ))
         .overflow_hidden()
         .when(!enabled, |cell| cell.opacity(0.5))
-        .child(input)
+        .child(
+            Input::new(&input)
+                .appearance(false)
+                .bordered(false)
+                .focus_bordered(false)
+                .disabled(!enabled)
+                .h(px(28.0))
+                .text_size(px(11.0)),
+        )
 }

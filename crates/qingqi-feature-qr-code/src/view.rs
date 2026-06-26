@@ -6,17 +6,18 @@ use std::{
 use anyhow::Result;
 use gpui::{
     App, AppContext, Context, Entity, InteractiveElement, IntoElement, KeyDownEvent, ObjectFit,
-    ParentElement, Render, Styled, StyledImage, Subscription, Window,
-    div, hsla, img, px,
+    ParentElement, Render, Styled, StyledImage, Subscription, Window, div, hsla, img, px,
 };
 
 use crate::service::QrCodeService;
-use gpui_component::theme::Theme;
-use qingqi_plugin::storage::AppPaths;
-use qingqi_ui::{
-    text_input::{TextInput, TextInputStyle},
-    ui,
+use gpui_component::{
+    Sizable,
+    button::{Button, ButtonCustomVariant, ButtonVariants},
+    input::{Input, InputState},
+    theme::Theme,
 };
+use qingqi_plugin::storage::AppPaths;
+use qingqi_ui::ui;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum StatusTone {
@@ -26,7 +27,7 @@ enum StatusTone {
 }
 
 pub struct QrView {
-    input: Option<Entity<TextInput>>,
+    input: Option<Entity<InputState>>,
     service: QrCodeService,
     qr_matrix: Vec<bool>,
     qr_size: usize,
@@ -72,21 +73,12 @@ impl QrView {
         })
     }
 
-    pub fn ensure_inputs(&mut self, cx: &mut Context<Self>) {
+    pub fn ensure_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.input.is_none() {
             self.input = Some(cx.new(|cx| {
-                let mut input = TextInput::new(cx, "输入文本或粘贴图片...", "");
-                input.set_multiline(true, cx);
-                input.set_chrome(false, cx);
-                input.set_style(
-                    TextInputStyle {
-                        height: 200.0,
-                        font_size: 12.0,
-                        padding: 8.0,
-                    },
-                    cx,
-                );
-                input
+                InputState::new(window, cx)
+                    .placeholder("输入文本或粘贴图片...")
+                    .multi_line(true)
             }));
         }
         self.observe_input(cx);
@@ -108,16 +100,15 @@ impl QrView {
     fn input_text(&self, cx: &App) -> String {
         self.input
             .as_ref()
-            .map(|i| i.read(cx).text())
+            .map(|i| i.read(cx).value().to_string())
             .unwrap_or_default()
     }
 
     pub fn set_input_text(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
-        self.ensure_inputs(cx);
         let text = text.into();
         self.input_snapshot = text.clone();
         if let Some(input) = self.input.as_ref() {
-            input.update(cx, |input, cx| input.set_text(text, cx));
+            input.update(cx, |input, cx| input.reset_value(text, cx));
         }
     }
 
@@ -291,22 +282,53 @@ impl QrView {
 
     pub fn choose_scan_image(&mut self, cx: &mut Context<Self>) {
         self.invalidate_preview();
+        cx.spawn(async move |this, cx| {
+            let result = rfd::AsyncFileDialog::new()
+                .set_title("选择二维码图片")
+                .pick_file()
+                .await
+                .map(|file| file.path().to_path_buf());
+            let _ = this.update(cx, |view, cx| {
+                view.handle_scan_image_selection(Ok(result), cx);
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    fn handle_scan_image_selection(
+        &mut self,
+        result: anyhow::Result<Option<PathBuf>>,
+        cx: &mut Context<Self>,
+    ) {
+        let path = match result {
+            Ok(Some(path)) => path,
+            Ok(None) => {
+                self.message = "已取消".into();
+                self.tone = StatusTone::Neutral;
+                cx.notify();
+                return;
+            }
+            Err(error) => {
+                self.message = format!("{error}");
+                self.tone = StatusTone::Error;
+                cx.notify();
+                return;
+            }
+        };
         let service = self.service.clone();
         let pending = Arc::clone(&self.pending_action);
         self.message = "正在识别...".into();
         self.tone = StatusTone::Neutral;
         cx.spawn(async move |this, cx| {
+            let scan_path = path.clone();
             let r = cx
                 .background_executor()
                 .spawn(async move {
-                    match qingqi_platform::shell::choose_file("选择二维码图片") {
-                        Ok(Some(p)) => {
-                            let text = service.scan_image(&p).map_err(|e| format!("{e}"))?;
-                            Ok((text, p))
-                        }
-                        Ok(None) => Err("已取消".into()),
-                        Err(e) => Err(format!("{e}")),
-                    }
+                    let text = service
+                        .scan_image(&scan_path)
+                        .map_err(|error| format!("{error}"))?;
+                    Ok((text, scan_path))
                 })
                 .await;
             if let Ok(mut s) = pending.lock() {
@@ -318,10 +340,9 @@ impl QrView {
     }
 
     pub fn clear_input(&mut self, cx: &mut Context<Self>) {
-        self.ensure_inputs(cx);
         self.input_snapshot.clear();
         if let Some(i) = self.input.as_ref() {
-            i.update(cx, |i, cx| i.clear(cx));
+            i.update(cx, |i, cx| i.reset_value("", cx));
         }
         self.invalidate_preview();
         self.qr_matrix.clear();
@@ -463,9 +484,9 @@ impl QrView {
 }
 
 impl Render for QrView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.collect_pending(cx);
-        self.ensure_inputs(cx);
+        self.ensure_inputs(window, cx);
 
         let entity = cx.entity();
         let t = Theme::global(cx);
@@ -538,7 +559,7 @@ impl Render for QrView {
                                         .border_1()
                                         .border_color(ui::border_light(cx))
                                         .overflow_hidden()
-                                        .child(input),
+                                        .child(qr_input(input)),
                                 )
                                 .child(
                                     div()
@@ -690,16 +711,26 @@ fn status_bar(message: String, tone: StatusTone, cx: &App) -> impl IntoElement {
         )
 }
 
+fn qr_input(state: Entity<InputState>) -> Input {
+    Input::new(&state)
+        .appearance(false)
+        .bordered(false)
+        .focus_bordered(false)
+        .h(px(200.0))
+        .text_size(px(12.0))
+}
+
 fn primary_btn(
     id: impl Into<gpui::ElementId>,
     label: &str,
     cx: &App,
 ) -> gpui_component::button::Button {
-    ui::accent_btn(
-        id,
-        label.to_string(),
-        qingqi_plugin::plugin_spec::PluginAccent::Blue,
-        cx,
+    let accent: gpui::Hsla =
+        ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue).into();
+    Button::new(id).label(label.to_string()).small().custom(
+        ButtonCustomVariant::new(cx)
+            .color(accent)
+            .foreground(ui::white()),
     )
 }
 fn action_btn(
@@ -707,12 +738,12 @@ fn action_btn(
     label: &str,
     _cx: &App,
 ) -> gpui_component::button::Button {
-    ui::secondary_btn(id, label.to_string())
+    Button::new(id).label(label.to_string()).small()
 }
 fn ghost_btn(
     id: impl Into<gpui::ElementId>,
     label: &str,
     _cx: &App,
 ) -> gpui_component::button::Button {
-    ui::ghost_btn(id, label.to_string())
+    Button::new(id).label(label.to_string()).small().ghost()
 }

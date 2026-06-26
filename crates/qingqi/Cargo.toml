@@ -43,7 +43,7 @@ icon = [
     "assets/app_icon_512.png",
 ]
 resources = ["assets/**/*"]
-osx_info_plist_exts = ["assets/macos-Info.plist"]
+osx_info_plist_exts = ["crates/qingqi/assets/macos-Info.plist"]
 category = "DeveloperTool"
 short_description = "A lightweight Rust + GPUI desktop toolbox inspired by Suishou."
 copyright = "Copyright (c) fwfx1234"

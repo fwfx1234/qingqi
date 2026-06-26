@@ -27,16 +27,16 @@ impl ApiDebuggerView {
     pub(crate) fn reload_environment_inputs(&mut self, cx: &mut App) {
         let environment = self.selected_environment().clone();
         self.env_name_input.update(cx, |input, input_cx| {
-            input.set_text(environment.name.clone(), input_cx)
+            input.reset_value(environment.name.clone(), input_cx)
         });
         self.env_base_url_input.update(cx, |input, input_cx| {
-            input.set_text(environment.base_url.clone(), input_cx)
+            input.reset_value(environment.base_url.clone(), input_cx)
         });
         self.env_variables_input.update(cx, |input, input_cx| {
-            input.set_text(format_rows(&environment.variables), input_cx)
+            input.reset_value(format_rows(&environment.variables), input_cx)
         });
         self.env_headers_input.update(cx, |input, input_cx| {
-            input.set_text(format_rows(&environment.headers), input_cx)
+            input.reset_value(format_rows(&environment.headers), input_cx)
         });
     }
 

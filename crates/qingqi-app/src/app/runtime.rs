@@ -5,8 +5,9 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use time::{Date, OffsetDateTime, macros::format_description};
+use time::{Date, OffsetDateTime, format_description::FormatItem, macros::format_description};
 use tracing_subscriber::Layer;
+use tracing_subscriber::fmt::time::LocalTime;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -223,6 +224,8 @@ pub fn run(host: AppHost) -> Result<()> {
     });
     let database_for_shutdown = Arc::clone(&build_cx.database);
     app.run(move |cx| {
+        qingqi_platform::macos::hide_dock_icon();
+
         gpui_component::init(cx);
 
         // 初始化主题服务
@@ -423,14 +426,17 @@ fn init_tracing(logs_dir: &Path) -> Option<tracing_appender::non_blocking::Worke
 
     let file_layer = tracing_subscriber::fmt::layer()
         .with_ansi(false)
+        .with_timer(log_timer())
         .with_target(true)
+        .with_thread_ids(true)
         .with_writer(non_blocking)
         .with_filter(env_filter.clone());
 
     // stderr layer：精简格式，与文件 layer 共用 RUST_LOG 过滤
     let stderr_layer = tracing_subscriber::fmt::layer()
         .compact()
-        .with_target(false)
+        .with_timer(log_timer())
+        .with_target(true)
         .with_writer(io::stderr)
         .with_filter(env_filter);
 
@@ -443,6 +449,12 @@ fn init_tracing(logs_dir: &Path) -> Option<tracing_appender::non_blocking::Worke
     prune_old_logs(logs_dir, 7);
 
     Some(guard)
+}
+
+fn log_timer() -> LocalTime<&'static [FormatItem<'static>]> {
+    LocalTime::new(format_description!(
+        "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:3]"
+    ))
 }
 
 /// 解析日志级别过滤：RUST_LOG 环境变量，未设置时使用编译时默认

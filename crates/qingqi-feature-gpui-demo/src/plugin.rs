@@ -10,6 +10,7 @@ use gpui_component::{
     slider::{Slider, SliderState},
     switch::Switch,
     tab::TabBar,
+    tag::Tag,
     theme::Theme,
 };
 use std::sync::Arc;
@@ -19,7 +20,7 @@ use qingqi_plugin::{
     plugin::{InlineView, Plugin, PluginCx, PluginId, PluginView},
     plugin_spec::PluginAccent,
 };
-use qingqi_ui::{theme, ui, ui::components};
+use qingqi_ui::{theme, ui};
 
 pub struct GpuiDemoPlugin;
 
@@ -156,11 +157,7 @@ fn header(accent: PluginAccent, cx: &App) -> impl IntoElement {
                         .child("用 gpui-component 真实组件替代静态描述，验证按钮、标签页、开关等控件的交互行为。"),
                 ),
         )
-        .child(components::status_pill(
-            "预览",
-            components::StatusTone::Warning,
-            cx,
-        ))
+        .child(Tag::warning().small().child("预览"))
 }
 
 fn component_column(

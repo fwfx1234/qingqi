@@ -77,10 +77,24 @@ pub struct TrayItemState {
     pub spec: TrayItemSpec,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TrayIconAction {
     Main,
-    Item(TrayItemId),
+    Item(TrayItemClick),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TrayItemRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TrayItemClick {
+    pub id: TrayItemId,
+    pub rect: TrayItemRect,
 }
 
 const MAIN_TRAY_ID: &str = "qingqi.tray.main";
@@ -167,10 +181,17 @@ pub fn register_item(spec: TrayItemSpec) -> Result<(), String> {
         }
 
         let tray = builder.build().map_err(|error| error.to_string())?;
+        apply_item_title_style(&tray, &spec.title);
         tray.set_visible(spec.visible)
             .map_err(|error| error.to_string())?;
         with_item_trays(|items| {
-            items.insert(spec.id.clone(), TrayItemEntry { state: TrayItemState { spec }, tray });
+            items.insert(
+                spec.id.clone(),
+                TrayItemEntry {
+                    state: TrayItemState { spec },
+                    tray,
+                },
+            );
         });
         Ok(())
     }
@@ -191,6 +212,7 @@ pub fn update_item(spec: TrayItemSpec) -> Result<(), String> {
             if let Some(entry) = items.get_mut(&spec.id) {
                 found = true;
                 entry.tray.set_title(Some(spec.title.as_str()));
+                apply_item_title_style(&entry.tray, &spec.title);
                 if let Err(error) = entry.tray.set_tooltip(Some(spec.tooltip.as_str())) {
                     result = Err(error.to_string());
                     return;
@@ -214,6 +236,60 @@ pub fn update_item(spec: TrayItemSpec) -> Result<(), String> {
         Ok(())
     }
 }
+
+#[cfg(target_os = "macos")]
+fn apply_item_title_style(tray: &tray_icon::TrayIcon, title: &str) {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{
+        NSBaselineOffsetAttributeName, NSFont, NSFontAttributeName, NSFontWeightRegular,
+        NSMutableParagraphStyle, NSParagraphStyleAttributeName, NSTextAlignment,
+    };
+    use objc2_foundation::{NSDictionary, NSMutableAttributedString, NSNumber, NSRange, NSString};
+
+    let Some(status_item) = tray.ns_status_item() else {
+        return;
+    };
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let Some(button) = status_item.button(mtm) else {
+        return;
+    };
+
+    if !title.contains('\n') {
+        button.setFont(None);
+        return;
+    }
+
+    let font = NSFont::monospacedSystemFontOfSize_weight(8.0, unsafe { NSFontWeightRegular });
+    let paragraph = NSMutableParagraphStyle::new();
+    paragraph.setAlignment(NSTextAlignment::Left);
+    paragraph.setLineSpacing(0.0);
+    paragraph.setMinimumLineHeight(8.8);
+    paragraph.setMaximumLineHeight(8.8);
+
+    let baseline = NSNumber::new_f64(-2.6);
+    let ns_title = NSString::from_str(title);
+    let attributed = NSMutableAttributedString::from_nsstring(&ns_title);
+    let range = NSRange::new(0, ns_title.len_utf16());
+    let attrs = unsafe {
+        NSDictionary::from_slices(
+            &[
+                NSFontAttributeName,
+                NSParagraphStyleAttributeName,
+                NSBaselineOffsetAttributeName,
+            ],
+            &[font.as_ref(), paragraph.as_ref(), baseline.as_ref()],
+        )
+    };
+    unsafe {
+        attributed.addAttributes_range(&attrs, range);
+    }
+    button.setAttributedTitle(&attributed);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn apply_item_title_style(_tray: &tray_icon::TrayIcon, _title: &str) {}
 
 pub fn remove_item(id: &TrayItemId) {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -291,12 +367,13 @@ pub fn next_tray_icon_action() -> Option<TrayIconAction> {
             let event = TrayIconEvent::receiver().recv().ok()?;
             if let TrayIconEvent::Click {
                 id,
+                rect,
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
                 ..
             } = event
             {
-                return Some(action_for_tray_icon_id(&id));
+                return Some(action_for_tray_icon_id(&id, rect));
             }
             // Other tray events (right-click, enter/leave, …) are ignored; keep
             // blocking until a left-click arrives.
@@ -569,13 +646,21 @@ fn action_for_menu_id(id: &str) -> Option<TrayAction> {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn action_for_tray_icon_id(id: &TrayIconId) -> TrayIconAction {
+fn action_for_tray_icon_id(id: &TrayIconId, rect: tray_icon::Rect) -> TrayIconAction {
     let id = id.as_ref();
     if id == MAIN_TRAY_ID {
         return TrayIconAction::Main;
     }
     if let Some(item_id) = id.strip_prefix("qingqi.tray.item.") {
-        return TrayIconAction::Item(TrayItemId::new(item_id));
+        return TrayIconAction::Item(TrayItemClick {
+            id: TrayItemId::new(item_id),
+            rect: TrayItemRect {
+                x: rect.position.x,
+                y: rect.position.y,
+                width: rect.size.width as f64,
+                height: rect.size.height as f64,
+            },
+        });
     }
     TrayIconAction::Main
 }
@@ -593,11 +678,7 @@ mod tests {
 
     #[test]
     fn tray_item_states_sort_by_priority_then_id() {
-        let mut states = [
-            state("zeta", 20),
-            state("alpha", 10),
-            state("beta", 10),
-        ];
+        let mut states = [state("zeta", 20), state("alpha", 10), state("beta", 10)];
         states.sort_by(|a, b| {
             a.spec
                 .priority

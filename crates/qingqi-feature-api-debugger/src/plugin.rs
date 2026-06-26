@@ -70,15 +70,18 @@ impl Plugin for ApiDebuggerPlugin {
 
     fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let service = self.service();
-        let view = cx.app.new(|cx| view::ApiDebuggerView::new(service, cx));
-        Ok(PluginView::Window(Box::new(ApiDebuggerWindow { view })))
+        Ok(PluginView::Window(Box::new(ApiDebuggerWindow {
+            service,
+            view: None,
+        })))
     }
 
     fn close_idle(&mut self) {}
 }
 
 struct ApiDebuggerWindow {
-    view: Entity<view::ApiDebuggerView>,
+    service: Arc<ApiService>,
+    view: Option<Entity<view::ApiDebuggerView>>,
 }
 
 impl WindowView for ApiDebuggerWindow {
@@ -90,7 +93,14 @@ impl WindowView for ApiDebuggerWindow {
         "API 调试器".into()
     }
 
-    fn render(&mut self, _window: &mut Window, _cx: &mut App) -> AnyElement {
-        self.view.clone().into_any_element()
+    fn render(&mut self, window: &mut Window, cx: &mut App) -> AnyElement {
+        let view = self
+            .view
+            .get_or_insert_with(|| {
+                let service = Arc::clone(&self.service);
+                cx.new(|cx| view::ApiDebuggerView::new(service, window, cx))
+            })
+            .clone();
+        view.into_any_element()
     }
 }

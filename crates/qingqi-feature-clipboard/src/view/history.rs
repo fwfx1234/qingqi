@@ -4,6 +4,7 @@ use std::sync::Arc;
 use gpui::{UniformListScrollHandle, hsla, uniform_list};
 use gpui_component::{
     Icon, IconName, Sizable, Size as ComponentSize,
+    button::{Button, ButtonCustomVariant, ButtonVariants},
     scroll::{Scrollbar, ScrollbarShow},
     theme::Theme,
 };
@@ -57,7 +58,7 @@ pub(super) fn history_page(
         )
 }
 
-pub(super) fn search_field(query_input: Entity<TextInput>, cx: &App) -> gpui::Div {
+pub(super) fn search_field(query_input: Entity<InputState>, cx: &App) -> gpui::Div {
     let t = Theme::global(cx);
     div()
         .min_w(px(0.0))
@@ -73,12 +74,23 @@ pub(super) fn search_field(query_input: Entity<TextInput>, cx: &App) -> gpui::Di
                 .with_size(ComponentSize::Small)
                 .text_color(t.muted_foreground),
         )
-        .child(div().flex_1().child(query_input.into_any_element()))
+        .child(
+            div()
+                .flex_1()
+                .child(
+                    Input::new(&query_input)
+                        .appearance(false)
+                        .bordered(false)
+                        .focus_bordered(false)
+                        .h(px(28.0))
+                        .text_size(px(12.0)),
+                ),
+        )
 }
 
 pub(super) fn preview_panel(
     selected_record: Option<ClipboardRecord>,
-    preview_input: Entity<TextInput>,
+    preview_input: Entity<InputState>,
     wrap_enabled: bool,
     panel: Entity<ClipboardView>,
     cx: &App,
@@ -154,29 +166,28 @@ pub(super) fn preview_panel(
                         .child(div().flex_1())
                         .child({
                             let panel_toggle = panel.clone();
-                            let btn_text = if wrap_enabled {
-                                "自动换行"
+                            let (icon, tooltip) = if wrap_enabled {
+                                (IconName::CaseSensitive, "关闭自动换行")
                             } else {
-                                "不换行"
+                                (IconName::ALargeSmall, "开启自动换行")
                             };
-                            div()
-                                .px(px(6.0))
-                                .h(px(20.0))
-                                .rounded(px(4.0))
-                                .flex()
-                                .items_center()
-                                .text_size(px(10.0))
-                                .font_weight(gpui::FontWeight::MEDIUM)
-                                .text_color(t.muted_foreground)
-                                .bg(t.muted_foreground)
-                                .cursor_pointer()
-                                .hover(|s| s.bg(t.muted_foreground))
-                                .on_mouse_down(gpui::MouseButton::Left, move |_event, _, cx| {
+                            Button::new("clipboard-preview-toggle-wrap")
+                                .icon(icon)
+                                .tooltip(tooltip)
+                                .compact()
+                                .with_size(ComponentSize::Small)
+                                .custom(
+                                    ButtonCustomVariant::new(cx)
+                                        .color(t.transparent)
+                                        .foreground(t.muted_foreground)
+                                        .hover(t.list_hover)
+                                        .active(t.secondary_active),
+                                )
+                                .on_click(move |_event, window, cx| {
                                     panel_toggle.update(cx, |panel, cx| {
-                                        panel.toggle_preview_wrap(cx);
+                                        panel.toggle_preview_wrap(window, cx);
                                     });
                                 })
-                                .child(btn_text)
                         })
                         .child(if item.pinned {
                             div()
@@ -472,7 +483,13 @@ fn history_row(
         .flex()
         .items_center()
         .gap(px(8.0))
-        .child(history_row_media_values(&item, icon_surface, icon_color, border_color, list_bg))
+        .child(history_row_media_values(
+            &item,
+            icon_surface,
+            icon_color,
+            border_color,
+            list_bg,
+        ))
         .child(
             div()
                 .flex_1()
@@ -518,27 +535,16 @@ fn history_row(
                 .items_center()
                 .gap(px(2.0))
                 .child(
-                    div()
-                        .id(("clipboard-row-pin", index))
-                        .size(px(24.0))
-                        .rounded(px(4.0))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .hover(|s| s.bg(list_hover).cursor_pointer())
-                        .child(
-                            Icon::new(if pinned {
-                                IconName::Star
-                            } else {
-                                IconName::StarOff
-                            })
-                            .with_size(ComponentSize::Small)
-                            .text_color(if pinned {
-                                foreground
-                            } else {
-                                muted_foreground
-                            }),
-                        )
+                    Button::new(("clipboard-row-pin", index))
+                        .icon(if pinned {
+                            IconName::Star
+                        } else {
+                            IconName::StarOff
+                        })
+                        .tooltip(if pinned { "取消置顶" } else { "置顶" })
+                        .ghost()
+                        .with_size(ComponentSize::Small)
+                        .text_color(if pinned { foreground } else { muted_foreground })
                         .on_click(move |_event, _, cx| {
                             let _ = cx.update_entity(&pin_handle, |panel, cx| {
                                 panel.select(index, cx);
@@ -549,19 +555,12 @@ fn history_row(
                         }),
                 )
                 .child(
-                    div()
-                        .id(("clipboard-row-delete", index))
-                        .size(px(24.0))
-                        .rounded(px(4.0))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .hover(|s| s.bg(list_hover).cursor_pointer())
-                        .child(
-                            Icon::new(IconName::Delete)
-                                .with_size(ComponentSize::Small)
-                                .text_color(muted_foreground),
-                        )
+                    Button::new(("clipboard-row-delete", index))
+                        .icon(IconName::Delete)
+                        .tooltip("删除")
+                        .ghost()
+                        .with_size(ComponentSize::Small)
+                        .text_color(muted_foreground)
                         .on_click(move |_event, _, cx| {
                             let _ = cx.update_entity(&delete_handle, |panel, cx| {
                                 panel.select(index, cx);
@@ -604,12 +603,7 @@ fn history_row_media(
             .into_any_element();
     }
 
-    icon_label(
-        history_item_icon(item),
-        icon_surface,
-        icon_color,
-    )
-    .into_any_element()
+    icon_label(history_item_icon(item), icon_surface, icon_color).into_any_element()
 }
 
 fn history_row_media_values(
@@ -645,12 +639,7 @@ fn history_row_media_values(
             .into_any_element();
     }
 
-    icon_label(
-        history_item_icon(item),
-        icon_surface,
-        icon_color,
-    )
-    .into_any_element()
+    icon_label(history_item_icon(item), icon_surface, icon_color).into_any_element()
 }
 
 fn history_item_icon_color_values(
@@ -660,14 +649,12 @@ fn history_item_icon_color_values(
 ) -> gpui::Rgba {
     match item.kind {
         history_store::ClipboardItemKind::Text => match item.badge_kind() {
-            history_store::ClipboardBadgeKind::Link => {
-                gpui::Rgba {
-                    r: 0.13,
-                    g: 0.77,
-                    b: 0.39,
-                    a: 1.0,
-                }
-            }
+            history_store::ClipboardBadgeKind::Link => gpui::Rgba {
+                r: 0.13,
+                g: 0.77,
+                b: 0.39,
+                a: 1.0,
+            },
             history_store::ClipboardBadgeKind::Json => {
                 ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue)
             }
@@ -776,7 +763,7 @@ fn history_item_icon_color(item: &ClipboardRecord, cx: &App) -> gpui::Rgba {
 
 fn preview_content(
     item: ClipboardRecord,
-    preview_input: Entity<TextInput>,
+    preview_input: Entity<InputState>,
     cx: &App,
 ) -> impl IntoElement {
     let t = Theme::global(cx);
@@ -803,7 +790,7 @@ fn preview_content(
     }
 }
 
-fn preview_text(preview_input: Entity<TextInput>, cx: &App) -> impl IntoElement {
+fn preview_text(preview_input: Entity<InputState>, cx: &App) -> impl IntoElement {
     let t = Theme::global(cx);
     div()
         .size_full()
@@ -812,7 +799,14 @@ fn preview_text(preview_input: Entity<TextInput>, cx: &App) -> impl IntoElement 
         .pt(px(2.0))
         .pb(px(8.0))
         .text_color(t.muted_foreground)
-        .child(preview_input)
+        .child(
+            Input::new(&preview_input)
+                .appearance(false)
+                .bordered(false)
+                .focus_bordered(false)
+                .h_full()
+                .text_size(px(12.0)),
+        )
 }
 
 fn preview_empty(cx: &App) -> impl IntoElement {

@@ -6,18 +6,17 @@ use gpui::{
     App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
     Styled, div, hsla, prelude::FluentBuilder, px,
 };
-use gpui_component::theme::Theme;
+use gpui_component::{input::{Input, InputState}, theme::Theme};
 use gpui_component::{
     Sizable, Size,
     button::{Button, ButtonVariants},
 };
-use qingqi_ui::text_input::TextInput;
 use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn editor_panel(
     view: Entity<ApiDebuggerView>,
     editor_tab: EditorTab,
-    text_input: Option<Entity<TextInput>>,
+    text_input: Option<Entity<InputState>>,
     kv_rows: Vec<KvRow>,
     auth_form: AuthFormInputs,
     body_mode: BodyMode,
@@ -243,12 +242,21 @@ pub fn editor_panel(
                                     .border_color(glass::divider(cx))
                                     .bg(glass::inset(cx))
                                     .overflow_hidden()
-                                    .child(input),
+                                    .child(api_input(input, 220.0)),
                             )
                             .into_any_element()
                     }
                 }),
         )
+}
+
+fn api_input(input: Entity<InputState>, height: f32) -> Input {
+    Input::new(&input)
+        .appearance(false)
+        .bordered(false)
+        .focus_bordered(false)
+        .h(px(height))
+        .text_size(px(11.0))
 }
 
 pub fn editor_tab_button(

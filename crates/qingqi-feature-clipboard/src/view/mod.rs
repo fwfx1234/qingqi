@@ -4,24 +4,25 @@ use std::{
 };
 
 use gpui::{
-    App, AppContext, AnyWindowHandle, Context, Entity, FocusHandle, Focusable, InteractiveElement,
+    AnyWindowHandle, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
     IntoElement, KeyDownEvent, ObjectFit, ParentElement, Render, ScrollStrategy,
     StatefulInteractiveElement, Styled, StyledImage, Subscription, Task, UniformListScrollHandle,
     Window, div, img, px,
 };
 
-use gpui_component::{Icon, IconName, Sizable, Size as ComponentSize};
 use gpui_component::theme::Theme;
+use gpui_component::{
+    IconName, Sizable, Size as ComponentSize,
+    button::{Button, ButtonCustomVariant, ButtonVariants},
+    input::{Input, InputState},
+};
 
 use crate::{
     history_store::{self, ClipboardConfig, ClipboardRecord},
     service::{ClipboardFilter, ClipboardService},
 };
 use qingqi_plugin::host::ShortcutHandleRef;
-use qingqi_ui::{
-    text_input::{TextInput, TextInputStyle},
-    theme, ui,
-};
+use qingqi_ui::{theme, ui};
 
 mod aux_windows;
 mod history;
@@ -38,11 +39,11 @@ pub struct ClipboardView {
     focus_handle: Option<FocusHandle>,
     service: Arc<Mutex<ClipboardService>>,
     shortcut_handle: Option<ShortcutHandleRef>,
-    query_input: Option<Entity<TextInput>>,
-    preview_input: Option<Entity<TextInput>>,
-    ignore_patterns_input: Option<Entity<TextInput>>,
-    max_text_chars_input: Option<Entity<TextInput>>,
-    hotkey_input: Option<Entity<TextInput>>,
+    query_input: Option<Entity<InputState>>,
+    preview_input: Option<Entity<InputState>>,
+    ignore_patterns_input: Option<Entity<InputState>>,
+    max_text_chars_input: Option<Entity<InputState>>,
+    hotkey_input: Option<Entity<InputState>>,
     query: String,
     filter: ClipboardFilter,
     items: Arc<Vec<ClipboardRecord>>,
@@ -103,8 +104,6 @@ impl ClipboardView {
 
     pub(crate) fn init(&mut self, cx: &mut Context<Self>) {
         self.focus_handle = Some(cx.focus_handle());
-        self.ensure_inputs(cx);
-        self.observe_query_input(cx);
     }
 
     pub(crate) fn refresh_async(&mut self, cx: &mut Context<Self>) {
@@ -135,20 +134,13 @@ impl ClipboardView {
         self.refresh_async(cx);
     }
 
-    fn ensure_inputs(&mut self, cx: &mut Context<Self>) {
+    fn ensure_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.query_input.is_none() {
             let query = self.query.clone();
             let input = cx.new(|cx| {
-                let mut input = TextInput::new(cx, "搜索内容...", query);
-                input.set_style(
-                    TextInputStyle {
-                        height: 28.0,
-                        font_size: 12.0,
-                        padding: 0.0,
-                    },
-                    cx,
-                );
-                input.set_chrome(false, cx);
+                let mut input = InputState::new(window, cx);
+                input.set_placeholder("搜索内容...", window, cx);
+                input.reset_value(query, cx);
                 input
             });
             self.query_input = Some(input);
@@ -156,21 +148,10 @@ impl ClipboardView {
 
         if self.preview_input.is_none() {
             let input = cx.new(|cx| {
-                let mut input = TextInput::new(cx, "", "");
-                input.set_multiline(true, cx);
-                input.set_monospace(true, cx);
-                input.set_read_only(true, cx);
-                input.set_chrome(false, cx);
-                input.set_fill_height(true, cx);
-                input.set_soft_wrap(true, cx);
-                input.set_style(
-                    TextInputStyle {
-                        height: 0.0,
-                        font_size: 12.0,
-                        padding: 0.0,
-                    },
-                    cx,
-                );
+                let input = InputState::new(window, cx)
+                    .multi_line(true)
+                    .searchable(true)
+                    .soft_wrap(true);
                 input
             });
             self.preview_input = Some(input);
@@ -180,18 +161,9 @@ impl ClipboardView {
         if self.ignore_patterns_input.is_none() {
             let value = format_ignore_patterns(&config);
             let input = cx.new(|cx| {
-                let mut input = TextInput::new(cx, "每行一条规则，或使用 | 分隔", value);
-                input.set_multiline(true, cx);
-                input.set_monospace(true, cx);
-                input.set_chrome(false, cx);
-                input.set_style(
-                    TextInputStyle {
-                        height: 72.0,
-                        font_size: 11.0,
-                        padding: 6.0,
-                    },
-                    cx,
-                );
+                let mut input = InputState::new(window, cx).multi_line(true).soft_wrap(true);
+                input.set_placeholder("每行一条规则，或使用 | 分隔", window, cx);
+                input.reset_value(value, cx);
                 input
             });
             self.ignore_patterns_input = Some(input);
@@ -200,16 +172,9 @@ impl ClipboardView {
         if self.max_text_chars_input.is_none() {
             let value = config.max_text_chars.to_string();
             let input = cx.new(|cx| {
-                let mut input = TextInput::new(cx, "例如 20000，0 表示不限", value);
-                input.set_style(
-                    TextInputStyle {
-                        height: 28.0,
-                        font_size: 11.0,
-                        padding: 6.0,
-                    },
-                    cx,
-                );
-                input.set_chrome(false, cx);
+                let mut input = InputState::new(window, cx);
+                input.set_placeholder("例如 20000，0 表示不限", window, cx);
+                input.reset_value(value, cx);
                 input
             });
             self.max_text_chars_input = Some(input);
@@ -218,16 +183,9 @@ impl ClipboardView {
         if self.hotkey_input.is_none() {
             let value = config.hotkey.clone();
             let input = cx.new(|cx| {
-                let mut input = TextInput::new(cx, "例如 Alt+V", value);
-                input.set_style(
-                    TextInputStyle {
-                        height: 28.0,
-                        font_size: 11.0,
-                        padding: 6.0,
-                    },
-                    cx,
-                );
-                input.set_chrome(false, cx);
+                let mut input = InputState::new(window, cx);
+                input.set_placeholder("例如 Alt+V", window, cx);
+                input.reset_value(value, cx);
                 input
             });
             self.hotkey_input = Some(input);
@@ -235,6 +193,9 @@ impl ClipboardView {
     }
 
     fn observe_query_input(&mut self, cx: &mut Context<Self>) {
+        if !self.subscriptions.is_empty() {
+            return;
+        }
         let Some(query_input) = self.query_input.clone() else {
             return;
         };
@@ -249,7 +210,7 @@ impl ClipboardView {
         let Some(query_input) = self.query_input.as_ref() else {
             return;
         };
-        let next_query = query_input.read(cx).text();
+        let next_query = query_input.read(cx).value().to_string();
         if next_query == self.query {
             return;
         }
@@ -405,7 +366,6 @@ impl ClipboardView {
     fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(input) = self.query_input.clone() {
             window.focus(&input.focus_handle(cx));
-            input.update(cx, |input, cx| input.select_all_text(cx));
         }
         self.focus_pending = false;
     }
@@ -459,8 +419,8 @@ impl ClipboardView {
             .unwrap_or_default();
         if let Some(input) = self.preview_input.as_ref() {
             input.update(cx, |input, input_cx| {
-                if input.text() != raw_text {
-                    input.set_text(raw_text.clone(), input_cx);
+                if input.value().as_ref() != raw_text.as_str() {
+                    input.reset_value(raw_text.clone(), input_cx);
                 }
             });
         }
@@ -591,13 +551,14 @@ impl ClipboardView {
         }));
     }
 
-    fn toggle_preview_wrap(&mut self, cx: &mut Context<Self>) {
+    fn toggle_preview_wrap(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.preview_wrap_enabled = !self.preview_wrap_enabled;
         if let Some(input) = self.preview_input.as_ref() {
             input.update(cx, |input, input_cx| {
-                input.set_soft_wrap(self.preview_wrap_enabled, input_cx);
+                input.set_soft_wrap(self.preview_wrap_enabled, window, input_cx);
             });
         }
+        cx.notify();
     }
 
     fn delete_selected(&mut self, cx: &mut Context<Self>) {
@@ -751,7 +712,7 @@ impl ClipboardView {
         let text = self
             .max_text_chars_input
             .as_ref()
-            .map(|input| input.read(cx).text())
+            .map(|input| input.read(cx).value().to_string())
             .unwrap_or_default();
         let next = match text.trim().parse::<usize>() {
             Ok(value) => value,
@@ -767,7 +728,7 @@ impl ClipboardView {
         let text = self
             .ignore_patterns_input
             .as_ref()
-            .map(|input| input.read(cx).text())
+            .map(|input| input.read(cx).value().to_string())
             .unwrap_or_default();
         let patterns = ClipboardService::parse_ignore_patterns(&text);
         let service = Arc::clone(&self.service);
@@ -830,7 +791,7 @@ impl ClipboardView {
         let text = self
             .hotkey_input
             .as_ref()
-            .map(|input| input.read(cx).text())
+            .map(|input| input.read(cx).value().to_string())
             .unwrap_or_default();
         let normalized = match ClipboardService::normalize_hotkey(&text) {
             Some(value) => value,
@@ -882,7 +843,7 @@ impl ClipboardView {
     fn sync_ignore_patterns_input(&self, patterns: &[String], cx: &mut Context<Self>) {
         if let Some(input) = self.ignore_patterns_input.as_ref() {
             input.update(cx, |input, input_cx| {
-                input.set_text(patterns.join("\n"), input_cx);
+                input.reset_value(patterns.join("\n"), input_cx);
             });
         }
     }
@@ -890,7 +851,7 @@ impl ClipboardView {
     fn sync_max_text_chars_input(&self, value: usize, cx: &mut Context<Self>) {
         if let Some(input) = self.max_text_chars_input.as_ref() {
             input.update(cx, |input, input_cx| {
-                input.set_text(value.to_string(), input_cx);
+                input.reset_value(value.to_string(), input_cx);
             });
         }
     }
@@ -898,7 +859,7 @@ impl ClipboardView {
     fn sync_hotkey_input(&self, value: &str, cx: &mut Context<Self>) {
         if let Some(input) = self.hotkey_input.as_ref() {
             input.update(cx, |input, input_cx| {
-                input.set_text(value, input_cx);
+                input.reset_value(value.to_string(), input_cx);
             });
         }
     }
@@ -948,22 +909,21 @@ impl ClipboardView {
 
     pub(crate) fn open_app_settings(&mut self, cx: &mut Context<Self>) {
         self.close_app_settings(cx);
-        self.ensure_inputs(cx);
         let config = self.settings_snapshot();
         if let Some(input) = self.max_text_chars_input.as_ref() {
             input.update(cx, |input, input_cx| {
-                input.set_text(config.max_text_chars.to_string(), input_cx);
+                input.reset_value(config.max_text_chars.to_string(), input_cx);
             });
         }
         if let Some(input) = self.ignore_patterns_input.as_ref() {
             let value = format_ignore_patterns(&config);
             input.update(cx, |input, input_cx| {
-                input.set_text(&value, input_cx);
+                input.reset_value(&value, input_cx);
             });
         }
         if let Some(input) = self.hotkey_input.as_ref() {
             input.update(cx, |input, input_cx| {
-                input.set_text(&config.hotkey, input_cx);
+                input.reset_value(&config.hotkey, input_cx);
             });
         }
         let clipboard_view = cx.entity().clone();
@@ -993,6 +953,9 @@ impl ClipboardView {
 
 impl Render for ClipboardView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.ensure_inputs(window, cx);
+        self.observe_query_input(cx);
+
         if self.focus_pending {
             if let Some(query_input) = self.query_input.as_ref() {
                 window.focus(&query_input.focus_handle(cx));
@@ -1026,26 +989,18 @@ impl Render for ClipboardView {
         };
         let selected_record = self.items.get(self.selected).cloned();
 
-        // Gear icon button to open independent settings window
-        let gear_icon = Icon::new(IconName::Settings)
-            .with_size(ComponentSize::Small)
-            .text_color(t.muted_foreground)
-            .into_any_element();
         let gear_handle = handle.clone();
-        let gear_button = div()
-            .id("clipboard-open-settings")
-            .size(px(26.0))
-            .flex_none()
-            .rounded(px(5.0))
-            .flex()
-            .items_center()
-            .justify_center()
-            .hover(|style| {
-                style
-                    .bg(qingqi_ui::ui::glass::hover_bg(app))
-                    .cursor_pointer()
-            })
-            .child(gear_icon)
+        let gear_button = Button::new("clipboard-open-settings")
+            .icon(IconName::Settings2)
+            .tooltip("设置")
+            .with_size(ComponentSize::Size(px(28.0)))
+            .custom(
+                ButtonCustomVariant::new(cx)
+                    .color(t.transparent)
+                    .foreground(t.muted_foreground)
+                    .hover(t.list_hover)
+                    .active(t.secondary_active),
+            )
             .on_click(move |_, _, cx| {
                 cx.update_entity(&gear_handle, |panel, cx| {
                     panel.open_app_settings(cx);
@@ -1083,17 +1038,15 @@ impl Render for ClipboardView {
             left_panel
         };
 
-        let left_panel = left_panel
-            .child(left_header)
-            .child(history_page(
-                handle.clone(),
-                items,
-                selected,
-                &query,
-                current_filter,
-                self.history_scroll.clone(),
-                app,
-            ));
+        let left_panel = left_panel.child(left_header).child(history_page(
+            handle.clone(),
+            items,
+            selected,
+            &query,
+            current_filter,
+            self.history_scroll.clone(),
+            app,
+        ));
 
         // Right panel
         let right_panel = div()

@@ -13,8 +13,11 @@ use gpui::{
     App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
     StatefulInteractiveElement, Styled, Window, div, img, px,
 };
-use gpui_component::Selectable;
 use gpui_component::theme::Theme;
+use gpui_component::{
+    Selectable, Sizable,
+    button::{Button, ButtonCustomVariant, ButtonVariants},
+};
 
 use qingqi_plugin::plugin_spec::PluginAccent;
 use qingqi_ui::{
@@ -886,21 +889,24 @@ impl Render for ImageCompressView {
                                             .child(format!("{quality}%")),
                                     )
                                     .child(
-                                        quality_button("−", dark, cx)
-                                            .id("image-compress-quality-down")
-                                            .on_click({
-                                                let handle = handle.clone();
-                                                move |_, window, cx| {
-                                                    handle.update(cx, |this, _cx| {
-                                                        this.adjust_quality(-5);
-                                                    });
-                                                    window.refresh();
-                                                }
-                                            }),
+                                        quality_button(
+                                            "image-compress-quality-down",
+                                            "−",
+                                            dark,
+                                            cx,
+                                        )
+                                        .on_click({
+                                            let handle = handle.clone();
+                                            move |_, window, cx| {
+                                                handle.update(cx, |this, _cx| {
+                                                    this.adjust_quality(-5);
+                                                });
+                                                window.refresh();
+                                            }
+                                        }),
                                     )
                                     .child(
-                                        quality_button("+", dark, cx)
-                                            .id("image-compress-quality-up")
+                                        quality_button("image-compress-quality-up", "+", dark, cx)
                                             .on_click({
                                                 let handle = handle.clone();
                                                 move |_, window, cx| {
@@ -916,20 +922,25 @@ impl Render for ImageCompressView {
                     .child(
                         drop_zone(pending_count, cx)
                             .child(
-                                primary_button("image-compress-paste", "粘贴", PluginAccent::Amber, cx)
-                                    .on_click({
-                                        let handle = handle.clone();
-                                        move |_, window, cx| {
-                                            handle.update(cx, |this, cx| {
-                                                this.paste_from_clipboard(cx);
-                                            });
-                                            window.refresh();
-                                        }
-                                    }),
+                                primary_button(
+                                    "image-compress-paste",
+                                    "粘贴",
+                                    PluginAccent::Amber,
+                                    cx,
+                                )
+                                .on_click({
+                                    let handle = handle.clone();
+                                    move |_, window, cx| {
+                                        handle.update(cx, |this, cx| {
+                                            this.paste_from_clipboard(cx);
+                                        });
+                                        window.refresh();
+                                    }
+                                }),
                             )
                             .child(
-                                secondary_button("image-compress-choose", "选择图片", cx)
-                                    .on_click({
+                                secondary_button("image-compress-choose", "选择图片", cx).on_click(
+                                    {
                                         let handle = handle.clone();
                                         move |_, window, cx| {
                                             handle.update(cx, |this, _cx| {
@@ -937,7 +948,8 @@ impl Render for ImageCompressView {
                                             });
                                             window.refresh();
                                         }
-                                    }),
+                                    },
+                                ),
                             ),
                     )
                     .child(image_table(items, dark, handle.clone(), cx))
@@ -968,23 +980,21 @@ fn mode_chip(
     _dark: bool,
     _cx: &App,
 ) -> gpui_component::button::Button {
-    ui::secondary_btn(id, label.to_string()).selected(active)
+    Button::new(id)
+        .label(label.to_string())
+        .small()
+        .selected(active)
 }
 
-fn quality_button(label: &str, _dark: bool, cx: &App) -> gpui::Div {
-    div()
-        .size(px(26.0))
-        .rounded(px(8.0))
-        .bg(theme::rgba_with_alpha(Theme::global(cx).list.into(), 0.88))
-        .border_1()
-        .border_color(ui::border_light(cx))
-        .hover(move |style| style.cursor_pointer())
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(12.0))
-        .text_color(Theme::global(cx).foreground)
-        .child(label.to_string())
+fn quality_button(
+    id: impl Into<gpui::ElementId>,
+    label: &str,
+    _dark: bool,
+    _cx: &App,
+) -> gpui_component::button::Button {
+    Button::new(id)
+        .label(label.to_string())
+        .with_size(gpui_component::Size::Size(px(26.0)))
 }
 
 fn drop_zone(pending_count: usize, cx: &App) -> gpui::Div {
@@ -1479,16 +1489,15 @@ fn footer_bar(
                 )
                 .children(if running {
                     Some(
-                        secondary_button("image-compress-cancel", "取消", cx)
-                            .on_click({
-                                let handle = handle.clone();
-                                move |_, window, cx| {
-                                    handle.update(cx, |this, _cx| {
-                                        this.request_cancel();
-                                    });
-                                    window.refresh();
-                                }
-                            }),
+                        secondary_button("image-compress-cancel", "取消", cx).on_click({
+                            let handle = handle.clone();
+                            move |_, window, cx| {
+                                handle.update(cx, |this, _cx| {
+                                    this.request_cancel();
+                                });
+                                window.refresh();
+                            }
+                        }),
                     )
                 } else {
                     None
@@ -1514,41 +1523,36 @@ fn footer_bar(
                     }),
                 )
                 .child(
-                    secondary_button("image-compress-output-dir", "💾 选择目录", cx)
-                        .on_click({
-                            let handle = handle.clone();
-                            move |_, window, cx| {
-                                handle.update(cx, |this, _cx| {
-                                    this.choose_output_dir();
-                                });
-                                window.refresh();
-                            }
-                        }),
+                    secondary_button("image-compress-output-dir", "💾 选择目录", cx).on_click({
+                        let handle = handle.clone();
+                        move |_, window, cx| {
+                            handle.update(cx, |this, _cx| {
+                                this.choose_output_dir();
+                            });
+                            window.refresh();
+                        }
+                    }),
                 )
                 .child(
-                    secondary_button("image-compress-open-dir", "打开目录", cx)
-                        .on_click({
-                            let handle = handle.clone();
-                            move |_, window, cx| {
-                                handle.update(cx, |this, _cx| {
-                                    this.open_output_dir();
-                                });
-                                window.refresh();
-                            }
-                        }),
+                    secondary_button("image-compress-open-dir", "打开目录", cx).on_click({
+                        let handle = handle.clone();
+                        move |_, window, cx| {
+                            handle.update(cx, |this, _cx| {
+                                this.open_output_dir();
+                            });
+                            window.refresh();
+                        }
+                    }),
                 )
-                .child(
-                    ghost_button("image-compress-clear", "清空", cx)
-                        .on_click({
-                            let handle = handle.clone();
-                            move |_, window, cx| {
-                                handle.update(cx, |this, _cx| {
-                                    this.clear_items();
-                                });
-                                window.refresh();
-                            }
-                        }),
-                )
+                .child(ghost_button("image-compress-clear", "清空", cx).on_click({
+                    let handle = handle.clone();
+                    move |_, window, cx| {
+                        handle.update(cx, |this, _cx| {
+                            this.clear_items();
+                        });
+                        window.refresh();
+                    }
+                }))
                 .child(div().flex_1())
                 .child(
                     div()
@@ -1586,7 +1590,12 @@ fn primary_button(
     accent: PluginAccent,
     cx: &App,
 ) -> gpui_component::button::Button {
-    ui::accent_btn(id, label.to_string(), accent, cx)
+    let accent: gpui::Hsla = ui::accent_color(accent).into();
+    Button::new(id).label(label.to_string()).small().custom(
+        ButtonCustomVariant::new(cx)
+            .color(accent)
+            .foreground(ui::white()),
+    )
 }
 
 fn secondary_button(
@@ -1594,7 +1603,7 @@ fn secondary_button(
     label: &str,
     _cx: &App,
 ) -> gpui_component::button::Button {
-    ui::secondary_btn(id, label.to_string())
+    Button::new(id).label(label.to_string()).small()
 }
 
 fn ghost_button(
@@ -1602,7 +1611,7 @@ fn ghost_button(
     label: &str,
     _cx: &App,
 ) -> gpui_component::button::Button {
-    ui::ghost_btn(id, label.to_string())
+    Button::new(id).label(label.to_string()).small().ghost()
 }
 
 fn action_button(
@@ -1611,7 +1620,7 @@ fn action_button(
     _dark: bool,
     _cx: &App,
 ) -> gpui_component::button::Button {
-    ui::secondary_btn(id, label.to_string())
+    Button::new(id).label(label.to_string()).small()
 }
 
 fn format_size(bytes: u64) -> String {

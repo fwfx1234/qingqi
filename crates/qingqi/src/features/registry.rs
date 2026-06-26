@@ -98,6 +98,22 @@ pub fn register_builtin_plugins(host: &mut AppHost) -> Result<()> {
         },
     );
     registry.register(
+        PluginDescriptor::builtin(feature_system_settings::manifest::tray_manager_manifest()),
+        {
+            let app_index_handle = Arc::clone(&app_index_handle);
+            let shortcut_handle = Arc::clone(&shortcut_handle);
+            let theme_handle = Arc::clone(&theme_handle);
+            move |cx| {
+                feature_system_settings::build_tray_manager(
+                    Arc::clone(&theme_handle),
+                    cx.paths.clone(),
+                    Some(Arc::clone(&app_index_handle)),
+                    Some(Arc::clone(&shortcut_handle)),
+                )
+            }
+        },
+    );
+    registry.register(
         PluginDescriptor::builtin(feature_gpui_demo::manifest::manifest()),
         |_| feature_gpui_demo::build(),
     );

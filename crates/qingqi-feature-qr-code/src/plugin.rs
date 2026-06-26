@@ -32,11 +32,8 @@ impl Plugin for QrCodePlugin {
     }
 
     fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
-        let mut view = view::QrView::new(self.paths.clone())?;
-        let panel = cx.app.new(|cx| {
-            view.ensure_inputs(cx);
-            view
-        });
+        let view = view::QrView::new(self.paths.clone())?;
+        let panel = cx.app.new(|_| view);
         Ok(PluginView::Inline(Box::new(QrCodeView { panel })))
     }
 }

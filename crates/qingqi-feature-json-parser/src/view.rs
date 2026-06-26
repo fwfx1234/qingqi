@@ -7,11 +7,14 @@ use gpui::{
 };
 
 use crate::service::{self, JsonMode, JsonResult, JsonStats};
-use gpui_component::{Selectable, scroll::ScrollableElement, theme::Theme};
-use qingqi_ui::{
-    text_input::{TextInput, TextInputStyle},
-    theme, ui,
+use gpui_component::{
+    Selectable, Sizable,
+    button::{Button, ButtonVariants},
+    input::{Input, InputState},
+    scroll::ScrollableElement,
+    theme::Theme,
 };
+use qingqi_ui::{theme, ui};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum JsonAction {
@@ -32,9 +35,9 @@ enum StatusTone {
 }
 
 pub struct JsonView {
-    input: Option<Entity<TextInput>>,
-    query: Option<Entity<TextInput>>,
-    output: Option<Entity<TextInput>>,
+    input: Option<Entity<InputState>>,
+    query: Option<Entity<InputState>>,
+    output: Option<Entity<InputState>>,
     status_text: String,
     status_tone: StatusTone,
     stats_text: String,
@@ -71,55 +74,24 @@ impl JsonView {
         self.error_loc_text.clear();
     }
 
-    fn ensure_inputs(&mut self, cx: &mut Context<Self>) {
+    fn ensure_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.input.is_none() {
             self.input = Some(cx.new(|cx| {
-                let mut input = TextInput::new(cx, "粘贴或输入 JSON…", "");
-                input.set_multiline(true, cx);
-                input.set_monospace(true, cx);
-                input.set_chrome(false, cx);
-                input.set_style(
-                    TextInputStyle {
-                        height: 320.0,
-                        font_size: 12.0,
-                        padding: 10.0,
-                    },
-                    cx,
-                );
-                input
+                InputState::new(window, cx)
+                    .placeholder("粘贴或输入 JSON…")
+                    .multi_line(true)
             }));
         }
         if self.query.is_none() {
             self.query = Some(cx.new(|cx| {
-                let mut input = TextInput::new(cx, "$.store.book[*].author", "");
-                input.set_chrome(false, cx);
-                input.set_style(
-                    TextInputStyle {
-                        height: 32.0,
-                        font_size: 12.0,
-                        padding: 6.0,
-                    },
-                    cx,
-                );
-                input
+                InputState::new(window, cx).placeholder("$.store.book[*].author")
             }));
         }
         if self.output.is_none() {
             self.output = Some(cx.new(|cx| {
-                let mut input = TextInput::new(cx, "处理结果…", "");
-                input.set_multiline(true, cx);
-                input.set_monospace(true, cx);
-                input.set_read_only(true, cx);
-                input.set_chrome(false, cx);
-                input.set_style(
-                    TextInputStyle {
-                        height: 400.0,
-                        font_size: 12.0,
-                        padding: 10.0,
-                    },
-                    cx,
-                );
-                input
+                InputState::new(window, cx)
+                    .placeholder("处理结果…")
+                    .multi_line(true)
             }));
         }
     }
@@ -132,7 +104,7 @@ impl JsonView {
             result.output.clone()
         };
         if let Some(output) = self.output.as_ref() {
-            output.update(cx, |input, cx| input.set_text(output_text, cx));
+            output.update(cx, |input, cx| input.reset_value(output_text, cx));
         }
         self.status_text = result.status;
         self.error_loc_text = result
@@ -163,11 +135,10 @@ impl JsonView {
     }
 
     pub fn set_launch_input(&mut self, text: &str, cx: &mut Context<Self>) {
-        self.ensure_inputs(cx);
         if let Some(input) = self.input.as_ref() {
             input.update(cx, |input, cx| {
-                if input.text() != text {
-                    input.set_text(text.to_string(), cx);
+                if input.value().as_ref() != text {
+                    input.reset_value(text.to_string(), cx);
                 }
             });
         }
@@ -219,9 +190,9 @@ impl JsonView {
 }
 
 impl Render for JsonView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.collect_pending_result(cx);
-        self.ensure_inputs(cx);
+        self.ensure_inputs(window, cx);
 
         let t = Theme::global(cx);
 
@@ -265,7 +236,7 @@ impl Render for JsonView {
                                         .border_1()
                                         .border_color(ui::border_light(cx))
                                         .overflow_hidden()
-                                        .child(input.unwrap()),
+                                        .child(json_input(input.unwrap(), 320.0, false)),
                                 )
                                 .child(query_row(query.unwrap(), &panel, last_mode, cx)),
                         )
@@ -329,7 +300,7 @@ impl Render for JsonView {
                                         .child({
                                             let output_text = output
                                                 .as_ref()
-                                                .map(|o| o.read(cx).text())
+                                                .map(|o| o.read(cx).value().to_string())
                                                 .unwrap_or_default();
                                             if output_text.is_empty() {
                                                 div()
@@ -393,7 +364,7 @@ fn header(panel: &Entity<JsonView>, cx: &App) -> impl IntoElement {
 // ── Query Row ──
 
 fn query_row(
-    query: Entity<TextInput>,
+    query: Entity<InputState>,
     panel: &Entity<JsonView>,
     _last_mode: JsonMode,
     cx: &App,
@@ -423,8 +394,18 @@ fn query_row(
                 .border_1()
                 .border_color(ui::border_light(cx))
                 .overflow_hidden()
-                .child(query),
+                .child(json_input(query, 32.0, false)),
         )
+}
+
+fn json_input(state: Entity<InputState>, height: f32, read_only: bool) -> Input {
+    Input::new(&state)
+        .appearance(false)
+        .bordered(false)
+        .focus_bordered(false)
+        .disabled(read_only)
+        .h(px(height))
+        .text_size(px(12.0))
 }
 
 // ── Status Footer ──
@@ -585,10 +566,13 @@ fn secondary_button(
     _cx: &App,
 ) -> impl IntoElement {
     let p = panel.clone();
-    ui::secondary_btn(label, label).on_click(move |_, w, cx| {
-        run_action(action, &p, cx);
-        w.refresh();
-    })
+    Button::new(label)
+        .label(label)
+        .small()
+        .on_click(move |_, w, cx| {
+            run_action(action, &p, cx);
+            w.refresh();
+        })
 }
 
 fn mode_pill(
@@ -599,7 +583,9 @@ fn mode_pill(
     _cx: &App,
 ) -> impl IntoElement {
     let p = panel.clone();
-    ui::secondary_btn(label, label)
+    Button::new(label)
+        .label(label)
+        .small()
         .selected(active)
         .on_click(move |_, w, cx| {
             run_action(action, &p, cx);
@@ -613,10 +599,14 @@ fn query_execute_button(
     _cx: &App,
 ) -> impl IntoElement {
     let p = panel.clone();
-    ui::primary_btn(label, format!("▶ {label}")).on_click(move |_, w, cx| {
-        run_action(JsonAction::Query, &p, cx);
-        w.refresh();
-    })
+    Button::new(label)
+        .label(format!("▶ {label}"))
+        .small()
+        .primary()
+        .on_click(move |_, w, cx| {
+            run_action(JsonAction::Query, &p, cx);
+            w.refresh();
+        })
 }
 
 // ── Actions ──
@@ -628,7 +618,7 @@ fn run_action(action: JsonAction, panel: &Entity<JsonView>, cx: &mut App) {
                 .read(cx)
                 .output
                 .as_ref()
-                .map(|e| e.read(cx).text())
+                .map(|e| e.read(cx).value().to_string())
                 .unwrap_or_default();
             if output.is_empty() {
                 panel.update(cx, |p, _| p.set_status("无可复制内容", StatusTone::Neutral));
@@ -646,9 +636,8 @@ fn run_action(action: JsonAction, panel: &Entity<JsonView>, cx: &mut App) {
                 return;
             }
             panel.update(cx, |p, cx| {
-                p.ensure_inputs(cx);
                 if let Some(i) = p.input.as_ref() {
-                    i.update(cx, |i, cx| i.set_text(text.clone(), cx));
+                    i.update(cx, |i, cx| i.reset_value(text.clone(), cx));
                 }
             });
             apply_mode(JsonMode::Format, panel, cx);
@@ -656,15 +645,14 @@ fn run_action(action: JsonAction, panel: &Entity<JsonView>, cx: &mut App) {
         JsonAction::Clear => {
             let _ = panel.update(cx, |p, cx| {
                 p.clear();
-                p.ensure_inputs(cx);
                 if let Some(i) = p.input.as_ref() {
-                    i.update(cx, |i, cx| i.clear(cx));
+                    i.update(cx, |i, cx| i.reset_value("", cx));
                 }
                 if let Some(q) = p.query.as_ref() {
-                    q.update(cx, |q, cx| q.clear(cx));
+                    q.update(cx, |q, cx| q.reset_value("", cx));
                 }
                 if let Some(o) = p.output.as_ref() {
-                    o.update(cx, |o, cx| o.clear(cx));
+                    o.update(cx, |o, cx| o.reset_value("", cx));
                 }
                 p.set_status("已清空", StatusTone::Neutral);
             });
@@ -678,16 +666,15 @@ fn run_action(action: JsonAction, panel: &Entity<JsonView>, cx: &mut App) {
 
 fn apply_mode(mode: JsonMode, panel: &Entity<JsonView>, cx: &mut App) {
     panel.update(cx, |p, cx| {
-        p.ensure_inputs(cx);
         let input_text = p
             .input
             .as_ref()
-            .map(|i| i.read(cx).text())
+            .map(|i| i.read(cx).value().to_string())
             .unwrap_or_default();
         let query_text = p
             .query
             .as_ref()
-            .map(|i| i.read(cx).text())
+            .map(|i| i.read(cx).value().to_string())
             .unwrap_or_default();
         p.run_async(input_text, query_text, mode, cx.to_async());
     });

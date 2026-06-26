@@ -1,9 +1,8 @@
-use gpui::{App, AppContext, Entity};
+use gpui::{App, AppContext, Entity, Window};
+use gpui_component::input::InputState;
 use uuid::Uuid;
 
 use crate::service::{self, ApiGroup, ApiRequest, ApiResponse, AuthType, KeyValueRow};
-
-use qingqi_ui::text_input::{TextInput, TextInputStyle};
 
 #[derive(Clone, Debug)]
 pub enum OpenTab {
@@ -105,10 +104,10 @@ impl OpenTab {
 #[derive(Clone)]
 pub struct KvRow {
     pub enabled: bool,
-    pub key: Entity<TextInput>,
-    pub value: Entity<TextInput>,
-    pub value_type: Entity<TextInput>,
-    pub description: Entity<TextInput>,
+    pub key: Entity<InputState>,
+    pub value: Entity<InputState>,
+    pub value_type: Entity<InputState>,
+    pub description: Entity<InputState>,
 }
 
 pub struct KvEditor {
@@ -116,31 +115,31 @@ pub struct KvEditor {
 }
 
 impl KvEditor {
-    pub fn new(cx: &mut App, rows: &[KeyValueRow]) -> Self {
+    pub fn new(window: &mut Window, cx: &mut App, rows: &[KeyValueRow]) -> Self {
         let mut editor = Self { rows: Vec::new() };
-        editor.set_rows(cx, rows);
+        editor.set_rows(window, cx, rows);
         editor
     }
 
-    pub fn from_text(cx: &mut App, text: &str) -> Self {
-        Self::new(cx, &parse_rows(text))
+    pub fn from_text(window: &mut Window, cx: &mut App, text: &str) -> Self {
+        Self::new(window, cx, &parse_rows(text))
     }
 
-    pub fn set_rows(&mut self, cx: &mut App, rows: &[KeyValueRow]) {
+    pub fn set_rows(&mut self, window: &mut Window, cx: &mut App, rows: &[KeyValueRow]) {
         self.rows = rows
             .iter()
             .map(|row| KvRow {
                 enabled: row.enabled,
-                key: kv_input(cx, &row.key, "键"),
-                value: kv_input(cx, &row.value, "值"),
-                value_type: kv_input(cx, &row.value_type, "string"),
-                description: kv_input(cx, &row.description, "说明"),
+                key: kv_input(window, cx, &row.key, "键"),
+                value: kv_input(window, cx, &row.value, "值"),
+                value_type: kv_input(window, cx, &row.value_type, "string"),
+                description: kv_input(window, cx, &row.description, "说明"),
             })
             .collect();
     }
 
-    pub fn set_from_text(&mut self, cx: &mut App, text: &str) {
-        self.set_rows(cx, &parse_rows(text));
+    pub fn set_from_text(&mut self, window: &mut Window, cx: &mut App, text: &str) {
+        self.set_rows(window, cx, &parse_rows(text));
     }
 
     pub fn to_rows(&self, cx: &App) -> Vec<KeyValueRow> {
@@ -148,10 +147,10 @@ impl KvEditor {
             .iter()
             .map(|row| KeyValueRow {
                 enabled: row.enabled,
-                key: row.key.read(cx).text().trim().to_string(),
-                value: row.value.read(cx).text().trim().to_string(),
-                value_type: row.value_type.read(cx).text().trim().to_string(),
-                description: row.description.read(cx).text().trim().to_string(),
+                key: row.key.read(cx).value().trim().to_string(),
+                value: row.value.read(cx).value().trim().to_string(),
+                value_type: row.value_type.read(cx).value().trim().to_string(),
+                description: row.description.read(cx).value().trim().to_string(),
             })
             .collect()
     }
@@ -160,13 +159,13 @@ impl KvEditor {
         format_rows(&self.to_rows(cx))
     }
 
-    pub fn add_row(&mut self, cx: &mut App) {
+    pub fn add_row(&mut self, window: &mut Window, cx: &mut App) {
         self.rows.push(KvRow {
             enabled: true,
-            key: kv_input(cx, "", "键"),
-            value: kv_input(cx, "", "值"),
-            value_type: kv_input(cx, "", "string"),
-            description: kv_input(cx, "", "说明"),
+            key: kv_input(window, cx, "", "键"),
+            value: kv_input(window, cx, "", "值"),
+            value_type: kv_input(window, cx, "", "string"),
+            description: kv_input(window, cx, "", "说明"),
         });
     }
 
@@ -185,11 +184,11 @@ impl KvEditor {
 
 #[derive(Clone)]
 pub struct AuthFormInputs {
-    pub bearer: Entity<TextInput>,
-    pub basic_user: Entity<TextInput>,
-    pub basic_pass: Entity<TextInput>,
-    pub apikey_name: Entity<TextInput>,
-    pub apikey_value: Entity<TextInput>,
+    pub bearer: Entity<InputState>,
+    pub basic_user: Entity<InputState>,
+    pub basic_pass: Entity<InputState>,
+    pub apikey_name: Entity<InputState>,
+    pub apikey_value: Entity<InputState>,
     pub in_query: bool,
 }
 
@@ -249,60 +248,53 @@ pub fn derive_auth_form(rows: &[KeyValueRow]) -> AuthFormValues {
     }
 }
 
-pub fn kv_input(cx: &mut App, value: &str, placeholder: &str) -> Entity<TextInput> {
-    let value = value.to_string();
-    let placeholder = placeholder.to_string();
-    cx.new(|cx| {
-        let mut input = TextInput::new(cx, placeholder.clone(), value.clone());
-        input.set_chrome(false, cx);
-        input.set_monospace(true, cx);
-        input.set_style(
-            TextInputStyle {
-                height: 28.0,
-                font_size: 11.0,
-                padding: 6.0,
-            },
-            cx,
-        );
-        input
-    })
+pub fn kv_input(
+    window: &mut Window,
+    cx: &mut App,
+    value: &str,
+    placeholder: &str,
+) -> Entity<InputState> {
+    input_state(window, cx, value, placeholder, false)
 }
 
-pub fn single_input(cx: &mut App, value: &str, placeholder: &str) -> Entity<TextInput> {
-    let value = value.to_string();
-    let placeholder = placeholder.to_string();
-    cx.new(|cx| {
-        let mut input = TextInput::new(cx, placeholder.clone(), value.clone());
-        input.set_chrome(false, cx);
-        input.set_style(
-            TextInputStyle {
-                height: 32.0,
-                font_size: 11.0,
-                padding: 8.0,
-            },
-            cx,
-        );
-        input.set_monospace(true, cx);
-        input
-    })
+pub fn single_input(
+    window: &mut Window,
+    cx: &mut App,
+    value: &str,
+    placeholder: &str,
+) -> Entity<InputState> {
+    input_state(window, cx, value, placeholder, false)
 }
 
-pub fn multiline_input(cx: &mut App, value: &str, placeholder: &str) -> Entity<TextInput> {
+pub fn multiline_input(
+    window: &mut Window,
+    cx: &mut App,
+    value: &str,
+    placeholder: &str,
+) -> Entity<InputState> {
+    input_state(window, cx, value, placeholder, true)
+}
+
+fn input_state(
+    window: &mut Window,
+    cx: &mut App,
+    value: &str,
+    placeholder: &str,
+    multiline: bool,
+) -> Entity<InputState> {
     let value = value.to_string();
     let placeholder = placeholder.to_string();
     cx.new(|cx| {
-        let mut input = TextInput::new(cx, placeholder.clone(), value.clone());
-        input.set_chrome(false, cx);
-        input.set_multiline(true, cx);
-        input.set_monospace(true, cx);
-        input.set_style(
-            TextInputStyle {
-                height: 220.0,
-                font_size: 11.0,
-                padding: 10.0,
-            },
-            cx,
-        );
+        let mut input = if multiline {
+            InputState::new(window, cx)
+                .multi_line(true)
+                .searchable(true)
+                .soft_wrap(true)
+        } else {
+            InputState::new(window, cx)
+        };
+        input.set_placeholder(placeholder.clone(), window, cx);
+        input.reset_value(value.clone(), cx);
         input
     })
 }

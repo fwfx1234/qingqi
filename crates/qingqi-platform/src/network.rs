@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use sysinfo::Networks;
 
@@ -24,6 +27,25 @@ pub struct NetworkSnapshot {
 pub struct NetworkSampler {
     networks: Networks,
     last_sampled_at: Option<Instant>,
+    last_totals: HashMap<String, (u64, u64)>,
+}
+
+pub fn rate_per_sec(delta_bytes: u64, elapsed: Duration) -> u64 {
+    if elapsed < Duration::from_millis(250) {
+        return 0;
+    }
+    (delta_bytes as f64 / elapsed.as_secs_f64().max(0.001)).round() as u64
+}
+
+pub fn sample_rates_from_deltas(
+    received_delta: u64,
+    transmitted_delta: u64,
+    elapsed: Duration,
+) -> (u64, u64) {
+    (
+        rate_per_sec(received_delta, elapsed),
+        rate_per_sec(transmitted_delta, elapsed),
+    )
 }
 
 impl NetworkSampler {
@@ -31,6 +53,7 @@ impl NetworkSampler {
         Self {
             networks: Networks::new_with_refreshed_list(),
             last_sampled_at: None,
+            last_totals: HashMap::new(),
         }
     }
 
@@ -44,30 +67,31 @@ impl NetworkSampler {
         self.last_sampled_at = Some(now);
 
         let ready = elapsed >= Duration::from_millis(250);
-        let seconds = elapsed.as_secs_f64().max(0.001);
         let mut snapshot = NetworkSnapshot {
             ready,
             ..NetworkSnapshot::default()
         };
 
         for (name, data) in &self.networks {
-            let received = if ready {
-                (data.received() as f64 / seconds).round() as u64
-            } else {
-                0
-            };
-            let transmitted = if ready {
-                (data.transmitted() as f64 / seconds).round() as u64
-            } else {
-                0
-            };
             let total_received = data.total_received();
             let total_transmitted = data.total_transmitted();
+            let (last_received, last_transmitted) = self
+                .last_totals
+                .get(name.as_str())
+                .copied()
+                .unwrap_or((total_received, total_transmitted));
+            let received_delta = total_received.saturating_sub(last_received);
+            let transmitted_delta = total_transmitted.saturating_sub(last_transmitted);
+            let (received, transmitted) =
+                sample_rates_from_deltas(received_delta, transmitted_delta, elapsed);
+            self.last_totals
+                .insert(name.clone(), (total_received, total_transmitted));
 
             snapshot.received_per_sec = snapshot.received_per_sec.saturating_add(received);
             snapshot.transmitted_per_sec = snapshot.transmitted_per_sec.saturating_add(transmitted);
             snapshot.total_received = snapshot.total_received.saturating_add(total_received);
-            snapshot.total_transmitted = snapshot.total_transmitted.saturating_add(total_transmitted);
+            snapshot.total_transmitted =
+                snapshot.total_transmitted.saturating_add(total_transmitted);
 
             if received > 0 || transmitted > 0 || total_received > 0 || total_transmitted > 0 {
                 snapshot.interfaces.push(NetworkInterfaceSnapshot {
@@ -119,7 +143,8 @@ pub fn format_bytes(bytes: u64, suffix: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_bytes, format_rate};
+    use super::{format_bytes, format_rate, rate_per_sec, sample_rates_from_deltas};
+    use std::time::Duration;
 
     #[test]
     fn formats_network_rates() {
@@ -133,5 +158,22 @@ mod tests {
     fn formats_totals_with_custom_suffix() {
         assert_eq!(format_bytes(1024, ""), "1.0K");
         assert_eq!(format_bytes(1024 * 1024 * 1024, ""), "1.0G");
+    }
+
+    #[test]
+    fn computes_rates_from_delta_and_elapsed_time() {
+        assert_eq!(rate_per_sec(1024, Duration::from_secs(1)), 1024);
+        assert_eq!(rate_per_sec(1024, Duration::from_millis(500)), 2048);
+        assert_eq!(rate_per_sec(1024, Duration::from_millis(100)), 0);
+    }
+
+    #[test]
+    fn computes_download_and_upload_from_sysinfo_deltas() {
+        // sysinfo::NetworkData::received/transmitted are already deltas since
+        // the previous refresh, so the sampler must only divide by elapsed time.
+        assert_eq!(
+            sample_rates_from_deltas(2048, 1024, Duration::from_secs(2)),
+            (1024, 512)
+        );
     }
 }

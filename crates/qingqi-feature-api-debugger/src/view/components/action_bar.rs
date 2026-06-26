@@ -7,15 +7,15 @@ use gpui_component::theme::Theme;
 use gpui_component::{
     Icon, IconName, Sizable, Size,
     button::{Button, ButtonVariants},
+    input::{Input, InputState},
 };
-use qingqi_ui::text_input::TextInput;
 use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn action_bar(
     view: Entity<ApiDebuggerView>,
     _request: ApiRequest,
     environment: ApiEnvironment,
-    path_input: Entity<TextInput>,
+    path_input: Entity<InputState>,
     in_flight: bool,
     cx: &App,
     current_method: HttpMethod,
@@ -140,7 +140,7 @@ pub fn action_bar(
                         .text_color(ui::text_tertiary(cx))
                         .child(environment.base_url),
                 )
-                .child(div().flex_1().min_w(px(0.0)).child(path_input))
+                .child(div().flex_1().min_w(px(0.0)).child(api_input(path_input, 30.0)))
                 .on_key_down(move |event, _window, cx| {
                     if event.keystroke.key == "enter" {
                         url_view.update(cx, |view, cx| view.send_request(cx));
@@ -170,4 +170,13 @@ pub fn action_bar(
                 })
                 .into_any_element()
         })
+}
+
+fn api_input(input: Entity<InputState>, height: f32) -> Input {
+    Input::new(&input)
+        .appearance(false)
+        .bordered(false)
+        .focus_bordered(false)
+        .h(px(height))
+        .text_size(px(11.0))
 }

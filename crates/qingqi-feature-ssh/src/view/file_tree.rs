@@ -266,7 +266,12 @@ fn file_list_shell(handle: Entity<super::SshView>, child: impl IntoElement) -> i
         .child(child)
 }
 
-fn file_row(entry: &FileEntryRow, index: usize, handle: Entity<super::SshView>, cx: &App) -> AnyElement {
+fn file_row(
+    entry: &FileEntryRow,
+    index: usize,
+    handle: Entity<super::SshView>,
+    cx: &App,
+) -> AnyElement {
     let is_parent = entry.is_parent;
     let is_dir = entry.is_dir;
     let is_selected = entry.is_selected;
@@ -293,13 +298,7 @@ fn file_row(entry: &FileEntryRow, index: usize, handle: Entity<super::SshView>, 
         } else {
             hsla(0.0, 0.0, 0.0, 0.0)
         })
-        .hover(move |s| {
-            if !is_selected {
-                s.bg(hover_bg)
-            } else {
-                s
-            }
-        })
+        .hover(move |s| if !is_selected { s.bg(hover_bg) } else { s })
         .on_mouse_down(MouseButton::Right, {
             let entry = entry_for_menu.clone();
             let h = handle.clone();

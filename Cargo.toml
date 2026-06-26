@@ -43,7 +43,7 @@ tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process"
 tokio-rustls = "0.26"
 tracing = "0.1"
 tracing-appender = "0.2"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "std", "registry"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "std", "registry", "time", "local-time"] }
 tray-icon = { version = "0.21", default-features = false }
 unicode-segmentation = "1.12"
 usvg = "0.45"

@@ -2,6 +2,8 @@
 
 use gpui::prelude::*;
 use gpui::*;
+use gpui_component::Sizable;
+use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::theme::Theme;
 use qingqi_ui::ui;
 use qingqi_ui::ui::glass;
@@ -83,7 +85,9 @@ pub fn render_upload_overwrite_overlay(
                         .gap_2()
                         .child({
                             let h = handle.clone();
-                            ui::secondary_btn("upload-overwrite-cancel", "取消")
+                            Button::new("upload-overwrite-cancel")
+                                .label("取消")
+                                .small()
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.cancel_pending_upload(cx));
                                 })
@@ -91,7 +95,9 @@ pub fn render_upload_overwrite_overlay(
                         .when(!single_file, |row| {
                             row.child({
                                 let h = handle.clone();
-                                ui::secondary_btn("upload-overwrite-skip", "跳过已有")
+                                Button::new("upload-overwrite-skip")
+                                    .label("跳过已有")
+                                    .small()
                                     .on_click(
                                         move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                             h.update(cx, |v, cx| {
@@ -108,7 +114,10 @@ pub fn render_upload_overwrite_overlay(
                             } else {
                                 "全部覆盖"
                             };
-                            ui::primary_btn("upload-overwrite-replace", label)
+                            Button::new("upload-overwrite-replace")
+                                .label(label)
+                                .small()
+                                .primary()
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.confirm_pending_upload(true, cx));
                                 })

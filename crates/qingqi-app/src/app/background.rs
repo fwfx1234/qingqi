@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
     sync::{Arc, Mutex, RwLock},
+    time::{Duration, Instant},
 };
 
 use global_hotkey::HotKeyState;
@@ -106,27 +107,42 @@ impl BackgroundSupervisor {
 
         let task = cx.spawn(async move |async_cx| {
             let mut sampler = NetworkSampler::new();
+            let mut public_ip_cache = PublicIpCache::default();
             loop {
                 let settings = paths
                     .as_ref()
                     .map(load_current_tray_settings)
                     .unwrap_or_default();
+                let public_ip = if public_ip_cache.should_refresh() {
+                    let previous = public_ip_cache.value.clone();
+                    let result = async_cx
+                        .background_executor()
+                        .spawn(async move { fetch_public_ip().ok().or(previous) })
+                        .await;
+                    public_ip_cache.record(result)
+                } else {
+                    public_ip_cache.value.clone()
+                };
                 let provider = async_cx
                     .background_executor()
                     .spawn(async move {
-                        let provider = NetworkSpeedProvider::sample(&mut sampler, settings);
+                        let provider = NetworkSpeedProvider::sample_with_public_ip(
+                            &mut sampler,
+                            settings,
+                            public_ip,
+                        );
                         (provider, sampler)
                     })
                     .await;
                 let (provider, next_sampler) = provider;
                 sampler = next_sampler;
                 let tm = tray_manager.clone();
-                let _ = async_cx.update(move |_cx| {
-                    lock_or_recover(&tm.0, "tray-manager").update_provider(Box::new(provider));
+                let _ = async_cx.update(move |cx| {
+                    lock_or_recover(&tm.0, "tray-manager").update_provider(Box::new(provider), cx);
                 });
                 async_cx
                     .background_executor()
-                    .timer(NetworkSpeedProvider::sampling_interval())
+                    .timer(provider_interval_from_paths(paths.as_ref()))
                     .await;
             }
         });
@@ -294,6 +310,49 @@ impl BackgroundSupervisor {
     }
 }
 
+#[derive(Default)]
+struct PublicIpCache {
+    value: Option<String>,
+    last_checked_at: Option<Instant>,
+}
+
+impl PublicIpCache {
+    const REFRESH_INTERVAL: Duration = Duration::from_secs(300);
+
+    fn should_refresh(&self) -> bool {
+        self.last_checked_at
+            .map(|last| last.elapsed() >= Self::REFRESH_INTERVAL)
+            .unwrap_or(true)
+    }
+
+    fn record(&mut self, value: Option<String>) -> Option<String> {
+        self.last_checked_at = Some(Instant::now());
+        self.value = value;
+        self.value.clone()
+    }
+}
+
+fn fetch_public_ip() -> Result<String, reqwest::Error> {
+    reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(4))
+        .user_agent("Qingqi/TrayManager")
+        .build()?
+        .get("https://api.ipify.org")
+        .send()?
+        .error_for_status()?
+        .text()
+        .map(|text| text.trim().to_string())
+}
+
+fn provider_interval_from_paths(
+    paths: Option<&qingqi_plugin::storage::AppPaths>,
+) -> std::time::Duration {
+    paths
+        .map(load_current_tray_settings)
+        .map(|settings| settings.network_speed_update_interval())
+        .unwrap_or_else(NetworkSpeedProvider::sampling_interval)
+}
+
 fn handle_tray_action(
     action: qingqi_platform::tray::TrayAction,
     window_controller: WindowControllerHandle,
@@ -336,8 +395,8 @@ fn handle_tray_icon_action(
                 cx,
             );
         }
-        TrayIconAction::Item(id) => {
-            TrayManager::handle_item_click(tray_manager, id, cx);
+        TrayIconAction::Item(click) => {
+            TrayManager::handle_item_click(tray_manager, click, cx);
         }
     }
 }

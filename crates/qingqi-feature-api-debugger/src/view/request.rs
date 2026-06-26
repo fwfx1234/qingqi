@@ -2,7 +2,7 @@ use super::ApiDebuggerView;
 use super::components::collection_tree::build_tree_items;
 use super::types::{OpenTab, request_at, request_at_mut};
 use crate::service::{ApiRequest, BodyMode, HttpMethod};
-use gpui::App;
+use gpui::{App, Window};
 
 impl ApiDebuggerView {
     pub(crate) fn placeholder_request() -> ApiRequest {
@@ -199,7 +199,7 @@ impl ApiDebuggerView {
         request
     }
 
-    pub(crate) fn select_request(&mut self, index: usize, cx: &mut App) {
+    pub(crate) fn select_request(&mut self, index: usize, window: &mut Window, cx: &mut App) {
         self.sync_models(cx);
         self.flush_pending_persist(cx);
         self.selected_request = index;
@@ -209,13 +209,13 @@ impl ApiDebuggerView {
         self.active_tab = new_tab.clone();
 
         if let Some(persisted) = self.service.load_persisted_tab_by_id(&new_tab_id) {
-            self.restore_inputs_from_tab(&persisted, cx);
+            self.restore_inputs_from_tab(&persisted, window, cx);
             let tab_idx = persisted.active_request_tab;
             if let Some(et) = crate::service::index_to_editor_tab(tab_idx) {
                 self.editor_tab = et;
             }
         } else {
-            self.reload_request_inputs(cx);
+            self.reload_request_inputs(window, cx);
         }
 
         self.persist_current_tab_state(cx);
@@ -226,6 +226,7 @@ impl ApiDebuggerView {
         &mut self,
         request_index: usize,
         scenario_index: usize,
+        window: &mut Window,
         cx: &mut App,
     ) {
         self.sync_models(cx);
@@ -237,13 +238,13 @@ impl ApiDebuggerView {
         self.active_tab = new_tab.clone();
 
         if let Some(persisted) = self.service.load_persisted_tab_by_id(&new_tab_id) {
-            self.restore_inputs_from_tab(&persisted, cx);
+            self.restore_inputs_from_tab(&persisted, window, cx);
             let tab_idx = persisted.active_request_tab;
             if let Some(et) = crate::service::index_to_editor_tab(tab_idx) {
                 self.editor_tab = et;
             }
         } else {
-            self.reload_request_inputs(cx);
+            self.reload_request_inputs(window, cx);
         }
 
         self.persist_current_tab_state(cx);
@@ -251,15 +252,15 @@ impl ApiDebuggerView {
     }
 
     pub(crate) fn sync_models(&mut self, cx: &App) {
-        let path = self.path_input.read(cx).text();
+        let path = self.path_input.read(cx).value().to_string();
         let params = self.params_kv.to_rows(cx);
         let path_rows = self.path_kv.to_rows(cx);
-        let body = self.body_input.read(cx).text();
+        let body = self.body_input.read(cx).value().to_string();
         let headers = self.headers_kv.to_rows(cx);
         let cookies = self.cookies_kv.to_rows(cx);
         let auth = self.auth_rows(cx);
-        let pre_ops = self.pre_ops_input.read(cx).text();
-        let post_ops = self.post_ops_input.read(cx).text();
+        let pre_ops = self.pre_ops_input.read(cx).value().to_string();
+        let post_ops = self.post_ops_input.read(cx).value().to_string();
         let body_mode = self.body_mode;
 
         {
@@ -276,10 +277,10 @@ impl ApiDebuggerView {
             request.post_ops = post_ops;
         }
 
-        let env_name = self.env_name_input.read(cx).text();
-        let env_base_url = self.env_base_url_input.read(cx).text();
-        let env_variables = super::types::parse_rows(&self.env_variables_input.read(cx).text());
-        let env_headers = super::types::parse_rows(&self.env_headers_input.read(cx).text());
+        let env_name = self.env_name_input.read(cx).value().to_string();
+        let env_base_url = self.env_base_url_input.read(cx).value().to_string();
+        let env_variables = super::types::parse_rows(&self.env_variables_input.read(cx).value().to_string());
+        let env_headers = super::types::parse_rows(&self.env_headers_input.read(cx).value().to_string());
 
         {
             let environment = self.selected_environment_mut();
@@ -290,24 +291,24 @@ impl ApiDebuggerView {
         }
     }
 
-    pub(crate) fn reload_request_inputs(&mut self, cx: &mut App) {
+    pub(crate) fn reload_request_inputs(&mut self, window: &mut Window, cx: &mut App) {
         let request = self.selected_request().clone();
         self.path_input.update(cx, |input, input_cx| {
-            input.set_text(request.path.clone(), input_cx)
+            input.reset_value(request.path.clone(), input_cx)
         });
-        self.params_kv.set_rows(cx, &request.params);
-        self.path_kv.set_rows(cx, &request.path_rows);
+        self.params_kv.set_rows(window, cx, &request.params);
+        self.path_kv.set_rows(window, cx, &request.path_rows);
         self.body_input.update(cx, |input, input_cx| {
-            input.set_text(request.body.clone(), input_cx)
+            input.reset_value(request.body.clone(), input_cx)
         });
-        self.headers_kv.set_rows(cx, &request.headers);
-        self.cookies_kv.set_rows(cx, &request.cookies);
+        self.headers_kv.set_rows(window, cx, &request.headers);
+        self.cookies_kv.set_rows(window, cx, &request.cookies);
         self.load_auth_form(cx, &request.auth);
         self.pre_ops_input.update(cx, |input, input_cx| {
-            input.set_text(request.pre_ops.clone(), input_cx)
+            input.reset_value(request.pre_ops.clone(), input_cx)
         });
         self.post_ops_input.update(cx, |input, input_cx| {
-            input.set_text(request.post_ops.clone(), input_cx)
+            input.reset_value(request.post_ops.clone(), input_cx)
         });
     }
 

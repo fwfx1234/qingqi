@@ -10,10 +10,9 @@ use std::{
 };
 
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
-    KeyDownEvent, ParentElement, Render, ScrollStrategy, StatefulInteractiveElement, Styled,
-    Subscription, Task, UniformListScrollHandle, Window, div, prelude::FluentBuilder, px,
-    size, uniform_list,
+    App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement, KeyDownEvent,
+    ParentElement, Render, ScrollStrategy, StatefulInteractiveElement, Styled, Subscription, Task,
+    UniformListScrollHandle, Window, div, prelude::FluentBuilder, px, size, uniform_list,
 };
 use gpui_component::scroll::Scrollbar;
 use gpui_component::theme::Theme;

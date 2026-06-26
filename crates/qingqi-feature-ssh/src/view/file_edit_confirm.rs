@@ -2,6 +2,8 @@
 
 use gpui::prelude::*;
 use gpui::*;
+use gpui_component::Sizable;
+use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::theme::Theme;
 use qingqi_ui::ui;
 use qingqi_ui::ui::glass;
@@ -69,14 +71,19 @@ pub fn render_file_edit_confirm_overlay(
                         .gap_2()
                         .child({
                             let h = handle.clone();
-                            ui::secondary_btn("file-edit-confirm-cancel", "不上传")
+                            Button::new("file-edit-confirm-cancel")
+                                .label("不上传")
+                                .small()
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.cancel_external_edit(cx));
                                 })
                         })
                         .child({
                             let h = handle;
-                            ui::primary_btn("file-edit-confirm-upload", "上传")
+                            Button::new("file-edit-confirm-upload")
+                                .label("上传")
+                                .small()
+                                .primary()
                                 .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
                                     h.update(cx, |v, cx| v.confirm_upload_external_edit(cx));
                                 })
