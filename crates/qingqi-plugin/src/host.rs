@@ -11,6 +11,13 @@ pub trait ThemeHandle {
     fn config_path(&self) -> String;
     fn system_dark(&self) -> bool;
     fn set_mode(&self, mode: ThemeMode) -> Result<()>;
+
+    /// Apply the current theme settings (theme name + mode) to the UI.
+    /// Default implementation is a no-op for backward compatibility.
+    fn apply_current(&self, cx: &mut App) -> Result<()> {
+        let _ = cx;
+        Ok(())
+    }
 }
 
 pub trait AppIndexHandle {

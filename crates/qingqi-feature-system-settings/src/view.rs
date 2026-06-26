@@ -2304,10 +2304,16 @@ fn seg_button(
     .with_size(ComponentSize::Small)
     .selected(active)
     .on_click(move |_, _window, cx| {
-        entity.update(cx, |this, cx| {
+        entity.update(cx, |this, _| {
             this.set_theme_mode(mode);
-            cx.notify();
         });
+        // 将当前主题立即应用到 UI
+        let handle = entity.read(cx).theme_handle.clone();
+        if let Err(e) = handle.apply_current(cx) {
+            entity.update(cx, |this, _| {
+                this.message = format!("主题应用失败: {e}");
+            });
+        }
     })
 }
 

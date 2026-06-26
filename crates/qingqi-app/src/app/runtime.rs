@@ -92,6 +92,18 @@ impl qingqi_plugin::host::ThemeHandle for ThemeHandleAdapter {
             .map_err(|_| anyhow::anyhow!("theme store lock poisoned"))?
             .set_mode(mode)
     }
+
+    fn apply_current(&self, cx: &mut gpui::App) -> anyhow::Result<()> {
+        let store = self
+            .store
+            .read()
+            .map_err(|_| anyhow::anyhow!("theme store lock poisoned"))?;
+        let theme_name = store.theme().to_string();
+        let mode = store.mode();
+        drop(store);
+        crate::app::theme_service::ThemeService::apply_theme(&theme_name, mode, cx);
+        Ok(())
+    }
 }
 
 impl qingqi_plugin::host::AppIndexHandle for AppIndexHandleAdapter {
