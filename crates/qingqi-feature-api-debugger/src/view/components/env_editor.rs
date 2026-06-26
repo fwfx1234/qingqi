@@ -103,7 +103,7 @@ impl Render for EnvEditorWindow {
         div()
             .size_full()
             .bg(Theme::global(app).popover)
-            .font_family("Inter, PingFang SC")
+            .font_family(".SystemUIFont")
             .flex()
             .flex_col()
             .child(env_chips_bar(&environments, selected, handle.clone(), app))

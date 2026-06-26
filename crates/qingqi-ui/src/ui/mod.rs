@@ -116,7 +116,7 @@ pub fn status_color(status: PluginStatus, cx: &App) -> gpui::Hsla {
 // ── Typography tokens ────────────────────────────────────────────────────
 
 pub fn font_ui() -> &'static str {
-    "Inter, PingFang SC"
+    ".SystemUIFont"
 }
 
 pub fn font_mono() -> &'static str {

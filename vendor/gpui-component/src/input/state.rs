@@ -636,6 +636,7 @@ impl InputState {
         self.history.ignore = true;
         self.text = Rope::from(text.as_str());
         self.text_wrapper.set_default_text(&self.text);
+        self.text_wrapper.update_all(&self.text, cx);
         self.history.ignore = false;
 
         if self.mode.is_single_line() {

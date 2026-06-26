@@ -444,7 +444,7 @@ impl Render for ApiDebuggerView {
             .bg(glass::bg(cx))
             .rounded(px(12.0))
             .overflow_hidden()
-            .font_family("Inter, PingFang SC")
+            .font_family(".SystemUIFont")
             .text_color(Theme::global(cx).foreground)
             .on_key_down(move |event, _window, cx| {
                 if event.keystroke.key == "escape" {

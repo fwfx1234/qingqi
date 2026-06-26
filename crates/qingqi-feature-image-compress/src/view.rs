@@ -16,7 +16,7 @@ use gpui::{
 use gpui_component::theme::Theme;
 use gpui_component::{
     Selectable, Sizable,
-    button::{Button, ButtonCustomVariant, ButtonVariants},
+    button::{Button, ButtonVariants},
 };
 
 use qingqi_plugin::plugin_spec::PluginAccent;
@@ -922,13 +922,11 @@ impl Render for ImageCompressView {
                     .child(
                         drop_zone(pending_count, cx)
                             .child(
-                                primary_button(
-                                    "image-compress-paste",
-                                    "粘贴",
-                                    PluginAccent::Amber,
-                                    cx,
-                                )
-                                .on_click({
+                                Button::new("image-compress-paste")
+                                    .label("粘贴")
+                                    .small()
+                                    .primary()
+                                    .on_click({
                                     let handle = handle.clone();
                                     move |_, window, cx| {
                                         handle.update(cx, |this, cx| {
@@ -939,7 +937,7 @@ impl Render for ImageCompressView {
                                 }),
                             )
                             .child(
-                                secondary_button("image-compress-choose", "选择图片", cx).on_click(
+                                Button::new("image-compress-choose").label("选择图片").small().on_click(
                                     {
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1205,7 +1203,7 @@ fn image_row(
                         // "复制" — copy compressed image to clipboard (success only)
                         .children(if is_success {
                             Some(
-                                action_button(("image-compress-copy", index), "复制", dark, cx)
+                                Button::new(("image-compress-copy", index)).label("复制").small()
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1240,7 +1238,7 @@ fn image_row(
                         // "定位" — reveal in Finder (success only)
                         .children(if is_success {
                             Some(
-                                action_button(("image-compress-reveal", index), "定位", dark, cx)
+                                Button::new(("image-compress-reveal", index)).label("定位").small()
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1257,7 +1255,7 @@ fn image_row(
                         // "覆盖" — overwrite original (success, real file only)
                         .children(if is_success && !from_clipboard && has_source {
                             Some(
-                                action_button(("image-compress-overwrite", index), "覆盖", dark, cx)
+                                Button::new(("image-compress-overwrite", index)).label("覆盖").small()
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1274,7 +1272,7 @@ fn image_row(
                         // "另存为" — save-as copy (success only)
                         .children(if is_success {
                             Some(
-                                action_button(("image-compress-save-as", index), "另存", dark, cx)
+                                Button::new(("image-compress-save-as", index)).label("另存").small()
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1318,7 +1316,7 @@ fn image_row(
                         // "重试" — retry failed entry
                         .children(if is_failed {
                             Some(
-                                action_button(("image-compress-retry", index), "重试", dark, cx)
+                                Button::new(("image-compress-retry", index)).label("重试").small()
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1467,17 +1465,11 @@ fn footer_bar(
                 .items_center()
                 .gap_2()
                 .child(
-                    primary_button(
-                        "image-compress-run",
-                        if running {
-                            "压缩中…"
-                        } else {
-                            "开始压缩"
-                        },
-                        PluginAccent::Amber,
-                        cx,
-                    )
-                    .on_click({
+                    Button::new("image-compress-run")
+                        .label(if running { "压缩中…" } else { "开始压缩" })
+                        .small()
+                        .primary()
+                        .on_click({
                         let handle = handle.clone();
                         move |_, window, cx| {
                             handle.update(cx, |this, cx| {
@@ -1489,7 +1481,7 @@ fn footer_bar(
                 )
                 .children(if running {
                     Some(
-                        secondary_button("image-compress-cancel", "取消", cx).on_click({
+                        Button::new("image-compress-cancel").label("取消").small().on_click({
                             let handle = handle.clone();
                             move |_, window, cx| {
                                 handle.update(cx, |this, _cx| {
@@ -1503,16 +1495,10 @@ fn footer_bar(
                     None
                 })
                 .child(
-                    secondary_button(
-                        "image-compress-toggle-overwrite",
-                        if overwrite_original {
-                            "覆盖原图"
-                        } else {
-                            "另存为"
-                        },
-                        cx,
-                    )
-                    .on_click({
+                    Button::new("image-compress-toggle-overwrite")
+                        .label(if overwrite_original { "覆盖原图" } else { "另存为" })
+                        .small()
+                        .on_click({
                         let handle = handle.clone();
                         move |_, window, cx| {
                             handle.update(cx, |this, _cx| {
@@ -1523,7 +1509,7 @@ fn footer_bar(
                     }),
                 )
                 .child(
-                    secondary_button("image-compress-output-dir", "💾 选择目录", cx).on_click({
+                    Button::new("image-compress-output-dir").label("💾 选择目录").small().on_click({
                         let handle = handle.clone();
                         move |_, window, cx| {
                             handle.update(cx, |this, _cx| {
@@ -1534,7 +1520,7 @@ fn footer_bar(
                     }),
                 )
                 .child(
-                    secondary_button("image-compress-open-dir", "打开目录", cx).on_click({
+                    Button::new("image-compress-open-dir").label("打开目录").small().on_click({
                         let handle = handle.clone();
                         move |_, window, cx| {
                             handle.update(cx, |this, _cx| {
@@ -1544,7 +1530,7 @@ fn footer_bar(
                         }
                     }),
                 )
-                .child(ghost_button("image-compress-clear", "清空", cx).on_click({
+                .child(Button::new("image-compress-clear").label("清空").small().ghost().on_click({
                     let handle = handle.clone();
                     move |_, window, cx| {
                         handle.update(cx, |this, _cx| {
@@ -1584,44 +1570,7 @@ fn footer_bar(
         )
 }
 
-fn primary_button(
-    id: impl Into<gpui::ElementId>,
-    label: &str,
-    accent: PluginAccent,
-    cx: &App,
-) -> gpui_component::button::Button {
-    let accent: gpui::Hsla = ui::accent_color(accent).into();
-    Button::new(id).label(label.to_string()).small().custom(
-        ButtonCustomVariant::new(cx)
-            .color(accent)
-            .foreground(ui::white()),
-    )
-}
 
-fn secondary_button(
-    id: impl Into<gpui::ElementId>,
-    label: &str,
-    _cx: &App,
-) -> gpui_component::button::Button {
-    Button::new(id).label(label.to_string()).small()
-}
-
-fn ghost_button(
-    id: impl Into<gpui::ElementId>,
-    label: &str,
-    _cx: &App,
-) -> gpui_component::button::Button {
-    Button::new(id).label(label.to_string()).small().ghost()
-}
-
-fn action_button(
-    id: impl Into<gpui::ElementId>,
-    label: &str,
-    _dark: bool,
-    _cx: &App,
-) -> gpui_component::button::Button {
-    Button::new(id).label(label.to_string()).small()
-}
 
 fn format_size(bytes: u64) -> String {
     const KB: f64 = 1024.0;

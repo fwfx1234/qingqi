@@ -5,14 +5,15 @@ use std::{
 
 use anyhow::Result;
 use gpui::{
-    App, AppContext, Context, Entity, InteractiveElement, IntoElement, KeyDownEvent, ObjectFit,
-    ParentElement, Render, Styled, StyledImage, Subscription, Window, div, hsla, img, px,
+    App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement, KeyDownEvent,
+    ObjectFit, ParentElement, Render, Styled, StyledImage, Subscription, Window, div, hsla, img,
+    px,
 };
 
 use crate::service::QrCodeService;
 use gpui_component::{
     Sizable,
-    button::{Button, ButtonCustomVariant, ButtonVariants},
+    button::{Button, ButtonVariants},
     input::{Input, InputState},
     theme::Theme,
 };
@@ -75,11 +76,15 @@ impl QrView {
 
     pub fn ensure_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.input.is_none() {
-            self.input = Some(cx.new(|cx| {
+            let input = cx.new(|cx| {
                 InputState::new(window, cx)
                     .placeholder("输入文本或粘贴图片...")
                     .multi_line(true)
-            }));
+            });
+            // 自动聚焦输入框，确保 dispatch path 包含本视图，
+            // 从而使 capture_key_down 能响应 Cmd+V 粘贴图片
+            window.focus(&input.read(cx).focus_handle(cx));
+            self.input = Some(input);
         }
         self.observe_input(cx);
     }
@@ -521,24 +526,35 @@ impl Render for QrView {
                                 .flex()
                                 .items_center()
                                 .gap_2()
-                                .child(action_btn("qr-choose-img", "选择图片", cx).on_click({
-                                    let e = entity.clone();
-                                    move |_, _, cx| {
-                                        e.update(cx, |t, cx| {
-                                            t.choose_scan_image(cx);
-                                            cx.notify();
-                                        });
-                                    }
-                                }))
-                                .child(ghost_btn("qr-clear", "清空", cx).on_click({
-                                    let e = entity.clone();
-                                    move |_, _, cx| {
-                                        e.update(cx, |t, cx| {
-                                            t.clear_input(cx);
-                                            cx.notify();
-                                        });
-                                    }
-                                })),
+                                .child(
+                                    Button::new("qr-choose-img")
+                                        .label("选择图片")
+                                        .small()
+                                        .on_click({
+                                            let e = entity.clone();
+                                            move |_, _, cx| {
+                                                e.update(cx, |t, cx| {
+                                                    t.choose_scan_image(cx);
+                                                    cx.notify();
+                                                });
+                                            }
+                                        }),
+                                )
+                                .child(
+                                    Button::new("qr-clear")
+                                        .label("清空")
+                                        .small()
+                                        .ghost()
+                                        .on_click({
+                                            let e = entity.clone();
+                                            move |_, _, cx| {
+                                                e.update(cx, |t, cx| {
+                                                    t.clear_input(cx);
+                                                    cx.notify();
+                                                });
+                                            }
+                                        }),
+                                ),
                         ),
                 )
                 // Content: input (left) | preview (right)
@@ -566,44 +582,66 @@ impl Render for QrView {
                                         .flex()
                                         .items_center()
                                         .gap_2()
-                                        .child(primary_btn("qr-save", "另存为", cx).on_click({
-                                            let e = entity.clone();
-                                            move |_, _, cx| {
-                                                e.update(cx, |t, cx| {
-                                                    t.save_current(cx);
-                                                    cx.notify();
-                                                });
-                                            }
-                                        }))
-                                        .child(action_btn("qr-copy", "复制", cx).on_click({
-                                            let e = entity.clone();
-                                            move |_, _, cx| {
-                                                e.update(cx, |t, cx| {
-                                                    t.copy_current(cx);
-                                                    cx.notify();
-                                                });
-                                            }
-                                        }))
-                                        .child(action_btn("qr-paste", "粘贴", cx).on_click({
-                                            let e = entity.clone();
-                                            move |_, _, cx| {
-                                                e.update(cx, |t, cx| {
-                                                    t.fill_from_clipboard(cx);
-                                                    cx.notify();
-                                                });
-                                            }
-                                        }))
+                                        .child(
+                                            Button::new("qr-save")
+                                                .label("另存为")
+                                                .small()
+                                                .primary()
+                                                .on_click({
+                                                    let e = entity.clone();
+                                                    move |_, _, cx| {
+                                                        e.update(cx, |t, cx| {
+                                                            t.save_current(cx);
+                                                            cx.notify();
+                                                        });
+                                                    }
+                                                }),
+                                        )
+                                        .child(
+                                            Button::new("qr-copy")
+                                                .label("复制")
+                                                .small()
+                                                .on_click({
+                                                    let e = entity.clone();
+                                                    move |_, _, cx| {
+                                                        e.update(cx, |t, cx| {
+                                                            t.copy_current(cx);
+                                                            cx.notify();
+                                                        });
+                                                    }
+                                                }),
+                                        )
+                                        .child(
+                                            Button::new("qr-paste")
+                                                .label("粘贴")
+                                                .small()
+                                                .on_click({
+                                                    let e = entity.clone();
+                                                    move |_, _, cx| {
+                                                        e.update(cx, |t, cx| {
+                                                            t.fill_from_clipboard(cx);
+                                                            cx.notify();
+                                                        });
+                                                    }
+                                                }),
+                                        )
                                         .child(div().flex_1())
-                                        .child(ghost_btn("qr-gen", "生成", cx).on_click({
-                                            let e = entity.clone();
-                                            move |_, _, cx| {
-                                                e.update(cx, |t, cx| {
-                                                    let text = t.input_text(cx);
-                                                    t.generate_from_text(&text, cx);
-                                                    cx.notify();
-                                                });
-                                            }
-                                        })),
+                                        .child(
+                                            Button::new("qr-gen")
+                                                .label("生成")
+                                                .small()
+                                                .ghost()
+                                                .on_click({
+                                                    let e = entity.clone();
+                                                    move |_, _, cx| {
+                                                        e.update(cx, |t, cx| {
+                                                            let text = t.input_text(cx);
+                                                            t.generate_from_text(&text, cx);
+                                                            cx.notify();
+                                                        });
+                                                    }
+                                                }),
+                                        ),
                                 )
                                 .child(status_bar(message, tone, cx)),
                         )
@@ -720,30 +758,4 @@ fn qr_input(state: Entity<InputState>) -> Input {
         .text_size(px(12.0))
 }
 
-fn primary_btn(
-    id: impl Into<gpui::ElementId>,
-    label: &str,
-    cx: &App,
-) -> gpui_component::button::Button {
-    let accent: gpui::Hsla =
-        ui::accent_color(qingqi_plugin::plugin_spec::PluginAccent::Blue).into();
-    Button::new(id).label(label.to_string()).small().custom(
-        ButtonCustomVariant::new(cx)
-            .color(accent)
-            .foreground(ui::white()),
-    )
-}
-fn action_btn(
-    id: impl Into<gpui::ElementId>,
-    label: &str,
-    _cx: &App,
-) -> gpui_component::button::Button {
-    Button::new(id).label(label.to_string()).small()
-}
-fn ghost_btn(
-    id: impl Into<gpui::ElementId>,
-    label: &str,
-    _cx: &App,
-) -> gpui_component::button::Button {
-    Button::new(id).label(label.to_string()).small().ghost()
-}
+
