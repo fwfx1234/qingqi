@@ -38,6 +38,7 @@ impl TrayPopupView for NetworkSpeedPopupView {
             &self.service.settings(),
             &self.service.snapshot(),
             self.service.public_ip().as_deref(),
+            self.service.local_ip().as_deref(),
         );
         let copied_label = self
             .copied_label

@@ -359,7 +359,9 @@ impl TrayPopupWindow {
                     .background_executor()
                     .timer(Duration::from_secs(1))
                     .await;
-                let _ = this.update(async_cx, |_, cx| cx.notify());
+                if this.update(async_cx, |_, cx| cx.notify()).is_err() {
+                    break;
+                }
             }
         }));
 

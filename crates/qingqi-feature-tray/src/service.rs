@@ -1,4 +1,5 @@
 use std::{
+    net::UdpSocket,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -29,8 +30,10 @@ pub struct NetworkSpeedService {
     sampler: Mutex<NetworkSampler>,
     snapshot: Mutex<NetworkSnapshot>,
     public_ip: Arc<Mutex<Option<String>>>,
+    local_ip: Arc<Mutex<Option<String>>>,
     tray_host: Mutex<Option<TrayHostRef>>,
     started: AtomicBool,
+    ip_refreshing: Arc<AtomicBool>,
 }
 
 impl NetworkSpeedService {
@@ -41,8 +44,10 @@ impl NetworkSpeedService {
             sampler: Mutex::new(NetworkSampler::new()),
             snapshot: Mutex::new(NetworkSnapshot::default()),
             public_ip: Arc::new(Mutex::new(None)),
+            local_ip: Arc::new(Mutex::new(None)),
             tray_host: Mutex::new(None),
             started: AtomicBool::new(false),
+            ip_refreshing: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -61,11 +66,8 @@ impl NetworkSpeedService {
         self.public_ip.lock().ok().and_then(|ip| ip.clone())
     }
 
-    fn fetch_public_ip(&self) {
-        let ip = fetch_public_ip_from_api();
-        if let Ok(mut current) = self.public_ip.lock() {
-            *current = ip;
-        }
+    pub fn local_ip(&self) -> Option<String> {
+        self.local_ip.lock().ok().and_then(|ip| ip.clone())
     }
 
     pub fn start_background(self: &Arc<Self>, tray_host: TrayHostRef, cx: &mut App) -> Result<()> {
@@ -75,7 +77,7 @@ impl NetworkSpeedService {
         tray_host.register_tray_item(&self.plugin_id, tray_item_spec(&settings, &snapshot))?;
 
         if !self.started.swap(true, Ordering::SeqCst) {
-            self.fetch_public_ip();
+            self.refresh_ip_cache_background();
             Self::schedule_next_sample(
                 Arc::clone(self),
                 settings.network_speed_update_interval(),
@@ -96,13 +98,7 @@ impl NetworkSpeedService {
         let settings = self.settings();
         let snapshot = self.snapshot();
         let height = crate::model::popup_content_height(&settings, &snapshot);
-        // 弹窗打开时后台刷新公网 IP
-        let ip_store = Arc::clone(&self.public_ip);
-        std::thread::spawn(move || {
-            if let Ok(mut current) = ip_store.lock() {
-                *current = fetch_public_ip_from_api();
-            }
-        });
+        self.refresh_ip_cache_background();
         tray_host.open_tray_popup(
             &self.plugin_id,
             item_id,
@@ -205,6 +201,27 @@ impl NetworkSpeedService {
         }
     }
 
+    fn refresh_ip_cache_background(self: &Arc<Self>) {
+        if self.ip_refreshing.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let public_ip = Arc::clone(&self.public_ip);
+        let local_ip = Arc::clone(&self.local_ip);
+        let ip_refreshing = Arc::clone(&self.ip_refreshing);
+        std::thread::spawn(move || {
+            let next_local_ip = detect_local_ip();
+            if let Ok(mut current) = local_ip.lock() {
+                *current = next_local_ip;
+            }
+
+            let next_public_ip = fetch_public_ip_from_api();
+            if let Ok(mut current) = public_ip.lock() {
+                *current = next_public_ip;
+            }
+            ip_refreshing.store(false, Ordering::SeqCst);
+        });
+    }
+
     fn sample(&self) -> Result<(NetworkSpeedSettings, NetworkSnapshot)> {
         let snapshot = {
             let mut sampler = self
@@ -290,4 +307,10 @@ fn fetch_public_ip_from_api() -> Option<String> {
         ))
     })();
     result.ok()
+}
+
+fn detect_local_ip() -> Option<String> {
+    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    socket.local_addr().ok().map(|addr| addr.ip().to_string())
 }

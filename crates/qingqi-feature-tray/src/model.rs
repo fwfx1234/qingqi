@@ -1,5 +1,3 @@
-use std::net::UdpSocket;
-
 use qingqi_platform::network::{NetworkSnapshot, format_bytes, format_rate};
 use qingqi_plugin::tray::{TrayItemIcon, TrayItemId, TrayItemSpec};
 
@@ -41,6 +39,7 @@ pub fn popup_model(
     settings: &NetworkSpeedSettings,
     snapshot: &NetworkSnapshot,
     public_ip: Option<&str>,
+    local_ip: Option<&str>,
 ) -> NetworkSpeedPopupModel {
     let public_ip_value = public_ip
         .map(|ip| ip.to_string())
@@ -51,11 +50,11 @@ pub fn popup_model(
         copy_value: public_ip.map(|s| s.to_string()),
     }];
 
-    if let Some(local_ip) = detect_local_ip() {
+    if let Some(local_ip) = local_ip {
         rows.push(NetworkSpeedPopupRow {
             label: String::from("内网 IP"),
-            value: local_ip.clone(),
-            copy_value: Some(local_ip),
+            value: local_ip.to_string(),
+            copy_value: Some(local_ip.to_string()),
         });
     }
 
@@ -157,12 +156,6 @@ fn build_tooltip(snapshot: &NetworkSnapshot) -> String {
         format_bytes(snapshot.total_received, ""),
         format_bytes(snapshot.total_transmitted, "")
     )
-}
-
-fn detect_local_ip() -> Option<String> {
-    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
-    socket.connect("8.8.8.8:80").ok()?;
-    socket.local_addr().ok().map(|addr| addr.ip().to_string())
 }
 
 fn format_menu_bar_rate(bytes_per_sec: u64) -> String {
