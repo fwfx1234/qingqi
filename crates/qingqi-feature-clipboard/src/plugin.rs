@@ -6,7 +6,6 @@ use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 use crate::{manifest, service::ClipboardService, view};
 use qingqi_plugin::{
     command::{Activation, Command},
-    events::AppEventBus,
     host::ShortcutHandleRef,
     plugin::{Plugin, PluginCx, PluginId, PluginView, WindowView},
     shortcut::{ShortcutDescriptor, ShortcutScope, ShortcutTarget},
@@ -124,8 +123,8 @@ impl Plugin for ClipboardPlugin {
         Ok(())
     }
 
-    fn start_background(&mut self, _: AppEventBus, cx: &mut App) {
-        ClipboardService::start_background(Arc::clone(&self.service), cx);
+    fn start_background(&mut self, cx: &mut PluginCx<'_>) {
+        ClipboardService::start_background(Arc::clone(&self.service), cx.app);
     }
 
     fn close_idle(&mut self) {}

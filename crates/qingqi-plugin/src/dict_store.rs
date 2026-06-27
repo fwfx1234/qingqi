@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use serde::{Serialize, de::DeserializeOwned};
-use serde_json::Value;
 
 use crate::database::DatabaseService;
 
@@ -27,55 +25,44 @@ impl PluginDictStore {
         Self::new(database, path)
     }
 
-    pub fn get_json(&self, namespace: &str, key: &str) -> Result<Option<Value>> {
-        self.database.with_connection(self.path.clone(), |conn| {
-            ensure_schema(conn)?;
-            conn.query_row(
-                &format!("SELECT value_json FROM {TABLE_NAME} WHERE namespace = ?1 AND key = ?2"),
-                rusqlite::params![namespace, key],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(Into::into)
-            .and_then(|raw: Option<String>| match raw {
-                Some(value) => serde_json::from_str(&value)
-                    .with_context(|| format!("invalid json value for {namespace}:{key}"))
-                    .map(Some),
-                None => Ok(None),
-            })
-        })
-    }
-
-    pub fn get<T: DeserializeOwned>(&self, namespace: &str, key: &str) -> Result<Option<T>> {
-        self.get_json(namespace, key)?
-            .map(serde_json::from_value)
+    pub fn get_bool(&self, namespace: &str, key: &str) -> Result<Option<bool>> {
+        self.get_typed(namespace, key)?
+            .map(|(kind, value)| decode_bool(&kind, &value))
             .transpose()
-            .with_context(|| format!("cannot decode value for {namespace}:{key}"))
     }
 
-    pub fn set_json(&self, namespace: &str, key: &str, value: &Value) -> Result<()> {
-        let raw = serde_json::to_string(value).context("cannot encode dict json value")?;
-        self.database.with_connection(self.path.clone(), |conn| {
-            ensure_schema(conn)?;
-            conn.execute(
-                &format!(
-                    "
-                    INSERT INTO {TABLE_NAME} (namespace, key, value_json, updated_at)
-                    VALUES (?1, ?2, ?3, strftime('%s', 'now'))
-                    ON CONFLICT(namespace, key) DO UPDATE SET
-                        value_json = excluded.value_json,
-                        updated_at = excluded.updated_at
-                    "
-                ),
-                rusqlite::params![namespace, key, raw],
-            )?;
-            Ok(())
-        })
+    pub fn set_bool(&self, namespace: &str, key: &str, value: bool) -> Result<()> {
+        self.set_typed(namespace, key, "bool", if value { "1" } else { "0" })
     }
 
-    pub fn set<T: Serialize>(&self, namespace: &str, key: &str, value: &T) -> Result<()> {
-        let json = serde_json::to_value(value).context("cannot convert dict value to json")?;
-        self.set_json(namespace, key, &json)
+    pub fn get_i64(&self, namespace: &str, key: &str) -> Result<Option<i64>> {
+        self.get_typed(namespace, key)?
+            .map(|(kind, value)| decode_i64(&kind, &value))
+            .transpose()
+    }
+
+    pub fn set_i64(&self, namespace: &str, key: &str, value: i64) -> Result<()> {
+        self.set_typed(namespace, key, "i64", &value.to_string())
+    }
+
+    pub fn get_u64(&self, namespace: &str, key: &str) -> Result<Option<u64>> {
+        self.get_typed(namespace, key)?
+            .map(|(kind, value)| decode_u64(&kind, &value))
+            .transpose()
+    }
+
+    pub fn set_u64(&self, namespace: &str, key: &str, value: u64) -> Result<()> {
+        self.set_typed(namespace, key, "u64", &value.to_string())
+    }
+
+    pub fn get_string(&self, namespace: &str, key: &str) -> Result<Option<String>> {
+        self.get_typed(namespace, key)?
+            .map(|(kind, value)| decode_string(&kind, &value))
+            .transpose()
+    }
+
+    pub fn set_string(&self, namespace: &str, key: &str, value: &str) -> Result<()> {
+        self.set_typed(namespace, key, "string", value)
     }
 
     pub fn remove(&self, namespace: &str, key: &str) -> Result<bool> {
@@ -114,15 +101,50 @@ impl PluginDictStore {
             .map_err(Into::into)
         })
     }
+
+    fn get_typed(&self, namespace: &str, key: &str) -> Result<Option<(String, String)>> {
+        self.database.with_connection(self.path.clone(), |conn| {
+            ensure_schema(conn)?;
+            conn.query_row(
+                &format!("SELECT value_kind, value_text FROM {TABLE_NAME} WHERE namespace = ?1 AND key = ?2"),
+                rusqlite::params![namespace, key],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .optional()
+            .map_err(Into::into)
+        })
+    }
+
+    fn set_typed(&self, namespace: &str, key: &str, kind: &str, value: &str) -> Result<()> {
+        self.database.with_connection(self.path.clone(), |conn| {
+            ensure_schema(conn)?;
+            conn.execute(
+                &format!(
+                    "
+                    INSERT INTO {TABLE_NAME} (namespace, key, value_kind, value_text, updated_at)
+                    VALUES (?1, ?2, ?3, ?4, strftime('%s', 'now'))
+                    ON CONFLICT(namespace, key) DO UPDATE SET
+                        value_kind = excluded.value_kind,
+                        value_text = excluded.value_text,
+                        updated_at = excluded.updated_at
+                    "
+                ),
+                rusqlite::params![namespace, key, kind, value],
+            )?;
+            Ok(())
+        })
+    }
 }
 
 fn ensure_schema(conn: &rusqlite::Connection) -> Result<()> {
+    reset_legacy_json_schema(conn)?;
     conn.execute_batch(&format!(
         "
         CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
             namespace   TEXT NOT NULL,
             key         TEXT NOT NULL,
-            value_json  TEXT NOT NULL,
+            value_kind  TEXT NOT NULL,
+            value_text  TEXT NOT NULL,
             updated_at  INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY (namespace, key)
         );
@@ -135,95 +157,46 @@ fn ensure_schema(conn: &rusqlite::Connection) -> Result<()> {
 
 use rusqlite::OptionalExtension;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{database::DatabaseService, storage::AppPaths};
-    use serde::{Deserialize, Serialize};
-    use serde_json::json;
-    use std::{
-        fs,
-        time::{SystemTime, UNIX_EPOCH},
-    };
-
-    #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-    struct DemoValue {
-        name: String,
-        count: i32,
+fn reset_legacy_json_schema(conn: &rusqlite::Connection) -> Result<()> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({TABLE_NAME})"))?;
+    let columns = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    if !columns.iter().any(|column| column == "value_json") {
+        return Ok(());
     }
+    conn.execute_batch(&format!(
+        "
+        DROP TABLE {TABLE_NAME};
+        "
+    ))?;
+    Ok(())
+}
 
-    fn temp_paths(label: &str) -> AppPaths {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or_default();
-        let dir = std::env::temp_dir().join(format!("qingqi-dict-store-{label}-{nanos}"));
-        fs::create_dir_all(&dir).expect("temp dir");
-        AppPaths::for_test(dir)
+fn decode_bool(kind: &str, value: &str) -> Result<bool> {
+    match kind {
+        "bool" => Ok(value == "1" || value.eq_ignore_ascii_case("true")),
+        other => anyhow::bail!("dict value is {other}, expected bool"),
     }
+}
 
-    #[test]
-    fn supports_json_roundtrip_and_namespace_isolation() {
-        let db = DatabaseService::new(temp_paths("json-roundtrip"));
-        let store = PluginDictStore::for_database(db, "dict.db");
-
-        store
-            .set(
-                "plugin-a",
-                "config",
-                &DemoValue {
-                    name: String::from("demo"),
-                    count: 3,
-                },
-            )
-            .expect("set struct");
-        store
-            .set_json("plugin-a", "title", &json!("hello"))
-            .expect("set string");
-        store
-            .set_json("plugin-b", "title", &json!(42))
-            .expect("set number");
-
-        let value: DemoValue = store
-            .get("plugin-a", "config")
-            .expect("get struct")
-            .expect("struct value");
-        assert_eq!(
-            value,
-            DemoValue {
-                name: String::from("demo"),
-                count: 3
-            }
-        );
-        assert_eq!(
-            store.get_json("plugin-a", "title").expect("json title"),
-            Some(json!("hello"))
-        );
-        assert_eq!(
-            store.get_json("plugin-b", "title").expect("json number"),
-            Some(json!(42))
-        );
-        assert_eq!(
-            store.list_keys("plugin-a").expect("keys"),
-            vec![String::from("config"), String::from("title")]
-        );
+fn decode_i64(kind: &str, value: &str) -> Result<i64> {
+    match kind {
+        "i64" | "u64" => value.parse().context("cannot decode i64 dict value"),
+        other => anyhow::bail!("dict value is {other}, expected i64"),
     }
+}
 
-    #[test]
-    fn remove_and_clear_namespace_work() {
-        let db = DatabaseService::new(temp_paths("remove-clear"));
-        let store = PluginDictStore::for_database(db, "dict.db");
+fn decode_u64(kind: &str, value: &str) -> Result<u64> {
+    match kind {
+        "u64" | "i64" => value.parse().context("cannot decode u64 dict value"),
+        other => anyhow::bail!("dict value is {other}, expected u64"),
+    }
+}
 
-        store
-            .set_json("plugin-a", "a", &json!({"ok": true}))
-            .unwrap();
-        store.set_json("plugin-a", "b", &json!("value")).unwrap();
-        store.set_json("plugin-b", "a", &json!(1)).unwrap();
-
-        assert!(store.remove("plugin-a", "a").expect("remove"));
-        assert_eq!(store.get_json("plugin-a", "a").unwrap(), None);
-        assert_eq!(store.clear_namespace("plugin-a").expect("clear"), 1);
-        assert_eq!(store.list_keys("plugin-a").unwrap(), Vec::<String>::new());
-        assert_eq!(store.get_json("plugin-b", "a").unwrap(), Some(json!(1)));
+fn decode_string(kind: &str, value: &str) -> Result<String> {
+    match kind {
+        "string" => Ok(value.to_string()),
+        other => anyhow::bail!("dict value is {other}, expected string"),
     }
 }

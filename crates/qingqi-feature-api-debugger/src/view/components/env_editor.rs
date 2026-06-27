@@ -1,15 +1,17 @@
 use super::shared::{api_accent, circle_badge, section_micro_label};
-use crate::service::EnvDetailTab;
 use crate::view::ApiDebuggerView;
 use gpui::{
     App, AppContext, Bounds, Context, Entity, InteractiveElement, IntoElement, ParentElement,
     Render, SharedString, StatefulInteractiveElement, Styled, Subscription, TitlebarOptions,
     Window, WindowBounds, WindowKind, WindowOptions, div, px, size,
 };
-use gpui_component::{input::{Input, InputState}, theme::Theme};
 use gpui_component::{
     IconName, Root, Sizable, Size,
     button::{Button, ButtonVariants},
+};
+use gpui_component::{
+    input::{Input, InputState},
+    theme::Theme,
 };
 use qingqi_ui::{theme, ui, ui::glass};
 
@@ -20,7 +22,7 @@ pub fn open_env_editor_window(debugger: Entity<ApiDebuggerView>, cx: &mut App) {
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
             None,
-            size(px(480.0), px(520.0)),
+            size(px(720.0), px(560.0)),
             cx,
         ))),
         titlebar: Some(TitlebarOptions {
@@ -29,7 +31,7 @@ pub fn open_env_editor_window(debugger: Entity<ApiDebuggerView>, cx: &mut App) {
         }),
         kind: WindowKind::Normal,
         is_resizable: true,
-        window_min_size: Some(size(px(420.0), px(400.0))),
+        window_min_size: Some(size(px(560.0), px(440.0))),
         ..Default::default()
     };
     let inner = debugger.clone();
@@ -85,18 +87,11 @@ impl Render for EnvEditorWindow {
         let view = self.debugger_view.read(cx);
         let environments = view.environments.clone();
         let selected = view.selected_environment;
-        let detail_tab = view.env_detail_tab;
         let name_input = view.env_name_input.clone();
         let base_url_input = view.env_base_url_input.clone();
         let vars_input = view.env_variables_input.clone();
         let headers_input = view.env_headers_input.clone();
         let handle = self.debugger_view.clone();
-
-        let detail_input = if detail_tab == EnvDetailTab::Variables {
-            vars_input.clone()
-        } else {
-            headers_input.clone()
-        };
 
         let app: &App = cx;
 
@@ -115,68 +110,77 @@ impl Render for EnvEditorWindow {
                     .flex_col()
                     .gap(px(10.0))
                     .p(px(14.0))
-                    .child(labeled_field("名称", name_input.clone(), app))
-                    .child(labeled_field("Base URL", base_url_input.clone(), app))
                     .child(
-                        div().flex().items_center().gap(px(8.0)).children(
-                            [EnvDetailTab::Variables, EnvDetailTab::Headers]
-                                .into_iter()
-                                .enumerate()
-                                .map({
-                                    let tv = handle.clone();
-                                    move |(index, tab)| {
-                                        let active = tab == detail_tab;
-                                        let tv = tv.clone();
-                                        div()
-                                            .id(("api-env-win-tab", index))
-                                            .px(px(12.0))
-                                            .py(px(5.0))
-                                            .rounded(px(5.0))
-                                            .bg(if active {
-                                                theme::rgba_with_alpha(api_accent(app), 0.10)
-                                            } else {
-                                                gpui::transparent_black()
-                                            })
-                                            .text_size(px(11.0))
-                                            .font_weight(if active {
-                                                gpui::FontWeight::SEMIBOLD
-                                            } else {
-                                                gpui::FontWeight::NORMAL
-                                            })
-                                            .text_color(if active {
-                                                api_accent(app).into()
-                                            } else {
-                                                ui::text_secondary(app)
-                                            })
-                                            .hover(move |style| {
-                                                style
-                                                    .bg(theme::rgba_with_alpha(
-                                                        api_accent(app),
-                                                        0.06,
-                                                    ))
-                                                    .cursor_pointer()
-                                            })
-                                            .child(tab.label())
-                                            .on_click(move |_, window, cx| {
-                                                tv.update(cx, |view, _cx| {
-                                                    view.env_detail_tab = tab;
-                                                });
-                                                window.refresh();
-                                            })
-                                    }
-                                }),
-                        ),
+                        div()
+                            .flex()
+                            .gap(px(10.0))
+                            .child(div().flex_1().child(labeled_field(
+                                "名称",
+                                name_input.clone(),
+                                app,
+                            )))
+                            .child(div().flex_1().child(labeled_field(
+                                "Base URL",
+                                base_url_input.clone(),
+                                app,
+                            ))),
                     )
                     .child(
                         div()
                             .flex_1()
-                            .min_h(px(140.0))
-                            .rounded(px(6.0))
-                            .border_1()
-                            .border_color(glass::divider(app))
-                            .bg(glass::inset(app))
-                            .overflow_hidden()
-                            .child(detail_input),
+                            .min_h(px(0.0))
+                            .flex()
+                            .gap(px(10.0))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(6.0))
+                                    .child(
+                                        div()
+                                            .text_size(px(11.0))
+                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .text_color(ui::text_primary(app))
+                                            .child("环境变量"),
+                                    )
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_h(px(0.0))
+                                            .rounded(px(6.0))
+                                            .border_1()
+                                            .border_color(glass::divider(app))
+                                            .bg(glass::inset(app))
+                                            .overflow_hidden()
+                                            .child(vars_input),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(6.0))
+                                    .child(
+                                        div()
+                                            .text_size(px(11.0))
+                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .text_color(ui::text_primary(app))
+                                            .child("公共 Headers"),
+                                    )
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_h(px(0.0))
+                                            .rounded(px(6.0))
+                                            .border_1()
+                                            .border_color(glass::divider(app))
+                                            .bg(glass::inset(app))
+                                            .overflow_hidden()
+                                            .child(headers_input),
+                                    ),
+                            ),
                     ),
             )
             .child(env_bottom_bar(handle.clone(), app))

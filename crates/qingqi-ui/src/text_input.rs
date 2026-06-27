@@ -1,12 +1,17 @@
 //! 基于 `gpui-component::input` 的文本输入封装，样式对齐 Qingqi UI。
 
+use std::rc::Rc;
+
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, Hsla, IntoElement, Render,
-    SharedString, Styled, Subscription, Window, px,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, Hsla, InteractiveElement,
+    IntoElement, KeyDownEvent, ParentElement, Render, SharedString, Styled, Subscription, Window,
+    div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::input::{Input, InputEvent, InputState, SelectAll};
 
 use crate::ui;
+
+type KeyDownHandler = Rc<dyn Fn(&KeyDownEvent, &mut Window, &mut App) -> bool + 'static>;
 
 #[derive(Clone, Copy, Debug)]
 pub struct TextInputStyle {
@@ -46,6 +51,7 @@ pub struct TextInput {
     pending_select_all: bool,
     pending_recreate: bool,
     change_subscription: Option<Subscription>,
+    key_down_handler: Option<KeyDownHandler>,
 }
 
 impl TextInput {
@@ -74,6 +80,7 @@ impl TextInput {
             pending_select_all: false,
             pending_recreate: true,
             change_subscription: None,
+            key_down_handler: None,
         }
     }
 
@@ -159,6 +166,15 @@ impl TextInput {
 
     pub fn select_all_text(&mut self, cx: &mut Context<Self>) {
         self.pending_select_all = true;
+        cx.notify();
+    }
+
+    pub fn set_key_down_handler(
+        &mut self,
+        handler: impl Fn(&KeyDownEvent, &mut Window, &mut App) -> bool + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        self.key_down_handler = Some(Rc::new(handler));
         cx.notify();
     }
 
@@ -294,17 +310,29 @@ impl Render for TextInput {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let state = self.ensure_state(window, cx);
         self.sync_pending(&state, window, cx);
-        let mut input = self.build_input(&state, cx).w_full();
+        let input = self.build_input(&state, cx).w_full().h_full();
+        let key_down_handler = self.key_down_handler.clone();
+
+        let mut wrapper = div().w_full();
         if self.fill_height {
-            input = input.h_full();
+            wrapper = wrapper.h_full();
         } else {
             let height = if self.multiline {
                 self.style.height.max(40.0)
             } else {
                 self.style.height
             };
-            input = input.h(px(height));
+            wrapper = wrapper.h(px(height));
         }
-        input
+
+        wrapper
+            .when_some(key_down_handler, |this, handler| {
+                this.capture_key_down(move |event, window, cx| {
+                    if handler(event, window, cx) {
+                        cx.stop_propagation();
+                    }
+                })
+            })
+            .child(input)
     }
 }

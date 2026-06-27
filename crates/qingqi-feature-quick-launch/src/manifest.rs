@@ -28,6 +28,7 @@ pub fn manifest() -> Manifest {
         status: PluginStatus::Ready,
         background: false,
         dynamic_commands: true,
+        has_settings: false,
         visual: Some(PluginVisualSpec {
             icon: IconRef::asset("icons/bolt.svg"),
             accent: PluginAccent::Amber,

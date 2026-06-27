@@ -6,10 +6,13 @@ use gpui::{
     App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
     Styled, div, hsla, prelude::FluentBuilder, px,
 };
-use gpui_component::{input::{Input, InputState}, theme::Theme};
 use gpui_component::{
     Sizable, Size,
     button::{Button, ButtonVariants},
+};
+use gpui_component::{
+    input::{Input, InputState},
+    theme::Theme,
 };
 use qingqi_ui::{theme, ui, ui::glass};
 
@@ -68,7 +71,7 @@ pub fn editor_panel(
                             bm_click.update(cx, |view, cx| {
                                 view.sync_models(cx);
                                 view.body_mode = BodyMode::from_db(&mode_val);
-                                view.persist_current_tab_state(cx);
+                                view.persist_workspace();
                             });
                         })
                         .child(label),
@@ -145,7 +148,7 @@ pub fn editor_panel(
                             au_click.update(cx, |view, cx| {
                                 view.auth_type = AuthType::from_db(&at_val);
                                 view.sync_models(cx);
-                                view.persist_current_tab_state(cx);
+                                view.persist_workspace();
                             });
                         })
                         .child(label),
@@ -299,9 +302,9 @@ pub fn editor_tab_button(
         .on_click(move |_, _window, cx| {
             view.update(cx, |view, cx| {
                 view.sync_models(cx);
-                view.persist_current_tab_state(cx);
+                view.persist_workspace();
                 view.editor_tab = tab;
-                view.persist_current_tab_state(cx);
+                view.persist_workspace();
             });
         })
 }

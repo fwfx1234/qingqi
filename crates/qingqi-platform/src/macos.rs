@@ -110,6 +110,23 @@ pub fn hide_dock_icon() {
 #[cfg(not(target_os = "macos"))]
 pub fn hide_dock_icon() {}
 
+/// Bring this accessory app to the foreground without changing Dock policy.
+#[cfg(target_os = "macos")]
+pub fn activate_frontmost() {
+    use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
+
+    let app = NSRunningApplication::currentApplication();
+    #[allow(deprecated)]
+    let options = NSApplicationActivationOptions::ActivateAllWindows
+        | NSApplicationActivationOptions::ActivateIgnoringOtherApps;
+    if !app.activateWithOptions(options) {
+        tracing::warn!("failed to activate macOS running application");
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn activate_frontmost() {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

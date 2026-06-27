@@ -356,11 +356,7 @@ impl QuickLaunchView {
         cx.notify();
     }
 
-    fn rerun_action_by_id(
-        &mut self,
-        action_id: i64,
-        cx: &mut Context<Self>,
-    ) {
+    fn rerun_action_by_id(&mut self, action_id: i64, cx: &mut Context<Self>) {
         if let Some(action) = self.actions.iter().find(|a| a.id == action_id).cloned() {
             self.run_action(action, cx);
         } else {
@@ -1422,9 +1418,7 @@ fn search_row(
         .child(window_action_button("新建动作", sr_theme, {
             let handle = handle.clone();
             move |_, window, cx| {
-                let _ = cx.update_entity(&handle, |view, cx| {
-                    view.open_create_editor(window, cx)
-                });
+                let _ = cx.update_entity(&handle, |view, cx| view.open_create_editor(window, cx));
             }
         }))
         .child(action_button("清空", sr_theme, move |_, cx| {
@@ -1503,9 +1497,7 @@ fn management_row(
         .child(window_action_button("编辑", mgmt_theme, {
             let handle = handle.clone();
             move |_, window, cx| {
-                let _ = cx.update_entity(&handle, |view, cx| {
-                    view.open_selected_editor(window, cx)
-                });
+                let _ = cx.update_entity(&handle, |view, cx| view.open_selected_editor(window, cx));
             }
         }))
         .child(action_button("复制", mgmt_theme, {

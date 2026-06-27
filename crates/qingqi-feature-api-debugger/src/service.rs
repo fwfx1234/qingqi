@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     data_source::ApiDebuggerDataSource,
-    model::{ApiVariable, CollectionNode, HttpTab, NodeKind, RequestSnapshot, VariableScope},
+    model::{ApiVariable, CollectionNode, NodeKind, RequestSnapshot, VariableScope},
     script_service,
     store::ApiWorkspace,
     variable_service,
@@ -170,7 +170,6 @@ struct ApiServiceState {
     pending_notice: Option<String>,
     pending_groups: Option<Vec<ApiGroup>>,
     pending_environments: Option<Vec<ApiEnvironment>>,
-    last_tab_id: String,
 }
 
 pub struct ApiService {
@@ -198,7 +197,6 @@ impl ApiService {
                 pending_notice: None,
                 pending_groups: None,
                 pending_environments: None,
-                last_tab_id: String::new(),
             }),
             data_source,
         }
@@ -701,7 +699,6 @@ impl ApiService {
         request: ApiRequest,
         pre_ops_text: &str,
         post_ops_text: &str,
-        tab_id: &str,
     ) -> Result<()> {
         let my_gen = {
             let mut state = self
@@ -714,7 +711,6 @@ impl ApiService {
             state.in_flight = true;
             state.pending_response = None;
             state.pending_error = None;
-            state.last_tab_id = tab_id.to_string();
             self.generation
                 .fetch_add(1, Ordering::SeqCst)
                 .wrapping_add(1)
@@ -724,7 +720,6 @@ impl ApiService {
         let service = Arc::clone(self);
         let pre_ops = pre_ops_text.to_string();
         let post_ops = post_ops_text.to_string();
-        let tid = tab_id.to_string();
         thread::spawn(move || {
             // Load the persisted variable stores so chained values (extracted by
             // earlier requests) resolve in this one. Module scope is not yet keyed
@@ -836,9 +831,10 @@ impl ApiService {
                 let title = resp.status_line.clone();
                 let method = request.method.label().to_string();
                 let url_str = build_final_url(&environment, &request);
+                let node_id = request.node_id.clone();
                 log_error!(
                     service.data_source.insert_history(
-                        &tid,
+                        &node_id,
                         &method,
                         &url_str,
                         resp.status_code as i64,
@@ -847,57 +843,6 @@ impl ApiService {
                     ),
                     warn,
                     "保存请求历史失败"
-                );
-            }
-            // Save tab state if we have a meaningful tab_id
-            if !tid.is_empty() {
-                // Preserve existing tab fields so send doesn't overwrite the
-                // view-persisted draft state with partial data.
-                let existing = service
-                    .data_source
-                    .list_tabs()
-                    .ok()
-                    .and_then(|tabs| tabs.into_iter().find(|t| t.id == tid));
-                let existing_node_id = existing
-                    .as_ref()
-                    .and_then(|t| {
-                        if t.node_id.is_empty() {
-                            None
-                        } else {
-                            Some(t.node_id.clone())
-                        }
-                    })
-                    .unwrap_or_default();
-                let existing_active_tab =
-                    existing.as_ref().map(|t| t.active_request_tab).unwrap_or(0);
-
-                let auth_type = extract_auth_type(&request.auth);
-                let auth_value = extract_auth_value(&request.auth);
-
-                let tab = crate::model::HttpTab {
-                    id: tid.clone(),
-                    name: request.title.clone(),
-                    method: request.method.label().to_string(),
-                    url: request.path.clone(),
-                    request_mode: "rest".into(),
-                    body_mode: request.body_mode.as_str().to_string(),
-                    auth_type,
-                    auth_value,
-                    headers_text: format_kv_rows(&request.headers),
-                    cookies_text: format_kv_rows(&request.cookies),
-                    body_text: request.body.clone(),
-                    params_text: format_kv_rows(&request.params),
-                    path_params_text: format_kv_rows(&request.path_rows),
-                    pre_ops_text: pre_ops.clone(),
-                    post_ops_text: post_ops.clone(),
-                    node_id: existing_node_id,
-                    active_request_tab: existing_active_tab,
-                    updated_at: String::new(),
-                };
-                log_error!(
-                    service.data_source.save_tab(&tab),
-                    warn,
-                    "保存标签页状态失败"
                 );
             }
 
@@ -1089,118 +1034,6 @@ impl ApiService {
             Ok(count) => service.reload_workspace_with_notice(format!("已导入 {count} 个环境")),
             Err(error) => service.publish_notice(format!("环境导入失败: {error}")),
         });
-    }
-
-    // ── Tab persistence ──
-
-    pub fn load_persisted_tabs(&self) -> Vec<HttpTab> {
-        self.data_source.list_tabs().unwrap_or_default()
-    }
-
-    pub fn save_tab_state(&self, tab: &HttpTab) -> Result<()> {
-        self.data_source.save_tab(tab)?;
-        self.revision.fetch_add(1, Ordering::SeqCst);
-        Ok(())
-    }
-
-    pub fn save_tab_state_async(self: &Arc<Self>, tab: HttpTab) {
-        let service = Arc::clone(self);
-        thread::spawn(move || {
-            log_error!(service.save_tab_state(&tab), warn, "保存标签页状态失败");
-        });
-    }
-
-    pub fn delete_persisted_tab(&self, tab_id: &str) -> Result<bool> {
-        let deleted = self.data_source.delete_tab(tab_id)?;
-        if deleted {
-            self.revision.fetch_add(1, Ordering::SeqCst);
-        }
-        Ok(deleted)
-    }
-
-    pub fn delete_persisted_tab_async(self: &Arc<Self>, tab_id: String) {
-        let service = Arc::clone(self);
-        thread::spawn(move || {
-            log_error!(
-                service.delete_persisted_tab(&tab_id),
-                warn,
-                "删除持久化标签页失败"
-            );
-        });
-    }
-
-    pub fn load_persisted_tab_by_id(&self, tab_id: &str) -> Option<HttpTab> {
-        self.data_source
-            .list_tabs()
-            .unwrap_or_default()
-            .into_iter()
-            .find(|t| t.id == tab_id)
-    }
-}
-
-// ── Tab draft conversion ──
-//
-// `TabDraft` captures the textual editor state held by the view layer.
-// `build_http_tab`/`restore_tab_draft` convert between the persisted
-// `HttpTab` row and the editor draft, centralising the auth-text parsing
-// and body-mode detection so the view layer doesn't reimplement them.
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct TabDraft {
-    pub url: String,
-    pub params_text: String,
-    pub path_params_text: String,
-    pub body_text: String,
-    pub headers_text: String,
-    pub cookies_text: String,
-    pub auth_text: String,
-    pub pre_ops_text: String,
-    pub post_ops_text: String,
-    pub active_request_tab: i64,
-}
-
-pub fn build_http_tab(
-    tab_id: &str,
-    node_id: &str,
-    name: &str,
-    method: &str,
-    draft: &TabDraft,
-) -> HttpTab {
-    let auth_rows = parse_kv_text(&draft.auth_text);
-    HttpTab {
-        id: tab_id.to_string(),
-        name: name.to_string(),
-        method: method.to_string(),
-        url: draft.url.clone(),
-        request_mode: "rest".into(),
-        body_mode: detect_body_mode(&draft.body_text).to_string(),
-        auth_type: extract_auth_type(&auth_rows),
-        auth_value: extract_auth_value(&auth_rows),
-        headers_text: draft.headers_text.clone(),
-        cookies_text: draft.cookies_text.clone(),
-        body_text: draft.body_text.clone(),
-        params_text: draft.params_text.clone(),
-        path_params_text: draft.path_params_text.clone(),
-        pre_ops_text: draft.pre_ops_text.clone(),
-        post_ops_text: draft.post_ops_text.clone(),
-        node_id: node_id.to_string(),
-        active_request_tab: draft.active_request_tab,
-        updated_at: String::new(),
-    }
-}
-
-pub fn restore_tab_draft(tab: &HttpTab) -> TabDraft {
-    TabDraft {
-        url: tab.url.clone(),
-        params_text: tab.params_text.clone(),
-        path_params_text: tab.path_params_text.clone(),
-        body_text: tab.body_text.clone(),
-        headers_text: tab.headers_text.clone(),
-        cookies_text: tab.cookies_text.clone(),
-        auth_text: format_auth_for_input(&tab.auth_type, &tab.auth_value),
-        pre_ops_text: tab.pre_ops_text.clone(),
-        post_ops_text: tab.post_ops_text.clone(),
-        active_request_tab: tab.active_request_tab,
     }
 }
 
@@ -2240,7 +2073,6 @@ mod tests {
                 pending_notice: None,
                 pending_groups: None,
                 pending_environments: None,
-                last_tab_id: String::new(),
             }),
             data_source: store,
             generation: AtomicU64::new(0),
@@ -2931,38 +2763,6 @@ mod tests {
     }
 
     #[test]
-    fn tab_state_persisted() {
-        let store = temp_store();
-        let tab = crate::model::HttpTab {
-            id: "tab-persist".into(),
-            name: "Test".into(),
-            method: "POST".into(),
-            url: "/api/data".into(),
-            request_mode: "rest".into(),
-            body_mode: "json".into(),
-            auth_type: "bearer".into(),
-            auth_value: "tok".into(),
-            headers_text: "Content-Type=application/json".into(),
-            cookies_text: String::new(),
-            body_text: r#"{"key":"val"}"#.into(),
-            params_text: String::new(),
-            path_params_text: String::new(),
-            pre_ops_text: "set x=1".into(),
-            post_ops_text: "status == 200".into(),
-            node_id: "node-1".into(),
-            active_request_tab: 2,
-            updated_at: String::new(),
-        };
-        store.save_tab(&tab).unwrap();
-
-        let tabs = store.list_tabs().unwrap();
-        assert_eq!(tabs.len(), 1);
-        assert_eq!(tabs[0].name, "Test");
-        assert_eq!(tabs[0].method, "POST");
-        assert_eq!(tabs[0].pre_ops_text, "set x=1");
-    }
-
-    #[test]
     fn script_assertion_results_in_response() {
         use crate::script_service;
 
@@ -3090,7 +2890,6 @@ mod tests {
                 pending_notice: None,
                 pending_groups: None,
                 pending_environments: None,
-                last_tab_id: String::new(),
             }),
             data_source: store,
             generation: AtomicU64::new(0),
@@ -3116,7 +2915,6 @@ mod tests {
                 pending_notice: None,
                 pending_groups: None,
                 pending_environments: None,
-                last_tab_id: String::new(),
             }),
             data_source: store,
             generation: AtomicU64::new(0),
@@ -3140,7 +2938,6 @@ mod tests {
                 pending_notice: None,
                 pending_groups: None,
                 pending_environments: None,
-                last_tab_id: String::new(),
             }),
             data_source: store,
             generation: AtomicU64::new(0),
@@ -3163,7 +2960,6 @@ mod tests {
                 pending_notice: None,
                 pending_groups: None,
                 pending_environments: None,
-                last_tab_id: String::new(),
             }),
             data_source: store,
             generation: AtomicU64::new(0),
@@ -3187,7 +2983,6 @@ mod tests {
                 pending_notice: None,
                 pending_groups: None,
                 pending_environments: None,
-                last_tab_id: String::new(),
             }),
             data_source: store,
             generation: AtomicU64::new(0),
@@ -3239,51 +3034,6 @@ mod tests {
     }
 
     #[test]
-    fn service_tab_persistence_lifecycle() {
-        let store = temp_store();
-        let service = ApiService {
-            revision: AtomicU64::new(0),
-            state: Mutex::new(ApiServiceState {
-                in_flight: false,
-                pending_response: None,
-                pending_error: None,
-                pending_notice: None,
-                pending_groups: None,
-                pending_environments: None,
-                last_tab_id: String::new(),
-            }),
-            data_source: store,
-            generation: AtomicU64::new(0),
-        };
-        let tab = HttpTab {
-            id: "tab-uuid-1".into(),
-            name: "用户接口".into(),
-            method: "GET".into(),
-            url: "/api/user".into(),
-            request_mode: "rest".into(),
-            body_mode: "none".into(),
-            auth_type: String::new(),
-            auth_value: String::new(),
-            headers_text: String::new(),
-            cookies_text: String::new(),
-            body_text: String::new(),
-            params_text: String::new(),
-            path_params_text: String::new(),
-            pre_ops_text: String::new(),
-            post_ops_text: String::new(),
-            node_id: "node-1".into(),
-            active_request_tab: 0,
-            updated_at: String::new(),
-        };
-        service.save_tab_state(&tab).unwrap();
-        let loaded = service.load_persisted_tabs();
-        assert_eq!(loaded.len(), 1);
-        assert_eq!(loaded[0].name, "用户接口");
-        assert!(service.delete_persisted_tab("tab-uuid-1").unwrap());
-        assert!(service.load_persisted_tabs().is_empty());
-    }
-
-    #[test]
     fn parse_kv_lines_parses_and_filters() {
         let result = parse_kv_lines("KEY1=val1\n\n# KEY2=val2");
         assert_eq!(result.len(), 2);
@@ -3292,129 +3042,6 @@ mod tests {
         assert!(result[0].0); // enabled
         assert_eq!(result[1].1, "KEY2");
         assert!(!result[1].0);
-    }
-
-    #[test]
-    fn load_persisted_tab_by_id_finds_correct_tab() {
-        let store = temp_store();
-        let service = ApiService {
-            revision: AtomicU64::new(0),
-            state: Mutex::new(ApiServiceState {
-                in_flight: false,
-                pending_response: None,
-                pending_error: None,
-                pending_notice: None,
-                pending_groups: None,
-                pending_environments: None,
-                last_tab_id: String::new(),
-            }),
-            data_source: store,
-            generation: AtomicU64::new(0),
-        };
-
-        let tab_a = HttpTab {
-            id: "tab-a".into(),
-            name: "Tab A".into(),
-            method: "GET".into(),
-            url: "/a".into(),
-            ..empty_tab_fields()
-        };
-        let tab_b = HttpTab {
-            id: "tab-b".into(),
-            name: "Tab B".into(),
-            method: "POST".into(),
-            url: "/b".into(),
-            ..empty_tab_fields()
-        };
-        service.save_tab_state(&tab_a).unwrap();
-        service.save_tab_state(&tab_b).unwrap();
-
-        let found = service.load_persisted_tab_by_id("tab-b").unwrap();
-        assert_eq!(found.name, "Tab B");
-        assert_eq!(found.method, "POST");
-
-        assert!(service.load_persisted_tab_by_id("tab-missing").is_none());
-    }
-
-    #[test]
-    fn tab_persists_auth_fields_roundtrip() {
-        let store = temp_store();
-        let tab = HttpTab {
-            id: "tab-auth".into(),
-            name: "Auth Test".into(),
-            method: "GET".into(),
-            url: "/api/protected".into(),
-            request_mode: "rest".into(),
-            body_mode: "json".into(),
-            auth_type: "bearer".into(),
-            auth_value: "my-secret-token".into(),
-            headers_text: "Accept=application/json".into(),
-            cookies_text: String::new(),
-            body_text: String::new(),
-            params_text: String::new(),
-            path_params_text: String::new(),
-            pre_ops_text: String::new(),
-            post_ops_text: String::new(),
-            node_id: "node-1".into(),
-            active_request_tab: 5,
-            updated_at: String::new(),
-        };
-        store.save_tab(&tab).unwrap();
-
-        let tabs = store.list_tabs().unwrap();
-        assert_eq!(tabs.len(), 1);
-        assert_eq!(tabs[0].auth_type, "bearer");
-        assert_eq!(tabs[0].auth_value, "my-secret-token");
-        assert_eq!(tabs[0].body_mode, "json");
-        assert_eq!(tabs[0].active_request_tab, 5);
-        assert_eq!(tabs[0].headers_text, "Accept=application/json");
-    }
-
-    #[test]
-    fn tab_persists_all_draft_fields_roundtrip() {
-        let store = temp_store();
-        let tab = HttpTab {
-            id: "tab-full".into(),
-            name: "Full Draft".into(),
-            method: "POST".into(),
-            url: "/api/v2/data".into(),
-            request_mode: "rest".into(),
-            body_mode: "json".into(),
-            auth_type: "bearer".into(),
-            auth_value: "tok123".into(),
-            headers_text: "Content-Type=application/json\nX-Custom=hello".into(),
-            cookies_text: "session=abc".into(),
-            body_text: r#"{"name":"test"}"#.into(),
-            params_text: "page=1&limit=10".into(),
-            path_params_text: "id=42".into(),
-            pre_ops_text: "set token=abc".into(),
-            post_ops_text: "status == 200".into(),
-            node_id: "node-ep-5".into(),
-            active_request_tab: 2,
-            updated_at: String::new(),
-        };
-        store.save_tab(&tab).unwrap();
-
-        let loaded = store.list_tabs().unwrap();
-        assert_eq!(loaded.len(), 1);
-        let t = &loaded[0];
-        assert_eq!(t.name, "Full Draft");
-        assert_eq!(t.method, "POST");
-        assert_eq!(t.url, "/api/v2/data");
-        assert_eq!(t.auth_type, "bearer");
-        assert_eq!(t.auth_value, "tok123");
-        assert_eq!(
-            t.headers_text,
-            "Content-Type=application/json\nX-Custom=hello"
-        );
-        assert_eq!(t.cookies_text, "session=abc");
-        assert_eq!(t.body_text, r#"{"name":"test"}"#);
-        assert_eq!(t.params_text, "page=1&limit=10");
-        assert_eq!(t.path_params_text, "id=42");
-        assert_eq!(t.pre_ops_text, "set token=abc");
-        assert_eq!(t.post_ops_text, "status == 200");
-        assert_eq!(t.node_id, "node-ep-5");
-        assert_eq!(t.active_request_tab, 2);
     }
 
     #[test]
@@ -3429,292 +3056,8 @@ mod tests {
     }
 
     #[test]
-    fn send_tab_preserves_existing_node_id() {
-        let store = temp_store();
-        // Pre-save a tab with a known node_id
-        let existing = HttpTab {
-            id: "tab-send-node".into(),
-            name: "Before".into(),
-            method: "GET".into(),
-            url: "/api/test".into(),
-            node_id: "node-collection-42".into(),
-            body_text: "{}".into(),
-            ..empty_tab_fields()
-        };
-        store.save_tab(&existing).unwrap();
-
-        // Simulate what the service thread does: look up existing node_id
-        let found_node_id = store
-            .list_tabs()
-            .unwrap()
-            .into_iter()
-            .find(|t| t.id == "tab-send-node")
-            .and_then(|t| {
-                if t.node_id.is_empty() {
-                    None
-                } else {
-                    Some(t.node_id)
-                }
-            })
-            .unwrap_or_default();
-        assert_eq!(found_node_id, "node-collection-42");
-
-        // Now save a new version — should preserve node_id
-        let updated = HttpTab {
-            id: "tab-send-node".into(),
-            name: "After".into(),
-            method: "POST".into(),
-            url: "/api/test/v2".into(),
-            node_id: found_node_id,
-            body_mode: "json".into(),
-            body_text: r#"{"new":true}"#.into(),
-            ..empty_tab_fields()
-        };
-        store.save_tab(&updated).unwrap();
-
-        let tabs = store.list_tabs().unwrap();
-        assert_eq!(tabs.len(), 1);
-        assert_eq!(tabs[0].node_id, "node-collection-42");
-        assert_eq!(tabs[0].method, "POST");
-        assert_eq!(tabs[0].body_mode, "json");
-    }
-
-    // Helper for tests: provides default empty fields for HttpTab
-    fn empty_tab_fields() -> HttpTab {
-        HttpTab {
-            id: String::new(),
-            name: String::new(),
-            method: String::new(),
-            url: String::new(),
-            request_mode: String::new(),
-            body_mode: String::new(),
-            auth_type: String::new(),
-            auth_value: String::new(),
-            headers_text: String::new(),
-            cookies_text: String::new(),
-            body_text: String::new(),
-            params_text: String::new(),
-            path_params_text: String::new(),
-            pre_ops_text: String::new(),
-            post_ops_text: String::new(),
-            node_id: String::new(),
-            active_request_tab: 0,
-            updated_at: String::new(),
-        }
-    }
-
-    fn sample_draft() -> TabDraft {
-        TabDraft {
-            url: "/api/v1/data".into(),
-            params_text: "page=1\nlimit=10".into(),
-            path_params_text: "id=42".into(),
-            body_text: r#"{"name":"qingqi"}"#.into(),
-            headers_text: "Content-Type=application/json\nX-Custom=hello".into(),
-            cookies_text: "session=abc".into(),
-            auth_text: "Authorization=Bearer tok123".into(),
-            pre_ops_text: "set token=abc".into(),
-            post_ops_text: "status == 200".into(),
-            active_request_tab: editor_tab_index(EditorTab::Body),
-        }
-    }
-
-    #[test]
-    fn editor_tab_index_roundtrip_all_variants() {
-        for tab in [
-            EditorTab::Params,
-            EditorTab::Path,
-            EditorTab::Body,
-            EditorTab::Headers,
-            EditorTab::Cookies,
-            EditorTab::Auth,
-            EditorTab::PreOps,
-            EditorTab::PostOps,
-        ] {
-            let idx = editor_tab_index(tab);
-            assert_eq!(index_to_editor_tab(idx), Some(tab));
-        }
-    }
-
-    #[test]
-    fn index_to_editor_tab_rejects_out_of_range() {
-        assert_eq!(index_to_editor_tab(-1), None);
-        assert_eq!(index_to_editor_tab(8), None);
-        assert_eq!(index_to_editor_tab(999), None);
-    }
-
-    #[test]
-    fn build_http_tab_copies_textual_fields() {
-        let draft = sample_draft();
-        let tab = build_http_tab("tab-1", "node-x", "用户接口", "POST", &draft);
-
-        assert_eq!(tab.id, "tab-1");
-        assert_eq!(tab.node_id, "node-x");
-        assert_eq!(tab.name, "用户接口");
-        assert_eq!(tab.method, "POST");
-        assert_eq!(tab.url, "/api/v1/data");
-        assert_eq!(tab.params_text, "page=1\nlimit=10");
-        assert_eq!(tab.path_params_text, "id=42");
-        assert_eq!(tab.body_text, r#"{"name":"qingqi"}"#);
-        assert_eq!(
-            tab.headers_text,
-            "Content-Type=application/json\nX-Custom=hello"
-        );
-        assert_eq!(tab.cookies_text, "session=abc");
-        assert_eq!(tab.pre_ops_text, "set token=abc");
-        assert_eq!(tab.post_ops_text, "status == 200");
-        assert_eq!(tab.request_mode, "rest");
-        assert_eq!(tab.active_request_tab, editor_tab_index(EditorTab::Body));
-    }
-
-    #[test]
-    fn build_http_tab_extracts_bearer_auth() {
-        let mut draft = sample_draft();
-        draft.auth_text = "Authorization=Bearer my-token".into();
-        let tab = build_http_tab("tab-a", "", "n", "GET", &draft);
-        assert_eq!(tab.auth_type, "bearer");
-        assert_eq!(tab.auth_value, "my-token");
-    }
-
-    #[test]
-    fn build_http_tab_extracts_basic_auth() {
-        let mut draft = sample_draft();
-        draft.auth_text = "Authorization=Basic dXNlcjpwYXNz".into();
-        let tab = build_http_tab("tab-a", "", "n", "GET", &draft);
-        assert_eq!(tab.auth_type, "basic");
-        assert_eq!(tab.auth_value, "dXNlcjpwYXNz");
-    }
-
-    #[test]
-    fn build_http_tab_extracts_apikey_auth() {
-        let mut draft = sample_draft();
-        draft.auth_text = "X-API-Key=secret".into();
-        let tab = build_http_tab("tab-a", "", "n", "GET", &draft);
-        assert_eq!(tab.auth_type, "apikey");
-        assert_eq!(tab.auth_value, "secret");
-    }
-
-    #[test]
-    fn build_http_tab_blank_auth_yields_empty_fields() {
-        let mut draft = sample_draft();
-        draft.auth_text = String::new();
-        let tab = build_http_tab("tab-a", "", "n", "GET", &draft);
-        assert!(tab.auth_type.is_empty());
-        assert!(tab.auth_value.is_empty());
-    }
-
-    #[test]
-    fn build_http_tab_detects_body_modes() {
-        let mut draft = sample_draft();
-        draft.body_text = r#"{"key":"val"}"#.into();
-        assert_eq!(
-            build_http_tab("a", "", "n", "POST", &draft).body_mode,
-            "json"
-        );
-
-        draft.body_text = "[1, 2, 3]".into();
-        assert_eq!(
-            build_http_tab("a", "", "n", "POST", &draft).body_mode,
-            "json"
-        );
-
-        draft.body_text = "plain body".into();
-        assert_eq!(
-            build_http_tab("a", "", "n", "POST", &draft).body_mode,
-            "text"
-        );
-
-        draft.body_text = String::new();
-        assert_eq!(
-            build_http_tab("a", "", "n", "POST", &draft).body_mode,
-            "none"
-        );
-    }
-
-    #[test]
-    fn restore_tab_draft_reverses_build_http_tab() {
-        let original = sample_draft();
-        let tab = build_http_tab("tab-r", "node-r", "n", "POST", &original);
-        let restored = restore_tab_draft(&tab);
-
-        assert_eq!(restored.url, original.url);
-        assert_eq!(restored.params_text, original.params_text);
-        assert_eq!(restored.path_params_text, original.path_params_text);
-        assert_eq!(restored.body_text, original.body_text);
-        assert_eq!(restored.headers_text, original.headers_text);
-        assert_eq!(restored.cookies_text, original.cookies_text);
-        assert_eq!(restored.pre_ops_text, original.pre_ops_text);
-        assert_eq!(restored.post_ops_text, original.post_ops_text);
-        assert_eq!(restored.active_request_tab, original.active_request_tab);
-        // auth_text round-trips back to the canonical "Authorization=Bearer X" form
-        assert_eq!(restored.auth_text, "Authorization=Bearer tok123");
-    }
-
-    #[test]
-    fn restore_tab_draft_format_apikey() {
-        let mut tab = empty_tab_fields();
-        tab.auth_type = "apikey".into();
-        tab.auth_value = "secret".into();
-        let draft = restore_tab_draft(&tab);
-        assert_eq!(draft.auth_text, "X-API-Key=secret");
-    }
-
-    #[test]
-    fn restore_tab_draft_format_basic() {
-        let mut tab = empty_tab_fields();
-        tab.auth_type = "basic".into();
-        tab.auth_value = "abc".into();
-        let draft = restore_tab_draft(&tab);
-        assert_eq!(draft.auth_text, "Authorization=Basic abc");
-    }
-
-    #[test]
-    fn restore_tab_draft_empty_auth_yields_empty_text() {
-        let mut tab = empty_tab_fields();
-        tab.auth_type = "bearer".into();
-        tab.auth_value = String::new();
-        assert!(restore_tab_draft(&tab).auth_text.is_empty());
-
-        tab.auth_type = String::new();
-        tab.auth_value = "stray-value".into();
-        assert!(restore_tab_draft(&tab).auth_text.is_empty());
-    }
-
-    #[test]
     fn format_auth_for_input_unknown_type_uppercases_key() {
         let text = format_auth_for_input("oauth2", "tok");
         assert_eq!(text, "OAUTH2=tok");
-    }
-
-    #[test]
-    fn build_then_persist_then_restore_via_service_roundtrip() {
-        let store = temp_store();
-        let service = ApiService {
-            revision: AtomicU64::new(0),
-            state: Mutex::new(ApiServiceState {
-                in_flight: false,
-                pending_response: None,
-                pending_error: None,
-                pending_notice: None,
-                pending_groups: None,
-                pending_environments: None,
-                last_tab_id: String::new(),
-            }),
-            data_source: store,
-            generation: AtomicU64::new(0),
-        };
-        let draft = sample_draft();
-        let tab = build_http_tab("tab-uuid-1", "node-1", "Sample", "POST", &draft);
-        service.save_tab_state(&tab).unwrap();
-
-        let loaded = service
-            .load_persisted_tab_by_id("tab-uuid-1")
-            .expect("tab should be persisted");
-        let restored = restore_tab_draft(&loaded);
-        assert_eq!(restored, draft);
-        assert_eq!(loaded.method, "POST");
-        assert_eq!(loaded.name, "Sample");
-        assert_eq!(loaded.node_id, "node-1");
-        assert_eq!(loaded.auth_type, "bearer");
-        assert_eq!(loaded.auth_value, "tok123");
     }
 }

@@ -18,6 +18,7 @@ use qingqi_feature_qr_code as feature_qr_code;
 use qingqi_feature_quick_launch as feature_quick_launch;
 use qingqi_feature_ssh as feature_ssh;
 use qingqi_feature_system_settings as feature_system_settings;
+use qingqi_feature_tray as feature_tray;
 
 pub fn register_builtin_plugins(host: &mut AppHost) -> Result<()> {
     let theme_handle = theme_handle_ref(host);
@@ -98,20 +99,9 @@ pub fn register_builtin_plugins(host: &mut AppHost) -> Result<()> {
         },
     );
     registry.register(
-        PluginDescriptor::builtin(feature_system_settings::manifest::tray_manager_manifest()),
-        {
-            let app_index_handle = Arc::clone(&app_index_handle);
-            let shortcut_handle = Arc::clone(&shortcut_handle);
-            let theme_handle = Arc::clone(&theme_handle);
-            move |cx| {
-                feature_system_settings::build_tray_manager(
-                    Arc::clone(&theme_handle),
-                    cx.paths.clone(),
-                    Some(Arc::clone(&app_index_handle)),
-                    Some(Arc::clone(&shortcut_handle)),
-                )
-            }
-        },
+        PluginDescriptor::builtin(feature_tray::manifest::manifest())
+            .with_databases(feature_tray::databases()),
+        |cx| feature_tray::build(Arc::clone(&cx.database)),
     );
     registry.register(
         PluginDescriptor::builtin(feature_gpui_demo::manifest::manifest()),

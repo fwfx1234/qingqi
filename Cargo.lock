@@ -5712,6 +5712,7 @@ dependencies = [
  "qingqi-feature-quick-launch",
  "qingqi-feature-ssh",
  "qingqi-feature-system-settings",
+ "qingqi-feature-tray",
  "qingqi-plugin",
  "resvg",
  "tiny-skia",
@@ -5982,6 +5983,20 @@ dependencies = [
  "qingqi-ui",
  "serde",
  "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "qingqi-feature-tray"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "gpui",
+ "gpui-component",
+ "qingqi-platform",
+ "qingqi-plugin",
+ "qingqi-ui",
+ "serde",
  "tracing",
 ]
 

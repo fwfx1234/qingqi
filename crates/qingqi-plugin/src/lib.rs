@@ -13,6 +13,7 @@ pub mod plugin_spec;
 pub mod shortcut;
 pub mod storage;
 pub mod theme;
+pub mod tray;
 
 pub use log::log_and_return;
 

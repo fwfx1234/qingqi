@@ -15,8 +15,8 @@ use gpui_component::{
 
 use crate::code_gen::CodeLanguage;
 use crate::service::{
-    self, ApiEnvironment, ApiGroup, ApiRequest, ApiResponse, ApiService, AuthType, BodyMode,
-    EditorTab, EnvDetailTab, HttpHistory, HttpMethod, ResponseTab,
+    ApiEnvironment, ApiGroup, ApiRequest, ApiResponse, ApiService, AuthType, BodyMode, EditorTab,
+    HttpHistory, HttpMethod, ResponseTab,
 };
 use gpui_component::{input::InputState, theme::Theme};
 use qingqi_ui::ui::glass;
@@ -29,11 +29,9 @@ pub mod editor;
 pub mod env;
 pub mod request;
 pub mod response;
-pub mod tab;
 pub mod types;
 
 pub(crate) const STACK_BREAKPOINT_PX: f32 = 980.0;
-pub(crate) const TAB_BAR_HEIGHT: f32 = 34.0;
 #[allow(unused)]
 pub(crate) const ACCENT: PluginAccent = PluginAccent::Blue;
 
@@ -41,8 +39,6 @@ pub struct ApiDebuggerView {
     pub(crate) service: Arc<ApiService>,
     pub(crate) groups: Vec<ApiGroup>,
     pub(crate) environments: Vec<ApiEnvironment>,
-    pub(crate) open_tabs: Vec<types::OpenTab>,
-    pub(crate) active_tab: types::OpenTab,
     pub(crate) selected_request: usize,
     pub(crate) selected_scenario: Option<usize>,
     pub(crate) selected_environment: usize,
@@ -50,7 +46,6 @@ pub struct ApiDebuggerView {
     pub(crate) response_tab: ResponseTab,
     pub(crate) response_code_lang: CodeLanguage,
     pub(crate) history_entries: Vec<HttpHistory>,
-    pub(crate) env_detail_tab: EnvDetailTab,
     pub(crate) body_mode: BodyMode,
     pub(crate) auth_type: AuthType,
     pub(crate) show_method_popover: bool,
@@ -91,7 +86,6 @@ pub struct ApiDebuggerView {
     pub(crate) last_revision: u64,
     pub(crate) tree_state: Entity<TreeState>,
     pub(crate) collapsed_nodes: RefCell<HashSet<String>>,
-    pub(crate) pending_persist: bool,
 }
 
 impl ApiDebuggerView {
@@ -169,58 +163,10 @@ impl ApiDebuggerView {
         let selected_scenario = types::request_at(&groups, selected_request)
             .and_then(|request| (!request.scenarios.is_empty()).then_some(0));
 
-        let persisted_tabs = service.load_persisted_tabs();
-        let first_persisted_tab = persisted_tabs.first().cloned();
-        let (open_tabs, active_tab, restored_request, restored_scenario) =
-            if !persisted_tabs.is_empty() {
-                let mut tabs = Vec::new();
-                let mut first_request_index = 0usize;
-                let mut first_scenario_index = None;
-                for ptab in &persisted_tabs {
-                    let matched_tab = types::persisted_tab_to_open_tab(&groups, ptab)
-                        .unwrap_or_else(|| types::OpenTab::new_request(0));
-                    let (req_index, scenario_index) = match &matched_tab {
-                        types::OpenTab::Request { index, .. } => (*index, None),
-                        types::OpenTab::Scenario {
-                            request_index,
-                            scenario_index,
-                            ..
-                        } => (*request_index, Some(*scenario_index)),
-                    };
-                    if tabs.is_empty() {
-                        first_request_index = req_index;
-                        first_scenario_index = scenario_index;
-                    }
-                    tabs.push(matched_tab);
-                }
-                let active = tabs
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| types::OpenTab::new_request(selected_request));
-                (tabs, active, first_request_index, first_scenario_index)
-            } else {
-                let active_tab = selected_scenario
-                    .map(|index| {
-                        types::OpenTab::new_scenario_with_node(
-                            selected_request,
-                            index,
-                            types::request_at(&groups, selected_request)
-                                .and_then(|request| request.scenarios.get(index))
-                                .map(|scenario| scenario.node_id.clone())
-                                .unwrap_or_default(),
-                        )
-                    })
-                    .unwrap_or_else(|| types::OpenTab::new_request(selected_request));
-                let mut tabs = vec![active_tab.clone()];
-                if types::request_at(&groups, 1).is_some() {
-                    tabs.push(types::OpenTab::new_request(1));
-                }
-                (tabs, active_tab, selected_request, selected_scenario)
-            };
-        let base_request = types::request_at(&groups, restored_request)
+        let base_request = types::request_at(&groups, selected_request)
             .expect("api request should exist")
             .clone();
-        let request = restored_scenario
+        let request = selected_scenario
             .and_then(|scenario_index| {
                 base_request
                     .scenarios
@@ -252,36 +198,18 @@ impl ApiDebuggerView {
             init_pre_ops,
             init_post_ops,
             init_editor_tab,
-        ) = if let Some(ref tab) = first_persisted_tab {
-            let draft = service::restore_tab_draft(tab);
-            let et =
-                service::index_to_editor_tab(draft.active_request_tab).unwrap_or(EditorTab::Params);
-            (
-                draft.url,
-                draft.params_text,
-                draft.path_params_text,
-                draft.body_text,
-                draft.headers_text,
-                draft.cookies_text,
-                draft.auth_text,
-                draft.pre_ops_text,
-                draft.post_ops_text,
-                et,
-            )
-        } else {
-            (
-                request.path.clone(),
-                types::format_rows(&request.params),
-                types::format_rows(&request.path_rows),
-                request.body.clone(),
-                types::format_rows(&request.headers),
-                types::format_rows(&request.cookies),
-                types::format_rows(&request.auth),
-                request.pre_ops.clone(),
-                request.post_ops.clone(),
-                EditorTab::Params,
-            )
-        };
+        ) = (
+            request.path.clone(),
+            types::format_rows(&request.params),
+            types::format_rows(&request.path_rows),
+            request.body.clone(),
+            types::format_rows(&request.headers),
+            types::format_rows(&request.cookies),
+            types::format_rows(&request.auth),
+            request.pre_ops.clone(),
+            request.post_ops.clone(),
+            EditorTab::Params,
+        );
 
         let rev = service.revision();
         let init_auth_form = types::derive_auth_form(&types::parse_rows(&init_auth));
@@ -297,16 +225,13 @@ impl ApiDebuggerView {
             service,
             groups,
             environments,
-            open_tabs,
-            active_tab,
-            selected_request: restored_request,
-            selected_scenario: restored_scenario,
+            selected_request,
+            selected_scenario,
             selected_environment: 0,
             editor_tab: init_editor_tab,
             response_tab: ResponseTab::Body,
             response_code_lang: CodeLanguage::Curl,
             history_entries: Vec::new(),
-            env_detail_tab: EnvDetailTab::Variables,
             body_mode: BodyMode::from_db(&types::detect_body_mode(&init_body)),
             auth_type: init_auth_form.auth_type.unwrap_or(AuthType::None),
             show_method_popover: false,
@@ -382,7 +307,6 @@ impl ApiDebuggerView {
             last_revision: rev,
             tree_state,
             collapsed_nodes: RefCell::new(HashSet::new()),
-            pending_persist: false,
         }
     }
 }
@@ -394,12 +318,7 @@ impl Render for ApiDebuggerView {
         let stacked = window.bounds().size.width < px(STACK_BREAKPOINT_PX);
 
         let entity = cx.entity();
-        let environments = self.environments.clone();
-        let selected_environment = self.selected_environment;
         let show_method_popover = self.show_method_popover;
-        let show_env_popover = self.show_env_popover;
-        let open_tabs = self.open_tabs.clone();
-        let active_tab = self.active_tab.clone();
         let editor_tab = self.editor_tab;
         let body_mode = self.body_mode;
         let auth_type = self.auth_type;
@@ -427,10 +346,6 @@ impl Render for ApiDebuggerView {
         let notice = self.notice.clone();
         let current_request = self.selected_request().clone();
         let current_environment = self.selected_environment().clone();
-        let tab_titles = open_tabs
-            .iter()
-            .map(|tab| self.tab_title(tab))
-            .collect::<Vec<_>>();
         let in_flight = self.service.is_in_flight();
         let current_method = self.selected_request().method;
 
@@ -560,25 +475,18 @@ impl Render for ApiDebuggerView {
                                     .overflow_hidden()
                                     .flex()
                                     .flex_col()
-                                    .child(components::tab_bar::open_tabs_bar(
-                                        entity.clone(),
-                                        open_tabs,
-                                        active_tab,
-                                        tab_titles,
-                                        environments,
-                                        selected_environment,
-                                        show_env_popover,
-                                        app,
-                                    ))
                                     .child(components::action_bar::action_bar(
                                         entity.clone(),
                                         current_request.clone(),
                                         current_environment.clone(),
+                                        self.environments.clone(),
+                                        self.selected_environment,
                                         path_input,
                                         in_flight,
                                         app,
                                         current_method,
                                         show_method_popover,
+                                        self.show_env_popover,
                                     ))
                                     .child(
                                         components::shared::content_split(stacked)
@@ -761,144 +669,5 @@ mod tests {
         assert!(is_binary_content_type("video/mp4"));
         assert!(!is_binary_content_type("application/json"));
         assert!(!is_binary_content_type("text/plain"));
-    }
-
-    #[test]
-    fn open_tab_matching_uses_request_identity() {
-        let tab = OpenTab::with_id(2, "tab-existing".into(), "node-a".into());
-        assert!(tab.matches_request_index(2));
-        assert!(!tab.matches_request_index(3));
-    }
-
-    #[test]
-    fn open_tab_matching_uses_scenario_identity() {
-        let tab = OpenTab::new_scenario_with_node(4, 1, "case-1".into());
-        assert!(tab.matches_scenario_index(4, 1));
-        assert!(!tab.matches_scenario_index(4, 2));
-        assert!(!tab.matches_scenario_index(3, 1));
-    }
-
-    #[test]
-    fn persisted_endpoint_tab_restores_by_node_id() {
-        let groups = vec![ApiGroup {
-            id: None,
-            name: "默认".into(),
-            folders: Vec::new(),
-            requests: vec![
-                ApiRequest {
-                    node_id: "node-a".into(),
-                    title: "A".into(),
-                    method: HttpMethod::Get,
-                    path: "/same".into(),
-                    params: Vec::new(),
-                    path_rows: Vec::new(),
-                    body: String::new(),
-                    body_mode: BodyMode::None,
-                    headers: Vec::new(),
-                    cookies: Vec::new(),
-                    auth: Vec::new(),
-                    pre_ops: String::new(),
-                    post_ops: String::new(),
-                    scenarios: Vec::new(),
-                },
-                ApiRequest {
-                    node_id: "node-b".into(),
-                    title: "B".into(),
-                    method: HttpMethod::Get,
-                    path: "/same".into(),
-                    params: Vec::new(),
-                    path_rows: Vec::new(),
-                    body: String::new(),
-                    body_mode: BodyMode::None,
-                    headers: Vec::new(),
-                    cookies: Vec::new(),
-                    auth: Vec::new(),
-                    pre_ops: String::new(),
-                    post_ops: String::new(),
-                    scenarios: Vec::new(),
-                },
-            ],
-        }];
-        let tab = crate::model::HttpTab {
-            id: "tab-b".into(),
-            method: "GET".into(),
-            url: "/same".into(),
-            node_id: "node-b".into(),
-            ..empty_http_tab()
-        };
-
-        let restored = persisted_tab_to_open_tab(&groups, &tab).expect("tab restored");
-        assert!(matches!(restored, OpenTab::Request { index: 1, .. }));
-        assert_eq!(restored.fallback_node_id(), "node-b");
-    }
-
-    #[test]
-    fn persisted_case_tab_restores_as_scenario() {
-        let groups = vec![ApiGroup {
-            id: None,
-            name: "默认".into(),
-            folders: Vec::new(),
-            requests: vec![ApiRequest {
-                node_id: "node-parent".into(),
-                title: "Parent".into(),
-                method: HttpMethod::Post,
-                path: "/login".into(),
-                params: Vec::new(),
-                path_rows: Vec::new(),
-                body: String::new(),
-                body_mode: BodyMode::None,
-                headers: Vec::new(),
-                cookies: Vec::new(),
-                auth: Vec::new(),
-                pre_ops: String::new(),
-                post_ops: String::new(),
-                scenarios: vec![ApiScenario {
-                    node_id: "case-wrong-password".into(),
-                    name: "错误密码".into(),
-                    request: None,
-                }],
-            }],
-        }];
-        let tab = crate::model::HttpTab {
-            id: "tab-case".into(),
-            method: "POST".into(),
-            url: "/login".into(),
-            node_id: "case-wrong-password".into(),
-            ..empty_http_tab()
-        };
-
-        let restored = persisted_tab_to_open_tab(&groups, &tab).expect("tab restored");
-        assert!(matches!(
-            restored,
-            OpenTab::Scenario {
-                request_index: 0,
-                scenario_index: 0,
-                ..
-            }
-        ));
-        assert_eq!(restored.fallback_node_id(), "case-wrong-password");
-    }
-
-    fn empty_http_tab() -> crate::model::HttpTab {
-        crate::model::HttpTab {
-            id: String::new(),
-            name: String::new(),
-            method: String::new(),
-            url: String::new(),
-            request_mode: String::new(),
-            body_mode: String::new(),
-            auth_type: String::new(),
-            auth_value: String::new(),
-            headers_text: String::new(),
-            cookies_text: String::new(),
-            body_text: String::new(),
-            params_text: String::new(),
-            path_params_text: String::new(),
-            pre_ops_text: String::new(),
-            post_ops_text: String::new(),
-            node_id: String::new(),
-            active_request_tab: 0,
-            updated_at: String::new(),
-        }
     }
 }

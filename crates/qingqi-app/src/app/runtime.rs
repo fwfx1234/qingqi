@@ -27,9 +27,7 @@ use crate::{
         background::BackgroundSupervisor,
         theme_service::ThemeService,
         theme_store::ThemeStore,
-        tray_manager::{
-            NetworkSpeedProvider, TrayManager, TrayManagerHandle, load_current_tray_settings,
-        },
+        tray_manager::{TrayHostAdapter, TrayManager, TrayManagerHandle},
         window_controller::{PluginOpenTrace, WindowController, WindowControllerHandle},
     },
     core::{
@@ -44,7 +42,6 @@ use qingqi_core::{
     registry::BuildCx,
 };
 use qingqi_platform::power::PowerManager;
-
 struct ThemeHandleAdapter {
     store: Arc<RwLock<ThemeStore>>,
 }
@@ -228,6 +225,10 @@ pub fn run(host: AppHost) -> Result<()> {
         build_cx.events.clone(),
     )));
     let tray_manager = TrayManagerHandle::new(TrayManager::new());
+    qingqi_core::lock_or_recover(&tray_manager.0, "tray-manager")
+        .set_plugin_manager(Arc::clone(&plugins));
+    qingqi_core::lock_or_recover(&plugins, "plugin-manager")
+        .set_tray_host(Arc::new(TrayHostAdapter::new(tray_manager.clone())));
     let app = gpui::Application::new().with_assets(qingqi_ui::assets::ProjectAssets);
     let plugins_for_shutdown = Arc::clone(&plugins);
     app.on_reopen({
@@ -281,8 +282,6 @@ pub fn run(host: AppHost) -> Result<()> {
             .ensure_keep_alive_window(cx);
 
         set_menus(cx);
-        app_catalog.start_background();
-        qingqi_core::lock_or_recover(&plugins, "plugin-manager").start_background(cx);
         let mut background = BackgroundSupervisor::new();
         background.start_theme_listener(Arc::clone(&theme_store), cx);
 
@@ -327,30 +326,35 @@ pub fn run(host: AppHost) -> Result<()> {
         let initial_mode = qingqi_core::lock_or_recover(&power_manager, "power-manager").mode();
         match qingqi_platform::tray::install_tray(initial_mode) {
             Ok(()) => {
-                let initial_tray_settings = load_current_tray_settings(&paths);
-                qingqi_core::lock_or_recover(&tray_manager.0, "tray-manager")
-                    .register_provider(Box::new(NetworkSpeedProvider::new(
-                        Default::default(),
-                        initial_tray_settings,
-                    )));
+                app_catalog.start_background();
+                qingqi_core::lock_or_recover(&plugins, "plugin-manager").start_background(cx);
                 background.start_tray_events(
                     Arc::clone(&window_controller),
                     tray_manager.clone(),
                     Arc::clone(&power_manager),
                     cx,
                 );
-                background.start_tray_providers_with_paths(
-                    tray_manager.clone(),
-                    Some(paths.clone()),
-                    cx,
-                );
                 background.start_power_listener(Arc::clone(&power_manager), cx);
             }
-            Err(error) => tracing::warn!(error, "system tray install failed"),
+            Err(error) => {
+                tracing::warn!(error, "system tray install failed");
+                app_catalog.start_background();
+                qingqi_core::lock_or_recover(&plugins, "plugin-manager").start_background(cx);
+            }
         }
         cx.set_global(ShortcutGlobal::new(Arc::clone(&shortcut_service)));
         cx.set_global(tray_manager.clone());
         cx.set_global(background);
+
+        #[cfg(debug_assertions)]
+        if let Ok(plugin_id) = std::env::var("QINGQI_DEBUG_OPEN_PLUGIN") {
+            if !plugin_id.trim().is_empty() {
+                let window_controller = Arc::clone(&window_controller);
+                cx.defer(move |cx| {
+                    WindowController::open_plugin(window_controller, plugin_id, cx);
+                });
+            }
+        }
     });
     qingqi_core::lock_or_recover(&plugins_for_shutdown, "plugin-manager").shutdown();
     database_for_shutdown.shutdown();

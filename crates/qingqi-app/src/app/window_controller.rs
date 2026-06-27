@@ -129,6 +129,7 @@ impl WindowController {
             { lock_or_recover(&controller, "window_controller").launcher_window };
         if let Some(window_handle) = stored_window_handle {
             match update_launcher(window_handle, cx, |launcher, window, cx| {
+                qingqi_platform::macos::activate_frontmost();
                 cx.activate(true);
                 window.activate_window();
                 launcher.refresh_on_show(cx);
@@ -137,7 +138,7 @@ impl WindowController {
                     // 在独立的 update 中设置焦点，确保 refresh_on_show
                     // 触发的重渲染完成后再请求焦点
                     let _ = update_launcher(window_handle, cx, |launcher, window, cx| {
-                        launcher.focus_query_input(window, cx);
+                        activate_launcher_window(launcher, window, cx);
                     });
                     return;
                 }
@@ -170,7 +171,6 @@ impl WindowController {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             display_id: display.map(|display| display.id()),
-            show: false,
             titlebar: Some(TitlebarOptions {
                 title: Some("Qingqi".into()),
                 appears_transparent: true,
@@ -197,9 +197,10 @@ impl WindowController {
                 .new(|cx| Launcher::new(Arc::clone(&plugin_manager), Arc::clone(&app_catalog), cx));
             let handle = launcher.clone();
             launcher.update(cx, |launcher, launcher_cx| {
-                launcher.attach_handle(handle);
+                launcher.attach_handle(handle.clone());
                 launcher.attach_window_controller(Arc::clone(&controller_for_entity));
                 launcher.attach_query_input(query_input.clone());
+                launcher.bind_query_input_keys(handle, launcher_cx);
                 launcher.observe_query_input(launcher_cx);
                 launcher.initialize_async(events, launcher_cx);
             });
@@ -210,9 +211,7 @@ impl WindowController {
                 lock_or_recover(&controller, "window_controller").launcher_window =
                     Some(handle.into());
                 let _ = update_launcher(handle.into(), cx, |launcher, window, cx| {
-                    cx.activate(true);
-                    window.activate_window();
-                    launcher.focus_query_input(window, cx);
+                    activate_launcher_window(launcher, window, cx);
                 });
             }
             Err(error) => tracing::warn!(error = %error, "open launcher window failed"),
@@ -294,6 +293,7 @@ impl WindowController {
             Ok(handle) => {
                 log_plugin_window_step(&plugin_id, "open plugin window", window_started, trace);
                 let _ = handle.update(cx, |_, window, cx| {
+                    qingqi_platform::macos::activate_frontmost();
                     cx.activate(true);
                     window.activate_window();
                 });
@@ -602,6 +602,7 @@ impl WindowController {
         };
         if let Some(window_handle) = stored_window_handle {
             match update_plugin_window(window_handle, cx, |plugin_window, window, cx| {
+                qingqi_platform::macos::activate_frontmost();
                 cx.activate(true);
                 plugin_window.reopen(window, cx);
                 if let Some(input) = launch_input
@@ -633,6 +634,7 @@ impl WindowController {
             }
 
             let _ = update_plugin_window(window_handle, cx, |plugin_window, window, cx| {
+                qingqi_platform::macos::activate_frontmost();
                 cx.activate(true);
                 plugin_window.reopen(window, cx);
                 if let Some(input) = launch_input
@@ -841,6 +843,18 @@ impl Render for KeepAliveWindow {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div().size_full()
     }
+}
+
+fn activate_launcher_window(launcher: &Launcher, window: &mut Window, cx: &mut App) {
+    qingqi_platform::macos::activate_frontmost();
+    cx.activate(true);
+    window.activate_window();
+    launcher.focus_query_input(window, cx);
+    window.defer(cx, |window, cx| {
+        qingqi_platform::macos::activate_frontmost();
+        cx.activate(true);
+        window.activate_window();
+    });
 }
 
 fn update_launcher<R>(

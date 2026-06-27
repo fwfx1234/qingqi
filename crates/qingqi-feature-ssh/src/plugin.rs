@@ -40,7 +40,7 @@ impl Plugin for SshPlugin {
         Ok(PluginView::Window(Box::new(SshWindowView { view })))
     }
 
-    fn start_background(&mut self, _events: qingqi_plugin::events::AppEventBus, _cx: &mut App) {}
+    fn start_background(&mut self, _cx: &mut PluginCx<'_>) {}
 
     fn shutdown(&mut self) {
         self.service.shutdown_all();

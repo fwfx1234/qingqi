@@ -6,8 +6,8 @@ use gpui::{
     App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
     Styled, div, hsla, px,
 };
-use gpui_component::theme::Theme;
 use gpui_component::input::{Input, InputState};
+use gpui_component::theme::Theme;
 use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn auth_form_panel(
@@ -117,7 +117,7 @@ fn auth_location_button(
             view.update(cx, |view, cx| {
                 view.auth_apikey_in_query = query;
                 view.sync_models(cx);
-                view.persist_current_tab_state(cx);
+                view.persist_workspace();
             });
         })
 }

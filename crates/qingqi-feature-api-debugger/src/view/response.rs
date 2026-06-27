@@ -53,8 +53,8 @@ impl ApiDebuggerView {
     }
 
     pub(crate) fn refresh_history(&mut self) {
-        let tab_id = self.active_tab.tab_id().to_string();
-        match self.service.list_history(&tab_id, 50) {
+        let node_id = self.current_node_id().to_string();
+        match self.service.list_history(&node_id, 50) {
             Ok(rows) => self.history_entries = rows,
             Err(error) => {
                 self.history_entries.clear();
@@ -64,8 +64,8 @@ impl ApiDebuggerView {
     }
 
     pub(crate) fn clear_current_history(&mut self) {
-        let tab_id = self.active_tab.tab_id().to_string();
-        match self.service.clear_history(&tab_id) {
+        let node_id = self.current_node_id().to_string();
+        match self.service.clear_history(&node_id) {
             Ok(count) => {
                 self.history_entries.clear();
                 self.notice = format!("已清空 {count} 条历史记录");

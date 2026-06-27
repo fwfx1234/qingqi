@@ -218,8 +218,7 @@ impl DownloadManagerView {
                 Some(self.make_settings_input(window, cx, settings.referer.clone()));
         }
         if self.cookie_input.is_none() {
-            self.cookie_input =
-                Some(self.make_settings_input(window, cx, settings.cookie.clone()));
+            self.cookie_input = Some(self.make_settings_input(window, cx, settings.cookie.clone()));
         }
         if self.headers_input.is_none() {
             self.headers_input =

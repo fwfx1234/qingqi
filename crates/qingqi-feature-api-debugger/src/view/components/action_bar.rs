@@ -1,4 +1,6 @@
 use super::dropdown::{DropdownItem, dropdown_list};
+use super::env_editor::open_env_editor_window;
+use super::shared::circle_badge;
 use crate::service::{ApiEnvironment, ApiRequest, HttpMethod};
 use crate::view::ApiDebuggerView;
 use gpui::{App, Entity, InteractiveElement, IntoElement, ParentElement, Styled, div, px};
@@ -15,11 +17,14 @@ pub fn action_bar(
     view: Entity<ApiDebuggerView>,
     _request: ApiRequest,
     environment: ApiEnvironment,
+    environments: Vec<ApiEnvironment>,
+    current_environment_index: usize,
     path_input: Entity<InputState>,
     in_flight: bool,
     cx: &App,
     current_method: HttpMethod,
-    show_popover: bool,
+    show_method_popover: bool,
+    show_env_popover: bool,
 ) -> impl IntoElement {
     div()
         .px(px(10.0))
@@ -36,7 +41,7 @@ pub fn action_bar(
             Popover::new("api-method-popover")
                 .anchor(gpui::Corner::TopLeft)
                 .appearance(false)
-                .open(show_popover)
+                .open(show_method_popover)
                 .on_open_change({
                     let v = view.clone();
                     move |is_open, _, cx| {
@@ -138,13 +143,126 @@ pub fn action_bar(
                         .font_family("SF Mono")
                         .text_size(px(11.0))
                         .text_color(ui::text_tertiary(cx))
-                        .child(environment.base_url),
+                        .child(environment.base_url.clone()),
                 )
-                .child(div().flex_1().min_w(px(0.0)).child(api_input(path_input, 30.0)))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(0.0))
+                        .child(api_input(path_input, 30.0)),
+                )
                 .on_key_down(move |event, _window, cx| {
                     if event.keystroke.key == "enter" {
                         url_view.update(cx, |view, cx| view.send_request(cx));
                     }
+                })
+        })
+        .child({
+            let view = view.clone();
+            let selected_env = environment.clone();
+            Popover::new("api-env-popover")
+                .anchor(gpui::Corner::TopLeft)
+                .appearance(false)
+                .open(show_env_popover)
+                .on_open_change({
+                    let v = view.clone();
+                    move |is_open, _, cx| {
+                        v.update(cx, |view, _cx| view.show_env_popover = *is_open);
+                    }
+                })
+                .trigger({
+                    Button::new("api-env-trigger")
+                        .ghost()
+                        .w(px(104.0))
+                        .h(px(26.0))
+                        .rounded(px(5.0))
+                        .bg(theme::rgba_with_alpha(ui::bg_surface(cx).into(), 0.10))
+                        .child(
+                            div()
+                                .px(px(6.0))
+                                .flex()
+                                .items_center()
+                                .gap(px(4.0))
+                                .child(circle_badge(&selected_env.badge, selected_env.color, 12.0))
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .text_size(px(11.0))
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_color(ui::text_primary(cx))
+                                        .whitespace_nowrap()
+                                        .child(selected_env.name.clone()),
+                                )
+                                .child(
+                                    Icon::new(IconName::ChevronDown)
+                                        .size(px(10.0))
+                                        .text_color(ui::text_secondary(cx)),
+                                ),
+                        )
+                })
+                .content(move |_state, _window, _cx| {
+                    let v = view.clone();
+                    let accent = Theme::global(_cx).primary;
+                    let bg = Theme::global(_cx).list;
+                    let border = ui::border_light(_cx);
+                    let mut items: Vec<DropdownItem> = environments
+                        .iter()
+                        .enumerate()
+                        .map(|(index, env)| {
+                            DropdownItem::new(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(2.0))
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(8.0))
+                                            .child(circle_badge(&env.badge, env.color, 14.0))
+                                            .child(
+                                                div()
+                                                    .text_size(px(12.0))
+                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .text_color(ui::text_primary(_cx))
+                                                    .child(env.name.clone()),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(10.0))
+                                            .text_color(ui::text_secondary(_cx))
+                                            .child(env.base_url.clone()),
+                                    ),
+                            )
+                            .active(index == current_environment_index)
+                            .on_select({
+                                let v = v.clone();
+                                move |_, cx| {
+                                    v.update(cx, |view, _cx| {
+                                        view.select_environment(index, _cx);
+                                        view.show_env_popover = false;
+                                    });
+                                }
+                            })
+                        })
+                        .collect();
+                    items.push(
+                        DropdownItem::new(
+                            div().px(px(4.0)).child(
+                                div()
+                                    .text_size(px(11.0))
+                                    .font_weight(gpui::FontWeight::NORMAL)
+                                    .text_color(ui::text_secondary(_cx))
+                                    .child("环境管理"),
+                            ),
+                        )
+                        .on_select(move |_, cx| {
+                            v.update(cx, |view, _cx| view.show_env_popover = false);
+                            open_env_editor_window(v.clone(), cx);
+                        }),
+                    );
+                    dropdown_list(items, accent, bg, border)
                 })
         })
         .child(if in_flight {

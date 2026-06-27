@@ -1,9 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use gpui::{
-    App, AppContext, AsyncApp, Context, Entity, FontWeight, IntoElement,
-    ParentElement, Render, Styled, Window, div, prelude::FluentBuilder,
-    px,
+    App, AppContext, AsyncApp, Context, Entity, FontWeight, IntoElement, ParentElement, Render,
+    Styled, Window, div, prelude::FluentBuilder, px,
 };
 
 use crate::service::{self, JsonMode, JsonResult, JsonStats};
@@ -83,9 +82,9 @@ impl JsonView {
             }));
         }
         if self.query.is_none() {
-            self.query = Some(cx.new(|cx| {
-                InputState::new(window, cx).placeholder("$.store.book[*].author")
-            }));
+            self.query = Some(
+                cx.new(|cx| InputState::new(window, cx).placeholder("$.store.book[*].author")),
+            );
         }
         if self.output.is_none() {
             self.output = Some(cx.new(|cx| {

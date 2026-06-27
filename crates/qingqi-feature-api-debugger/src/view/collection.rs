@@ -174,7 +174,13 @@ impl ApiDebuggerView {
     }
 
     pub(crate) fn confirm_inline_rename(&mut self, cx: &App) {
-        let new_name = self.rename_inline_input.read(cx).value().to_string().trim().to_string();
+        let new_name = self
+            .rename_inline_input
+            .read(cx)
+            .value()
+            .to_string()
+            .trim()
+            .to_string();
         let node_id = std::mem::take(&mut self.renaming_node_id);
         if node_id.is_empty() {
             return;
@@ -193,7 +199,13 @@ impl ApiDebuggerView {
     }
 
     pub(crate) fn confirm_rename(&mut self, cx: &App) {
-        let new_name = self.rename_input.read(cx).value().to_string().trim().to_string();
+        let new_name = self
+            .rename_input
+            .read(cx)
+            .value()
+            .to_string()
+            .trim()
+            .to_string();
         let node_id = self.rename_node_id.clone();
         if node_id.is_empty() {
         } else if new_name.is_empty() {

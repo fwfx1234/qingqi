@@ -35,25 +35,3 @@ pub fn build(
         shortcut_handle,
     )))
 }
-
-pub fn build_tray_manager(
-    theme_handle: ThemeHandleRef,
-    paths: AppPaths,
-    app_index_handle: Option<AppIndexHandleRef>,
-    shortcut_handle: Option<ShortcutHandleRef>,
-) -> anyhow::Result<Box<dyn Plugin>> {
-    let settings_store = Arc::new(Mutex::new(SettingsStore::new(
-        paths.config("system_settings.json"),
-    )));
-    Ok(Box::new(SystemSettingsPlugin::new_with_manifest(
-        theme_handle,
-        paths,
-        settings_store,
-        app_index_handle,
-        shortcut_handle,
-        crate::manifest::tray_manager_manifest(),
-        "托盘管理".into(),
-        2,
-        true,
-    )))
-}

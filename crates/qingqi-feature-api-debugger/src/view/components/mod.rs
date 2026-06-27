@@ -9,4 +9,3 @@ pub mod env_editor;
 pub mod kv_editor;
 pub mod response_panel;
 pub mod shared;
-pub mod tab_bar;

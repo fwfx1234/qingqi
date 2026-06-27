@@ -18,6 +18,7 @@ use qingqi_plugin::{
     },
     events::AppEventBus,
     shortcut::ShortcutDescriptor,
+    tray::{TrayHostRef, TrayItemId, TrayItemRect},
 };
 
 use crate::{
@@ -34,6 +35,7 @@ pub struct PluginManager {
     usage_store: CommandUsageStore,
     command_catalog_store: CommandCatalogStore,
     events: AppEventBus,
+    tray_host: Option<TrayHostRef>,
 }
 
 impl PluginManager {
@@ -51,7 +53,12 @@ impl PluginManager {
             usage_store,
             command_catalog_store,
             events,
+            tray_host: None,
         }
+    }
+
+    pub fn set_tray_host(&mut self, tray_host: TrayHostRef) {
+        self.tray_host = Some(tray_host);
     }
 
     pub fn register(&mut self, plugin: Box<dyn Plugin>) {
@@ -441,13 +448,14 @@ impl PluginManager {
     }
 
     pub fn open(&mut self, plugin_id: &str, cx: &mut App) -> anyhow::Result<PluginView> {
+        let events = self.events.clone();
+        let tray_host = self.tray_host.clone();
         let plugin = self
             .plugins
             .get_mut(plugin_id)
             .ok_or_else(|| anyhow::anyhow!("plugin not registered: {plugin_id}"))?;
         let expected_mode = plugin.manifest().mode;
-        let events = self.events.clone();
-        let mut plugin_cx = PluginCx::new(events, cx);
+        let mut plugin_cx = plugin_cx_with_tray(events, tray_host, cx);
         let view = call_plugin(plugin_id, || plugin.open(&mut plugin_cx))
             .with_context(|| format!("plugin {plugin_id} panicked while opening"))?;
         debug_assert_eq!(
@@ -504,8 +512,10 @@ impl PluginManager {
             }
             let id = plugin.manifest().id.clone();
             let events = self.events.clone();
+            let tray_host = self.tray_host.clone();
+            let mut plugin_cx = plugin_cx_with_tray(events, tray_host, cx);
             if let Err(error) =
-                call_plugin_value(id.as_ref(), || plugin.start_background(events, cx))
+                call_plugin_value(id.as_ref(), || plugin.start_background(&mut plugin_cx))
             {
                 tracing::error!(
                     plugin_id = %id,
@@ -514,6 +524,45 @@ impl PluginManager {
                 );
             }
         }
+    }
+
+    pub fn dispatch_tray_item_click(
+        &mut self,
+        plugin_id: &str,
+        item_id: &TrayItemId,
+        rect: TrayItemRect,
+        cx: &mut App,
+    ) -> anyhow::Result<()> {
+        let events = self.events.clone();
+        let tray_host = self.tray_host.clone();
+        let plugin = self
+            .plugins
+            .get_mut(plugin_id)
+            .ok_or_else(|| anyhow::anyhow!("plugin not registered: {plugin_id}"))?;
+        let mut plugin_cx = plugin_cx_with_tray(events, tray_host, cx);
+        call_plugin(plugin_id, || {
+            plugin.on_tray_item_click(item_id, rect, &mut plugin_cx)
+        })
+        .with_context(|| format!("plugin {plugin_id} panicked in on_tray_item_click"))
+    }
+
+    pub fn dispatch_tray_popup_closed(
+        &mut self,
+        plugin_id: &str,
+        item_id: &TrayItemId,
+        cx: &mut App,
+    ) -> anyhow::Result<()> {
+        let events = self.events.clone();
+        let tray_host = self.tray_host.clone();
+        let plugin = self
+            .plugins
+            .get_mut(plugin_id)
+            .ok_or_else(|| anyhow::anyhow!("plugin not registered: {plugin_id}"))?;
+        let mut plugin_cx = plugin_cx_with_tray(events, tray_host, cx);
+        call_plugin(plugin_id, || {
+            plugin.on_tray_popup_closed(item_id, &mut plugin_cx)
+        })
+        .with_context(|| format!("plugin {plugin_id} panicked in on_tray_popup_closed"))
     }
 
     pub fn shutdown(&mut self) {
@@ -557,15 +606,51 @@ fn call_plugin_value<T>(plugin_id: &str, f: impl FnOnce() -> T) -> anyhow::Resul
         .map_err(|error| anyhow::anyhow!("plugin {plugin_id} panicked: {}", panic_message(error)))
 }
 
+fn plugin_cx_with_tray<'a>(
+    events: AppEventBus,
+    tray_host: Option<TrayHostRef>,
+    cx: &'a mut App,
+) -> PluginCx<'a> {
+    let mut plugin_cx = PluginCx::new(events, cx);
+    if let Some(tray_host) = tray_host {
+        plugin_cx = plugin_cx.with_tray(tray_host);
+    }
+    plugin_cx
+}
+
 fn default_plugin_command(manifest: Manifest) -> Vec<Command> {
-    vec![Command::plugin_open(
+    let mut commands = vec![Command::plugin_open(
         manifest.id.as_ref(),
         manifest.name.as_ref(),
         manifest.description.as_ref(),
         manifest.keywords.iter().map(|s| s.as_ref()),
         manifest.prefixes.iter().map(|s| s.as_ref()),
         manifest.icon.as_str(),
-    )]
+    )];
+
+    // 对有设置页的插件，额外注册一个设置命令（使用独立 id 避免与主命令冲突）
+    if manifest.has_settings {
+        let plugin_id = manifest.id.as_ref();
+        let settings_title = format!("{} 设置", manifest.name.as_ref());
+        let mut keywords: Vec<String> = manifest.keywords.iter().map(|s| s.to_string()).collect();
+        keywords.push("设置".into());
+        keywords.push("settings".into());
+        commands.push(Command::plugin_open(
+            plugin_id,
+            &settings_title,
+            format!("配置 {}", manifest.name.as_ref()),
+            keywords.iter().map(|s| s.as_str()),
+            ["设置", "settings", "config"].iter().copied(),
+            manifest.icon.as_str(),
+        ));
+        // 设置命令使用 plugin_settings 标记以避免 id 冲突，
+        // catalog 加载后 commands 会被重新构建，无需持久化。
+        if let Some(cmd) = commands.last_mut() {
+            cmd.id = format!("{plugin_id}.settings");
+        }
+    }
+
+    commands
 }
 
 pub fn command_kind_priority(kind: CommandKind) -> u8 {

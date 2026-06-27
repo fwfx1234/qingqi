@@ -5,10 +5,7 @@ use gpui::{App, Entity};
 use gpui_component::input::InputState;
 
 impl ApiDebuggerView {
-    pub fn text_editor_input(
-        &self,
-        tab: EditorTab,
-    ) -> Option<Entity<InputState>> {
+    pub fn text_editor_input(&self, tab: EditorTab) -> Option<Entity<InputState>> {
         match tab {
             EditorTab::Body => Some(self.body_input.clone()),
             EditorTab::PreOps => Some(self.pre_ops_input.clone()),
@@ -36,7 +33,13 @@ impl ApiDebuggerView {
         match self.auth_type {
             AuthType::None => Vec::new(),
             AuthType::BearerToken => {
-                let token = self.auth_bearer_input.read(cx).value().to_string().trim().to_string();
+                let token = self
+                    .auth_bearer_input
+                    .read(cx)
+                    .value()
+                    .to_string()
+                    .trim()
+                    .to_string();
                 if token.is_empty() {
                     Vec::new()
                 } else {
@@ -135,7 +138,6 @@ impl ApiDebuggerView {
                 self.body_input
                     .update(cx, |input, input_cx| input.reset_value(pretty, input_cx));
                 self.sync_models(cx);
-                self.persist_current_tab_state(cx);
                 self.notice = String::from("JSON 已格式化");
             }
             Err(error) => {
@@ -157,7 +159,6 @@ impl ApiDebuggerView {
             input.reset_value(path_string.clone(), input_cx)
         });
         self.sync_models(cx);
-        self.persist_current_tab_state(cx);
         self.notice = format!("已选择文件: {path_string}");
     }
 }

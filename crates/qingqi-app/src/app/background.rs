@@ -5,31 +5,33 @@ use std::{
 };
 
 use global_hotkey::HotKeyState;
-use gpui::{App, Global, Task};
+use gpui::{App, BorrowAppContext, Global, Task};
 
 use gpui_component::theme::Theme;
 
 use crate::{
     app::{
         theme_store::ThemeStore,
-        tray_manager::{
-            NetworkSpeedProvider, TrayManager, TrayManagerHandle, load_current_tray_settings,
-        },
+        tray_manager::{TrayManager, TrayManagerHandle},
         window_controller::{WindowController, WindowControllerHandle},
     },
     core::shortcut::{self, ShortcutGlobal},
 };
 use qingqi_core::lock_or_recover;
 use qingqi_platform::{
-    network::NetworkSampler,
     power::{PowerChangeListener, PowerManager},
     theme::ThemeChangeListener,
+    tray::{
+        RawTrayIconEvent, RawTrayMenuEvent, TrayIconAction, TrayItemClick, TrayItemRect,
+        TrayMouseButton, TrayMouseButtonState,
+    },
 };
 
 #[derive(Default)]
 pub struct BackgroundSupervisor {
     running: HashSet<&'static str>,
-    tasks: Vec<Task<()>>,
+    tasks: Arc<Mutex<Vec<Task<()>>>>,
+    last_main_tray_click: Option<Instant>,
 }
 
 impl Global for BackgroundSupervisor {}
@@ -50,103 +52,19 @@ impl BackgroundSupervisor {
             return;
         }
 
-        // Tray-icon left-clicks → show launcher. Event-driven: the helper parks
-        // on the tray channel, so there is no idle polling wakeup.
-        let icon_wc = Arc::clone(&window_controller);
-        let icon_tm = tray_manager.clone();
-        let icon_pm = Arc::clone(&power_manager);
-        let icon_task = cx.spawn(async move |async_cx| {
-            loop {
-                let action = async_cx
-                    .background_executor()
-                    .spawn(async { qingqi_platform::tray::next_tray_icon_action() })
-                    .await;
-                let Some(action) = action else {
-                    break;
-                };
-                let wc = Arc::clone(&icon_wc);
-                let tm = icon_tm.clone();
-                let pm = Arc::clone(&icon_pm);
-                let _ = async_cx.update(move |cx| handle_tray_icon_action(action, wc, tm, pm, cx));
-            }
-        });
-        self.tasks.push(icon_task);
-
-        // Tray menu selections → their mapped actions.
-        let menu_task = cx.spawn(async move |async_cx| {
-            loop {
-                let action = async_cx
-                    .background_executor()
-                    .spawn(async { qingqi_platform::tray::next_menu_action() })
-                    .await;
-                let Some(action) = action else {
-                    break;
-                };
-                let wc = Arc::clone(&window_controller);
-                let pm = Arc::clone(&power_manager);
-                let _ = async_cx.update(move |cx| handle_tray_action(action, wc, pm, cx));
-            }
-        });
-        self.tasks.push(menu_task);
-    }
-
-    pub fn start_tray_providers(&mut self, tray_manager: TrayManagerHandle, cx: &mut App) {
-        let paths = qingqi_plugin::storage::AppPaths::resolve().ok();
-        self.start_tray_providers_with_paths(tray_manager, paths, cx);
-    }
-
-    pub fn start_tray_providers_with_paths(
-        &mut self,
-        tray_manager: TrayManagerHandle,
-        paths: Option<qingqi_plugin::storage::AppPaths>,
-        cx: &mut App,
-    ) {
-        if !self.mark_started("tray-providers") {
-            return;
-        }
-
-        let task = cx.spawn(async move |async_cx| {
-            let mut sampler = NetworkSampler::new();
-            let mut public_ip_cache = PublicIpCache::default();
-            loop {
-                let settings = paths
-                    .as_ref()
-                    .map(load_current_tray_settings)
-                    .unwrap_or_default();
-                let public_ip = if public_ip_cache.should_refresh() {
-                    let previous = public_ip_cache.value.clone();
-                    let result = async_cx
-                        .background_executor()
-                        .spawn(async move { fetch_public_ip().ok().or(previous) })
-                        .await;
-                    public_ip_cache.record(result)
-                } else {
-                    public_ip_cache.value.clone()
-                };
-                let provider = async_cx
-                    .background_executor()
-                    .spawn(async move {
-                        let provider = NetworkSpeedProvider::sample_with_public_ip(
-                            &mut sampler,
-                            settings,
-                            public_ip,
-                        );
-                        (provider, sampler)
-                    })
-                    .await;
-                let (provider, next_sampler) = provider;
-                sampler = next_sampler;
-                let tm = tray_manager.clone();
-                let _ = async_cx.update(move |cx| {
-                    lock_or_recover(&tm.0, "tray-manager").update_provider(Box::new(provider), cx);
-                });
-                async_cx
-                    .background_executor()
-                    .timer(provider_interval_from_paths(paths.as_ref()))
-                    .await;
-            }
-        });
-        self.tasks.push(task);
+        arm_tray_icon_event(
+            Arc::clone(&self.tasks),
+            Arc::clone(&window_controller),
+            tray_manager,
+            Arc::clone(&power_manager),
+            cx,
+        );
+        arm_tray_menu_event(
+            Arc::clone(&self.tasks),
+            window_controller,
+            power_manager,
+            cx,
+        );
     }
 
     pub fn start_hotkey_events(&mut self, window_controller: WindowControllerHandle, cx: &mut App) {
@@ -179,7 +97,7 @@ impl BackgroundSupervisor {
                 });
             }
         });
-        self.tasks.push(task);
+        push_background_task(&self.tasks, task);
     }
 
     /// Start a low-level keyboard hook (WH_KEYBOARD_LL) for shortcuts that
@@ -234,7 +152,7 @@ impl BackgroundSupervisor {
                 });
             }
         });
-        self.tasks.push(task);
+        push_background_task(&self.tasks, task);
     }
 
     /// 通过 `NSDistributedNotificationCenter` 监听系统主题变化，
@@ -268,7 +186,7 @@ impl BackgroundSupervisor {
                 });
             }
         });
-        self.tasks.push(task);
+        push_background_task(&self.tasks, task);
     }
 
     /// 通过 `IOPSNotificationCreateRunLoopSource` 监听电源变化，替代轮询。
@@ -297,7 +215,7 @@ impl BackgroundSupervisor {
                 });
             }
         });
-        self.tasks.push(task);
+        push_background_task(&self.tasks, task);
     }
 
     fn mark_started(&mut self, name: &'static str) -> bool {
@@ -310,47 +228,134 @@ impl BackgroundSupervisor {
     }
 }
 
-#[derive(Default)]
-struct PublicIpCache {
-    value: Option<String>,
-    last_checked_at: Option<Instant>,
-}
-
-impl PublicIpCache {
-    const REFRESH_INTERVAL: Duration = Duration::from_secs(300);
-
-    fn should_refresh(&self) -> bool {
-        self.last_checked_at
-            .map(|last| last.elapsed() >= Self::REFRESH_INTERVAL)
-            .unwrap_or(true)
-    }
-
-    fn record(&mut self, value: Option<String>) -> Option<String> {
-        self.last_checked_at = Some(Instant::now());
-        self.value = value;
-        self.value.clone()
+fn push_background_task(tasks: &Arc<Mutex<Vec<Task<()>>>>, task: Task<()>) {
+    if let Ok(mut tasks) = tasks.lock() {
+        tasks.push(task);
+    } else {
+        task.detach();
     }
 }
 
-fn fetch_public_ip() -> Result<String, reqwest::Error> {
-    reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(4))
-        .user_agent("Qingqi/TrayManager")
-        .build()?
-        .get("https://api.ipify.org")
-        .send()?
-        .error_for_status()?
-        .text()
-        .map(|text| text.trim().to_string())
+fn arm_tray_icon_event(
+    tasks: Arc<Mutex<Vec<Task<()>>>>,
+    window_controller: WindowControllerHandle,
+    tray_manager: TrayManagerHandle,
+    power_manager: Arc<Mutex<PowerManager>>,
+    cx: &mut App,
+) {
+    let tasks_for_task = Arc::clone(&tasks);
+    let task = cx.spawn(async move |async_cx| {
+        let event = async_cx
+            .background_executor()
+            .spawn(async { qingqi_platform::tray::next_raw_tray_icon_event() })
+            .await;
+        let Some(event) = event else {
+            return;
+        };
+        let wc = Arc::clone(&window_controller);
+        let tm = tray_manager.clone();
+        let pm = Arc::clone(&power_manager);
+        let tasks_for_rearm = Arc::clone(&tasks_for_task);
+        let _ = async_cx.update(move |cx| {
+            if let Some(action) = action_for_tray_icon_event(event) {
+                if matches!(action, TrayIconAction::Main) && is_duplicate_main_tray_click(cx) {
+                    arm_tray_icon_event(tasks_for_rearm, wc, tm, pm, cx);
+                    return;
+                }
+                handle_tray_icon_action(action, Arc::clone(&wc), tm.clone(), Arc::clone(&pm), cx);
+            }
+            arm_tray_icon_event(tasks_for_rearm, wc, tm, pm, cx);
+        });
+    });
+    push_background_task(&tasks, task);
 }
 
-fn provider_interval_from_paths(
-    paths: Option<&qingqi_plugin::storage::AppPaths>,
-) -> std::time::Duration {
-    paths
-        .map(load_current_tray_settings)
-        .map(|settings| settings.network_speed_update_interval())
-        .unwrap_or_else(NetworkSpeedProvider::sampling_interval)
+fn arm_tray_menu_event(
+    tasks: Arc<Mutex<Vec<Task<()>>>>,
+    window_controller: WindowControllerHandle,
+    power_manager: Arc<Mutex<PowerManager>>,
+    cx: &mut App,
+) {
+    let tasks_for_task = Arc::clone(&tasks);
+    let task = cx.spawn(async move |async_cx| {
+        let event = async_cx
+            .background_executor()
+            .spawn(async { qingqi_platform::tray::next_raw_menu_event() })
+            .await;
+        let Some(event) = event else {
+            return;
+        };
+        let wc = Arc::clone(&window_controller);
+        let pm = Arc::clone(&power_manager);
+        let tasks_for_rearm = Arc::clone(&tasks_for_task);
+        let _ = async_cx.update(move |cx| {
+            if let Some(action) = action_for_menu_event(event) {
+                handle_tray_action(action, Arc::clone(&wc), Arc::clone(&pm), cx);
+            }
+            arm_tray_menu_event(tasks_for_rearm, wc, pm, cx);
+        });
+    });
+    push_background_task(&tasks, task);
+}
+
+fn action_for_tray_icon_event(event: RawTrayIconEvent) -> Option<TrayIconAction> {
+    if event.button != TrayMouseButton::Left || event.button_state != TrayMouseButtonState::Up {
+        return None;
+    }
+    if event.id == "qingqi.tray.main" {
+        return Some(TrayIconAction::Main);
+    }
+    event.id.strip_prefix("qingqi.tray.item.").map(|id| {
+        TrayIconAction::Item(TrayItemClick {
+            id: qingqi_platform::tray::TrayItemId::new(id),
+            rect: rect_for_tray_icon_event(&event),
+        })
+    })
+}
+
+fn rect_for_tray_icon_event(event: &RawTrayIconEvent) -> TrayItemRect {
+    let width = event.rect.width.max(22.0);
+    let height = event.rect.height.max(22.0);
+    if event.position.x.abs() <= 1.0 && event.position.y.abs() <= 1.0 {
+        return event.rect;
+    }
+
+    TrayItemRect {
+        x: event.position.x - width / 2.0,
+        y: event.position.y - height / 2.0,
+        width,
+        height,
+    }
+}
+
+fn is_duplicate_main_tray_click(cx: &mut App) -> bool {
+    const DUPLICATE_CLICK_WINDOW: Duration = Duration::from_millis(180);
+    let now = Instant::now();
+    cx.update_global::<BackgroundSupervisor, bool>(|background, _cx| {
+        let duplicate = background
+            .last_main_tray_click
+            .is_some_and(|last| now.saturating_duration_since(last) <= DUPLICATE_CLICK_WINDOW);
+        background.last_main_tray_click = Some(now);
+        duplicate
+    })
+}
+
+fn action_for_menu_event(event: RawTrayMenuEvent) -> Option<qingqi_platform::tray::TrayAction> {
+    use qingqi_platform::{power::PreventSleepMode, tray::TrayAction};
+
+    match event.id.as_str() {
+        "qingqi.tray.show" => Some(TrayAction::Show),
+        "qingqi.tray.sleep.disabled" => {
+            Some(TrayAction::SetPreventSleep(PreventSleepMode::Disabled))
+        }
+        "qingqi.tray.sleep.always" => Some(TrayAction::SetPreventSleep(PreventSleepMode::AlwaysOn)),
+        "qingqi.tray.sleep.plugged" => {
+            Some(TrayAction::SetPreventSleep(PreventSleepMode::WhenPluggedIn))
+        }
+        "qingqi.tray.restart" => Some(TrayAction::Restart),
+        "qingqi.tray.quit" => Some(TrayAction::Quit),
+        _ => None,
+    }
 }
 
 fn handle_tray_action(
@@ -384,8 +389,6 @@ fn handle_tray_icon_action(
     power_manager: Arc<Mutex<PowerManager>>,
     cx: &mut App,
 ) {
-    use qingqi_platform::tray::TrayIconAction;
-
     match action {
         TrayIconAction::Main => {
             handle_tray_action(
@@ -397,6 +400,70 @@ fn handle_tray_icon_action(
         }
         TrayIconAction::Item(click) => {
             TrayManager::handle_item_click(tray_manager, click, cx);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{action_for_tray_icon_event, rect_for_tray_icon_event};
+    use qingqi_platform::tray::{
+        RawTrayIconEvent, TrayIconAction, TrayItemRect, TrayMouseButton, TrayMouseButtonState,
+    };
+
+    #[test]
+    fn tray_main_click_only_handles_left_button_release() {
+        let action = action_for_tray_icon_event(raw_event(
+            "qingqi.tray.main",
+            TrayMouseButton::Left,
+            TrayMouseButtonState::Up,
+        ));
+
+        assert!(matches!(action, Some(TrayIconAction::Main)));
+    }
+
+    #[test]
+    fn tray_click_ignores_button_press_to_avoid_toggle_flash() {
+        let action = action_for_tray_icon_event(raw_event(
+            "qingqi.tray.main",
+            TrayMouseButton::Left,
+            TrayMouseButtonState::Down,
+        ));
+
+        assert!(action.is_none());
+    }
+
+    #[test]
+    fn tray_item_rect_anchors_to_cursor_position() {
+        let event = raw_event(
+            "qingqi.tray.item.network-speed",
+            TrayMouseButton::Left,
+            TrayMouseButtonState::Up,
+        );
+        let rect = rect_for_tray_icon_event(&event);
+
+        assert_eq!(rect.x, 0.0);
+        assert_eq!(rect.y, 0.0);
+        assert_eq!(rect.width, 22.0);
+        assert_eq!(rect.height, 22.0);
+    }
+
+    fn raw_event(
+        id: &str,
+        button: TrayMouseButton,
+        button_state: TrayMouseButtonState,
+    ) -> RawTrayIconEvent {
+        RawTrayIconEvent {
+            id: id.to_string(),
+            position: qingqi_platform::tray::TrayItemPoint { x: 11.0, y: 11.0 },
+            rect: TrayItemRect {
+                x: 0.0,
+                y: 0.0,
+                width: 22.0,
+                height: 22.0,
+            },
+            button,
+            button_state,
         }
     }
 }

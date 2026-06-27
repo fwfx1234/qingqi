@@ -1,6 +1,6 @@
 use super::ApiDebuggerView;
 use super::components::collection_tree::build_tree_items;
-use super::types::{OpenTab, request_at, request_at_mut};
+use super::types::{request_at, request_at_mut};
 use crate::service::{ApiRequest, BodyMode, HttpMethod};
 use gpui::{App, Window};
 
@@ -45,8 +45,6 @@ impl ApiDebuggerView {
             }];
             self.selected_request = 0;
             self.selected_scenario = None;
-            self.active_tab = OpenTab::new_request(0);
-            self.open_tabs = vec![self.active_tab.clone()];
         } else {
             let request_count: usize = self
                 .groups
@@ -56,7 +54,6 @@ impl ApiDebuggerView {
             if self.selected_request >= request_count {
                 self.selected_request = 0;
                 self.selected_scenario = None;
-                self.active_tab = self.request_tab_for_index(0);
             }
             if let Some(scenario_index) = self.selected_scenario {
                 let valid = request_at(&self.groups, self.selected_request)
@@ -64,22 +61,7 @@ impl ApiDebuggerView {
                     .is_some();
                 if !valid {
                     self.selected_scenario = None;
-                    self.active_tab = self.request_tab_for_index(self.selected_request);
                 }
-            }
-            self.open_tabs.retain(|tab| match tab {
-                OpenTab::Request { index, .. } => *index < request_count,
-                OpenTab::Scenario {
-                    request_index,
-                    scenario_index,
-                    ..
-                } => request_at(&self.groups, *request_index)
-                    .and_then(|request| request.scenarios.get(*scenario_index))
-                    .is_some(),
-            });
-            if self.open_tabs.is_empty() {
-                self.active_tab = OpenTab::new_request(self.selected_request);
-                self.open_tabs.push(self.active_tab.clone());
             }
         }
 
@@ -153,8 +135,6 @@ impl ApiDebuggerView {
         if let Some(notice) = self.service.take_pending_notice() {
             self.notice = notice;
         }
-
-        self.flush_pending_persist(cx);
     }
 
     pub(crate) fn selected_base_request(&self) -> &ApiRequest {
@@ -201,24 +181,9 @@ impl ApiDebuggerView {
 
     pub(crate) fn select_request(&mut self, index: usize, window: &mut Window, cx: &mut App) {
         self.sync_models(cx);
-        self.flush_pending_persist(cx);
         self.selected_request = index;
         self.selected_scenario = None;
-        let new_tab = self.request_tab_for_index(index);
-        let new_tab_id = new_tab.tab_id().to_string();
-        self.active_tab = new_tab.clone();
-
-        if let Some(persisted) = self.service.load_persisted_tab_by_id(&new_tab_id) {
-            self.restore_inputs_from_tab(&persisted, window, cx);
-            let tab_idx = persisted.active_request_tab;
-            if let Some(et) = crate::service::index_to_editor_tab(tab_idx) {
-                self.editor_tab = et;
-            }
-        } else {
-            self.reload_request_inputs(window, cx);
-        }
-
-        self.persist_current_tab_state(cx);
+        self.reload_request_inputs(window, cx);
         self.notice = format!("已切换到 {}", self.selected_request().title);
     }
 
@@ -230,25 +195,10 @@ impl ApiDebuggerView {
         cx: &mut App,
     ) {
         self.sync_models(cx);
-        self.flush_pending_persist(cx);
         self.selected_request = request_index;
         self.selected_scenario = Some(scenario_index);
-        let new_tab = self.scenario_tab_for_index(request_index, scenario_index);
-        let new_tab_id = new_tab.tab_id().to_string();
-        self.active_tab = new_tab.clone();
-
-        if let Some(persisted) = self.service.load_persisted_tab_by_id(&new_tab_id) {
-            self.restore_inputs_from_tab(&persisted, window, cx);
-            let tab_idx = persisted.active_request_tab;
-            if let Some(et) = crate::service::index_to_editor_tab(tab_idx) {
-                self.editor_tab = et;
-            }
-        } else {
-            self.reload_request_inputs(window, cx);
-        }
-
-        self.persist_current_tab_state(cx);
-        self.notice = format!("已切换到场景 {}", self.current_title());
+        self.reload_request_inputs(window, cx);
+        self.notice = format!("已切换到场景 {}", self.selected_request().title);
     }
 
     pub(crate) fn sync_models(&mut self, cx: &App) {
@@ -279,8 +229,10 @@ impl ApiDebuggerView {
 
         let env_name = self.env_name_input.read(cx).value().to_string();
         let env_base_url = self.env_base_url_input.read(cx).value().to_string();
-        let env_variables = super::types::parse_rows(&self.env_variables_input.read(cx).value().to_string());
-        let env_headers = super::types::parse_rows(&self.env_headers_input.read(cx).value().to_string());
+        let env_variables =
+            super::types::parse_rows(&self.env_variables_input.read(cx).value().to_string());
+        let env_headers =
+            super::types::parse_rows(&self.env_headers_input.read(cx).value().to_string());
 
         {
             let environment = self.selected_environment_mut();
@@ -318,21 +270,18 @@ impl ApiDebuggerView {
         request.method = method;
         self.notice = format!("请求方法已切换为 {}", request.method.label());
         self.persist_workspace();
-        self.persist_current_tab_state(cx);
     }
 
     pub(crate) fn send_request(&mut self, cx: &mut App) {
         self.sync_models(cx);
-        self.persist_current_tab_state(cx);
         self.persist_workspace();
         let request = self.selected_request().clone();
         let environment = self.selected_environment().clone();
         let pre_ops = request.pre_ops.clone();
         let post_ops = request.post_ops.clone();
-        let tab_id = self.active_tab.tab_id().to_string();
         match self
             .service
-            .send_request(environment, request, &pre_ops, &post_ops, &tab_id)
+            .send_request(environment, request, &pre_ops, &post_ops)
         {
             Ok(()) => self.notice = String::from("请求发送中..."),
             Err(error) => self.notice = format!("发送失败: {error}"),

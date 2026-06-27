@@ -39,6 +39,7 @@ use qingqi_plugin::plugin_spec::{PluginStatus, ViewMode, WindowSize};
 // ── Design A · Deep Frost (launcher-glass-5.html), default light mode
 
 const INPUT_HEIGHT: f32 = 60.0;
+const QUERY_INPUT_HEIGHT: f32 = 36.0;
 const ROW_HEIGHT: f32 = 64.0;
 const HEADER_HEIGHT: f32 = INPUT_HEIGHT + 10.0;
 const RESULTS_PADDING_TOP: f32 = 8.0;
@@ -283,6 +284,34 @@ impl Launcher {
         self.query_input = Some(input);
     }
 
+    pub fn bind_query_input_keys(&self, handle: Entity<Launcher>, cx: &mut Context<Self>) {
+        let Some(input) = self.query_input.clone() else {
+            return;
+        };
+        let weak_launcher = handle.downgrade();
+        input.update(cx, |input, input_cx| {
+            input.set_key_down_handler(
+                move |event, window, cx| {
+                    if !matches!(
+                        event.keystroke.key.as_str(),
+                        "up" | "down" | "enter" | "escape"
+                    ) {
+                        return false;
+                    }
+
+                    let Some(launcher) = weak_launcher.upgrade() else {
+                        return false;
+                    };
+                    launcher.update(cx, |launcher, launcher_cx| {
+                        launcher.handle_launcher_key(event, window, launcher_cx);
+                    });
+                    true
+                },
+                input_cx,
+            );
+        });
+    }
+
     pub fn focus_query_input(&self, window: &mut Window, cx: &App) {
         if let Some(input) = self.query_input.as_ref() {
             window.focus(&input.focus_handle(cx));
@@ -292,7 +321,7 @@ impl Launcher {
     pub fn configure_query_input(input: &mut TextInput, cx: &mut Context<TextInput>) {
         input.set_style(
             TextInputStyle {
-                height: INPUT_HEIGHT,
+                height: QUERY_INPUT_HEIGHT,
                 font_size: 14.0,
                 padding: 0.0,
             },
@@ -1159,7 +1188,7 @@ impl Render for Launcher {
                             .map(|input| {
                                 div()
                                     .flex_1()
-                                    .h(px(INPUT_HEIGHT))
+                                    .h(px(QUERY_INPUT_HEIGHT))
                                     .flex()
                                     .items_center()
                                     .child(input)
@@ -1168,7 +1197,7 @@ impl Render for Launcher {
                             .unwrap_or_else(|| {
                                 div()
                                     .flex_1()
-                                    .h(px(INPUT_HEIGHT))
+                                    .h(px(QUERY_INPUT_HEIGHT))
                                     .flex()
                                     .items_center()
                                     .text_size(px(14.0))

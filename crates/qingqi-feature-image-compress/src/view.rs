@@ -927,18 +927,20 @@ impl Render for ImageCompressView {
                                     .small()
                                     .primary()
                                     .on_click({
-                                    let handle = handle.clone();
-                                    move |_, window, cx| {
-                                        handle.update(cx, |this, cx| {
-                                            this.paste_from_clipboard(cx);
-                                        });
-                                        window.refresh();
-                                    }
-                                }),
+                                        let handle = handle.clone();
+                                        move |_, window, cx| {
+                                            handle.update(cx, |this, cx| {
+                                                this.paste_from_clipboard(cx);
+                                            });
+                                            window.refresh();
+                                        }
+                                    }),
                             )
                             .child(
-                                Button::new("image-compress-choose").label("选择图片").small().on_click(
-                                    {
+                                Button::new("image-compress-choose")
+                                    .label("选择图片")
+                                    .small()
+                                    .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
                                             handle.update(cx, |this, _cx| {
@@ -946,8 +948,7 @@ impl Render for ImageCompressView {
                                             });
                                             window.refresh();
                                         }
-                                    },
-                                ),
+                                    }),
                             ),
                     )
                     .child(image_table(items, dark, handle.clone(), cx))
@@ -1466,79 +1467,102 @@ fn footer_bar(
                 .gap_2()
                 .child(
                     Button::new("image-compress-run")
-                        .label(if running { "压缩中…" } else { "开始压缩" })
+                        .label(if running {
+                            "压缩中…"
+                        } else {
+                            "开始压缩"
+                        })
                         .small()
                         .primary()
                         .on_click({
-                        let handle = handle.clone();
-                        move |_, window, cx| {
-                            handle.update(cx, |this, cx| {
-                                this.run_compression(cx);
-                            });
-                            window.refresh();
-                        }
-                    }),
-                )
-                .children(if running {
-                    Some(
-                        Button::new("image-compress-cancel").label("取消").small().on_click({
                             let handle = handle.clone();
                             move |_, window, cx| {
-                                handle.update(cx, |this, _cx| {
-                                    this.request_cancel();
+                                handle.update(cx, |this, cx| {
+                                    this.run_compression(cx);
                                 });
                                 window.refresh();
                             }
                         }),
+                )
+                .children(if running {
+                    Some(
+                        Button::new("image-compress-cancel")
+                            .label("取消")
+                            .small()
+                            .on_click({
+                                let handle = handle.clone();
+                                move |_, window, cx| {
+                                    handle.update(cx, |this, _cx| {
+                                        this.request_cancel();
+                                    });
+                                    window.refresh();
+                                }
+                            }),
                     )
                 } else {
                     None
                 })
                 .child(
                     Button::new("image-compress-toggle-overwrite")
-                        .label(if overwrite_original { "覆盖原图" } else { "另存为" })
+                        .label(if overwrite_original {
+                            "覆盖原图"
+                        } else {
+                            "另存为"
+                        })
                         .small()
                         .on_click({
-                        let handle = handle.clone();
-                        move |_, window, cx| {
-                            handle.update(cx, |this, _cx| {
-                                this.toggle_overwrite();
-                            });
-                            window.refresh();
-                        }
-                    }),
+                            let handle = handle.clone();
+                            move |_, window, cx| {
+                                handle.update(cx, |this, _cx| {
+                                    this.toggle_overwrite();
+                                });
+                                window.refresh();
+                            }
+                        }),
                 )
                 .child(
-                    Button::new("image-compress-output-dir").label("💾 选择目录").small().on_click({
-                        let handle = handle.clone();
-                        move |_, window, cx| {
-                            handle.update(cx, |this, _cx| {
-                                this.choose_output_dir();
-                            });
-                            window.refresh();
-                        }
-                    }),
+                    Button::new("image-compress-output-dir")
+                        .label("💾 选择目录")
+                        .small()
+                        .on_click({
+                            let handle = handle.clone();
+                            move |_, window, cx| {
+                                handle.update(cx, |this, _cx| {
+                                    this.choose_output_dir();
+                                });
+                                window.refresh();
+                            }
+                        }),
                 )
                 .child(
-                    Button::new("image-compress-open-dir").label("打开目录").small().on_click({
-                        let handle = handle.clone();
-                        move |_, window, cx| {
-                            handle.update(cx, |this, _cx| {
-                                this.open_output_dir();
-                            });
-                            window.refresh();
-                        }
-                    }),
+                    Button::new("image-compress-open-dir")
+                        .label("打开目录")
+                        .small()
+                        .on_click({
+                            let handle = handle.clone();
+                            move |_, window, cx| {
+                                handle.update(cx, |this, _cx| {
+                                    this.open_output_dir();
+                                });
+                                window.refresh();
+                            }
+                        }),
                 )
-                .child(Button::new("image-compress-clear").label("清空").small().ghost().on_click({
-                    let handle = handle.clone();
-                    move |_, window, cx| {
-                        handle.update(cx, |this, _cx| {
-                            this.clear_items();
-                        });
-                        window.refresh();
-                    }
-                }))
+                .child(
+                    Button::new("image-compress-clear")
+                        .label("清空")
+                        .small()
+                        .ghost()
+                        .on_click({
+                            let handle = handle.clone();
+                            move |_, window, cx| {
+                                handle.update(cx, |this, _cx| {
+                                    this.clear_items();
+                                });
+                                window.refresh();
+                            }
+                        }),
+                )
                 .child(div().flex_1())
                 .child(
                     div()
@@ -1569,8 +1593,6 @@ fn footer_bar(
                 ),
         )
 }
-
-
 
 fn format_size(bytes: u64) -> String {
     const KB: f64 = 1024.0;

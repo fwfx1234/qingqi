@@ -6,7 +6,7 @@ use time::{OffsetDateTime, macros::format_description};
 
 use crate::model::{
     ApiVariable, CollectionNode, EnvHeader, EnvVariable, Environment, EnvironmentFull, HttpHistory,
-    HttpTab, NodeKind, RequestSnapshot, Script, ScriptCategory, VariableScope,
+    NodeKind, RequestSnapshot, Script, ScriptCategory, VariableScope,
 };
 use qingqi_plugin::database::{DatabaseService, PooledConnection, SqlitePool};
 
@@ -84,27 +84,6 @@ impl ApiDebuggerDataSource {
                 ON environment_headers(environment_id);
             CREATE UNIQUE INDEX IF NOT EXISTS idx_env_hdr_key
                 ON environment_headers(environment_id, header_key);
-
-            CREATE TABLE IF NOT EXISTS http_tabs (
-                id                  TEXT PRIMARY KEY,
-                name                TEXT NOT NULL DEFAULT '',
-                method              TEXT NOT NULL DEFAULT 'GET',
-                url                 TEXT NOT NULL DEFAULT '',
-                request_mode        TEXT NOT NULL DEFAULT 'rest',
-                body_mode           TEXT NOT NULL DEFAULT 'none',
-                auth_type           TEXT NOT NULL DEFAULT '',
-                auth_value          TEXT NOT NULL DEFAULT '',
-                headers_text        TEXT NOT NULL DEFAULT '',
-                cookies_text        TEXT NOT NULL DEFAULT '',
-                body_text           TEXT NOT NULL DEFAULT '',
-                params_text         TEXT NOT NULL DEFAULT '',
-                path_params_text    TEXT NOT NULL DEFAULT '',
-                pre_ops_text        TEXT NOT NULL DEFAULT '',
-                post_ops_text       TEXT NOT NULL DEFAULT '',
-                node_id             TEXT NOT NULL DEFAULT '',
-                active_request_tab  INTEGER NOT NULL DEFAULT 0,
-                updated_at          TEXT NOT NULL DEFAULT ''
-            );
 
             CREATE TABLE IF NOT EXISTS http_history (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -538,81 +517,6 @@ impl ApiDebuggerDataSource {
         Ok(())
     }
 
-    // ── Tabs ──
-
-    pub fn list_tabs(&self) -> Result<Vec<HttpTab>> {
-        let conn = self.connection()?;
-        let mut stmt = conn.prepare(
-            "SELECT id, name, method, url, request_mode, body_mode,
-                    auth_type, auth_value, headers_text, cookies_text,
-                    body_text, params_text, path_params_text,
-                    pre_ops_text, post_ops_text, node_id,
-                    active_request_tab, updated_at
-               FROM http_tabs ORDER BY updated_at DESC",
-        )?;
-        let rows = stmt.query_map([], map_http_tab)?;
-        let mut tabs = Vec::new();
-        for row in rows {
-            tabs.push(row?);
-        }
-        Ok(tabs)
-    }
-
-    pub fn save_tab(&self, tab: &HttpTab) -> Result<()> {
-        let now = now_label();
-        let conn = self.connection()?;
-        conn.execute(
-            "INSERT INTO http_tabs
-                 (id, name, method, url, request_mode, body_mode,
-                  auth_type, auth_value, headers_text, cookies_text,
-                  body_text, params_text, path_params_text,
-                  pre_ops_text, post_ops_text, node_id,
-                  active_request_tab, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
-                     ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
-             ON CONFLICT(id) DO UPDATE SET
-                name = excluded.name, method = excluded.method,
-                url = excluded.url, request_mode = excluded.request_mode,
-                body_mode = excluded.body_mode, auth_type = excluded.auth_type,
-                auth_value = excluded.auth_value, headers_text = excluded.headers_text,
-                cookies_text = excluded.cookies_text, body_text = excluded.body_text,
-                params_text = excluded.params_text,
-                path_params_text = excluded.path_params_text,
-                pre_ops_text = excluded.pre_ops_text,
-                post_ops_text = excluded.post_ops_text,
-                node_id = excluded.node_id,
-                active_request_tab = excluded.active_request_tab,
-                updated_at = ?18",
-            params![
-                tab.id,
-                tab.name,
-                tab.method,
-                tab.url,
-                tab.request_mode,
-                tab.body_mode,
-                tab.auth_type,
-                tab.auth_value,
-                tab.headers_text,
-                tab.cookies_text,
-                tab.body_text,
-                tab.params_text,
-                tab.path_params_text,
-                tab.pre_ops_text,
-                tab.post_ops_text,
-                tab.node_id,
-                tab.active_request_tab,
-                now,
-            ],
-        )?;
-        Ok(())
-    }
-
-    pub fn delete_tab(&self, id: &str) -> Result<bool> {
-        let conn = self.connection()?;
-        let affected = conn.execute("DELETE FROM http_tabs WHERE id = ?1", params![id])?;
-        Ok(affected > 0)
-    }
-
     // ── History ──
 
     pub fn insert_history(
@@ -922,29 +826,6 @@ fn map_env_header(row: &rusqlite::Row) -> std::result::Result<EnvHeader, rusqlit
     })
 }
 
-fn map_http_tab(row: &rusqlite::Row) -> std::result::Result<HttpTab, rusqlite::Error> {
-    Ok(HttpTab {
-        id: row.get(0)?,
-        name: row.get(1)?,
-        method: row.get(2)?,
-        url: row.get(3)?,
-        request_mode: row.get(4)?,
-        body_mode: row.get(5)?,
-        auth_type: row.get(6)?,
-        auth_value: row.get(7)?,
-        headers_text: row.get(8)?,
-        cookies_text: row.get(9)?,
-        body_text: row.get(10)?,
-        params_text: row.get(11)?,
-        path_params_text: row.get(12)?,
-        pre_ops_text: row.get(13)?,
-        post_ops_text: row.get(14)?,
-        node_id: row.get(15)?,
-        active_request_tab: row.get(16)?,
-        updated_at: row.get(17)?,
-    })
-}
-
 fn map_http_history(row: &rusqlite::Row) -> std::result::Result<HttpHistory, rusqlite::Error> {
     Ok(HttpHistory {
         id: row.get(0)?,
@@ -1025,7 +906,6 @@ mod tests {
         assert!(tables.contains(&"environments".into()));
         assert!(tables.contains(&"environment_variables".into()));
         assert!(tables.contains(&"environment_headers".into()));
-        assert!(tables.contains(&"http_tabs".into()));
         assert!(tables.contains(&"http_history".into()));
         assert!(tables.contains(&"api_variables".into()));
         assert!(tables.contains(&"schema_info".into()));
@@ -1149,49 +1029,6 @@ mod tests {
 
         assert!(store.delete_environment("env-test").unwrap());
         assert_eq!(store.list_environments().unwrap().len(), 1);
-    }
-
-    #[test]
-    fn tab_persistence() {
-        let store = open_store();
-
-        let tab = HttpTab {
-            id: "tab-1".into(),
-            name: "获取用户".into(),
-            method: "GET".into(),
-            url: "/api/user".into(),
-            request_mode: "rest".into(),
-            body_mode: "none".into(),
-            auth_type: "Bearer".into(),
-            auth_value: "token123".into(),
-            headers_text: "Content-Type=application/json".into(),
-            cookies_text: "sid=abc".into(),
-            body_text: String::new(),
-            params_text: "page=1".into(),
-            path_params_text: String::new(),
-            pre_ops_text: "set token=abc".into(),
-            post_ops_text: "extract id=$.data.id".into(),
-            node_id: "node-1".into(),
-            active_request_tab: 0,
-            updated_at: String::new(),
-        };
-
-        store.save_tab(&tab).unwrap();
-        let tabs = store.list_tabs().unwrap();
-        assert_eq!(tabs.len(), 1);
-        assert_eq!(tabs[0].name, "获取用户");
-        assert_eq!(tabs[0].method, "GET");
-
-        let mut tab2 = tab.clone();
-        tab2.method = "POST".into();
-        tab2.url = "/api/user/create".into();
-        store.save_tab(&tab2).unwrap();
-        let tabs = store.list_tabs().unwrap();
-        assert_eq!(tabs.len(), 1);
-        assert_eq!(tabs[0].method, "POST");
-
-        assert!(store.delete_tab("tab-1").unwrap());
-        assert_eq!(store.list_tabs().unwrap().len(), 0);
     }
 
     #[test]

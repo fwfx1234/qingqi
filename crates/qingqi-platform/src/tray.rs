@@ -11,7 +11,7 @@ use std::{
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tray_icon::{
-    Icon, TrayIconBuilder, TrayIconId,
+    Icon, TrayIconBuilder,
     menu::{CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu},
 };
 
@@ -83,6 +83,21 @@ pub enum TrayIconAction {
     Item(TrayItemClick),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrayMouseButton {
+    Left,
+    Right,
+    Middle,
+    Other,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrayMouseButtonState {
+    Up,
+    Down,
+    Other,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TrayItemRect {
     pub x: f64,
@@ -91,10 +106,30 @@ pub struct TrayItemRect {
     pub height: f64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TrayItemPoint {
+    pub x: f64,
+    pub y: f64,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct TrayItemClick {
     pub id: TrayItemId,
     pub rect: TrayItemRect,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RawTrayIconEvent {
+    pub id: String,
+    pub position: TrayItemPoint,
+    pub rect: TrayItemRect,
+    pub button: TrayMouseButton,
+    pub button_state: TrayMouseButtonState,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RawTrayMenuEvent {
+    pub id: String,
 }
 
 const MAIN_TRAY_ID: &str = "qingqi.tray.main";
@@ -261,14 +296,14 @@ fn apply_item_title_style(tray: &tray_icon::TrayIcon, title: &str) {
         return;
     }
 
-    let font = NSFont::monospacedSystemFontOfSize_weight(8.0, unsafe { NSFontWeightRegular });
+    let font = NSFont::monospacedSystemFontOfSize_weight(8.8, unsafe { NSFontWeightRegular });
     let paragraph = NSMutableParagraphStyle::new();
     paragraph.setAlignment(NSTextAlignment::Left);
     paragraph.setLineSpacing(0.0);
-    paragraph.setMinimumLineHeight(8.8);
-    paragraph.setMaximumLineHeight(8.8);
+    paragraph.setMinimumLineHeight(9.6);
+    paragraph.setMaximumLineHeight(9.6);
 
-    let baseline = NSNumber::new_f64(-2.6);
+    let baseline = NSNumber::new_f64(-2.2);
     let ns_title = NSString::from_str(title);
     let attributed = NSMutableAttributedString::from_nsstring(&ns_title);
     let range = NSRange::new(0, ns_title.len_utf16());
@@ -346,37 +381,39 @@ pub fn item_states() -> Vec<TrayItemState> {
     }
 }
 
-/// Block until the next tray-icon left-click, returning the resulting action.
-///
-/// Event-driven: parks on the `tray-icon` event channel instead of polling, so
-/// it adds no idle CPU wakeups. Returns `None` when the channel is disconnected
-/// (or on platforms without a tray), which signals callers to stop looping.
-pub fn next_tray_action() -> Option<TrayAction> {
-    next_tray_icon_action().map(|action| match action {
-        TrayIconAction::Main => TrayAction::Show,
-        TrayIconAction::Item(_) => TrayAction::Show,
-    })
-}
-
-pub fn next_tray_icon_action() -> Option<TrayIconAction> {
+pub fn next_raw_tray_icon_event() -> Option<RawTrayIconEvent> {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
-        use tray_icon::{MouseButton, MouseButtonState, TrayIconEvent};
+        use tray_icon::TrayIconEvent;
 
-        loop {
-            let event = TrayIconEvent::receiver().recv().ok()?;
-            if let TrayIconEvent::Click {
+        let event = TrayIconEvent::receiver().recv().ok()?;
+        match event {
+            TrayIconEvent::Click {
                 id,
+                position,
                 rect,
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
+                button,
+                button_state,
                 ..
-            } = event
-            {
-                return Some(action_for_tray_icon_id(&id, rect));
-            }
-            // Other tray events (right-click, enter/leave, …) are ignored; keep
-            // blocking until a left-click arrives.
+            } => Some(RawTrayIconEvent {
+                id: id.as_ref().to_string(),
+                position: tray_point_from_platform(position),
+                rect: tray_rect_from_platform(rect),
+                button: tray_mouse_button(button),
+                button_state: tray_mouse_button_state(button_state),
+            }),
+            _ => Some(RawTrayIconEvent {
+                id: String::new(),
+                position: TrayItemPoint { x: 0.0, y: 0.0 },
+                rect: TrayItemRect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 0.0,
+                    height: 0.0,
+                },
+                button: TrayMouseButton::Other,
+                button_state: TrayMouseButtonState::Other,
+            }),
         }
     }
 
@@ -386,21 +423,13 @@ pub fn next_tray_icon_action() -> Option<TrayIconAction> {
     }
 }
 
-/// Block until the next tray menu selection, returning the mapped action.
-///
-/// Event-driven counterpart to [`next_tray_action`] for the menu channel.
-/// Returns `None` when the channel is disconnected (or on unsupported
-/// platforms).
-pub fn next_menu_action() -> Option<TrayAction> {
+pub fn next_raw_menu_event() -> Option<RawTrayMenuEvent> {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
-        loop {
-            let event = MenuEvent::receiver().recv().ok()?;
-            if let Some(action) = action_for_menu_id(event.id().as_ref()) {
-                return Some(action);
-            }
-            // Unknown menu id; keep blocking for the next selection.
-        }
+        let event = MenuEvent::receiver().recv().ok()?;
+        Some(RawTrayMenuEvent {
+            id: event.id().as_ref().to_string(),
+        })
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -633,36 +662,39 @@ fn icon_from_rgba_template(rgba: Vec<u8>, width: u32, height: u32) -> Result<Ico
     Icon::from_rgba(out, width, height).map_err(|error| error.to_string())
 }
 
-fn action_for_menu_id(id: &str) -> Option<TrayAction> {
-    match id {
-        MENU_SHOW => Some(TrayAction::Show),
-        MENU_SLEEP_DISABLED => Some(TrayAction::SetPreventSleep(PreventSleepMode::Disabled)),
-        MENU_SLEEP_ALWAYS => Some(TrayAction::SetPreventSleep(PreventSleepMode::AlwaysOn)),
-        MENU_SLEEP_PLUGGED => Some(TrayAction::SetPreventSleep(PreventSleepMode::WhenPluggedIn)),
-        MENU_RESTART => Some(TrayAction::Restart),
-        MENU_QUIT => Some(TrayAction::Quit),
-        _ => None,
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn tray_point_from_platform(position: tray_icon::dpi::PhysicalPosition<f64>) -> TrayItemPoint {
+    TrayItemPoint {
+        x: position.x,
+        y: position.y,
     }
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn action_for_tray_icon_id(id: &TrayIconId, rect: tray_icon::Rect) -> TrayIconAction {
-    let id = id.as_ref();
-    if id == MAIN_TRAY_ID {
-        return TrayIconAction::Main;
+fn tray_rect_from_platform(rect: tray_icon::Rect) -> TrayItemRect {
+    TrayItemRect {
+        x: rect.position.x,
+        y: rect.position.y,
+        width: rect.size.width as f64,
+        height: rect.size.height as f64,
     }
-    if let Some(item_id) = id.strip_prefix("qingqi.tray.item.") {
-        return TrayIconAction::Item(TrayItemClick {
-            id: TrayItemId::new(item_id),
-            rect: TrayItemRect {
-                x: rect.position.x,
-                y: rect.position.y,
-                width: rect.size.width as f64,
-                height: rect.size.height as f64,
-            },
-        });
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn tray_mouse_button(button: tray_icon::MouseButton) -> TrayMouseButton {
+    match button {
+        tray_icon::MouseButton::Left => TrayMouseButton::Left,
+        tray_icon::MouseButton::Right => TrayMouseButton::Right,
+        tray_icon::MouseButton::Middle => TrayMouseButton::Middle,
     }
-    TrayIconAction::Main
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn tray_mouse_button_state(state: tray_icon::MouseButtonState) -> TrayMouseButtonState {
+    match state {
+        tray_icon::MouseButtonState::Up => TrayMouseButtonState::Up,
+        tray_icon::MouseButtonState::Down => TrayMouseButtonState::Down,
+    }
 }
 
 #[cfg(test)]

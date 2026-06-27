@@ -7,40 +7,43 @@ use qingqi_plugin::{
     },
 };
 
-pub const PLUGIN_ID: &str = "system-settings";
+pub const PLUGIN_ID: &str = "network-speed";
 
 pub fn manifest() -> Manifest {
     Manifest {
         id: PLUGIN_ID.into(),
-        name: "系统设置".into(),
-        description: "主题切换与应用偏好设置".into(),
-        keywords: ["设置", "settings", "主题", "theme", "偏好"]
+        name: "托盘管理".into(),
+        description: "管理系统托盘图标和菜单栏网速显示".into(),
+        keywords: ["网速", "network", "speed", "托盘", "tray", "上传", "下载"]
             .into_iter()
             .map(Into::into)
             .collect(),
         icon: IconRef::asset("icons/settings.svg"),
-        prefixes: vec!["set".into(), "settings".into()],
+        prefixes: vec!["net".into(), "网络".into(), "网速".into()],
         mode: PluginWindowMode::Inline,
-        window: WindowSpec::ratio(0.72, 0.7),
+        window: WindowSpec::ratio(0.46, 0.5),
         category: PluginCategory::System,
         status: PluginStatus::Ready,
-        background: false,
+        background: true,
         dynamic_commands: false,
-        has_settings: false,
+        has_settings: true,
         visual: Some(PluginVisualSpec {
             icon: IconRef::asset("icons/settings.svg"),
-            accent: PluginAccent::Slate,
+            accent: PluginAccent::Green,
             category: PluginCategory::System,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Inline,
-            window: WindowSpec::ratio(0.72, 0.7),
+            window: WindowSpec::ratio(0.46, 0.5),
         }),
         stats: Some(PluginStats {
-            primary: "主题设置".into(),
-            secondary: "配置持久化".into(),
-            tertiary: "偏好设置".into(),
+            primary: "网速监控".into(),
+            secondary: "菜单栏实时更新".into(),
+            tertiary: "详情弹窗".into(),
         }),
-        command_hint: Some("主题、窗口保留、应用索引与诊断信息".into()),
-        command_prefixes: ["set", "settings"].into_iter().map(Into::into).collect(),
+        command_hint: Some("网速托盘监控".into()),
+        command_prefixes: ["net", "网络", "网速"]
+            .into_iter()
+            .map(Into::into)
+            .collect(),
     }
 }

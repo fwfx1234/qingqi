@@ -15,8 +15,6 @@ pub struct SystemSettingsPlugin {
     app_index_handle: Option<AppIndexHandleRef>,
     shortcut_handle: Option<ShortcutHandleRef>,
     app_paths: AppPaths,
-    initial_section: usize,
-    tray_manager_mode: bool,
     manifest: Manifest,
     title: Arc<str>,
 }
@@ -29,40 +27,14 @@ impl SystemSettingsPlugin {
         app_index_handle: Option<AppIndexHandleRef>,
         shortcut_handle: Option<ShortcutHandleRef>,
     ) -> Self {
-        Self::new_with_manifest(
-            theme_handle,
-            app_paths,
-            settings_store,
-            app_index_handle,
-            shortcut_handle,
-            crate::manifest::manifest(),
-            "系统设置".into(),
-            0,
-            false,
-        )
-    }
-
-    pub fn new_with_manifest(
-        theme_handle: ThemeHandleRef,
-        app_paths: AppPaths,
-        settings_store: Arc<Mutex<SettingsStore>>,
-        app_index_handle: Option<AppIndexHandleRef>,
-        shortcut_handle: Option<ShortcutHandleRef>,
-        manifest: Manifest,
-        title: Arc<str>,
-        initial_section: usize,
-        tray_manager_mode: bool,
-    ) -> Self {
         Self {
             theme_handle,
             settings_store,
             app_index_handle,
             shortcut_handle,
             app_paths,
-            initial_section,
-            tray_manager_mode,
-            manifest,
-            title,
+            manifest: crate::manifest::manifest(),
+            title: "系统设置".into(),
         }
     }
 }
@@ -78,27 +50,15 @@ impl Plugin for SystemSettingsPlugin {
         let app_index_handle = self.app_index_handle.clone();
         let shortcut_handle = self.shortcut_handle.clone();
         let app_paths = self.app_paths.clone();
-        let initial_section = self.initial_section;
-        let tray_manager_mode = self.tray_manager_mode;
         let title = Arc::clone(&self.title);
 
         let panel = cx.app.new(|_cx| {
-            if tray_manager_mode {
-                return SettingsView::tray_manager(
-                    theme_handle,
-                    settings_store,
-                    app_index_handle,
-                    shortcut_handle,
-                    app_paths,
-                );
-            }
-            SettingsView::new_with_initial_section(
+            SettingsView::new(
                 theme_handle,
                 settings_store,
                 app_index_handle,
                 shortcut_handle,
                 app_paths,
-                initial_section,
             )
         });
         Ok(PluginView::Inline(Box::new(SystemSettingsView {

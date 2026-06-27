@@ -104,12 +104,12 @@ impl CaptureView {
 
     fn ensure_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.search_input.is_none() {
-            self.search_input = Some(cx.new(|cx| {
-                InputState::new(window, cx).placeholder("搜索 URL 关键词")
-            }));
+            self.search_input =
+                Some(cx.new(|cx| InputState::new(window, cx).placeholder("搜索 URL 关键词")));
         }
         if self.host_input.is_none() {
-            self.host_input = Some(cx.new(|cx| InputState::new(window, cx).placeholder("Host 过滤")));
+            self.host_input =
+                Some(cx.new(|cx| InputState::new(window, cx).placeholder("Host 过滤")));
         }
         self.observe_inputs(cx);
     }

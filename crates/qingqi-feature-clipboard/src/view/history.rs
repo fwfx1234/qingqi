@@ -75,16 +75,14 @@ pub(super) fn search_field(query_input: Entity<InputState>, cx: &App) -> gpui::D
                 .text_color(t.muted_foreground),
         )
         .child(
-            div()
-                .flex_1()
-                .child(
-                    Input::new(&query_input)
-                        .appearance(false)
-                        .bordered(false)
-                        .focus_bordered(false)
-                        .h(px(28.0))
-                        .text_size(px(12.0)),
-                ),
+            div().flex_1().child(
+                Input::new(&query_input)
+                    .appearance(false)
+                    .bordered(false)
+                    .focus_bordered(false)
+                    .h(px(28.0))
+                    .text_size(px(12.0)),
+            ),
         )
 }
 

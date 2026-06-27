@@ -598,10 +598,8 @@ impl Render for QrView {
                                                 }),
                                         )
                                         .child(
-                                            Button::new("qr-copy")
-                                                .label("复制")
-                                                .small()
-                                                .on_click({
+                                            Button::new("qr-copy").label("复制").small().on_click(
+                                                {
                                                     let e = entity.clone();
                                                     move |_, _, cx| {
                                                         e.update(cx, |t, cx| {
@@ -609,13 +607,12 @@ impl Render for QrView {
                                                             cx.notify();
                                                         });
                                                     }
-                                                }),
+                                                },
+                                            ),
                                         )
                                         .child(
-                                            Button::new("qr-paste")
-                                                .label("粘贴")
-                                                .small()
-                                                .on_click({
+                                            Button::new("qr-paste").label("粘贴").small().on_click(
+                                                {
                                                     let e = entity.clone();
                                                     move |_, _, cx| {
                                                         e.update(cx, |t, cx| {
@@ -623,7 +620,8 @@ impl Render for QrView {
                                                             cx.notify();
                                                         });
                                                     }
-                                                }),
+                                                },
+                                            ),
                                         )
                                         .child(div().flex_1())
                                         .child(
@@ -757,5 +755,3 @@ fn qr_input(state: Entity<InputState>) -> Input {
         .h(px(200.0))
         .text_size(px(12.0))
 }
-
-

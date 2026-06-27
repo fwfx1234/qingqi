@@ -25,6 +25,7 @@ pub fn manifest() -> Manifest {
         .collect(),
         background: true,
         dynamic_commands: false,
+        has_settings: false,
         icon: IconRef::asset("icons/clipboard.svg"),
         mode: ViewMode::Window,
         window: WindowSpec::fixed_topmost(1024.0, 558.0),

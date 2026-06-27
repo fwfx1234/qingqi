@@ -24,6 +24,7 @@ qingqi-feature-json-parser = { path = "../qingqi-feature-json-parser" }
 qingqi-feature-qr-code = { path = "../qingqi-feature-qr-code" }
 qingqi-feature-quick-launch = { path = "../qingqi-feature-quick-launch" }
 qingqi-feature-system-settings = { path = "../qingqi-feature-system-settings" }
+qingqi-feature-tray = { path = "../qingqi-feature-tray" }
 
 [build-dependencies]
 image = { workspace = true, default-features = false, features = ["png"] }

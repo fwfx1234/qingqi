@@ -9,6 +9,12 @@ pub enum AppEventKind {
     FeatureChanged,
     CommandsChanged,
     JobsChanged,
+    /// 托盘项被点击（provider_id）
+    TrayClicked,
+    /// 托盘弹窗已显示（provider_id）
+    TrayPopupShown,
+    /// 托盘弹窗已关闭（provider_id）
+    TrayPopupClosed,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

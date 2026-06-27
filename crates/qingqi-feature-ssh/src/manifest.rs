@@ -38,6 +38,7 @@ pub fn manifest() -> Manifest {
         status: PluginStatus::Ready,
         background: false,
         dynamic_commands: false,
+        has_settings: false,
         visual: Some(PluginVisualSpec {
             icon: IconRef::asset("icons/folder-network.svg"),
             accent: PluginAccent::Cyan,

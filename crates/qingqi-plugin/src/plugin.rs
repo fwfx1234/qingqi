@@ -12,6 +12,7 @@ use crate::{
         WindowSpec,
     },
     shortcut::ShortcutDescriptor,
+    tray::{TrayHostRef, TrayItemId, TrayItemRect},
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -125,11 +126,25 @@ pub trait ListView {
 pub struct PluginCx<'a> {
     pub events: AppEventBus,
     pub app: &'a mut App,
+    pub tray: Option<TrayHostRef>,
 }
 
 impl<'a> PluginCx<'a> {
     pub fn new(events: AppEventBus, app: &'a mut App) -> Self {
-        Self { events, app }
+        Self {
+            events,
+            app,
+            tray: None,
+        }
+    }
+
+    pub fn with_tray(mut self, tray: TrayHostRef) -> Self {
+        self.tray = Some(tray);
+        self
+    }
+
+    pub fn tray(&self) -> Option<TrayHostRef> {
+        self.tray.clone()
     }
 
     pub fn notify_commands_changed(&self, plugin: &PluginId) {
@@ -181,7 +196,7 @@ pub trait Plugin {
         Ok(())
     }
 
-    fn start_background(&mut self, _events: AppEventBus, _cx: &mut App) {}
+    fn start_background(&mut self, _cx: &mut PluginCx<'_>) {}
 
     fn clipboard_boost(&self, _payload: &ClipboardPayload) -> Option<i32> {
         None
@@ -189,6 +204,30 @@ pub trait Plugin {
 
     fn shutdown(&mut self) {}
     fn close_idle(&mut self) {}
+
+    /// 返回配置视图（可选实现）。
+    /// 如果插件有配置界面，返回 `Some(PluginView)`，
+    /// app 层会将其嵌入设置中心或作为独立入口。
+    fn settings_view(&mut self, _cx: &mut PluginCx<'_>) -> Option<PluginView> {
+        None
+    }
+
+    fn on_tray_item_click(
+        &mut self,
+        _item_id: &TrayItemId,
+        _rect: TrayItemRect,
+        _cx: &mut PluginCx<'_>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn on_tray_popup_closed(
+        &mut self,
+        _item_id: &TrayItemId,
+        _cx: &mut PluginCx<'_>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -205,6 +244,9 @@ pub struct Manifest {
     pub status: PluginStatus,
     pub background: bool,
     pub dynamic_commands: bool,
+    /// 是否有独立的配置界面（通过 `Plugin::settings_view()` 提供）
+    #[serde(default)]
+    pub has_settings: bool,
     #[serde(skip)]
     pub visual: Option<PluginVisualSpec>,
     #[serde(skip)]
@@ -235,6 +277,7 @@ impl Manifest {
             status: PluginStatus::Ready,
             background: false,
             dynamic_commands: false,
+            has_settings: false,
             visual: None,
             stats: None,
             command_hint: None,

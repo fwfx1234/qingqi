@@ -6,10 +6,13 @@ use gpui::{
     App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
     Styled, div, hsla, prelude::FluentBuilder, px,
 };
-use gpui_component::{input::{Input, InputState}, theme::Theme};
 use gpui_component::{
     IconName, Sizable, Size,
     button::{Button, ButtonVariants},
+};
+use gpui_component::{
+    input::{Input, InputState},
+    theme::Theme,
 };
 use qingqi_ui::{theme, ui, ui::glass};
 
@@ -108,7 +111,7 @@ pub fn kv_editor_table(
                                         editor.toggle(i);
                                     }
                                     view.sync_models(cx);
-                                    view.persist_current_tab_state(cx);
+                                    view.persist_workspace();
                                 });
                             }),
                     ),
@@ -130,7 +133,7 @@ pub fn kv_editor_table(
                                     editor.remove_row(i);
                                 }
                                 view.sync_models(cx);
-                                view.persist_current_tab_state(cx);
+                                view.persist_workspace();
                             });
                         }),
                 )
@@ -147,7 +150,7 @@ pub fn kv_editor_table(
                             if let Some(editor) = view.kv_editor_mut(tab) {
                                 editor.add_row(window, cx);
                             }
-                            view.persist_current_tab_state(cx);
+                            view.persist_workspace();
                         });
                     }),
             ),
@@ -158,20 +161,11 @@ fn kv_cell(input: Entity<InputState>, enabled: bool, cx: &App) -> gpui::Div {
     kv_cell_base(input, enabled, cx).flex_1()
 }
 
-fn kv_cell_fixed(
-    input: Entity<InputState>,
-    enabled: bool,
-    cx: &App,
-    width: f32,
-) -> gpui::Div {
+fn kv_cell_fixed(input: Entity<InputState>, enabled: bool, cx: &App, width: f32) -> gpui::Div {
     kv_cell_base(input, enabled, cx).w(px(width)).flex_none()
 }
 
-fn kv_cell_base(
-    input: Entity<InputState>,
-    enabled: bool,
-    cx: &App,
-) -> gpui::Div {
+fn kv_cell_base(input: Entity<InputState>, enabled: bool, cx: &App) -> gpui::Div {
     div()
         .min_w(px(0.0))
         .rounded(px(6.0))

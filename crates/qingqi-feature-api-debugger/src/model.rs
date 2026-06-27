@@ -399,30 +399,6 @@ pub struct EnvHeader {
     pub sort_order: i64,
 }
 
-// ── Tabs ──
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct HttpTab {
-    pub id: String,
-    pub name: String,
-    pub method: String,
-    pub url: String,
-    pub request_mode: String,
-    pub body_mode: String,
-    pub auth_type: String,
-    pub auth_value: String,
-    pub headers_text: String,
-    pub cookies_text: String,
-    pub body_text: String,
-    pub params_text: String,
-    pub path_params_text: String,
-    pub pre_ops_text: String,
-    pub post_ops_text: String,
-    pub node_id: String,
-    pub active_request_tab: i64,
-    pub updated_at: String,
-}
-
 // ── History ──
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

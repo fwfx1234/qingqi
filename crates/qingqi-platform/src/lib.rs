@@ -12,4 +12,3 @@ pub mod shell;
 pub mod svg_icon;
 pub mod theme;
 pub mod tray;
-pub mod tray_settings;
