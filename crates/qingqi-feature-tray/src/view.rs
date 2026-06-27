@@ -1,6 +1,6 @@
 //! 网速托盘弹窗视图。
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc::Receiver};
 
 use gpui::{
     AnyElement, App, ClipboardItem, InteractiveElement, IntoElement, MouseButton, ParentElement,
@@ -31,6 +31,10 @@ impl NetworkSpeedPopupView {
 impl TrayPopupView for NetworkSpeedPopupView {
     fn title(&self) -> Arc<str> {
         "网速详情".into()
+    }
+
+    fn subscribe_updates(&mut self) -> Option<Receiver<()>> {
+        Some(self.service.subscribe_updates())
     }
 
     fn render(&mut self, _window: &mut Window, cx: &mut App) -> AnyElement {

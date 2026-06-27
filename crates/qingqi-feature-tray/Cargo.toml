@@ -13,6 +13,7 @@ gpui-component.workspace = true
 qingqi-platform = { path = "../qingqi-platform" }
 qingqi-plugin = { path = "../qingqi-plugin" }
 qingqi-ui = { path = "../qingqi-ui" }
+reqwest.workspace = true
 serde.workspace = true
 tracing.workspace = true
 

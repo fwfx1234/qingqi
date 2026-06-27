@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, mpsc::Receiver},
     time::{Duration, Instant},
 };
 
@@ -321,7 +321,7 @@ struct TrayPopupWindow {
     manager: TrayManagerHandle,
     view: Box<dyn TrayPopupView>,
     activation_subscription: Option<Subscription>,
-    _refresh_task: Option<Task<()>>,
+    _update_task: Option<Task<()>>,
 }
 
 impl TrayPopupWindow {
@@ -329,7 +329,7 @@ impl TrayPopupWindow {
     fn new(
         platform_id: platform_tray::TrayItemId,
         manager: TrayManagerHandle,
-        view: Box<dyn TrayPopupView>,
+        mut view: Box<dyn TrayPopupView>,
         close_on_deactivate: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -352,27 +352,37 @@ impl TrayPopupWindow {
             None
         };
 
-        // 定时刷新弹窗内容（每 1 秒），使网速等实时数据持续更新
-        let refresh_task = Some(cx.spawn(async move |this, async_cx| {
-            loop {
-                async_cx
-                    .background_executor()
-                    .timer(Duration::from_secs(1))
-                    .await;
-                if this.update(async_cx, |_, cx| cx.notify()).is_err() {
-                    break;
+        let update_task = view.subscribe_updates().map(|receiver| {
+            cx.spawn(async move |this, async_cx| {
+                let receiver = Arc::new(Mutex::new(receiver));
+                loop {
+                    let receiver = Arc::clone(&receiver);
+                    let event = async_cx
+                        .background_executor()
+                        .spawn(async move { recv_popup_update(receiver) })
+                        .await;
+                    if event.is_none() {
+                        break;
+                    }
+                    if this.update(async_cx, |_, cx| cx.notify()).is_err() {
+                        break;
+                    }
                 }
-            }
-        }));
+            })
+        });
 
         Self {
             platform_id,
             manager,
             view,
             activation_subscription,
-            _refresh_task: refresh_task,
+            _update_task: update_task,
         }
     }
+}
+
+fn recv_popup_update(receiver: Arc<Mutex<Receiver<()>>>) -> Option<()> {
+    receiver.lock().ok()?.recv().ok()
 }
 
 impl Drop for TrayPopupWindow {

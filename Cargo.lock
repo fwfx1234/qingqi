@@ -5996,6 +5996,7 @@ dependencies = [
  "qingqi-platform",
  "qingqi-plugin",
  "qingqi-ui",
+ "reqwest",
  "serde",
  "tracing",
 ]

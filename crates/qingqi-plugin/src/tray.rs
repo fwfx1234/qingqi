@@ -1,6 +1,6 @@
 //! Lightweight tray SDK types shared by plugins and the app host.
 
-use std::sync::Arc;
+use std::sync::{Arc, mpsc::Receiver};
 
 use anyhow::Result;
 use gpui::{App, Window};
@@ -88,6 +88,9 @@ impl Default for TrayPopupOptions {
 
 pub trait TrayPopupView: 'static {
     fn title(&self) -> Arc<str>;
+    fn subscribe_updates(&mut self) -> Option<Receiver<()>> {
+        None
+    }
     fn render(&mut self, window: &mut Window, cx: &mut App) -> gpui::AnyElement;
     fn on_close(&mut self) {}
 }

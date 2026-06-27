@@ -1,8 +1,9 @@
 use std::{
-    net::UdpSocket,
+    net::{IpAddr, UdpSocket},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
+        mpsc::{Receiver, Sender, channel},
     },
     time::Duration,
 };
@@ -31,6 +32,7 @@ pub struct NetworkSpeedService {
     snapshot: Mutex<NetworkSnapshot>,
     public_ip: Arc<Mutex<Option<String>>>,
     local_ip: Arc<Mutex<Option<String>>>,
+    update_subscribers: Arc<Mutex<Vec<Sender<()>>>>,
     tray_host: Mutex<Option<TrayHostRef>>,
     started: AtomicBool,
     ip_refreshing: Arc<AtomicBool>,
@@ -45,6 +47,7 @@ impl NetworkSpeedService {
             snapshot: Mutex::new(NetworkSnapshot::default()),
             public_ip: Arc::new(Mutex::new(None)),
             local_ip: Arc::new(Mutex::new(None)),
+            update_subscribers: Arc::new(Mutex::new(Vec::new())),
             tray_host: Mutex::new(None),
             started: AtomicBool::new(false),
             ip_refreshing: Arc::new(AtomicBool::new(false)),
@@ -68,6 +71,14 @@ impl NetworkSpeedService {
 
     pub fn local_ip(&self) -> Option<String> {
         self.local_ip.lock().ok().and_then(|ip| ip.clone())
+    }
+
+    pub fn subscribe_updates(&self) -> Receiver<()> {
+        let (sender, receiver) = channel();
+        if let Ok(mut subscribers) = self.update_subscribers.lock() {
+            subscribers.push(sender);
+        }
+        receiver
     }
 
     pub fn start_background(self: &Arc<Self>, tray_host: TrayHostRef, cx: &mut App) -> Result<()> {
@@ -187,6 +198,7 @@ impl NetworkSpeedService {
     ) -> Result<NetworkSpeedSettings> {
         let settings = self.settings_store.update(apply)?;
         self.refresh_tray_item(&settings, &self.snapshot());
+        self.notify_updated();
         Ok(settings)
     }
 
@@ -207,6 +219,7 @@ impl NetworkSpeedService {
         }
         let public_ip = Arc::clone(&self.public_ip);
         let local_ip = Arc::clone(&self.local_ip);
+        let update_subscribers = Arc::clone(&self.update_subscribers);
         let ip_refreshing = Arc::clone(&self.ip_refreshing);
         std::thread::spawn(move || {
             let next_local_ip = detect_local_ip();
@@ -218,6 +231,7 @@ impl NetworkSpeedService {
             if let Ok(mut current) = public_ip.lock() {
                 *current = next_public_ip;
             }
+            notify_update_subscribers(&update_subscribers);
             ip_refreshing.store(false, Ordering::SeqCst);
         });
     }
@@ -250,6 +264,7 @@ impl NetworkSpeedService {
                 match result {
                     Ok((settings, snapshot)) => {
                         service_for_update.refresh_tray_item(&settings, &snapshot);
+                        service_for_update.notify_updated();
                         Self::schedule_next_sample(
                             Arc::clone(&service_for_update),
                             settings.network_speed_update_interval(),
@@ -272,41 +287,40 @@ impl NetworkSpeedService {
     pub fn tray_item_id() -> TrayItemId {
         TrayItemId::new(TRAY_ITEM_ID)
     }
+
+    fn notify_updated(&self) {
+        notify_update_subscribers(&self.update_subscribers);
+    }
 }
 
-/// 通过 HTTP 请求获取公网 IP。使用简单 TCP 连接避免引入 reqwest 依赖。
-/// 使用 ip-api.com 免费的 JSON API（无需 API Key）。
+fn notify_update_subscribers(subscribers: &Arc<Mutex<Vec<Sender<()>>>>) {
+    if let Ok(mut subscribers) = subscribers.lock() {
+        subscribers.retain(|subscriber| subscriber.send(()).is_ok());
+    }
+}
+
+/// 通过 api.ipify.org 获取公网 IP。
 fn fetch_public_ip_from_api() -> Option<String> {
-    let request = "GET /json/ HTTP/1.1\r\nHost: ip-api.com\r\nConnection: close\r\n\r\n";
-    let result = (|| -> std::io::Result<String> {
-        use std::io::{Read, Write};
-        use std::net::TcpStream;
-        let mut stream = TcpStream::connect_timeout(
-            &"ip-api.com:80"
-                .parse()
-                .unwrap_or_else(|_| ([93, 184, 216, 34], 80).into()),
-            Duration::from_secs(5),
-        )?;
-        stream.write_all(request.as_bytes())?;
-        stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-        let mut response = String::new();
-        stream.read_to_string(&mut response)?;
-        // 解析 JSON 响应: {"status":"success","query":"1.2.3.4"}
-        if let Some(body_start) = response.find("\r\n\r\n") {
-            let body = &response[body_start + 4..];
-            if let Some(ip_start) = body.find("\"query\":\"") {
-                let after = &body[ip_start + 9..];
-                if let Some(ip_end) = after.find('\"') {
-                    return Ok(after[..ip_end].to_string());
-                }
-            }
+    let result = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(6))
+        .user_agent("qingqi/1.0")
+        .build()
+        .and_then(|client| client.get("https://api.ipify.org").send())
+        .and_then(|response| response.error_for_status())
+        .and_then(|response| response.text());
+
+    match result {
+        Ok(body) => parse_public_ip_body(&body),
+        Err(error) => {
+            tracing::warn!(error = %error, "public IP fetch failed");
+            None
         }
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "parse failed",
-        ))
-    })();
-    result.ok()
+    }
+}
+
+fn parse_public_ip_body(body: &str) -> Option<String> {
+    let candidate = body.trim();
+    candidate.parse::<IpAddr>().ok().map(|ip| ip.to_string())
 }
 
 fn detect_local_ip() -> Option<String> {
