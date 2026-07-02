@@ -12,7 +12,7 @@ use gpui::{
     App, InteractiveElement, IntoElement, ParentElement, SharedString, StatefulInteractiveElement,
     Styled, Window, div, hsla, img, px, rgb, svg,
 };
-use gpui_component::theme::Theme;
+
 
 use crate::{assets, theme};
 use qingqi_plugin::plugin_spec::{PluginAccent, PluginCategory, PluginStatus};
@@ -20,69 +20,69 @@ use qingqi_plugin::plugin_spec::{PluginAccent, PluginCategory, PluginStatus};
 // ── Background Colors ────────────────────────────────────────────────────
 
 pub fn bg_canvas(cx: &App) -> gpui::Hsla {
-    Theme::global(cx).background
+    crate::token::tokens(cx).background
 }
 
 pub fn bg_surface(cx: &App) -> gpui::Hsla {
-    Theme::global(cx).list
+    crate::token::tokens(cx).surface
 }
 
 pub fn bg_subtle(cx: &App) -> gpui::Hsla {
-    Theme::global(cx).muted
+    crate::token::tokens(cx).muted
 }
 
 pub fn bg_hover(cx: &App) -> gpui::Hsla {
-    Theme::global(cx).list_hover
+    crate::token::tokens(cx).surface_hover
 }
 
 // ── Text Colors ─────────────────────────────────────────────────────────
 
 pub fn text_primary(cx: &App) -> gpui::Hsla {
-    Theme::global(cx).foreground
+    crate::token::tokens(cx).foreground
 }
 
 pub fn text_secondary(cx: &App) -> gpui::Hsla {
-    Theme::global(cx).muted_foreground
+    crate::token::tokens(cx).foreground_muted
 }
 
 pub fn text_tertiary(cx: &App) -> gpui::Hsla {
-    Theme::global(cx).muted_foreground
+    crate::token::tokens(cx).foreground_muted
 }
 
 // ── Border Colors ────────────────────────────────────────────────────────
 
 pub fn border_light(cx: &App) -> gpui::Hsla {
-    Theme::global(cx).border
+    crate::token::tokens(cx).border
 }
 
 pub fn border_strong(cx: &App) -> gpui::Hsla {
-    Theme::global(cx).border
+    crate::token::tokens(cx).border_strong
 }
 
 // ── Status Colors ────────────────────────────────────────────────────────
 
 pub fn success(cx: &App) -> gpui::Hsla {
-    Theme::global(cx).success
+    crate::token::tokens(cx).success
 }
 
 pub fn warning(cx: &App) -> gpui::Hsla {
-    Theme::global(cx).warning
+    crate::token::tokens(cx).warning
 }
 
 pub fn danger(cx: &App) -> gpui::Hsla {
-    Theme::global(cx).danger
+    crate::token::tokens(cx).danger
 }
 
 pub fn info(cx: &App) -> gpui::Hsla {
-    Theme::global(cx).info
+    crate::token::tokens(cx).info
 }
 
 pub fn overlay_backdrop(cx: &App) -> gpui::Hsla {
-    Theme::global(cx).overlay
+    crate::token::tokens(cx).overlay
 }
 
 pub fn row_hover(cx: &App) -> gpui::Hsla {
-    Theme::global(cx).list_hover
+    crate::token::tokens(cx).surface_hover
 }
 
 pub fn white() -> gpui::Hsla {
@@ -385,9 +385,9 @@ pub fn row_card(selected: bool, cx: &App) -> gpui::Div {
 pub fn plugin_surface(cx: &App) -> gpui::Div {
     div()
         .size_full()
-        .bg(Theme::global(cx).background)
+        .bg(crate::token::tokens(cx).background)
         .font_family(font_ui())
-        .text_color(Theme::global(cx).foreground)
+        .text_color(crate::token::tokens(cx).foreground)
 }
 
 pub fn plugin_content() -> gpui::Div {
@@ -441,7 +441,7 @@ pub fn ui_empty_state(message: impl Into<SharedString>, cx: &App) -> impl IntoEl
         .child(
             div()
                 .text_size(px(14.0))
-                .text_color(Theme::global(cx).muted_foreground)
+                .text_color(crate::token::tokens(cx).foreground_muted)
                 .child(message),
         )
 }
