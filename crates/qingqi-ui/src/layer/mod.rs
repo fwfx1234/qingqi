@@ -7,14 +7,13 @@ mod context_menu;
 mod popover;
 mod tooltip;
 
-pub use dialog::{Dialog, ActiveDialog};
+pub use dialog::{Dialog, DialogButton, ActiveDialog};
 pub use sheet::{Sheet, ActiveSheet, Placement};
 pub use notification::{Notification, NotificationList, NotificationType};
 pub use context_menu::{ContextMenuExt, PopupMenu, PopupMenuItem, MenuItemVariant};
 pub use popover::Popover;
 pub use tooltip::Tooltip;
 
-#[derive(Clone)]
 pub struct LayerManager {
     pub(crate) sheets: Vec<ActiveSheet>,
     pub(crate) dialogs: Vec<ActiveDialog>,
