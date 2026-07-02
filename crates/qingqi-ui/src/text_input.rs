@@ -1,15 +1,13 @@
-//! 基于 `gpui-component::input` 的文本输入封装，样式对齐 Qingqi UI。
+//! 基于自研 `crate::components::input` 的文本输入封装，样式对齐 Qingqi UI。
 
 use std::rc::Rc;
 
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, Hsla, InteractiveElement,
+    App, AppContext, Component, Context, Entity, FocusHandle, Focusable, Hsla, InteractiveElement,
     IntoElement, KeyDownEvent, ParentElement, Render, SharedString, Styled, Subscription, Window,
     div, prelude::FluentBuilder as _, px,
 };
-use gpui_component::input::{Input, InputEvent, InputState, SelectAll};
-
-use crate::ui;
+use crate::components::input::{TextInputState, TextInputElement};
 
 type KeyDownHandler = Rc<dyn Fn(&KeyDownEvent, &mut Window, &mut App) -> bool + 'static>;
 
@@ -30,10 +28,10 @@ impl Default for TextInputStyle {
     }
 }
 
-/// 包装 `gpui-component` 输入框，保留 Qingqi 侧常用配置 API。
+/// 包装自研输入框，保留 Qingqi 侧常用配置 API。
 pub struct TextInput {
     focus_handle: FocusHandle,
-    state: Option<Entity<InputState>>,
+    state: Option<Entity<TextInputState>>,
     placeholder: SharedString,
     cached_text: String,
     draw_chrome: bool,
@@ -87,7 +85,7 @@ impl TextInput {
     /// 键盘绑定由 `gpui_component::init` 注册，此处保留兼容调用。
     pub fn register_bindings(_cx: &mut App) {}
 
-    pub fn state(&self) -> Option<&Entity<InputState>> {
+    pub fn state(&self) -> Option<&Entity<TextInputState>> {
         self.state.as_ref()
     }
 
@@ -182,28 +180,23 @@ impl TextInput {
         self.cached_text.clone()
     }
 
-    /// 读取输入框当前值；子窗口渲染时优先从 `InputState` 取值，避免 `cached_text` 滞后。
+    /// 读取输入框当前值；子窗口渲染时优先从 `TextInputState` 取值，避免 `cached_text` 滞后。
     pub fn current_text(&self, cx: &App) -> String {
         self.state
             .as_ref()
-            .map(|state| state.read(cx).value().to_string())
+            .map(|state| state.read(cx).value.clone())
             .unwrap_or_else(|| self.cached_text.clone())
     }
 
-    fn ensure_state(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+    fn ensure_state(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> Entity<TextInputState> {
         if self.pending_recreate || self.state.is_none() {
             let text = self.cached_text.clone();
             let placeholder = self.placeholder.clone();
-            let multiline = self.multiline;
             let state = cx.new(|cx| {
-                let state = InputState::new(window, cx)
-                    .placeholder(placeholder)
-                    .default_value(text);
-                if multiline {
-                    state.multi_line(true)
-                } else {
-                    state
-                }
+                let mut s = TextInputState::new(cx);
+                s.placeholder = placeholder;
+                s.value = text;
+                s
             });
             self.state = Some(state.clone());
             self.pending_recreate = false;
@@ -223,77 +216,67 @@ impl TextInput {
         if self.change_subscription.is_some() {
             return;
         }
-        self.change_subscription = Some(cx.subscribe(&state, |this, state, event, cx| {
-            if matches!(event, InputEvent::Change) {
-                this.cached_text = state.read(cx).value().to_string();
-                cx.notify();
-            }
+        self.change_subscription = Some(cx.subscribe(&state, |this, state, _event, cx| {
+            this.cached_text = state.read(cx).value.clone();
+            cx.notify();
         }));
     }
 
     fn sync_pending(
         &mut self,
-        state: &Entity<InputState>,
-        window: &mut Window,
+        state: &Entity<TextInputState>,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if let Some(placeholder) = self.pending_placeholder.take() {
-            state.update(cx, |input, cx| {
-                input.set_placeholder(placeholder, window, cx);
+            state.update(cx, |s, _| {
+                s.placeholder = placeholder;
             });
         }
         if let Some(value) = self.pending_value.take() {
             self.cached_text = value.clone();
-            state.update(cx, |input, cx| {
-                input.set_value(value, window, cx);
+            state.update(cx, |s, _| {
+                s.set_value(value);
             });
         }
         if self.pending_select_all {
             self.pending_select_all = false;
-            let focus = state.read(cx).focus_handle(cx);
-            window.focus(&focus);
-            window.dispatch_action(Box::new(SelectAll), cx);
-        }
-        if let Some(wrap) = self.pending_soft_wrap.take() {
-            state.update(cx, |input, cx| {
-                input.set_soft_wrap(wrap, window, cx);
+            state.update(cx, |s, _| {
+                s.core.select_all(&s.value);
             });
+        }
+        if let Some(_wrap) = self.pending_soft_wrap.take() {
+            // 自研 TextInputElement 暂不支持 soft_wrap
         }
     }
 
-    fn build_input(&self, state: &Entity<InputState>, cx: &App) -> Input {
+    fn build_input(&self, state: &Entity<TextInputState>, _cx: &App) -> TextInputElement {
         let style = self.style;
-        let mut input = Input::new(state).w_full().h_full();
 
-        input = input
-            .appearance(self.draw_chrome)
-            .bordered(self.draw_chrome)
-            .focus_bordered(self.draw_chrome)
-            .disabled(self.read_only)
-            .text_size(px(style.font_size));
-
-        if self.draw_chrome {
-            input = input
-                .bg(ui::bg_surface(cx))
-                .rounded(px(8.0))
-                .border_color(ui::border_light(cx));
+        TextInputElement {
+            state: state.clone(),
+            placeholder: self.placeholder.clone(),
+            disabled: self.read_only,
+            masked: false,
+            appearance: self.draw_chrome,
+            bordered: self.draw_chrome,
+            cleanable: false,
+            prefix: None,
+            suffix: None,
+            height: if self.multiline {
+                px(style.height.max(40.0))
+            } else {
+                px(style.height)
+            },
+            font_size: px(style.font_size),
+            font_family: if self.monospace {
+                Some("Menlo".to_string())
+            } else {
+                None
+            },
+            text_color: self.text_color,
+            placeholder_color: self.placeholder_color,
         }
-
-        if self.monospace {
-            input = input.font_family("Menlo");
-        }
-
-        if let Some(color) = self.text_color {
-            input = input.text_color(color);
-        }
-
-        if style.padding > 0.0 {
-            let pad = px(style.padding);
-            input = input.px(pad).py(pad);
-        }
-
-        let _ = self.placeholder_color;
-        input
     }
 }
 
@@ -301,7 +284,7 @@ impl Focusable for TextInput {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
         self.state
             .as_ref()
-            .map(|state| state.read(cx).focus_handle(cx))
+            .map(|state| state.read(cx).focus_handle())
             .unwrap_or_else(|| self.focus_handle.clone())
     }
 }
@@ -310,7 +293,7 @@ impl Render for TextInput {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let state = self.ensure_state(window, cx);
         self.sync_pending(&state, window, cx);
-        let input = self.build_input(&state, cx).w_full().h_full();
+        let input = self.build_input(&state, cx);
         let key_down_handler = self.key_down_handler.clone();
 
         let mut wrapper = div().w_full();
@@ -333,6 +316,6 @@ impl Render for TextInput {
                     }
                 })
             })
-            .child(input)
+            .child(Component::new(input))
     }
 }

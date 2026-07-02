@@ -75,6 +75,8 @@ impl Focusable for TextInputState {
     fn focus_handle(&self, _cx: &App) -> FocusHandle { self.core.focus_handle() }
 }
 
+impl EventEmitter<()> for TextInputState {}
+
 impl EntityInputHandler for TextInputState {
     fn text_for_range(&mut self, range_utf16: std::ops::Range<usize>, adjusted_range: &mut Option<std::ops::Range<usize>>, _window: &mut Window, _cx: &mut Context<Self>) -> Option<String> {
         let (text, adjusted) = self.core.text_for_range_inner(&self.value, range_utf16);
