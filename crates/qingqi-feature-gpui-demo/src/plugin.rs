@@ -3,9 +3,7 @@ use gpui::{
     Styled, Window, div, px,
 };
 use gpui_component::{
-    IconName, Sizable,
     badge::Badge,
-    button::{Button, ButtonVariants},
     checkbox::Checkbox,
     slider::{Slider, SliderState},
     switch::Switch,
@@ -13,6 +11,7 @@ use gpui_component::{
     tag::Tag,
     theme::Theme,
 };
+use qingqi_ui::components::button::{Button, ButtonVariant, ButtonSize};
 use std::sync::Arc;
 
 use crate::manifest;
@@ -157,7 +156,7 @@ fn header(accent: PluginAccent, cx: &App) -> impl IntoElement {
                         .child("用 gpui-component 真实组件替代静态描述，验证按钮、标签页、开关等控件的交互行为。"),
                 ),
         )
-        .child(Tag::warning().small().child("预览"))
+        .child(Tag::warning().child("预览"))
 }
 
 fn component_column(
@@ -181,10 +180,10 @@ fn component_column(
                 .flex()
                 .gap_2()
                 .flex_wrap()
-                .child(Button::new("demo-primary").label("Primary").primary())
+                .child(Button::new("demo-primary").label("Primary").variant(ButtonVariant::Primary))
                 .child(Button::new("demo-secondary").label("Secondary"))
-                .child(Button::new("demo-danger").label("Danger").danger())
-                .child(Button::new("demo-ghost").label("Ghost").ghost()),
+                .child(Button::new("demo-danger").label("Danger").variant(ButtonVariant::Danger))
+                .child(Button::new("demo-ghost").label("Ghost").variant(ButtonVariant::Ghost)),
         )
         .child(
             div()
@@ -193,19 +192,19 @@ fn component_column(
                 .flex_wrap()
                 .child(
                     Button::new("demo-icon-search")
-                        .icon(IconName::Search)
-                        .ghost()
-                        .small(),
+                        .icon("🔍")
+                        .variant(ButtonVariant::Ghost)
+                        .size(ButtonSize::Small),
                 )
                 .child(
                     Badge::new()
                         .count(3)
-                        .child(Button::new("demo-badge-btn").label("通知").small()),
+                        .child(Button::new("demo-badge-btn").label("通知").size(ButtonSize::Small)),
                 )
                 .child(
                     Badge::new()
                         .dot()
-                        .child(Button::new("demo-dot-btn").label("状态").small()),
+                        .child(Button::new("demo-dot-btn").label("状态").size(ButtonSize::Small)),
                 ),
         )
         .child(
@@ -332,9 +331,9 @@ fn state_column(accent: PluginAccent, cx: &App) -> impl IntoElement {
                 .mt_2()
                 .flex()
                 .gap_2()
-                .child(Button::new("demo-outline-btn").label("Outline").outline())
-                .child(Button::new("demo-success-btn").label("Success").success())
-                .child(Button::new("demo-warning-btn").label("Warning").warning()),
+                .child(Button::new("demo-outline-btn").label("Outline").variant(ButtonVariant::Secondary))
+                .child(Button::new("demo-success-btn").label("Success").variant(ButtonVariant::Success))
+                .child(Button::new("demo-warning-btn").label("Warning").variant(ButtonVariant::Warning)),
         )
 }
 
