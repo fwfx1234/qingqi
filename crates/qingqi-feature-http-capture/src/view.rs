@@ -20,7 +20,11 @@ use gpui::{
     ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task,
     Window, div, px,
 };
-use gpui_component::button::{Button, ButtonVariants};
+use qingqi_ui::components::button::{Button, ButtonSize, ButtonVariant};
+
+
+
+use qingqi_ui::token::tokens;
 use gpui_component::divider::Divider;
 use gpui_component::input::{Input, InputState};
 use gpui_component::scroll::ScrollableElement;
@@ -480,15 +484,15 @@ impl CaptureView {
 
     fn status_color(status: i64, cx: &App) -> gpui::Rgba {
         if status >= 500 {
-            Theme::global(cx).danger.into()
+            tokens(cx).danger.into()
         } else if status >= 400 {
-            Theme::global(cx).warning.into()
+            tokens(cx).warning.into()
         } else if status >= 300 {
-            Theme::global(cx).info.into()
+            tokens(cx).info.into()
         } else if status >= 200 {
-            Theme::global(cx).success.into()
+            tokens(cx).success.into()
         } else {
-            Theme::global(cx).muted_foreground.into()
+            tokens(cx).foreground_muted.into()
         }
     }
 }
@@ -611,8 +615,8 @@ fn proxy_value_row(
         .into_any_element()
 }
 
-fn small_action(id: &'static str, label: &str, _cx: &App) -> gpui_component::button::Button {
-    Button::new(id).label(label.to_string()).small().compact()
+fn small_action(id: &'static str, label: &str, _cx: &App) -> Button {
+    Button::new(id).label(label.to_string()).size(ButtonSize::Small).size(ButtonSize::XSmall)
 }
 
 fn capture_input(state: Entity<InputState>) -> Input {
@@ -693,7 +697,7 @@ fn short_path(path: &str) -> String {
 impl Render for CaptureView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.ensure_inputs(window, cx);
-        let dark = Theme::global(cx).is_dark();
+        let dark = tokens(cx).is_dark();
         let exchanges = self.exchanges.clone();
         let total = self.total;
         let selected_id = self.selected_id;
@@ -821,25 +825,25 @@ impl Render for CaptureView {
                         },
                     ))
                     .child(if engine_running {
-                        Button::new("stop-proxy-btn").label("停止代理").small().danger()
+                        Button::new("stop-proxy-btn").label("停止代理").size(ButtonSize::Small).variant(ButtonVariant::Danger)
                             .on_click(cx.listener(|panel, _, _, cx| {
                                 panel.stop_proxy(cx);
                             }))
                     } else {
-                        Button::new("start-proxy-btn").label("启动代理").small().primary()
+                        Button::new("start-proxy-btn").label("启动代理").size(ButtonSize::Small).variant(ButtonVariant::Primary)
                             .on_click(cx.listener(|panel, _, _, cx| {
                                 panel.start_proxy(cx);
                             }))
                     })
                     .child({
-                        Button::new("reset-filter-btn").label("重置过滤").small().ghost()
+                        Button::new("reset-filter-btn").label("重置过滤").size(ButtonSize::Small).variant(ButtonVariant::Ghost)
                             .disabled(!has_active_filter)
                             .on_click(cx.listener(|panel, _, _, cx| {
                                 panel.reset_filters(cx);
                             }))
                     })
                     .child({
-                        Button::new("clear-btn").label("清空记录").small().danger()
+                        Button::new("clear-btn").label("清空记录").size(ButtonSize::Small).variant(ButtonVariant::Danger)
                             .disabled(total == 0)
                             .on_click(cx.listener(|panel, _, _, cx| {
                                 panel.clear_all(cx);
@@ -955,7 +959,7 @@ impl Render for CaptureView {
                                             .child(value_line(
                                                 "手机访问",
                                                 cert_download_url.clone(),
-                                                Theme::global(cx).primary.into(),
+                                                tokens(cx).primary.into(),
                                                 cx,
                                             ))
                                             .child(value_line(
@@ -1311,7 +1315,7 @@ impl Render for CaptureView {
                                                         .h(px(32.0))
                                                         .px_3()
                                                         .bg(if selected {
-                                                            Theme::global(cx).primary
+                                                            tokens(cx).primary
                                                         } else if i % 2 == 0 {
                                                             ui::bg_surface(cx)
                                                         } else {
@@ -1436,7 +1440,7 @@ impl Render for CaptureView {
                                                 let prev_link = div()
                                                     .id("prev-page")
                                                     .text_color(if has_prev {
-                                                        Theme::global(cx).primary
+                                                        tokens(cx).primary
                                                     } else {
                                                         ui::text_tertiary(cx)
                                                     })
@@ -1465,7 +1469,7 @@ impl Render for CaptureView {
                                                 let next_link = div()
                                                     .id("next-page")
                                                     .text_color(if has_next {
-                                                        Theme::global(cx).primary
+                                                        tokens(cx).primary
                                                     } else {
                                                         ui::text_tertiary(cx)
                                                     })
@@ -1588,8 +1592,8 @@ impl Render for CaptureView {
                                             .h(px(28.0))
                                             .rounded(theme::radius_sm())
                                             .bg(if active {
-                                                if Theme::global(cx).is_dark() {
-                                                    Theme::global(cx).primary
+                                                if tokens(cx).is_dark() {
+                                                    tokens(cx).primary
                                                 } else {
                                                     Theme::global(cx).primary_hover
                                                 }

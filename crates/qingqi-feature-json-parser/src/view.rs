@@ -7,12 +7,12 @@ use gpui::{
 
 use crate::service::{self, JsonMode, JsonResult, JsonStats};
 use gpui_component::{
-    Selectable, Sizable,
-    button::{Button, ButtonVariants},
     input::{Input, InputState},
     scroll::ScrollableElement,
     theme::Theme,
 };
+use qingqi_ui::components::button::{Button, ButtonSize, ButtonVariant};
+use qingqi_ui::token::tokens;
 use qingqi_ui::{theme, ui};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -567,7 +567,7 @@ fn secondary_button(
     let p = panel.clone();
     Button::new(label)
         .label(label)
-        .small()
+        .size(ButtonSize::Small)
         .on_click(move |_, w, cx| {
             run_action(action, &p, cx);
             w.refresh();
@@ -584,7 +584,7 @@ fn mode_pill(
     let p = panel.clone();
     Button::new(label)
         .label(label)
-        .small()
+        .size(ButtonSize::Small)
         .selected(active)
         .on_click(move |_, w, cx| {
             run_action(action, &p, cx);
@@ -600,8 +600,8 @@ fn query_execute_button(
     let p = panel.clone();
     Button::new(label)
         .label(format!("▶ {label}"))
-        .small()
-        .primary()
+        .size(ButtonSize::Small)
+        .variant(ButtonVariant::Primary)
         .on_click(move |_, w, cx| {
             run_action(JsonAction::Query, &p, cx);
             w.refresh();
