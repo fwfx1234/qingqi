@@ -12,11 +12,10 @@ use gpui::{
 
 use crate::service::QrCodeService;
 use gpui_component::{
-    Sizable,
-    button::{Button, ButtonVariants},
     input::{Input, InputState},
     theme::Theme,
 };
+use qingqi_ui::components::button::{Button, ButtonVariant, ButtonSize};
 use qingqi_plugin::storage::AppPaths;
 use qingqi_ui::ui;
 
@@ -529,7 +528,7 @@ impl Render for QrView {
                                 .child(
                                     Button::new("qr-choose-img")
                                         .label("选择图片")
-                                        .small()
+                                        .size(ButtonSize::Small)
                                         .on_click({
                                             let e = entity.clone();
                                             move |_, _, cx| {
@@ -543,8 +542,8 @@ impl Render for QrView {
                                 .child(
                                     Button::new("qr-clear")
                                         .label("清空")
-                                        .small()
-                                        .ghost()
+                                        .size(ButtonSize::Small)
+                                        .variant(ButtonVariant::Ghost)
                                         .on_click({
                                             let e = entity.clone();
                                             move |_, _, cx| {
@@ -585,8 +584,8 @@ impl Render for QrView {
                                         .child(
                                             Button::new("qr-save")
                                                 .label("另存为")
-                                                .small()
-                                                .primary()
+                                                .size(ButtonSize::Small)
+                                                .variant(ButtonVariant::Primary)
                                                 .on_click({
                                                     let e = entity.clone();
                                                     move |_, _, cx| {
@@ -598,7 +597,7 @@ impl Render for QrView {
                                                 }),
                                         )
                                         .child(
-                                            Button::new("qr-copy").label("复制").small().on_click(
+                                            Button::new("qr-copy").label("复制").size(ButtonSize::Small).on_click(
                                                 {
                                                     let e = entity.clone();
                                                     move |_, _, cx| {
@@ -611,7 +610,7 @@ impl Render for QrView {
                                             ),
                                         )
                                         .child(
-                                            Button::new("qr-paste").label("粘贴").small().on_click(
+                                            Button::new("qr-paste").label("粘贴").size(ButtonSize::Small).on_click(
                                                 {
                                                     let e = entity.clone();
                                                     move |_, _, cx| {
@@ -627,8 +626,8 @@ impl Render for QrView {
                                         .child(
                                             Button::new("qr-gen")
                                                 .label("生成")
-                                                .small()
-                                                .ghost()
+                                                .size(ButtonSize::Small)
+                                                .variant(ButtonVariant::Ghost)
                                                 .on_click({
                                                     let e = entity.clone();
                                                     move |_, _, cx| {

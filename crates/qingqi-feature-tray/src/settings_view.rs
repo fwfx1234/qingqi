@@ -10,13 +10,12 @@ use gpui::{
 };
 
 use gpui_component::{
-    Sizable, Size,
-    button::{Button, ButtonVariants},
     scroll::ScrollableElement,
     slider::{Slider, SliderEvent, SliderState, SliderValue},
     switch::Switch,
     theme::Theme,
 };
+use qingqi_ui::components::button::{Button, ButtonVariant, ButtonSize};
 
 use qingqi_plugin::plugin::{InlineView, PluginId};
 use qingqi_ui::ui::components;
@@ -338,7 +337,7 @@ impl Render for SettingsView {
                                 .px(theme::space_4())
                                 .py(theme::space_2())
                                 .text_size(theme::font_size_caption())
-                                .text_color(Theme::global(cx).muted_foreground)
+                            .text_color(Theme::global(cx).muted_foreground)
                                 .child(message.clone()),
                         )
                     }),
@@ -456,11 +455,11 @@ fn seg_btn<T: Copy + PartialEq + std::fmt::Debug + 'static>(
     let active = mode == current;
     let id = ElementId::Name(format!("seg-{:?}", mode).into());
     let mut btn = if active {
-        Button::new(id).primary().label(label)
+        Button::new(id).variant(ButtonVariant::Primary).label(label)
     } else {
-        Button::new(id).ghost().label(label)
+        Button::new(id).variant(ButtonVariant::Ghost).label(label)
     };
-    btn = btn.with_size(Size::XSmall);
+    btn = btn.size(ButtonSize::XSmall);
     btn.on_click(move |_, _, cx| {
         entity.update(cx, |view, cx| {
             apply(view, mode);
