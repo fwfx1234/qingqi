@@ -14,12 +14,11 @@ use crate::{
     parameters::{join_shell_words, split_shell_words},
     service::{QuickLaunchService, RunSummary},
 };
-use gpui_component::theme::Theme;
-use gpui_component::{
-    Selectable, Sizable,
-    button::{Button, ButtonVariants},
-    input::{Input, InputState},
-};
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::components::styled::Selectable;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::button::{Button, ButtonVariants};
+use qingqi_ui::components::input::{Input, InputState};
 use qingqi_ui::{
     theme,
     ui::{self, components},
@@ -2837,7 +2836,7 @@ fn icon_action_button(
     Button::new(label)
         .label(label)
         .small()
-        .with_size(gpui_component::Size::Size(px(26.0)))
+        .with_size(qingqi_ui::components::styled::Size::Size(px(26.0)))
         .compact()
         .on_click(move |event, window, cx| on_click(event, window, cx))
 }

@@ -6,19 +6,21 @@ use gpui::{
     AnyWindowHandle, App, AppContext, Context, Entity, InteractiveElement, IntoElement,
     ParentElement, Render, Styled, Window, div, prelude::FluentBuilder, px,
 };
-use gpui_component::tree::TreeState;
-use gpui_component::{
-    IconName, Sizable, Size,
-    button::{Button, ButtonVariants},
-    menu::{DropdownMenu, PopupMenuItem},
-};
+use qingqi_ui::components::tree::TreeState;
+use qingqi_ui::components::icon::IconName;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size;
+use qingqi_ui::components::button::{Button, ButtonVariants};
+use qingqi_ui::components::widgets::DropdownMenu;
+use qingqi_ui::layer::context_menu::PopupMenuItem;
 
 use crate::code_gen::CodeLanguage;
 use crate::service::{
     ApiEnvironment, ApiGroup, ApiRequest, ApiResponse, ApiService, AuthType, BodyMode, EditorTab,
     HttpHistory, HttpMethod, ResponseTab,
 };
-use gpui_component::{input::InputState, theme::Theme};
+use qingqi_ui::components::input::InputState;
+use qingqi_ui::components::theme::Theme;
 use qingqi_ui::ui::glass;
 
 use qingqi_plugin::plugin_spec::PluginAccent;

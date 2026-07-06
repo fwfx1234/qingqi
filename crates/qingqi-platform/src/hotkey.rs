@@ -25,6 +25,7 @@ pub struct HotkeyRegistrationResult {
 }
 
 pub fn register_global_hotkeys(registrations: &[(String, HotKey)]) -> HotkeyRegistrationResult {
+    println!("!!! register_global_hotkeys called with {} registrations: {:?}", registrations.len(), registrations.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>());
     let mut result = HotkeyRegistrationResult {
         registered: HashMap::new(),
         errors: HashMap::new(),
@@ -118,6 +119,8 @@ pub fn register_global_hotkeys(registrations: &[(String, HotKey)]) -> HotkeyRegi
         }
     }
 
+    println!("!!! Hotkey registration result: registered={:?}, errors={:?}", result.registered.keys().collect::<Vec<_>>(), result.errors);
+    tracing::info!(registered = ?result.registered.keys().collect::<Vec<_>>(), errors = ?result.errors, "Global hotkey registration complete");
     result
 }
 

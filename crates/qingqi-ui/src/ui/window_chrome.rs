@@ -1,32 +1,23 @@
+use crate::token::Token;
 use gpui::{
     AnyElement, App, InteractiveElement, IntoElement, MouseButton, ParentElement, SharedString,
     StatefulInteractiveElement, Styled, Window, WindowControlArea, div, hsla, px,
 };
-use gpui_component::theme::Theme;
-use gpui_component::{Icon, IconName, Sizable, Size as ComponentSize};
-
+use crate::components::{Icon, IconNamed, Sizable, Size as ComponentSize};
+use crate::components::theme::ActiveTheme;
 use crate::{theme, ui};
 
 pub const TITLE_BAR_HEIGHT: f32 = 36.0;
 const MACOS_TRAFFIC_LIGHT_SAFE_WIDTH: f32 = 86.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum WindowChromeStyle {
-    Windows,
-    MacOs,
-}
+pub enum WindowChromeStyle { Windows, MacOs }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum WindowChromeMode {
-    Floating,
-    Immersive,
-}
+pub enum WindowChromeMode { Floating, Immersive }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum WindowChromeTitlebarSlotAlignment {
-    Center,
-    Leading,
-}
+pub enum WindowChromeTitlebarSlotAlignment { Center, Leading }
 
 #[derive(Clone, Debug)]
 pub struct WindowChromeConfig {
@@ -50,11 +41,7 @@ pub struct WindowChromeMetrics {
 
 impl WindowChromeStyle {
     pub fn current() -> Self {
-        if cfg!(target_os = "macos") {
-            Self::MacOs
-        } else {
-            Self::Windows
-        }
+        if cfg!(target_os = "macos") { Self::MacOs } else { Self::Windows }
     }
 }
 
@@ -74,87 +61,38 @@ impl Default for WindowChromeConfig {
 }
 
 impl WindowChromeConfig {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn title(mut self, title: impl Into<SharedString>) -> Self {
-        self.title = Some(title.into());
-        self
-    }
-
-    pub fn style(mut self, style: WindowChromeStyle) -> Self {
-        self.style = style;
-        self
-    }
-
-    pub fn mode(mut self, mode: WindowChromeMode) -> Self {
-        self.mode = mode;
-        self
-    }
-
-    pub fn titlebar_slot_alignment(mut self, alignment: WindowChromeTitlebarSlotAlignment) -> Self {
-        self.titlebar_slot_alignment = alignment;
-        self
-    }
-
+    pub fn new() -> Self { Self::default() }
+    pub fn title(mut self, title: impl Into<SharedString>) -> Self { self.title = Some(title.into()); self }
+    pub fn style(mut self, style: WindowChromeStyle) -> Self { self.style = style; self }
+    pub fn mode(mut self, mode: WindowChromeMode) -> Self { self.mode = mode; self }
+    pub fn titlebar_slot_alignment(mut self, alignment: WindowChromeTitlebarSlotAlignment) -> Self { self.titlebar_slot_alignment = alignment; self }
     pub fn immersive(mut self, immersive: bool) -> Self {
-        self.mode = if immersive {
-            WindowChromeMode::Immersive
-        } else {
-            WindowChromeMode::Floating
-        };
-        self
+        self.mode = if immersive { WindowChromeMode::Immersive } else { WindowChromeMode::Floating }; self
     }
-
-    pub fn transparent(mut self, transparent: bool) -> Self {
-        self.transparent = transparent;
-        self
-    }
-
+    pub fn transparent(mut self, transparent: bool) -> Self { self.transparent = transparent; self }
     pub fn controls(mut self, minimize: bool, maximize: bool, close: bool) -> Self {
-        self.show_minimize = minimize;
-        self.show_maximize = maximize;
-        self.show_close = close;
-        self
+        self.show_minimize = minimize; self.show_maximize = maximize; self.show_close = close; self
     }
-
-    pub fn metrics(&self) -> WindowChromeMetrics {
-        WindowChromeMetrics::for_style_with_mode(self.style, self.mode)
-    }
+    pub fn metrics(&self) -> WindowChromeMetrics { WindowChromeMetrics::for_style_with_mode(self.style, self.mode) }
 }
 
 impl WindowChromeMetrics {
-    pub fn for_current_platform() -> Self {
-        Self::for_current_platform_with_mode(WindowChromeMode::Floating)
-    }
-
+    pub fn for_current_platform() -> Self { Self::for_current_platform_with_mode(WindowChromeMode::Floating) }
     pub fn for_current_platform_with_mode(mode: WindowChromeMode) -> Self {
         Self::for_style_with_mode(WindowChromeStyle::current(), mode)
     }
-
-    pub fn for_style(style: WindowChromeStyle) -> Self {
-        Self::for_style_with_mode(style, WindowChromeMode::Floating)
-    }
-
+    pub fn for_style(style: WindowChromeStyle) -> Self { Self::for_style_with_mode(style, WindowChromeMode::Floating) }
     pub fn for_style_with_mode(style: WindowChromeStyle, mode: WindowChromeMode) -> Self {
         let content_top_padding = match mode {
             WindowChromeMode::Floating => TITLE_BAR_HEIGHT,
             WindowChromeMode::Immersive => 0.0,
         };
-
         let (safe_left, safe_right) = match (style, mode) {
             (_, WindowChromeMode::Floating) => (0.0, 0.0),
             (WindowChromeStyle::Windows, WindowChromeMode::Immersive) => (12.0, 148.0),
             (WindowChromeStyle::MacOs, WindowChromeMode::Immersive) => (86.0, 12.0),
         };
-
-        Self {
-            titlebar_height: TITLE_BAR_HEIGHT,
-            content_top_padding,
-            safe_left,
-            safe_right,
-        }
+        Self { titlebar_height: TITLE_BAR_HEIGHT, content_top_padding, safe_left, safe_right }
     }
 }
 
@@ -168,12 +106,8 @@ pub fn popup_window_chrome_with_titlebar_slot(
     cx: &App,
 ) -> impl IntoElement {
     match config.style {
-        WindowChromeStyle::MacOs => {
-            macos_window_chrome(config, titlebar_slot, cx).into_any_element()
-        }
-        WindowChromeStyle::Windows => {
-            windows_window_chrome(config, titlebar_slot, cx).into_any_element()
-        }
+        WindowChromeStyle::MacOs => macos_window_chrome(config, titlebar_slot, cx).into_any_element(),
+        WindowChromeStyle::Windows => windows_window_chrome(config, titlebar_slot, cx).into_any_element(),
     }
 }
 
@@ -182,137 +116,70 @@ fn windows_window_chrome(
     titlebar_slot: Option<AnyElement>,
     cx: &App,
 ) -> impl IntoElement {
-    let immersive = config.mode == WindowChromeMode::Immersive;
-    let t = Theme::global(cx);
-    let background = if immersive || config.transparent {
-        hsla(0.0, 0.0, 0.0, 0.0)
-    } else {
-        theme::rgba_with_alpha(t.list.into(), 0.72)
-    };
+    let t = cx.theme();
+    let background = if config.transparent { hsla(0.0, 0.0, 0.0, 0.0) } else { t.background() };
+    let borderColor = if config.transparent { hsla(0.0, 0.0, 0.0, 0.0) } else { t.border() };
+
+    let titlebar = div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .h(px(TITLE_BAR_HEIGHT))
+        .bg(background.clone())
+        .border_b_1()
+        .border_color(borderColor)
+        .px_3()
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(0.0))
+                .flex()
+                .items_center()
+                .justify_end()
+                .children(titlebar_slot),
+        )
+        .child(windows_control_buttons(config, cx));
+
+    let content = div()
+        .flex_1()
+        .min_h(px(0.0))
+        .overflow_hidden()
+        .bg(background);
 
     div()
         .absolute()
         .top_0()
         .left_0()
         .right_0()
-        .h(px(TITLE_BAR_HEIGHT))
+        .bottom_0()
         .flex()
-        .items_center()
-        .bg(background)
-        .border_b_1()
-        .border_color(if immersive || config.transparent {
-            hsla(0.0, 0.0, 0.0, 0.0)
-        } else {
-            ui::border_light(cx)
-        })
-        .child(windows_titlebar_content(
-            config.title.clone(),
-            titlebar_slot,
-            config.titlebar_slot_alignment,
-            cx,
-        ))
-        .children(config.show_minimize.then(|| {
-            windows_control_button(
-                "qingqi-window-minimize",
-                IconName::WindowMinimize,
-                false,
-                |window, _cx| window.minimize_window(),
-                cx,
-            )
-        }))
-        .children(config.show_maximize.then(|| {
-            windows_control_button(
-                "qingqi-window-maximize",
-                IconName::WindowMaximize,
-                false,
-                |window, _cx| window.zoom_window(),
-                cx,
-            )
-        }))
-        .children(config.show_close.then(|| {
-            windows_control_button(
-                "qingqi-window-close",
-                IconName::WindowClose,
-                true,
-                |window, cx| {
-                    window.defer(cx, |window, _cx| window.remove_window());
-                },
-                cx,
-            )
-        }))
+        .flex_col()
+        .child(titlebar)
+        .child(content)
 }
 
-fn windows_titlebar_content(
-    title: Option<SharedString>,
-    titlebar_slot: Option<AnyElement>,
-    alignment: WindowChromeTitlebarSlotAlignment,
-    cx: &App,
-) -> impl IntoElement {
-    if let Some(slot) = titlebar_slot {
-        match alignment {
-            WindowChromeTitlebarSlotAlignment::Center => div()
-                .flex_1()
-                .min_w(px(0.0))
-                .h_full()
-                .flex()
-                .items_center()
-                .pl(px(12.0))
-                .pr(px(8.0))
-                .child(
-                    div()
-                        .w(px(110.0))
-                        .h_full()
-                        .flex_none()
-                        .window_control_area(WindowControlArea::Drag),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w(px(0.0))
-                        .flex()
-                        .justify_center()
-                        .child(slot),
-                )
-                .child(
-                    div()
-                        .w(px(110.0))
-                        .h_full()
-                        .flex_none()
-                        .window_control_area(WindowControlArea::Drag),
-                ),
-            WindowChromeTitlebarSlotAlignment::Leading => div()
-                .flex_1()
-                .min_w(px(0.0))
-                .h_full()
-                .flex()
-                .items_center()
-                .pl(px(12.0))
-                .pr(px(8.0))
-                .child(div().min_w(px(0.0)).flex().items_center().child(slot))
-                .child(title_drag_region()),
-        }
-    } else {
-        let t = Theme::global(cx);
-        title_drag_region().pl(px(12.0)).pr(px(8.0)).child(
-            div()
-                .max_w(px(360.0))
-                .line_clamp(1)
-                .text_size(px(12.0))
-                .font_weight(gpui::FontWeight::MEDIUM)
-                .text_color(t.muted_foreground)
-                .children(title),
-        )
+fn windows_control_buttons(config: WindowChromeConfig, cx: &App) -> impl IntoElement {
+    let mut buttons = div().flex().items_center().flex_none();
+    if config.show_minimize {
+        buttons = buttons.child(windows_control_button("minimize", "minimize", false, |window, _cx| window.minimize_window(), cx));
     }
+    if config.show_maximize {
+        buttons = buttons.child(windows_control_button("maximize", "maximize", false, |window, _cx| window.zoom_window(), cx));
+    }
+    if config.show_close {
+        buttons = buttons.child(windows_control_button("close", "x", true, |window, _cx| window.remove_window(), cx));
+    }
+    buttons
 }
 
 fn windows_control_button(
     id: &'static str,
-    icon: IconName,
+    icon_name: &str,
     is_close: bool,
     action: impl Fn(&mut Window, &mut App) + 'static,
     cx: &App,
 ) -> impl IntoElement {
-    let t = Theme::global(cx);
+    let t = cx.theme();
     div()
         .id(id)
         .w(px(46.0))
@@ -326,20 +193,13 @@ fn windows_control_button(
             let style = if is_close {
                 style.bg(ui::danger(cx)).text_color(hsla(0., 0., 1., 1.))
             } else {
-                style
-                    .bg(Theme::global(cx).muted)
-                    .text_color(Theme::global(cx).foreground)
+                style.bg(t.muted()).text_color(t.foreground())
             };
             style.cursor_pointer()
         })
-        .on_mouse_down(MouseButton::Left, |_, _window, cx| {
-            cx.stop_propagation();
-        })
-        .on_click(move |_event, window, cx| {
-            action(window, cx);
-            cx.stop_propagation();
-        })
-        .child(Icon::new(icon).with_size(ComponentSize::Small))
+        .on_mouse_down(MouseButton::Left, |_, _window, cx| { cx.stop_propagation(); })
+        .on_click(move |_event, window, cx| { action(window, cx); cx.stop_propagation(); })
+        .child(Icon::new(icon_name.to_string()).with_size(ComponentSize::Small))
 }
 
 fn macos_window_chrome(
@@ -347,12 +207,12 @@ fn macos_window_chrome(
     titlebar_slot: Option<AnyElement>,
     cx: &App,
 ) -> impl IntoElement {
+    let t = cx.theme();
     let immersive = config.mode == WindowChromeMode::Immersive;
-    let t = Theme::global(cx);
     let background = if immersive || config.transparent {
         hsla(0.0, 0.0, 0.0, 0.0)
     } else {
-        theme::rgba_with_alpha(t.list.into(), 0.62)
+        theme::rgba_with_alpha(t.list().into(), 0.62)
     };
 
     div()
@@ -365,18 +225,9 @@ fn macos_window_chrome(
         .items_center()
         .bg(background)
         .border_b_1()
-        .border_color(if immersive || config.transparent {
-            hsla(0.0, 0.0, 0.0, 0.0)
-        } else {
-            ui::border_light(cx)
-        })
+        .border_color(if immersive || config.transparent { hsla(0.0, 0.0, 0.0, 0.0) } else { ui::border_light(cx) })
         .child(macos_native_traffic_light_spacer())
-        .child(macos_titlebar_content(
-            config.title.clone(),
-            titlebar_slot,
-            config.titlebar_slot_alignment,
-            cx,
-        ))
+        .child(macos_titlebar_content(config.title.clone(), titlebar_slot, config.titlebar_slot_alignment, cx))
         .child(title_drag_spacer(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH))
 }
 
@@ -386,6 +237,7 @@ fn macos_titlebar_content(
     alignment: WindowChromeTitlebarSlotAlignment,
     cx: &App,
 ) -> impl IntoElement {
+    let t = cx.theme();
     if let Some(slot) = titlebar_slot {
         match alignment {
             WindowChromeTitlebarSlotAlignment::Center => div()
@@ -394,28 +246,9 @@ fn macos_titlebar_content(
                 .h_full()
                 .flex()
                 .items_center()
-                .child(
-                    div()
-                        .w(px(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH))
-                        .h_full()
-                        .flex_none()
-                        .window_control_area(WindowControlArea::Drag),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w(px(0.0))
-                        .flex()
-                        .justify_center()
-                        .child(slot),
-                )
-                .child(
-                    div()
-                        .w(px(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH))
-                        .h_full()
-                        .flex_none()
-                        .window_control_area(WindowControlArea::Drag),
-                ),
+                .child(div().w(px(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH)).h_full().flex_none().window_control_area(WindowControlArea::Drag))
+                .child(div().flex_1().min_w(px(0.0)).flex().justify_center().child(slot))
+                .child(div().w(px(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH)).h_full().flex_none().window_control_area(WindowControlArea::Drag)),
             WindowChromeTitlebarSlotAlignment::Leading => div()
                 .flex_1()
                 .min_w(px(0.0))
@@ -426,7 +259,6 @@ fn macos_titlebar_content(
                 .child(title_drag_region()),
         }
     } else {
-        let t = Theme::global(cx);
         title_drag_region().justify_center().child(
             div()
                 .max_w(px(360.0))
@@ -440,10 +272,7 @@ fn macos_titlebar_content(
 }
 
 fn macos_native_traffic_light_spacer() -> gpui::Div {
-    div()
-        .w(px(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH))
-        .h_full()
-        .flex_none()
+    div().w(px(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH)).h_full().flex_none()
 }
 
 fn title_drag_region() -> gpui::Div {
@@ -456,11 +285,7 @@ fn title_drag_region() -> gpui::Div {
         .window_control_area(WindowControlArea::Drag)
         .on_mouse_down(MouseButton::Left, |event, window, cx| {
             if event.click_count >= 2 {
-                if cfg!(target_os = "macos") {
-                    window.titlebar_double_click();
-                } else {
-                    window.zoom_window();
-                }
+                if cfg!(target_os = "macos") { window.titlebar_double_click(); } else { window.zoom_window(); }
             } else if cfg!(any(target_os = "linux", target_os = "freebsd")) {
                 window.start_window_move();
             }
@@ -471,3 +296,9 @@ fn title_drag_region() -> gpui::Div {
 fn title_drag_spacer(width: f32) -> gpui::Div {
     title_drag_region().w(px(width)).flex_none()
 }
+
+// Re-export names commonly used by plugin code:
+// Icon, IconName — exported from crate::components.
+// Theme (= Token), Sizable, Size — exported from crate::components.
+pub use crate::components::IconName;
+pub type Theme = Token;

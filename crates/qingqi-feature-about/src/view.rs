@@ -8,7 +8,7 @@ pub struct AboutView;
 
 impl Render for AboutView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = gpui_component::theme::Theme::global(cx);
+        let t = qingqi_ui::components::theme::Theme::global(cx);
 
         div()
             .size_full()
@@ -119,7 +119,7 @@ impl Render for AboutView {
 }
 
 fn section_card(title: &'static str, children: impl IntoElement, cx: &App) -> impl IntoElement {
-    let t = gpui_component::theme::Theme::global(cx);
+    let t = qingqi_ui::components::theme::Theme::global(cx);
     div()
         .w(px(420.0))
         .rounded(px(10.0))
@@ -143,7 +143,7 @@ fn section_card(title: &'static str, children: impl IntoElement, cx: &App) -> im
 }
 
 fn tech_row(label: &'static str, value: &'static str, cx: &App) -> impl IntoElement {
-    let t = gpui_component::theme::Theme::global(cx);
+    let t = qingqi_ui::components::theme::Theme::global(cx);
     div()
         .flex()
         .items_center()
@@ -164,7 +164,7 @@ fn tech_row(label: &'static str, value: &'static str, cx: &App) -> impl IntoElem
 }
 
 fn desc_row(label: &'static str, desc: &'static str, cx: &App) -> impl IntoElement {
-    let t = gpui_component::theme::Theme::global(cx);
+    let t = qingqi_ui::components::theme::Theme::global(cx);
     div()
         .flex()
         .flex_col()

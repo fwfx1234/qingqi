@@ -2,16 +2,16 @@
 
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::Sizable;
-use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::theme::Theme;
-use qingqi_ui::text_input::TextInput;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::button::{Button, ButtonVariants};
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::components::input::{Input, InputState};
 use qingqi_ui::ui;
 use qingqi_ui::ui::glass;
 
 pub fn render_file_rename_overlay(
     handle: Entity<super::SshView>,
-    rename_input: Entity<TextInput>,
+    rename_input: Entity<InputState>,
     cx: &App,
 ) -> impl IntoElement {
     let backdrop = handle.clone();
@@ -61,7 +61,7 @@ pub fn render_file_rename_overlay(
                     div()
                         .id("file-rename-input")
                         .h(px(32.0))
-                        .child(rename_input),
+                        .child(Input::new(&rename_input)),
                 )
                 .child(
                     div()

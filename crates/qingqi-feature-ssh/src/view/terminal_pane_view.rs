@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use gpui::prelude::FluentBuilder;
 use gpui::*;
-use gpui_component::scroll::ScrollableElement;
+use qingqi_ui::components::scroll::ScrollableElement;
 use qingqi_ui::{theme, ui};
 use tracing::debug;
 

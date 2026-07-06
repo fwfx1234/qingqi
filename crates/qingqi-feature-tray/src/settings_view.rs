@@ -9,13 +9,13 @@ use gpui::{
     Styled, Subscription, Window, div, prelude::FluentBuilder, px,
 };
 
-use gpui_component::{
-    scroll::ScrollableElement,
-    slider::{Slider, SliderEvent, SliderState, SliderValue},
-    switch::Switch,
-    theme::Theme,
-};
-use qingqi_ui::components::button::{Button, ButtonVariant, ButtonSize};
+use qingqi_ui::components::scroll::ScrollbarExt;
+use qingqi_ui::components::scroll::ScrollableElement;
+use qingqi_ui::components::widgets::{Slider, SliderState};
+use qingqi_ui::components::switch::Switch;
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::components::button::{Button, ButtonVariant, ButtonVariants}; use qingqi_ui::components::styled::Size;
+use qingqi_ui::components::styled::Sizable;
 
 use qingqi_plugin::plugin::{InlineView, PluginId};
 use qingqi_ui::ui::components;
@@ -131,36 +131,33 @@ impl SettingsView {
         self.slider_subs.clear();
 
         if let Some(slider) = &self.interval_slider {
-            let sub = cx.subscribe(slider, |this, _slider, event, cx| {
-                if let SliderEvent::Change(SliderValue::Single(value)) = event {
-                    let _ = this
-                        .service
-                        .set_network_speed_update_interval_ms(*value as u64);
-                    this.message = format!("刷新间隔已更新为 {} ms", *value as u64);
-                    cx.notify();
-                }
+            let sub = cx.subscribe(slider, |this, slider, _event, cx| {
+                let value = slider.read(cx).value;
+                let _ = this
+                    .service
+                    .set_network_speed_update_interval_ms(value as u64);
+                this.message = format!("刷新间隔已更新为 {} ms", value as u64);
+                cx.notify();
             });
             self.slider_subs.push(sub);
         }
 
         if let Some(slider) = &self.popup_width_slider {
-            let sub = cx.subscribe(slider, |this, _slider, event, cx| {
-                if let SliderEvent::Change(SliderValue::Single(value)) = event {
-                    let _ = this.service.set_popup_size(*value as u32, 360);
-                    this.message = format!("弹窗宽度已更新为 {} px", *value as u32);
-                    cx.notify();
-                }
+            let sub = cx.subscribe(slider, |this, slider, _event, cx| {
+                let value = slider.read(cx).value;
+                let _ = this.service.set_popup_size(value as u32, 360);
+                this.message = format!("弹窗宽度已更新为 {} px", value as u32);
+                cx.notify();
             });
             self.slider_subs.push(sub);
         }
 
         if let Some(slider) = &self.max_interfaces_slider {
-            let sub = cx.subscribe(slider, |this, _slider, event, cx| {
-                if let SliderEvent::Change(SliderValue::Single(value)) = event {
-                    let _ = this.service.set_network_speed_max_interfaces(*value as u8);
-                    this.message = format!("最大网卡数已更新为 {}", *value as u8);
-                    cx.notify();
-                }
+            let sub = cx.subscribe(slider, |this, slider, _event, cx| {
+                let value = slider.read(cx).value;
+                let _ = this.service.set_network_speed_max_interfaces(value as u8);
+                this.message = format!("最大网卡数已更新为 {}", value as u8);
+                cx.notify();
             });
             self.slider_subs.push(sub);
         }
@@ -455,11 +452,11 @@ fn seg_btn<T: Copy + PartialEq + std::fmt::Debug + 'static>(
     let active = mode == current;
     let id = ElementId::Name(format!("seg-{:?}", mode).into());
     let mut btn = if active {
-        Button::new(id).variant(ButtonVariant::Primary).label(label)
+        Button::new(id).with_variant(ButtonVariant::Primary).label(label)
     } else {
-        Button::new(id).variant(ButtonVariant::Ghost).label(label)
+        Button::new(id).with_variant(ButtonVariant::Ghost).label(label)
     };
-    btn = btn.size(ButtonSize::XSmall);
+    btn = btn.with_size(Size::XSmall);
     btn.on_click(move |_, _, cx| {
         entity.update(cx, |view, cx| {
             apply(view, mode);
@@ -483,7 +480,13 @@ fn slider_row(
             div()
                 .flex_1()
                 .min_w(px(120.0))
-                .when_some(slider, |el, s| el.child(Slider::new(s).horizontal())),
+                .when_some(slider, |el, s| el.child(
+                    Slider::new()
+                        .value(s.read(cx).value)
+                        .min(s.read(cx).min)
+                        .max(s.read(cx).max)
+                        .horizontal(),
+                )),
         )
         .child(
             div()

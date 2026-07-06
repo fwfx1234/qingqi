@@ -7,12 +7,11 @@ use gpui::{
     App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
     StatefulInteractiveElement, Styled, Subscription, Window, div, px,
 };
-use gpui_component::{
-    Selectable, Sizable,
-    button::{Button, ButtonCustomVariant, ButtonVariants},
-    input::{Input, InputState},
-    tag::Tag,
-};
+use qingqi_ui::components::styled::Selectable;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::button::{Button, ButtonCustomVariant, ButtonVariants};
+use qingqi_ui::components::input::{Input, InputState};
+use qingqi_ui::components::widgets::Tag;
 
 use qingqi_plugin::{
     job::{JobId, JobProvider},
@@ -1067,12 +1066,12 @@ fn filter_bar(
 }
 
 fn filter_chip(
-    id: impl Into<gpui::ElementId>,
+    id: impl Into<gpui::ElementId> + Clone,
     label: &str,
     count: usize,
     active: bool,
     _cx: &App,
-) -> gpui_component::button::Button {
+) -> qingqi_ui::components::button::Button {
     Button::new(id)
         .label(format!("{label} {count}"))
         .small()
@@ -1355,7 +1354,7 @@ fn progress_bar(job_progress: Option<f64>, percent: f64, is_active: bool) -> imp
     } else {
         gpui::Hsla { a: 0.5, ..green }
     };
-    gpui_component::progress::Progress::new()
+    qingqi_ui::components::widgets::Progress::new()
         .bg(fill)
         .value(pct as f32)
         .h(px(6.0))
@@ -1601,11 +1600,11 @@ fn settings_input(state: Entity<InputState>) -> Input {
 }
 
 fn primary_btn(
-    id: impl Into<gpui::ElementId>,
+    id: impl Into<gpui::ElementId> + Clone,
     label: &str,
     accent: PluginAccent,
     cx: &App,
-) -> gpui_component::button::Button {
+) -> qingqi_ui::components::button::Button {
     let accent: gpui::Hsla = ui::accent_color(accent).into();
     Button::new(id).label(label.to_string()).small().custom(
         ButtonCustomVariant::new(cx)
@@ -1615,30 +1614,30 @@ fn primary_btn(
 }
 
 fn secondary_btn(
-    id: impl Into<gpui::ElementId>,
+    id: impl Into<gpui::ElementId> + Clone,
     label: &str,
     _cx: &App,
-) -> gpui_component::button::Button {
+) -> qingqi_ui::components::button::Button {
     Button::new(id).label(label.to_string()).small()
 }
 
 fn action_button(
-    id: impl Into<gpui::ElementId>,
+    id: impl Into<gpui::ElementId> + Clone,
     label: &str,
     _cx: &App,
-) -> gpui_component::button::Button {
+) -> qingqi_ui::components::button::Button {
     Button::new(id).label(label.to_string()).small()
 }
 
 fn action_icon(
-    id: impl Into<gpui::ElementId>,
+    id: impl Into<gpui::ElementId> + Clone,
     icon: &str,
     _cx: &App,
-) -> gpui_component::button::Button {
+) -> qingqi_ui::components::button::Button {
     Button::new(id)
         .label(icon.to_string())
         .small()
-        .with_size(gpui_component::Size::Size(px(20.0)))
+        .with_size(qingqi_ui::components::styled::Size::Size(px(20.0)))
         .compact()
 }
 

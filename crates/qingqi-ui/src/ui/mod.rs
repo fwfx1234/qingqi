@@ -42,11 +42,11 @@ pub fn text_primary(cx: &App) -> gpui::Hsla {
 }
 
 pub fn text_secondary(cx: &App) -> gpui::Hsla {
-    crate::token::tokens(cx).foreground_muted
+    crate::token::tokens(cx).muted_foreground
 }
 
 pub fn text_tertiary(cx: &App) -> gpui::Hsla {
-    crate::token::tokens(cx).foreground_muted
+    crate::token::tokens(cx).muted_foreground
 }
 
 // ── Border Colors ────────────────────────────────────────────────────────
@@ -441,7 +441,7 @@ pub fn ui_empty_state(message: impl Into<SharedString>, cx: &App) -> impl IntoEl
         .child(
             div()
                 .text_size(px(14.0))
-                .text_color(crate::token::tokens(cx).foreground_muted)
+                .text_color(crate::token::tokens(cx).muted_foreground)
                 .child(message),
         )
 }

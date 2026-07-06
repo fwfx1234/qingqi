@@ -10,12 +10,12 @@ use gpui::{
     Window, div, img, px,
 };
 
-use gpui_component::theme::Theme;
-use gpui_component::{
-    IconName, Sizable, Size as ComponentSize,
-    button::{Button, ButtonCustomVariant, ButtonVariants},
-    input::{Input, InputState},
-};
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::components::icon::IconName;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size as ComponentSize;
+use qingqi_ui::components::button::{Button, ButtonCustomVariant, ButtonVariants};
+use qingqi_ui::components::input::{Input, InputState};
 
 use crate::{
     history_store::{self, ClipboardConfig, ClipboardRecord},

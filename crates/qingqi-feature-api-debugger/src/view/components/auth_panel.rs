@@ -6,8 +6,8 @@ use gpui::{
     App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
     Styled, div, hsla, px,
 };
-use gpui_component::input::{Input, InputState};
-use gpui_component::theme::Theme;
+use qingqi_ui::components::input::{Input, InputState};
+use qingqi_ui::components::theme::Theme;
 use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn auth_form_panel(

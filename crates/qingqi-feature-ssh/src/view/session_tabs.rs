@@ -2,7 +2,8 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::*;
-use gpui_component::{Icon, IconName};
+use qingqi_ui::components::icon::Icon;
+use qingqi_ui::components::icon::IconName;
 use qingqi_plugin::plugin_spec::PluginAccent;
 use qingqi_ui::theme;
 use qingqi_ui::ui;

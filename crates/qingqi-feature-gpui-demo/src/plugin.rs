@@ -2,16 +2,14 @@ use gpui::{
     AnyElement, App, AppContext, Context, Entity, IntoElement, ParentElement, Render, SharedString,
     Styled, Window, div, px,
 };
-use gpui_component::{
-    badge::Badge,
-    checkbox::Checkbox,
-    slider::{Slider, SliderState},
-    switch::Switch,
-    tab::TabBar,
-    tag::Tag,
-    theme::Theme,
-};
-use qingqi_ui::components::button::{Button, ButtonVariant, ButtonSize};
+use crate::local_components::{Slider, SliderState, TabBar};
+use qingqi_ui::components::widgets::Badge;
+use qingqi_ui::components::checkbox::Checkbox;
+use qingqi_ui::components::switch::Switch;
+use qingqi_ui::components::widgets::Tag;
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::components::button::{Button, ButtonVariant, ButtonVariants}; use qingqi_ui::components::styled::Size;
+use qingqi_ui::components::styled::Sizable;
 use std::sync::Arc;
 
 use crate::manifest;
@@ -84,7 +82,7 @@ impl Render for GpuiDemoView {
         let accent = PluginAccent::Purple;
         let t = Theme::global(cx);
 
-        let slider_value = self.slider.read(cx).value().start() as i32;
+        let slider_value = self.slider.read(cx).value() as i32;
 
         div()
             .size_full()
@@ -113,7 +111,7 @@ impl Render for GpuiDemoView {
                     .child(state_column(accent, cx)),
             )
             .child(ui::status_bar(
-                "gpui-component 组件演示 — 点击按钮、切换 tab、调整 slider 查看交互效果",
+                "qingqi-ui 组件演示 — 点击按钮、切换 tab、调整 slider 查看交互效果",
                 t.muted_foreground,
                 cx,
             ))
@@ -153,7 +151,7 @@ fn header(accent: PluginAccent, cx: &App) -> impl IntoElement {
                         .text_size(px(12.0))
                         .line_height(px(18.0))
                         .text_color(t.muted_foreground)
-                        .child("用 gpui-component 真实组件替代静态描述，验证按钮、标签页、开关等控件的交互行为。"),
+                        .child("用 qingqi-ui 真实组件替代静态描述，验证按钮、标签页、开关等控件的交互行为。"),
                 ),
         )
         .child(Tag::warning().child("预览"))
@@ -180,10 +178,10 @@ fn component_column(
                 .flex()
                 .gap_2()
                 .flex_wrap()
-                .child(Button::new("demo-primary").label("Primary").variant(ButtonVariant::Primary))
+                .child(Button::new("demo-primary").label("Primary").with_variant(ButtonVariant::Primary))
                 .child(Button::new("demo-secondary").label("Secondary"))
-                .child(Button::new("demo-danger").label("Danger").variant(ButtonVariant::Danger))
-                .child(Button::new("demo-ghost").label("Ghost").variant(ButtonVariant::Ghost)),
+                .child(Button::new("demo-danger").label("Danger").with_variant(ButtonVariant::Danger))
+                .child(Button::new("demo-ghost").label("Ghost").with_variant(ButtonVariant::Ghost)),
         )
         .child(
             div()
@@ -192,19 +190,19 @@ fn component_column(
                 .flex_wrap()
                 .child(
                     Button::new("demo-icon-search")
-                        .icon("🔍")
-                        .variant(ButtonVariant::Ghost)
-                        .size(ButtonSize::Small),
+                        .label("🔍")
+                        .with_variant(ButtonVariant::Ghost)
+                        .with_size(Size::Small),
                 )
                 .child(
                     Badge::new()
                         .count(3)
-                        .child(Button::new("demo-badge-btn").label("通知").size(ButtonSize::Small)),
+                        .child(Button::new("demo-badge-btn").label("通知").with_size(Size::Small)),
                 )
                 .child(
                     Badge::new()
                         .dot()
-                        .child(Button::new("demo-dot-btn").label("状态").size(ButtonSize::Small)),
+                        .child(Button::new("demo-dot-btn").label("状态").with_size(Size::Small)),
                 ),
         )
         .child(
@@ -331,9 +329,9 @@ fn state_column(accent: PluginAccent, cx: &App) -> impl IntoElement {
                 .mt_2()
                 .flex()
                 .gap_2()
-                .child(Button::new("demo-outline-btn").label("Outline").variant(ButtonVariant::Secondary))
-                .child(Button::new("demo-success-btn").label("Success").variant(ButtonVariant::Success))
-                .child(Button::new("demo-warning-btn").label("Warning").variant(ButtonVariant::Warning)),
+                .child(Button::new("demo-outline-btn").label("Outline").with_variant(ButtonVariant::Secondary))
+                .child(Button::new("demo-success-btn").label("Success").with_variant(ButtonVariant::Success))
+                .child(Button::new("demo-warning-btn").label("Warning").with_variant(ButtonVariant::Warning)),
         )
 }
 

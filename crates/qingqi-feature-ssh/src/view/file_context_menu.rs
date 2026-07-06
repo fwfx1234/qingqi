@@ -1,7 +1,7 @@
-//! 文件列表右键菜单（gpui-component PopupMenu）
+//! 文件列表右键菜单（qingqi-ui PopupMenu）
 
 use gpui::Entity;
-use gpui_component::menu::{PopupMenu, PopupMenuItem};
+use qingqi_ui::layer::context_menu::{PopupMenu, PopupMenuItem};
 
 use super::{FileEntryRow, SshView};
 

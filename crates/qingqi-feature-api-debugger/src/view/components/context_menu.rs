@@ -5,11 +5,11 @@ use gpui::{
     App, Entity, InteractiveElement, IntoElement, MouseButton, ParentElement,
     StatefulInteractiveElement, Styled, div, prelude::FluentBuilder, px,
 };
-use gpui_component::theme::Theme;
-use gpui_component::{
-    IconName, Sizable, Size,
-    button::{Button, ButtonVariants},
-};
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::components::icon::IconName;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size;
+use qingqi_ui::components::button::{Button, ButtonVariants};
 use qingqi_ui::{theme, ui};
 
 pub fn context_menu_overlay(

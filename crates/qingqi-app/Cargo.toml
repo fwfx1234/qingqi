@@ -10,7 +10,6 @@ license.workspace = true
 anyhow.workspace = true
 global-hotkey.workspace = true
 gpui.workspace = true
-gpui-component.workspace = true
 r2d2.workspace = true
 r2d2_sqlite.workspace = true
 qingqi-core = { path = "../qingqi-core" }

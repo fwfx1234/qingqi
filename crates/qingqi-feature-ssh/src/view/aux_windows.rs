@@ -2,8 +2,8 @@
 
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::Root;
-use gpui_component::theme::Theme;
+use qingqi_ui::components::root::Root;
+use qingqi_ui::components::theme::Theme;
 
 use super::SshView;
 use super::app_settings;
@@ -126,19 +126,19 @@ impl Render for ProfileEditorWindow {
         let view = self.ssh_view.read(cx);
         let handle = self.ssh_view.clone();
         let inputs = profile_editor::ProfileFormInputs {
-            name: view.form_name.clone(),
-            host: view.form_host.clone(),
-            port: view.form_port.clone(),
-            username: view.form_username.clone(),
-            password: view.form_password.clone(),
-            remote_root: view.form_remote_root.clone(),
-            local_root: view.form_local_root.clone(),
-            private_key_path: view.form_private_key_path.clone(),
-            private_key_passphrase: view.form_private_key_passphrase.clone(),
-            note: view.form_note.clone(),
-            connection_timeout: view.form_connection_timeout.clone(),
-            keepalive_interval: view.form_keepalive_interval.clone(),
-            keepalive_max: view.form_keepalive_max.clone(),
+            name: view.form_name.clone().unwrap(),
+            host: view.form_host.clone().unwrap(),
+            port: view.form_port.clone().unwrap(),
+            username: view.form_username.clone().unwrap(),
+            password: view.form_password.clone().unwrap(),
+            remote_root: view.form_remote_root.clone().unwrap(),
+            local_root: view.form_local_root.clone().unwrap(),
+            private_key_path: view.form_private_key_path.clone().unwrap(),
+            private_key_passphrase: view.form_private_key_passphrase.clone().unwrap(),
+            note: view.form_note.clone().unwrap(),
+            connection_timeout: view.form_connection_timeout.clone().unwrap(),
+            keepalive_interval: view.form_keepalive_interval.clone().unwrap(),
+            keepalive_max: view.form_keepalive_max.clone().unwrap(),
         };
         let advanced_flags = profile_editor::ProfileAdvancedFlags {
             tcp_nodelay: view.form_tcp_nodelay,
@@ -188,7 +188,7 @@ impl Render for AppSettingsWindow {
         let view = self.ssh_view.read(cx);
         let handle = self.ssh_view.clone();
         let inputs = app_settings::AppSettingsInputs {
-            terminal_font_size: view.form_terminal_font_size.clone(),
+            terminal_font_size: view.form_terminal_font_size.clone().unwrap(),
         };
 
         div()

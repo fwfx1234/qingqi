@@ -20,19 +20,66 @@ pub enum PopupMenuItem {
 #[derive(Debug, Clone, Copy, Default)]
 pub enum MenuItemVariant { #[default] Normal, Danger }
 
-impl PopupMenu {
-    pub fn new() -> Self {
-        Self { items: Vec::new() }
-    }
-
-    pub fn item(mut self, label: impl Into<SharedString>) -> Self {
-        self.items.push(PopupMenuItem::Item {
+impl PopupMenuItem {
+    pub fn new(label: impl Into<SharedString>) -> Self {
+        Self::Item {
             label: label.into(),
             icon: None,
             disabled: false,
             variant: MenuItemVariant::Normal,
             on_click: None,
-        });
+        }
+    }
+    pub fn on_click(mut self, f: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
+        if let Self::Item { ref mut on_click, .. } = self {
+            *on_click = Some(Box::new(f));
+        }
+        self
+    }
+}
+
+impl From<SharedString> for PopupMenuItem {
+    fn from(label: SharedString) -> Self {
+        PopupMenuItem::new(label)
+    }
+}
+
+impl From<String> for PopupMenuItem {
+    fn from(label: String) -> Self {
+        PopupMenuItem::new(SharedString::from(label))
+    }
+}
+
+impl From<std::borrow::Cow<'static, str>> for PopupMenuItem {
+    fn from(label: std::borrow::Cow<'static, str>) -> Self {
+        PopupMenuItem::new(label.into_owned())
+    }
+}
+
+
+
+
+impl IntoElement for PopupMenuItem {
+    type Element = gpui::AnyElement;
+    fn into_element(self) -> Self::Element {
+        match self {
+            PopupMenuItem::Item { label, .. } => {
+                div().px_3().py_1p5().text_size(px(13.0)).child(label).into_any_element()
+            }
+            PopupMenuItem::Divider => {
+                div().h(px(1.0)).bg(gpui::rgba(0)).into_any_element()
+            }
+        }
+    }
+}
+
+impl PopupMenu {
+    pub fn new() -> Self {
+        Self { items: Vec::new() }
+    }
+
+    pub fn item(mut self, item: impl std::convert::Into<PopupMenuItem>) -> Self {
+        self.items.push(item.into());
         self
     }
 
@@ -40,6 +87,7 @@ impl PopupMenu {
         self.items.push(PopupMenuItem::Divider);
         self
     }
+    pub fn separator(self) -> Self { self.divider() }
 
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
@@ -106,14 +154,14 @@ impl RenderOnce for PopupMenu {
     }
 }
 
-pub trait ContextMenuExt: InteractiveElement + ParentElement + Styled {
+pub trait ContextMenuExt: Sized {
     fn context_menu(
         self,
-        f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
-    ) -> ContextMenu<Self> {
-        ContextMenu::new(self)
-    }
+        _f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+    ) -> Self { self }
 }
+
+impl<T: IntoElement> ContextMenuExt for T {}
 
 pub struct ContextMenu<E: ParentElement + Styled> {
     element: E,
@@ -136,3 +184,4 @@ impl<E: ParentElement + Styled> ParentElement for ContextMenu<E> {
         self.element.extend(elements);
     }
 }
+

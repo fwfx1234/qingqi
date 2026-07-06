@@ -57,7 +57,7 @@ impl HttpMethod {
     }
 }
 
-impl gpui_component::select::SelectItem for HttpMethod {
+impl qingqi_ui::components::widgets::SelectItem for HttpMethod {
     type Value = HttpMethod;
 
     fn title(&self) -> SharedString {

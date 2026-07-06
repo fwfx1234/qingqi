@@ -257,7 +257,9 @@ impl ShortcutService {
     }
 
     pub fn dispatch_global(&self, hotkey_id: u32) -> Option<ShortcutTarget> {
+        println!("!!! dispatch_global: hotkey_id={}, registered_ids={:?}", hotkey_id, self.hotkey_ids.keys().collect::<Vec<_>>());
         let Some(shortcut_id) = self.hotkey_ids.get(&hotkey_id) else {
+            println!("!!! dispatch_global: hotkey_id {} not found!", hotkey_id);
             return None;
         };
         let Some(resolved) = self

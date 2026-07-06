@@ -565,6 +565,7 @@ struct TrayAnchor {
     bottom: f64,
 }
 
+#[allow(dead_code)]
 fn tray_anchor_for_rect(tray_rect: TrayItemRect) -> TrayAnchor {
     TrayAnchor {
         center_x: tray_rect.x + tray_rect.width / 2.0,
@@ -621,6 +622,7 @@ fn scaled_anchor(tray_rect: TrayItemRect, scale: f64) -> TrayAnchor {
     }
 }
 
+#[allow(dead_code)]
 fn tray_anchor_overlaps_display(anchor: TrayAnchor, bounds: Bounds<gpui::Pixels>) -> bool {
     let left: f64 = bounds.origin.x.into();
     let top: f64 = bounds.origin.y.into();

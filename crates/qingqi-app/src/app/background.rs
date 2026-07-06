@@ -7,7 +7,7 @@ use std::{
 use global_hotkey::HotKeyState;
 use gpui::{App, BorrowAppContext, Global, Task};
 
-use gpui_component::theme::Theme;
+use qingqi_ui::components::theme::Theme;
 
 use crate::{
     app::{
@@ -68,7 +68,9 @@ impl BackgroundSupervisor {
     }
 
     pub fn start_hotkey_events(&mut self, window_controller: WindowControllerHandle, cx: &mut App) {
+        println!("!!! start_hotkey_events called");
         if !self.mark_started("hotkey-events") {
+            println!("!!! start_hotkey_events: already started, returning");
             return;
         }
 
@@ -83,6 +85,7 @@ impl BackgroundSupervisor {
                 let Some(event) = event else {
                     break;
                 };
+                println!("!!! Hotkey event received: id={}, state={:?}", event.id, event.state);
                 if event.state != HotKeyState::Pressed {
                     continue;
                 }

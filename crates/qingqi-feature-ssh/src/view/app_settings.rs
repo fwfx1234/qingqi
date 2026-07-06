@@ -2,15 +2,15 @@
 
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::Sizable;
-use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::theme::Theme;
-use qingqi_ui::text_input::TextInput;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::button::{Button, ButtonVariants};
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::components::input::{Input, InputState};
 use qingqi_ui::ui;
 use qingqi_ui::ui::glass;
 
 pub struct AppSettingsInputs {
-    pub terminal_font_size: Entity<TextInput>,
+    pub terminal_font_size: Entity<InputState>,
 }
 
 pub fn render_app_settings_panel(
@@ -55,7 +55,7 @@ pub fn render_app_settings_panel(
                         .items_center()
                         .gap(px(12.0))
                         .child(div().w(px(88.0)).text_size(px(13.0)).child("终端字号"))
-                        .child(div().flex_1().child(font_input)),
+                        .child(div().flex_1().child(Input::new(&font_input))),
                 )
                 .child(
                     div()

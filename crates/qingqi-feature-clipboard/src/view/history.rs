@@ -2,12 +2,13 @@ use super::*;
 use std::sync::Arc;
 
 use gpui::{UniformListScrollHandle, hsla, uniform_list};
-use gpui_component::{
-    Icon, IconName, Sizable, Size as ComponentSize,
-    button::{Button, ButtonCustomVariant, ButtonVariants},
-    scroll::{Scrollbar, ScrollbarShow},
-    theme::Theme,
-};
+use qingqi_ui::components::icon::Icon;
+use qingqi_ui::components::icon::IconName;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size as ComponentSize;
+use qingqi_ui::components::button::{Button, ButtonCustomVariant, ButtonVariants};
+use qingqi_ui::components::scroll::{Scrollbar, ScrollbarShow};
+use qingqi_ui::components::theme::Theme;
 
 pub(super) fn keyboard_filters() -> [ClipboardFilter; 5] {
     [

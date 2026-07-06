@@ -7,14 +7,15 @@ use gpui::{
     px,
 };
 
-use gpui_component::Disableable;
-use gpui_component::Selectable;
-use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::input::{Input, InputState};
-use gpui_component::sidebar::{Sidebar, SidebarMenu, SidebarMenuItem};
-use gpui_component::switch::Switch;
-use gpui_component::theme::Theme;
-use gpui_component::{Sizable, Size as ComponentSize};
+use qingqi_ui::components::styled::Disableable;
+use qingqi_ui::components::styled::Selectable;
+use qingqi_ui::components::button::{Button, ButtonVariants};
+use qingqi_ui::components::input::{Input, InputState};
+use qingqi_ui::components::sidebar::{Sidebar, SidebarMenu, SidebarMenuItem};
+use qingqi_ui::components::switch::Switch;
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size as ComponentSize;
 use qingqi_platform::macos::PermissionStatus;
 use qingqi_plugin::{
     app::AppIndexSnapshot,
@@ -381,7 +382,7 @@ impl SettingsView {
                 cx.new(|cx| {
                     InputState::new(window, cx)
                         .placeholder("例如 Alt+V")
-                        .default_value(value)
+                        .default_value(value.clone().into())
                 })
             });
         }
@@ -1582,6 +1583,7 @@ fn disabled_badge(text: &'static str, cx: &App) -> impl IntoElement {
         .child(text)
 }
 
+#[allow(dead_code)]
 fn toggle_button(
     entity: Entity<SettingsView>,
     _cx: &App,

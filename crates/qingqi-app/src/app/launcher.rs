@@ -11,15 +11,14 @@ use std::{
 
 use gpui::{
     App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement, KeyDownEvent,
+    SharedString,
     ParentElement, Render, ScrollStrategy, StatefulInteractiveElement, Styled, Subscription, Task,
     UniformListScrollHandle, Window, div, prelude::FluentBuilder, px, size, uniform_list,
 };
-use gpui_component::scroll::Scrollbar;
-use gpui_component::theme::Theme;
-use qingqi_ui::{
-    text_input::{TextInput, TextInputStyle},
-    theme, ui,
-};
+use qingqi_ui::components::scroll::Scrollbar;
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::components::input::{Input, InputState};
+use qingqi_ui::{theme, ui};
 
 use crate::{
     app::{
@@ -78,7 +77,7 @@ pub struct Launcher {
     plugin_manager: Arc<Mutex<PluginManager>>,
     app_catalog: Arc<AppCatalog>,
     plugin_visuals: HashMap<String, PluginVisual>,
-    query_input: Option<Entity<TextInput>>,
+    pub query_input: Option<Entity<InputState>>,
     results: Rc<Vec<Command>>,
     selected: usize,
     results_visible_start: usize,
@@ -280,7 +279,7 @@ impl Launcher {
         self.window_controller = Some(handle);
     }
 
-    pub fn attach_query_input(&mut self, input: Entity<TextInput>) {
+    pub fn attach_query_input(&mut self, input: Entity<InputState>) {
         self.query_input = Some(input);
     }
 
@@ -289,47 +288,23 @@ impl Launcher {
             return;
         };
         let weak_launcher = handle.downgrade();
-        input.update(cx, |input, input_cx| {
-            input.set_key_down_handler(
-                move |event, window, cx| {
-                    if !matches!(
-                        event.keystroke.key.as_str(),
-                        "up" | "down" | "enter" | "escape"
-                    ) {
-                        return false;
-                    }
-
-                    let Some(launcher) = weak_launcher.upgrade() else {
-                        return false;
-                    };
-                    launcher.update(cx, |launcher, launcher_cx| {
-                        launcher.handle_launcher_key(event, window, launcher_cx);
-                    });
-                    true
-                },
-                input_cx,
-            );
+        input.update(cx, |_, _| {
+            // key bindings for up/down/enter/escape are handled via Launcher's
+            // capture_key_down listener on the parent container.
         });
+        let _ = weak_launcher;
     }
 
     pub fn focus_query_input(&self, window: &mut Window, cx: &App) {
         if let Some(input) = self.query_input.as_ref() {
-            window.focus(&input.focus_handle(cx));
+            window.focus(&input.read(cx).focus_handle(cx));
+        } else {
         }
     }
 
-    pub fn configure_query_input(input: &mut TextInput, cx: &mut Context<TextInput>) {
-        input.set_style(
-            TextInputStyle {
-                height: QUERY_INPUT_HEIGHT,
-                font_size: 14.0,
-                padding: 0.0,
-            },
-            cx,
-        );
-        input.set_chrome(false, cx);
-        let t = Theme::global(cx);
-        input.set_text_colors(t.foreground, t.muted_foreground, cx);
+    #[allow(dead_code)]
+    pub fn configure_query_input(_input: &mut InputState, _cx: &Context<InputState>) {
+        // Style is now handled via the Input wrapper element and CSS-like styling.
     }
 
     fn default_results(
@@ -379,8 +354,10 @@ impl Launcher {
 
     pub fn observe_query_input(&mut self, cx: &mut Context<Self>) {
         let Some(query_input) = self.query_input.clone() else {
+            tracing::warn!("observe_query_input: no query_input");
             return;
         };
+        tracing::info!("observe_query_input: subscribing to InputState changes");
         // Guard against duplicate calls — clear old subscriptions
         if !self._subscriptions.is_empty() {
             self._subscriptions.clear();
@@ -394,7 +371,7 @@ impl Launcher {
     fn query(&self, cx: &App) -> String {
         self.query_input
             .as_ref()
-            .map(|input| input.read(cx).text())
+            .map(|input| input.read(cx).value().to_string())
             .unwrap_or_default()
     }
 
@@ -759,7 +736,7 @@ impl Launcher {
                             Some(trace),
                         );
                         self.mode = LauncherMode::InlinePlugin { view };
-                        self.enter_plugin_mode_input(&launch_input, cx);
+                        self.enter_plugin_mode_input(&launch_input, window, cx);
                     }
                     Err(error) => {
                         tracing::warn!(
@@ -806,7 +783,7 @@ impl Launcher {
                             selected: 0,
                         };
                         self.plugin_list_visible_start = 0;
-                        self.enter_plugin_mode_input(&launch_input, cx);
+                        self.enter_plugin_mode_input(&launch_input, window, cx);
                         self.plugin_list_scroll
                             .scroll_to_item(0, ScrollStrategy::Top);
                     }
@@ -831,17 +808,18 @@ impl Launcher {
         }
     }
 
-    fn enter_plugin_mode_input(&mut self, text: &str, cx: &mut App) {
-        self.set_query_text(text, cx);
+    fn enter_plugin_mode_input(&mut self, text: &str, window: &mut Window, cx: &mut App) {
+        self.set_query_text(text, window, cx);
         self.last_query = text.to_string();
         self.pending_query = text.to_string();
     }
 
-    fn set_query_text(&self, text: &str, cx: &mut App) {
+    fn set_query_text(&self, text: &str, window: &mut Window, cx: &mut App) {
         if let Some(input) = self.query_input.clone() {
+            let owned = SharedString::from(text.to_string());
             input.update(cx, |input, input_cx| {
-                if input.text() != text {
-                    input.set_text(text.to_string(), input_cx);
+                if input.value().as_ref() != text {
+                    input.set_value(&owned, window, input_cx);
                 }
             });
         }
@@ -981,9 +959,9 @@ impl Launcher {
             return;
         }
         if let Some(input) = self.query_input.clone()
-            && !input.read(cx).text().is_empty()
+            && !input.read(cx).value().is_empty()
         {
-            input.update(cx, |input, cx| input.clear(cx));
+            input.update(cx, |input, cx| input.set_value("", window, cx));
             return;
         }
         self.close_window(window, cx);
@@ -1031,7 +1009,7 @@ impl Launcher {
         }
         self.update_message();
         if let Some(input) = self.query_input.clone() {
-            window.focus(&input.focus_handle(cx));
+            window.focus(&input.read(cx).focus_handle(cx));
         }
         cx.notify();
     }
@@ -1191,7 +1169,7 @@ impl Render for Launcher {
                                     .h(px(QUERY_INPUT_HEIGHT))
                                     .flex()
                                     .items_center()
-                                    .child(input)
+                                    .child(Input::new(&input).appearance(false))
                                     .into_any_element()
                             })
                             .unwrap_or_else(|| {
@@ -1255,7 +1233,7 @@ impl Render for Launcher {
                                                         item,
                                                         idx == sel,
                                                         idx,
-                                                        t_results,
+                                                        &t_results,
                                                     ))
                                             })
                                             .collect::<Vec<_>>()
@@ -1420,7 +1398,7 @@ fn plugin_list(
                                 item,
                                 idx == selected,
                                 idx,
-                                t_closure,
+                                &t_closure,
                             ))
                     })
                     .collect::<Vec<_>>()

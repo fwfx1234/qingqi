@@ -2,9 +2,9 @@ use gpui::{App, Global};
 
 mod dialog;
 mod sheet;
-mod notification;
-mod context_menu;
-mod popover;
+pub mod notification;
+pub mod context_menu;
+pub mod popover;
 mod tooltip;
 
 pub use dialog::{Dialog, DialogButton, ActiveDialog};
@@ -14,6 +14,7 @@ pub use context_menu::{ContextMenuExt, PopupMenu, PopupMenuItem, MenuItemVariant
 pub use popover::Popover;
 pub use tooltip::Tooltip;
 
+#[allow(dead_code)]
 pub struct LayerManager {
     pub(crate) sheets: Vec<ActiveSheet>,
     pub(crate) dialogs: Vec<ActiveDialog>,

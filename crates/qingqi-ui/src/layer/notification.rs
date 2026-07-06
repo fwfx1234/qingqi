@@ -93,7 +93,7 @@ impl RenderOnce for NotificationList {
                         .when_some(note.title.as_ref(), |d, t| {
                             d.child(div().text_size(px(13.0)).font_weight(FontWeight::SEMIBOLD).text_color(token.foreground).child(t.clone()))
                         })
-                        .child(div().text_size(px(12.0)).text_color(token.foreground_muted).child(note.message.clone())))
+                        .child(div().text_size(px(12.0)).text_color(token.muted_foreground).child(note.message.clone())))
             }))
     }
 }

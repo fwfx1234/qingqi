@@ -2,9 +2,10 @@
 
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::Root;
-use gpui_component::scroll::ScrollableElement;
-use gpui_component::theme::Theme;
+use qingqi_ui::components::root::Root;
+use qingqi_ui::components::scroll::ScrollableElement;
+use qingqi_ui::components::scroll::ScrollbarExt;
+use qingqi_ui::components::theme::Theme;
 
 use super::ClipboardView;
 use super::settings;

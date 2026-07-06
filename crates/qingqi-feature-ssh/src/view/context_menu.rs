@@ -1,7 +1,7 @@
-//! Profile 右键菜单（gpui-component PopupMenu）
+//! Profile 右键菜单（qingqi-ui PopupMenu）
 
 use gpui::Entity;
-use gpui_component::menu::{PopupMenu, PopupMenuItem};
+use qingqi_ui::layer::context_menu::{PopupMenu, PopupMenuItem};
 
 #[derive(Clone, Copy)]
 enum ProfileAction {

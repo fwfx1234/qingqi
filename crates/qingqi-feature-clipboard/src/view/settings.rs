@@ -1,4 +1,4 @@
-use gpui_component::theme::Theme;
+use qingqi_ui::components::theme::Theme;
 
 use super::shared::{pill_button, toggle_control};
 use super::*;

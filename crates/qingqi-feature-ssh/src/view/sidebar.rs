@@ -2,8 +2,8 @@
 
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::menu::ContextMenuExt;
-use gpui_component::theme::Theme;
+use qingqi_ui::layer::context_menu::ContextMenuExt;
+use qingqi_ui::components::theme::Theme;
 
 use super::context_menu;
 use super::virtual_list;

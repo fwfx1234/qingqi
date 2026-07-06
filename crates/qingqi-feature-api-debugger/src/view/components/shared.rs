@@ -1,5 +1,5 @@
 use gpui::{App, IntoElement, ParentElement, Styled, div, px, rgb};
-use gpui_component::theme::Theme;
+use qingqi_ui::components::theme::Theme;
 use qingqi_ui::{theme, ui};
 
 pub fn transparent_surface(cx: &App) -> gpui::Hsla {

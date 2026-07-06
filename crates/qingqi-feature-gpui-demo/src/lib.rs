@@ -1,3 +1,4 @@
+pub mod local_components;
 pub mod manifest;
 pub mod plugin;
 

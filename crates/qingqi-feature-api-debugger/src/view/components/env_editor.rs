@@ -5,14 +5,13 @@ use gpui::{
     Render, SharedString, StatefulInteractiveElement, Styled, Subscription, TitlebarOptions,
     Window, WindowBounds, WindowKind, WindowOptions, div, px, size,
 };
-use gpui_component::{
-    IconName, Root, Sizable, Size,
-    button::{Button, ButtonVariants},
-};
-use gpui_component::{
-    input::{Input, InputState},
-    theme::Theme,
-};
+use qingqi_ui::components::icon::IconName;
+use qingqi_ui::components::root::Root;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size;
+use qingqi_ui::components::button::{Button, ButtonVariants};
+use qingqi_ui::components::input::{Input, InputState};
+use qingqi_ui::components::theme::Theme;
 use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn open_env_editor_window(debugger: Entity<ApiDebuggerView>, cx: &mut App) {

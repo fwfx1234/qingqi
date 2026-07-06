@@ -14,11 +14,10 @@ use gpui::{
     StatefulInteractiveElement, Styled, Window, div, img, px,
 };
 use qingqi_ui::token::tokens;
-use gpui_component::{
-    Selectable, Sizable,
-    theme::Theme,
-};
-use qingqi_ui::components::button::{Button, ButtonVariant, ButtonSize};
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::components::button::{Button, ButtonVariant, ButtonVariants}; use qingqi_ui::components::styled::Size;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Selectable;
 
 use qingqi_plugin::plugin_spec::PluginAccent;
 use qingqi_ui::{
@@ -925,8 +924,8 @@ impl Render for ImageCompressView {
                             .child(
                                 Button::new("image-compress-paste")
                                     .label("粘贴")
-                                    .size(ButtonSize::Small)
-                                    .variant(ButtonVariant::Primary)
+                                    .with_size(Size::Small)
+                                    .with_variant(ButtonVariant::Primary)
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -940,7 +939,7 @@ impl Render for ImageCompressView {
                             .child(
                                 Button::new("image-compress-choose")
                                     .label("选择图片")
-                                    .size(ButtonSize::Small)
+                                    .with_size(Size::Small)
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -974,7 +973,7 @@ impl Render for ImageCompressView {
 }
 
 fn mode_chip(
-    id: impl Into<gpui::ElementId>,
+    id: impl Into<gpui::ElementId> + Clone,
     label: &str,
     active: bool,
     _dark: bool,
@@ -982,12 +981,12 @@ fn mode_chip(
 ) -> Button {
     Button::new(id)
         .label(label.to_string())
-        .size(ButtonSize::Small)
+        .with_size(Size::Small)
         .selected(active)
 }
 
 fn quality_button(
-    id: impl Into<gpui::ElementId>,
+    id: impl Into<gpui::ElementId> + Clone,
     label: &str,
     _dark: bool,
     _cx: &App,
@@ -1205,7 +1204,7 @@ fn image_row(
                         // "复制" — copy compressed image to clipboard (success only)
                         .children(if is_success {
                             Some(
-                                Button::new(("image-compress-copy", index)).label("复制").size(ButtonSize::Small)
+                                Button::new(("image-compress-copy", index)).label("复制").with_size(Size::Small)
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1240,7 +1239,7 @@ fn image_row(
                         // "定位" — reveal in Finder (success only)
                         .children(if is_success {
                             Some(
-                                Button::new(("image-compress-reveal", index)).label("定位").size(ButtonSize::Small)
+                                Button::new(("image-compress-reveal", index)).label("定位").with_size(Size::Small)
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1257,7 +1256,7 @@ fn image_row(
                         // "覆盖" — overwrite original (success, real file only)
                         .children(if is_success && !from_clipboard && has_source {
                             Some(
-                                Button::new(("image-compress-overwrite", index)).label("覆盖").size(ButtonSize::Small)
+                                Button::new(("image-compress-overwrite", index)).label("覆盖").with_size(Size::Small)
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1274,7 +1273,7 @@ fn image_row(
                         // "另存为" — save-as copy (success only)
                         .children(if is_success {
                             Some(
-                                Button::new(("image-compress-save-as", index)).label("另存").size(ButtonSize::Small)
+                                Button::new(("image-compress-save-as", index)).label("另存").with_size(Size::Small)
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1318,7 +1317,7 @@ fn image_row(
                         // "重试" — retry failed entry
                         .children(if is_failed {
                             Some(
-                                Button::new(("image-compress-retry", index)).label("重试").size(ButtonSize::Small)
+                                Button::new(("image-compress-retry", index)).label("重试").with_size(Size::Small)
                                     .on_click({
                                         let handle = handle.clone();
                                         move |_, window, cx| {
@@ -1473,8 +1472,8 @@ fn footer_bar(
                         } else {
                             "开始压缩"
                         })
-                        .size(ButtonSize::Small)
-                        .variant(ButtonVariant::Primary)
+                        .with_size(Size::Small)
+                        .with_variant(ButtonVariant::Primary)
                         .on_click({
                             let handle = handle.clone();
                             move |_, window, cx| {
@@ -1489,7 +1488,7 @@ fn footer_bar(
                     Some(
                         Button::new("image-compress-cancel")
                             .label("取消")
-                            .size(ButtonSize::Small)
+                            .with_size(Size::Small)
                             .on_click({
                                 let handle = handle.clone();
                                 move |_, window, cx| {
@@ -1510,7 +1509,7 @@ fn footer_bar(
                         } else {
                             "另存为"
                         })
-                        .size(ButtonSize::Small)
+                        .with_size(Size::Small)
                         .on_click({
                             let handle = handle.clone();
                             move |_, window, cx| {
@@ -1524,7 +1523,7 @@ fn footer_bar(
                 .child(
                     Button::new("image-compress-output-dir")
                         .label("💾 选择目录")
-                        .size(ButtonSize::Small)
+                        .with_size(Size::Small)
                         .on_click({
                             let handle = handle.clone();
                             move |_, window, cx| {
@@ -1538,7 +1537,7 @@ fn footer_bar(
                 .child(
                     Button::new("image-compress-open-dir")
                         .label("打开目录")
-                        .size(ButtonSize::Small)
+                        .with_size(Size::Small)
                         .on_click({
                             let handle = handle.clone();
                             move |_, window, cx| {
@@ -1552,8 +1551,8 @@ fn footer_bar(
                 .child(
                     Button::new("image-compress-clear")
                         .label("清空")
-                        .size(ButtonSize::Small)
-                        .variant(ButtonVariant::Ghost)
+                        .with_size(Size::Small)
+                        .with_variant(ButtonVariant::Ghost)
                         .on_click({
                             let handle = handle.clone();
                             move |_, window, cx| {
@@ -1581,7 +1580,7 @@ fn footer_bar(
                     div()
                         .flex_1()
                         .text_size(px(11.0))
-                        .text_color(tokens(cx).foreground_muted)
+                        .text_color(tokens(cx).muted_foreground)
                         .child(message),
                 )
                 .child(

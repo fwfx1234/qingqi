@@ -9,7 +9,7 @@ use gpui::{
     TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds, WindowDecorations,
     WindowKind, WindowOptions, div, prelude::*, px, size,
 };
-use gpui_component::Root;
+use qingqi_ui::components::root::Root;
 
 use crate::app::{app_catalog::AppCatalog, launcher::Launcher};
 use qingqi_core::lock_or_recover;
@@ -17,7 +17,8 @@ use qingqi_core::plugin::{PluginManager, WindowView};
 use qingqi_plugin::command::{Action, Activation, CommandInvocation};
 use qingqi_plugin::events::AppEventBus;
 use qingqi_plugin::plugin_spec::{WindowBackgroundSpec, WindowSize};
-use qingqi_ui::{text_input::TextInput, ui};
+use qingqi_ui::components::input::InputState;
+use qingqi_ui::ui;
 
 pub type WindowControllerHandle = Arc<Mutex<WindowController>>;
 
@@ -189,9 +190,7 @@ impl WindowController {
         match cx.open_window(options, move |window, cx| {
             window.set_window_title("Qingqi");
             let query_input = cx.new(|cx| {
-                let mut input = TextInput::new(cx, "搜索工具、命令、文件...", "");
-                Launcher::configure_query_input(&mut input, cx);
-                input
+                InputState::new(window, cx).placeholder("搜索工具、命令、文件...")
             });
             let launcher = cx
                 .new(|cx| Launcher::new(Arc::clone(&plugin_manager), Arc::clone(&app_catalog), cx));
@@ -204,7 +203,10 @@ impl WindowController {
                 launcher.observe_query_input(launcher_cx);
                 launcher.initialize_async(events, launcher_cx);
             });
-            window.focus(&query_input.focus_handle(cx));
+            // Defer focus to next frame so that the on_focus listener registered
+            // via `cx.on_focus` (which uses deferred activate) is active by then.
+            let fh = query_input.focus_handle(cx);
+            window.on_next_frame(move |window, _cx| { window.focus(&fh); });
             cx.new(|cx| Root::new(launcher, window, cx))
         }) {
             Ok(handle) => {
@@ -850,6 +852,12 @@ fn activate_launcher_window(launcher: &Launcher, window: &mut Window, cx: &mut A
     cx.activate(true);
     window.activate_window();
     launcher.focus_query_input(window, cx);
+    // Ensure blink cursor starts even if on_focus callback has timing issues
+    if let Some(input) = launcher.query_input.as_ref() {
+        input.update(cx, |input, cx| {
+            // input.start_blink_cursor(cx); // method not available in this gpui version
+        });
+    }
     window.defer(cx, |window, cx| {
         qingqi_platform::macos::activate_frontmost();
         cx.activate(true);

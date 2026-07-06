@@ -1,5 +1,5 @@
 use gpui::{App, AppContext, Entity, Window};
-use gpui_component::input::InputState;
+use qingqi_ui::components::input::InputState;
 
 use crate::service::{self, ApiGroup, ApiRequest, ApiResponse, AuthType, KeyValueRow};
 

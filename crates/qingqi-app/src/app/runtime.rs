@@ -239,7 +239,7 @@ pub fn run(host: AppHost) -> Result<()> {
     app.run(move |cx| {
         qingqi_platform::macos::hide_dock_icon();
 
-        gpui_component::init(cx);
+        qingqi_ui::components::init(cx);
 
         // 初始化主题服务
         let themes_dir = paths.data_dir().join("config").join("themes");
@@ -260,8 +260,6 @@ pub fn run(host: AppHost) -> Result<()> {
             });
         tracing::info!(initial_theme = %initial_theme, initial_mode = ?initial_mode, "applying initial theme from store");
         ThemeService::apply_theme(&initial_theme, initial_mode, cx);
-
-        qingqi_ui::text_input::TextInput::register_bindings(cx);
 
         cx.on_action({
             let window_controller = Arc::clone(&window_controller);
@@ -345,6 +343,15 @@ pub fn run(host: AppHost) -> Result<()> {
         cx.set_global(ShortcutGlobal::new(Arc::clone(&shortcut_service)));
         cx.set_global(tray_manager.clone());
         cx.set_global(background);
+
+        // Auto-open launcher for testing input component
+        if std::env::var("QINGQI_TEST_LAUNCHER").is_ok() {
+            let window_controller = Arc::clone(&window_controller);
+            cx.defer(move |cx| {
+                println!("!!! Auto-opening launcher for testing");
+                WindowController::show_launcher(window_controller, cx);
+            });
+        }
 
         #[cfg(debug_assertions)]
         if let Ok(plugin_id) = std::env::var("QINGQI_DEBUG_OPEN_PLUGIN") {

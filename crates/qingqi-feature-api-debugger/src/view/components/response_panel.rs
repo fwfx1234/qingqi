@@ -6,11 +6,11 @@ use gpui::{
     AnyElement, App, Entity, InteractiveElement, IntoElement, ParentElement,
     StatefulInteractiveElement, Styled, div, prelude::FluentBuilder, px,
 };
-use gpui_component::theme::Theme;
-use gpui_component::{
-    IconName, Sizable, Size,
-    button::{Button, ButtonVariants},
-};
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::components::icon::IconName;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size;
+use qingqi_ui::components::button::{Button, ButtonVariants};
 use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn response_panel(

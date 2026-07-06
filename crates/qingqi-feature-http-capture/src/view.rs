@@ -20,16 +20,16 @@ use gpui::{
     ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task,
     Window, div, px,
 };
-use qingqi_ui::components::button::{Button, ButtonSize, ButtonVariant};
-
-
+use qingqi_ui::components::button::{Button, ButtonVariant, ButtonVariants}; use qingqi_ui::components::styled::Size;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Disableable;
 
 use qingqi_ui::token::tokens;
-use gpui_component::divider::Divider;
-use gpui_component::input::{Input, InputState};
-use gpui_component::scroll::ScrollableElement;
-use gpui_component::theme::Theme;
-use gpui_component::{Disableable, Sizable};
+use qingqi_ui::components::divider::Divider;
+use qingqi_ui::components::input::{Input, InputState};
+use qingqi_ui::components::scroll::ScrollableElement;
+use qingqi_ui::components::scroll::ScrollbarExt;
+use qingqi_ui::components::theme::Theme;
 use qingqi_plugin::{
     events::{AppEventBus, AppEventKind},
     plugin_spec::PluginAccent,
@@ -492,7 +492,7 @@ impl CaptureView {
         } else if status >= 200 {
             tokens(cx).success.into()
         } else {
-            tokens(cx).foreground_muted.into()
+            tokens(cx).muted_foreground.into()
         }
     }
 }
@@ -616,7 +616,7 @@ fn proxy_value_row(
 }
 
 fn small_action(id: &'static str, label: &str, _cx: &App) -> Button {
-    Button::new(id).label(label.to_string()).size(ButtonSize::Small).size(ButtonSize::XSmall)
+    Button::new(id).label(label.to_string()).with_size(Size::Small).with_size(Size::XSmall)
 }
 
 fn capture_input(state: Entity<InputState>) -> Input {
@@ -825,25 +825,25 @@ impl Render for CaptureView {
                         },
                     ))
                     .child(if engine_running {
-                        Button::new("stop-proxy-btn").label("停止代理").size(ButtonSize::Small).variant(ButtonVariant::Danger)
+                        Button::new("stop-proxy-btn").label("停止代理").with_size(Size::Small).with_variant(ButtonVariant::Danger)
                             .on_click(cx.listener(|panel, _, _, cx| {
                                 panel.stop_proxy(cx);
                             }))
                     } else {
-                        Button::new("start-proxy-btn").label("启动代理").size(ButtonSize::Small).variant(ButtonVariant::Primary)
+                        Button::new("start-proxy-btn").label("启动代理").with_size(Size::Small).with_variant(ButtonVariant::Primary)
                             .on_click(cx.listener(|panel, _, _, cx| {
                                 panel.start_proxy(cx);
                             }))
                     })
                     .child({
-                        Button::new("reset-filter-btn").label("重置过滤").size(ButtonSize::Small).variant(ButtonVariant::Ghost)
+                        Button::new("reset-filter-btn").label("重置过滤").with_size(Size::Small).with_variant(ButtonVariant::Ghost)
                             .disabled(!has_active_filter)
                             .on_click(cx.listener(|panel, _, _, cx| {
                                 panel.reset_filters(cx);
                             }))
                     })
                     .child({
-                        Button::new("clear-btn").label("清空记录").size(ButtonSize::Small).variant(ButtonVariant::Danger)
+                        Button::new("clear-btn").label("清空记录").with_size(Size::Small).with_variant(ButtonVariant::Danger)
                             .disabled(total == 0)
                             .on_click(cx.listener(|panel, _, _, cx| {
                                 panel.clear_all(cx);

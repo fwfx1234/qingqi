@@ -8,9 +8,18 @@ license.workspace = true
 
 [dependencies]
 gpui.workspace = true
-gpui-component.workspace = true
 qingqi-plugin = { path = "../qingqi-plugin" }
 tracing.workspace = true
-
+ropey = "=2.0.0-beta.1"
+unicode-segmentation = "1.12"
+aho-corasick = "1.1"
+regex = "1"
+smallvec = "1"
+sum-tree = { package = "zed-sum-tree", version = "0.2.0" }
+anyhow = "1"
+lsp-types = "0.97"
+tree-sitter = "0.25"
+serde = { workspace = true }
+serde_json.workspace = true
 [lints]
 workspace = true

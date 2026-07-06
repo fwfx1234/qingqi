@@ -2,13 +2,14 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::*;
-use gpui_component::menu::ContextMenuExt;
-use gpui_component::{Icon, IconName};
+use qingqi_ui::layer::context_menu::ContextMenuExt;
+use qingqi_ui::components::icon::Icon;
+use qingqi_ui::components::icon::IconName;
 
 use super::file_context_menu;
 use super::virtual_list;
 use qingqi_plugin::plugin_spec::PluginAccent;
-use qingqi_ui::text_input::TextInput;
+use qingqi_ui::components::input::{Input, InputState};
 use qingqi_ui::{theme, ui};
 
 use crate::model::SessionId;
@@ -25,7 +26,7 @@ pub fn render_file_tree(
     tree: &FileTreeViewModel,
     session_id: Option<SessionId>,
     list_scroll: UniformListScrollHandle,
-    path_input: Entity<TextInput>,
+    path_input: Entity<InputState>,
     follow_terminal: bool,
     can_follow_terminal: bool,
     cx: &mut Context<super::SshView>,
@@ -66,7 +67,7 @@ pub fn render_file_tree(
 }
 
 fn render_toolbar(
-    path_input: Entity<TextInput>,
+    path_input: Entity<InputState>,
     follow_terminal: bool,
     can_follow_terminal: bool,
     cx: &mut Context<super::SshView>,
@@ -131,7 +132,7 @@ fn render_toolbar(
         )
 }
 
-fn path_slot(path_input: Entity<TextInput>) -> impl IntoElement {
+fn path_slot(path_input: Entity<InputState>) -> impl IntoElement {
     let focus_target = path_input.clone();
     div()
         .id("file-path-input")
@@ -145,7 +146,7 @@ fn path_slot(path_input: Entity<TextInput>) -> impl IntoElement {
             cx.stop_propagation();
             window.focus(&focus_target.read(cx).focus_handle(cx));
         })
-        .child(path_input)
+        .child(Input::new(&path_input))
 }
 
 fn render_list_header(cx: &App) -> impl IntoElement {

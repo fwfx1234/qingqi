@@ -50,7 +50,7 @@
 | crate | 角色 | 主要内容 | 依赖 | 对外稳定? |
 |---|---|---|---|---|
 | **qingqi-plugin** | **插件 SDK 契约** | `Plugin`/视图 trait、`Manifest`+规格、`Command`/`Activation`/匹配器、`ShortcutDescriptor`、`PluginCx`、事件总线、存储(`AppPaths`/`DatabaseService`/`DatabaseSpec`)、`JobProvider`、`ClipboardContext`、`lock_or_recover` | gpui, serde, anyhow, rusqlite/r2d2 | **是（semver）** |
-| **qingqi-ui** | 渲染工具箱（插件 UI 必需） | theme / theme_mode / ui(+components) / text_input / assets / accent 配色 | qingqi-plugin, gpui, gpui-component | **是（semver）** |
+| **qingqi-ui** | 渲染工具箱（插件 UI 必需） | theme / theme_mode / ui(+components) / text_input / assets / accent 配色 | qingqi-plugin, gpui | **是（semver）** |
 | **qingqi-platform** | OS 服务 | clipboard / hotkey / low_level_hook / tray / power / display / apps / shell / svg_icon | (gpui, windows…)，**不依赖 plugin** | 否 |
 | **qingqi-core** | **插件宿主** | `PluginManager`、`FeatureRegistry`/`BuildCx`/`PluginDescriptor`、`CommandUsageStore`、命令排序 | qingqi-plugin | 否 |
 | **qingqi-app** | GUI 外壳 | runtime / window_controller / launcher / app_index(+store/catalog) / background / **shortcut 服务** | core, plugin, ui, platform | 否 |

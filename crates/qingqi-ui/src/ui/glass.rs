@@ -5,17 +5,17 @@
 
 use crate::theme;
 use gpui::{App, BoxShadow, Hsla, hsla, point, px};
-use gpui_component::theme::Theme;
+use crate::token::tokens;
 
 /// 主面板背景色
 pub fn bg(cx: &App) -> Hsla {
-    let t = Theme::global(cx);
+    let t = tokens(cx);
     theme::rgba_with_alpha(t.list.into(), if t.is_dark() { 0.22 } else { 0.82 })
 }
 
 /// 面板边框色
 pub fn border(cx: &App) -> Hsla {
-    let t = Theme::global(cx);
+    let t = tokens(cx);
     theme::rgba_with_alpha(t.border.into(), if t.is_dark() { 0.28 } else { 0.24 })
 }
 
@@ -39,13 +39,13 @@ pub fn shadow() -> Vec<BoxShadow> {
 
 /// 分割线颜色
 pub fn divider(cx: &App) -> Hsla {
-    let t = Theme::global(cx);
+    let t = tokens(cx);
     theme::rgba_with_alpha(t.border.into(), if t.is_dark() { 0.20 } else { 0.16 })
 }
 
 /// 悬停背景色
 pub fn hover_bg(cx: &App) -> Hsla {
-    if Theme::global(cx).is_dark() {
+    if tokens(cx).is_dark() {
         hsla(0.0, 0.0, 1.0, 0.055)
     } else {
         hsla(0.0, 0.0, 0.88, 0.34)
@@ -54,30 +54,30 @@ pub fn hover_bg(cx: &App) -> Hsla {
 
 /// 子面板背景色
 pub fn panel(cx: &App) -> Hsla {
-    let t = Theme::global(cx);
+    let t = tokens(cx);
     theme::rgba_with_alpha(t.popover.into(), if t.is_dark() { 0.55 } else { 0.78 })
 }
 
 /// 凹陷区域背景色（如编辑器、响应内容区）
 pub fn inset(cx: &App) -> Hsla {
-    if Theme::global(cx).is_dark() {
+    if tokens(cx).is_dark() {
         hsla(225.0 / 360.0, 0.18, 0.10, 0.18)
     } else {
-        theme::rgba_with_alpha(Theme::global(cx).list.into(), 0.50)
+        theme::rgba_with_alpha(tokens(cx).list.into(), 0.50)
     }
 }
 
 /// 侧栏背景色（macOS Source List 区域）
 pub fn sidebar(cx: &App) -> Hsla {
-    let t = Theme::global(cx);
+    let t = tokens(cx);
     theme::rgba_with_alpha(t.sidebar.into(), if t.is_dark() { 0.40 } else { 0.88 })
 }
 
 /// 工具栏/标签栏背景色
 pub fn bar(cx: &App) -> Hsla {
-    if Theme::global(cx).is_dark() {
+    if tokens(cx).is_dark() {
         hsla(225.0 / 360.0, 0.16, 0.14, 0.26)
     } else {
-        theme::rgba_with_alpha(Theme::global(cx).list.into(), 0.68)
+        theme::rgba_with_alpha(tokens(cx).list.into(), 0.68)
     }
 }

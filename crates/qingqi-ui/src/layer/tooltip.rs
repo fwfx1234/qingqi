@@ -30,7 +30,7 @@ impl RenderOnce for Tooltip {
             .px_2()
             .py_1()
             .text_xs()
-            .text_color(token.foreground_muted)
+            .text_color(token.muted_foreground)
             .child(self.content)
     }
 }

@@ -2,13 +2,12 @@
 
 use gpui::prelude::*;
 use gpui::{point, *};
-use gpui_component::scroll::ScrollableElement;
-use gpui_component::{
-    Sizable,
-    button::{Button, ButtonVariants},
-    theme::Theme,
-};
-use qingqi_ui::text_input::TextInput;
+use qingqi_ui::components::scroll::ScrollableElement;
+use qingqi_ui::components::scroll::ScrollbarExt;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::button::{Button, ButtonVariants};
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::components::input::{Input, InputState};
 use qingqi_ui::ui::glass;
 use qingqi_ui::{theme, ui};
 
@@ -20,19 +19,19 @@ const FIELD_INPUT_HEIGHT: f32 = 32.0;
 const FIELD_TEXTAREA_HEIGHT: f32 = 52.0;
 
 pub struct ProfileFormInputs {
-    pub name: Entity<TextInput>,
-    pub host: Entity<TextInput>,
-    pub port: Entity<TextInput>,
-    pub username: Entity<TextInput>,
-    pub password: Entity<TextInput>,
-    pub remote_root: Entity<TextInput>,
-    pub local_root: Entity<TextInput>,
-    pub private_key_path: Entity<TextInput>,
-    pub private_key_passphrase: Entity<TextInput>,
-    pub note: Entity<TextInput>,
-    pub connection_timeout: Entity<TextInput>,
-    pub keepalive_interval: Entity<TextInput>,
-    pub keepalive_max: Entity<TextInput>,
+    pub name: Entity<InputState>,
+    pub host: Entity<InputState>,
+    pub port: Entity<InputState>,
+    pub username: Entity<InputState>,
+    pub password: Entity<InputState>,
+    pub remote_root: Entity<InputState>,
+    pub local_root: Entity<InputState>,
+    pub private_key_path: Entity<InputState>,
+    pub private_key_passphrase: Entity<InputState>,
+    pub note: Entity<InputState>,
+    pub connection_timeout: Entity<InputState>,
+    pub keepalive_interval: Entity<InputState>,
+    pub keepalive_max: Entity<InputState>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -177,10 +176,10 @@ fn render_advanced_section(
     protocol: &ProtocolType,
     expanded: bool,
     flags: ProfileAdvancedFlags,
-    note: &Entity<TextInput>,
-    timeout: &Entity<TextInput>,
-    keepalive: &Entity<TextInput>,
-    keepalive_max: &Entity<TextInput>,
+    note: &Entity<InputState>,
+    timeout: &Entity<InputState>,
+    keepalive: &Entity<InputState>,
+    keepalive_max: &Entity<InputState>,
     cx: &App,
 ) -> impl IntoElement {
     let h = handle.clone();
@@ -241,10 +240,10 @@ fn render_advanced_fields(
     is_ssh: bool,
     is_ftp: bool,
     flags: ProfileAdvancedFlags,
-    note: &Entity<TextInput>,
-    timeout: &Entity<TextInput>,
-    keepalive: &Entity<TextInput>,
-    keepalive_max: &Entity<TextInput>,
+    note: &Entity<InputState>,
+    timeout: &Entity<InputState>,
+    keepalive: &Entity<InputState>,
+    keepalive_max: &Entity<InputState>,
     cx: &App,
 ) -> impl IntoElement {
     let mut group = settings_group(cx).child(group_row(
@@ -358,7 +357,7 @@ fn group_row(content: impl IntoElement, show_divider: bool, cx: &App) -> impl In
         .child(content)
 }
 
-fn input_slot(input: &Entity<TextInput>, height: f32) -> impl IntoElement {
+fn input_slot(input: &Entity<InputState>, height: f32) -> impl IntoElement {
     let focus_target = input.clone();
     div()
         .flex_1()
@@ -371,12 +370,12 @@ fn input_slot(input: &Entity<TextInput>, height: f32) -> impl IntoElement {
             cx.stop_propagation();
             window.focus(&focus_target.read(cx).focus_handle(cx));
         })
-        .child(input.clone())
+        .child(Input::new(input))
 }
 
 fn group_field(
     label: &str,
-    input: &Entity<TextInput>,
+    input: &Entity<InputState>,
     required: bool,
     cx: &App,
 ) -> impl IntoElement {
@@ -397,7 +396,7 @@ fn group_field(
 
 fn group_field_multiline(
     label: &str,
-    input: &Entity<TextInput>,
+    input: &Entity<InputState>,
     required: bool,
     cx: &App,
 ) -> impl IntoElement {
@@ -634,10 +633,10 @@ fn proto_segment(
 fn render_auth_selector(
     handle: &Entity<super::SshView>,
     current: &SshAuthMethod,
-    username_input: &Entity<TextInput>,
-    password_input: &Entity<TextInput>,
-    key_path: &Entity<TextInput>,
-    key_passphrase: &Entity<TextInput>,
+    username_input: &Entity<InputState>,
+    password_input: &Entity<InputState>,
+    key_path: &Entity<InputState>,
+    key_passphrase: &Entity<InputState>,
     cx: &App,
 ) -> impl IntoElement {
     let is_password = matches!(current, SshAuthMethod::Password { .. });

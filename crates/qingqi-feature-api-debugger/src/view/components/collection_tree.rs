@@ -6,11 +6,12 @@ use gpui::{
     App, Entity, InteractiveElement, IntoElement, MouseButton, ParentElement,
     StatefulInteractiveElement, Styled, div, px,
 };
-use gpui_component::list::ListItem;
-use gpui_component::menu::{ContextMenuExt, PopupMenuItem};
-use gpui_component::theme::Theme;
-use gpui_component::tree::{TreeItem, TreeState, tree};
-use gpui_component::{Icon, IconName};
+use qingqi_ui::components::list::ListItem;
+use qingqi_ui::layer::context_menu::{ContextMenuExt, PopupMenuItem};
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::components::tree::{TreeItem, TreeState, tree};
+use qingqi_ui::components::icon::Icon;
+use qingqi_ui::components::icon::IconName;
 use qingqi_ui::{theme, ui};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

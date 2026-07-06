@@ -2,7 +2,7 @@ use super::ApiDebuggerView;
 use super::types::AuthFormInputs;
 use crate::service::{AuthType, EditorTab, KeyValueRow};
 use gpui::{App, Entity};
-use gpui_component::input::InputState;
+use qingqi_ui::components::input::InputState;
 
 impl ApiDebuggerView {
     pub fn text_editor_input(&self, tab: EditorTab) -> Option<Entity<InputState>> {

@@ -3,10 +3,8 @@ use gpui::{
     App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
     Styled, div, hsla, px,
 };
-use gpui_component::{
-    input::{Input, InputState},
-    theme::Theme,
-};
+use qingqi_ui::components::input::{Input, InputState};
+use qingqi_ui::components::theme::Theme;
 use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn curl_import_dialog(

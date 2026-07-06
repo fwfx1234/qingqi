@@ -34,10 +34,9 @@ use crate::transfer;
 use crate::upload::{self, UploadItem};
 use gpui::prelude::FluentBuilder;
 use gpui::*;
-use gpui_component::WindowExt;
-use gpui_component::notification::Notification;
-use gpui_component::theme::Theme;
-use qingqi_ui::text_input::{TextInput, TextInputStyle};
+use qingqi_ui::components::root::WindowExt;
+use qingqi_ui::layer::notification::Notification;
+use qingqi_ui::components::input::InputState;
 use terminal_input::terminal_editing_key;
 use terminal_pane_view::TerminalPaneView;
 
@@ -171,7 +170,7 @@ pub struct SshView {
     editing_profile_id: Option<i64>, // None=新建, Some(id)=编辑
     form_advanced_expanded: bool,
     show_file_rename: bool,
-    file_rename_input: Entity<TextInput>,
+    file_rename_input: Option<Entity<InputState>>,
     file_rename_target: Option<FileEntryRow>,
     show_file_upload_confirm: bool,
     pending_external_edit: Option<PendingExternalEdit>,
@@ -186,24 +185,24 @@ pub struct SshView {
     form_auth_method: SshAuthMethod,
 
     // Profile 表单输入框
-    form_name: Entity<TextInput>,
-    form_host: Entity<TextInput>,
-    form_port: Entity<TextInput>,
-    form_username: Entity<TextInput>,
-    form_password: Entity<TextInput>,
-    form_remote_root: Entity<TextInput>,
-    form_local_root: Entity<TextInput>,
-    form_private_key_path: Entity<TextInput>,
-    form_private_key_passphrase: Entity<TextInput>,
-    form_note: Entity<TextInput>,
-    form_connection_timeout: Entity<TextInput>,
-    form_keepalive_interval: Entity<TextInput>,
-    form_keepalive_max: Entity<TextInput>,
+    form_name: Option<Entity<InputState>>,
+    form_host: Option<Entity<InputState>>,
+    form_port: Option<Entity<InputState>>,
+    form_username: Option<Entity<InputState>>,
+    form_password: Option<Entity<InputState>>,
+    form_remote_root: Option<Entity<InputState>>,
+    form_local_root: Option<Entity<InputState>>,
+    form_private_key_path: Option<Entity<InputState>>,
+    form_private_key_passphrase: Option<Entity<InputState>>,
+    form_note: Option<Entity<InputState>>,
+    form_connection_timeout: Option<Entity<InputState>>,
+    form_keepalive_interval: Option<Entity<InputState>>,
+    form_keepalive_max: Option<Entity<InputState>>,
     form_tcp_nodelay: bool,
     form_ftp_passive_mode: bool,
     form_ftp_passive_nat_workaround: bool,
-    form_terminal_font_size: Entity<TextInput>,
-    file_path_input: Entity<TextInput>,
+    form_terminal_font_size: Option<Entity<InputState>>,
+    file_path_input: Option<Entity<InputState>>,
     follow_terminal: bool,
     path_input_session: Option<SessionId>,
     last_seen_shell_cwd: Option<String>,
@@ -220,44 +219,6 @@ pub struct SshView {
     event_task: Option<Task<()>>,
     generation: u64,
     profiles_cache: Vec<crate::model::Profile>,
-}
-
-fn form_input(
-    cx: &mut Context<TextInput>,
-    placeholder: impl Into<SharedString>,
-    value: impl Into<SharedString>,
-) -> TextInput {
-    let mut input = TextInput::new(cx, placeholder, value);
-    input.set_chrome(true, cx);
-    input.set_style(
-        TextInputStyle {
-            height: 32.0,
-            font_size: 13.0,
-            padding: 5.0,
-        },
-        cx,
-    );
-    input
-}
-
-fn path_input(cx: &mut Context<TextInput>) -> TextInput {
-    let mut input = TextInput::new(cx, "/remote/path", "");
-    input.set_chrome(false, cx);
-    input.set_monospace(true, cx);
-    input.set_style(
-        TextInputStyle {
-            height: 24.0,
-            font_size: 11.0,
-            padding: 0.0,
-        },
-        cx,
-    );
-    input.set_text_colors(
-        Theme::global(cx).foreground,
-        Theme::global(cx).muted_foreground,
-        cx,
-    );
-    input
 }
 
 impl SshView {
@@ -283,19 +244,8 @@ impl SshView {
             editing_profile_id: None,
             form_advanced_expanded: false,
             show_file_rename: false,
-            file_rename_input: cx.new(|cx| {
-                let mut input = form_input(cx, "新名称", "");
-                input.set_style(
-                    TextInputStyle {
-                        height: 32.0,
-                        font_size: 13.0,
-                        padding: 6.0,
-                    },
-                    cx,
-                );
-                input
-            }),
-            file_rename_target: None,
+            file_rename_input: None,
+file_rename_target: None,
             show_file_upload_confirm: false,
             pending_external_edit: None,
             show_upload_overwrite_confirm: false,
@@ -307,36 +257,24 @@ impl SshView {
             form_auth_method: SshAuthMethod::Password {
                 password: String::new(),
             },
-            form_name: cx.new(|cx| form_input(cx, "连接名称", "")),
-            form_host: cx.new(|cx| form_input(cx, "主机地址或 IP", "")),
-            form_port: cx.new(|cx| form_input(cx, "22", "22")),
-            form_username: cx.new(|cx| form_input(cx, "登录用户名", "root")),
-            form_password: cx.new(|cx| form_input(cx, "登录密码", "")),
-            form_remote_root: cx.new(|cx| form_input(cx, "如 ~ 或 /var/www", "~")),
-            form_local_root: cx.new(|cx| form_input(cx, "本地下载目录", "~/Downloads")),
-            form_private_key_path: cx.new(|cx| form_input(cx, "~/.ssh/id_rsa", "~/.ssh/id_rsa")),
-            form_private_key_passphrase: cx.new(|cx| form_input(cx, "私钥密码（可选）", "")),
-            form_note: cx.new(|cx| {
-                let mut input = form_input(cx, "备注说明", "");
-                input.set_multiline(true, cx);
-                input.set_style(
-                    TextInputStyle {
-                        height: 64.0,
-                        font_size: 13.0,
-                        padding: 6.0,
-                    },
-                    cx,
-                );
-                input
-            }),
-            form_connection_timeout: cx.new(|cx| form_input(cx, "0", "0")),
-            form_keepalive_interval: cx.new(|cx| form_input(cx, "60", "60")),
-            form_keepalive_max: cx.new(|cx| form_input(cx, "3", "3")),
+            form_name: None,
+            form_host: None,
+            form_port: None,
+            form_username: None,
+            form_password: None,
+            form_remote_root: None,
+            form_local_root: None,
+            form_private_key_path: None,
+            form_private_key_passphrase: None,
+            form_note: None,
+form_connection_timeout: None,
+            form_keepalive_interval: None,
+            form_keepalive_max: None,
             form_tcp_nodelay: false,
             form_ftp_passive_mode: true,
             form_ftp_passive_nat_workaround: true,
-            form_terminal_font_size: cx.new(|cx| form_input(cx, "12", "12")),
-            file_path_input: cx.new(|cx| path_input(cx)),
+            form_terminal_font_size: None,
+            file_path_input: None,
             follow_terminal: false,
             path_input_session: None,
             last_seen_shell_cwd: None,
@@ -396,6 +334,57 @@ impl SshView {
                 }
             }
         }));
+    }
+
+    fn ensure_form_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.file_rename_input.is_none() {
+            self.file_rename_input = Some(cx.new(|cx| InputState::new(window, cx).placeholder("新名称").default_value("".into())));
+        }
+        if self.form_name.is_none() {
+            self.form_name = Some(cx.new(|cx| InputState::new(window, cx).placeholder("连接名称").default_value("".into())));
+        }
+        if self.form_host.is_none() {
+            self.form_host = Some(cx.new(|cx| InputState::new(window, cx).placeholder("主机地址或 IP").default_value("".into())));
+        }
+        if self.form_port.is_none() {
+            self.form_port = Some(cx.new(|cx| InputState::new(window, cx).placeholder("22").default_value("22".into())));
+        }
+        if self.form_username.is_none() {
+            self.form_username = Some(cx.new(|cx| InputState::new(window, cx).placeholder("登录用户名").default_value("root".into())));
+        }
+        if self.form_password.is_none() {
+            self.form_password = Some(cx.new(|cx| InputState::new(window, cx).placeholder("登录密码").default_value("".into())));
+        }
+        if self.form_remote_root.is_none() {
+            self.form_remote_root = Some(cx.new(|cx| InputState::new(window, cx).placeholder("如 ~ 或 /var/www").default_value("~".into())));
+        }
+        if self.form_local_root.is_none() {
+            self.form_local_root = Some(cx.new(|cx| InputState::new(window, cx).placeholder("本地下载目录").default_value("~/Downloads".into())));
+        }
+        if self.form_private_key_path.is_none() {
+            self.form_private_key_path = Some(cx.new(|cx| InputState::new(window, cx).placeholder("~/.ssh/id_rsa").default_value("~/.ssh/id_rsa".into())));
+        }
+        if self.form_private_key_passphrase.is_none() {
+            self.form_private_key_passphrase = Some(cx.new(|cx| InputState::new(window, cx).placeholder("私钥密码（可选）").default_value("".into())));
+        }
+        if self.form_note.is_none() {
+            self.form_note = Some(cx.new(|cx| InputState::new(window, cx).multi_line(true).placeholder("备注说明").default_value("".into())));
+        }
+        if self.form_connection_timeout.is_none() {
+            self.form_connection_timeout = Some(cx.new(|cx| InputState::new(window, cx).placeholder("0").default_value("0".into())));
+        }
+        if self.form_keepalive_interval.is_none() {
+            self.form_keepalive_interval = Some(cx.new(|cx| InputState::new(window, cx).placeholder("60").default_value("60".into())));
+        }
+        if self.form_keepalive_max.is_none() {
+            self.form_keepalive_max = Some(cx.new(|cx| InputState::new(window, cx).placeholder("3").default_value("3".into())));
+        }
+        if self.form_terminal_font_size.is_none() {
+            self.form_terminal_font_size = Some(cx.new(|cx| InputState::new(window, cx).placeholder("12").default_value("12".into())));
+        }
+        if self.file_path_input.is_none() {
+            self.file_path_input = Some(cx.new(|cx| InputState::new(window, cx).placeholder("/remote/path").default_value("".into())));
+        }
     }
 
     fn on_service_events(&mut self, events: &[SshEvent], cx: &mut Context<Self>) {
@@ -690,9 +679,7 @@ impl SshView {
     }
 
     fn sync_file_path_input(&mut self, cx: &mut Context<Self>, path: &str) {
-        self.file_path_input.update(cx, |input, cx| {
-            input.set_text(path, cx);
-        });
+        self.file_path_input.as_ref().unwrap().update(cx, |s, cx| s.reset_value(path.to_string(), cx));
     }
 
     fn sync_file_path_input_if_needed(&mut self, cx: &mut Context<Self>) {
@@ -715,7 +702,7 @@ impl SshView {
         let Some(sid) = self.selected_session_id else {
             return;
         };
-        let path = self.file_path_input.read(cx).text();
+        let path = self.file_path_input.as_ref().unwrap().read(cx).value().to_string();
         let path = path.trim();
         if path.is_empty() {
             return;
@@ -1175,7 +1162,7 @@ impl SshView {
         }
         self.file_rename_target = Some(entry.clone());
         self.file_rename_input
-            .update(cx, |input, cx| input.set_text(&entry.name, cx));
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value(&entry.name, cx));
         self.show_file_rename = true;
         cx.notify();
     }
@@ -1193,8 +1180,8 @@ impl SshView {
         };
         let new_name = self
             .file_rename_input
-            .read(cx)
-            .current_text(cx)
+            .as_ref().unwrap().read(cx)
+            .value().to_string()
             .trim()
             .to_string();
         if new_name.is_empty() || new_name == entry.name {
@@ -1427,7 +1414,7 @@ impl SshView {
                 }
             }
         }
-        self.form_local_root.read(cx).text()
+        self.form_local_root.as_ref().unwrap().read(cx).value().to_string()
     }
 
     // ===== Profile 编辑弹窗 =====
@@ -1513,29 +1500,17 @@ impl SshView {
 
     fn fill_form_from_profile(&mut self, profile: &crate::model::Profile, cx: &mut Context<Self>) {
         self.form_name
-            .update(cx, |input, cx| input.set_text(&profile.name, cx));
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value(&profile.name, cx));
         self.form_host
-            .update(cx, |input, cx| input.set_text(&profile.host, cx));
-        self.form_port.update(cx, |input, cx| {
-            input.set_text(&profile.port.to_string(), cx)
-        });
-        self.form_remote_root.update(cx, |input, cx| {
-            input.set_text(&profile.paths.remote_root, cx)
-        });
-        self.form_local_root.update(cx, |input, cx| {
-            input.set_text(&profile.paths.local_root, cx)
-        });
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value(&profile.host, cx));
+        self.form_port.as_ref().unwrap().update(cx, |s, cx| s.reset_value(&profile.port.to_string(), cx));
+        self.form_remote_root.as_ref().unwrap().update(cx, |s, cx| s.reset_value(&profile.paths.remote_root, cx));
+        self.form_local_root.as_ref().unwrap().update(cx, |s, cx| s.reset_value(&profile.paths.local_root, cx));
         self.form_note
-            .update(cx, |input, cx| input.set_text(&profile.note, cx));
-        self.form_connection_timeout.update(cx, |input, cx| {
-            input.set_text(&profile.advanced.connection_timeout_secs.to_string(), cx)
-        });
-        self.form_keepalive_interval.update(cx, |input, cx| {
-            input.set_text(&profile.advanced.keepalive_interval_secs.to_string(), cx)
-        });
-        self.form_keepalive_max.update(cx, |input, cx| {
-            input.set_text(&profile.advanced.keepalive_max.to_string(), cx)
-        });
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value(&profile.note, cx));
+        self.form_connection_timeout.as_ref().unwrap().update(cx, |s, cx| s.reset_value(&profile.advanced.connection_timeout_secs.to_string(), cx));
+        self.form_keepalive_interval.as_ref().unwrap().update(cx, |s, cx| s.reset_value(&profile.advanced.keepalive_interval_secs.to_string(), cx));
+        self.form_keepalive_max.as_ref().unwrap().update(cx, |s, cx| s.reset_value(&profile.advanced.keepalive_max.to_string(), cx));
         self.form_tcp_nodelay = profile.advanced.tcp_nodelay;
         self.form_ftp_passive_mode = profile.advanced.ftp_passive_mode;
         self.form_ftp_passive_nat_workaround = profile.advanced.ftp_passive_nat_workaround;
@@ -1543,17 +1518,17 @@ impl SshView {
         self.form_auth_method = match &profile.auth {
             AuthConfig::Ssh { username, method } => {
                 self.form_username
-                    .update(cx, |input, cx| input.set_text(username, cx));
+                    .as_ref().unwrap().update(cx, |s, cx| s.reset_value(username, cx));
                 match method {
                     SshAuthMethod::Password { password } => {
                         self.form_password
-                            .update(cx, |input, cx| input.set_text(password, cx));
+                            .as_ref().unwrap().update(cx, |s, cx| s.reset_value(password, cx));
                     }
                     SshAuthMethod::PrivateKey { path, passphrase } => {
                         self.form_private_key_path
-                            .update(cx, |input, cx| input.set_text(path, cx));
+                            .as_ref().unwrap().update(cx, |s, cx| s.reset_value(path, cx));
                         self.form_private_key_passphrase
-                            .update(cx, |input, cx| input.set_text(passphrase, cx));
+                            .as_ref().unwrap().update(cx, |s, cx| s.reset_value(passphrase, cx));
                     }
                     SshAuthMethod::Agent => {}
                 }
@@ -1561,9 +1536,9 @@ impl SshView {
             }
             AuthConfig::Ftp { username, password } => {
                 self.form_username
-                    .update(cx, |input, cx| input.set_text(username, cx));
+                    .as_ref().unwrap().update(cx, |s, cx| s.reset_value(username, cx));
                 self.form_password
-                    .update(cx, |input, cx| input.set_text(password, cx));
+                    .as_ref().unwrap().update(cx, |s, cx| s.reset_value(password, cx));
                 SshAuthMethod::Password {
                     password: password.clone(),
                 }
@@ -1577,31 +1552,31 @@ impl SshView {
             password: String::new(),
         };
         self.form_name
-            .update(cx, |input, cx| input.set_text("", cx));
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value("", cx));
         self.form_host
-            .update(cx, |input, cx| input.set_text("", cx));
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value("", cx));
         self.form_port
-            .update(cx, |input, cx| input.set_text("22", cx));
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value("22", cx));
         self.form_username
-            .update(cx, |input, cx| input.set_text("root", cx));
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value("root", cx));
         self.form_password
-            .update(cx, |input, cx| input.set_text("", cx));
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value("", cx));
         self.form_remote_root
-            .update(cx, |input, cx| input.set_text("~", cx));
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value("~", cx));
         self.form_local_root
-            .update(cx, |input, cx| input.set_text("~/Downloads", cx));
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value("~/Downloads", cx));
         self.form_private_key_path
-            .update(cx, |input, cx| input.set_text("~/.ssh/id_rsa", cx));
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value("~/.ssh/id_rsa", cx));
         self.form_private_key_passphrase
-            .update(cx, |input, cx| input.set_text("", cx));
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value("", cx));
         self.form_note
-            .update(cx, |input, cx| input.set_text("", cx));
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value("", cx));
         self.form_connection_timeout
-            .update(cx, |input, cx| input.set_text("0", cx));
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value("0", cx));
         self.form_keepalive_interval
-            .update(cx, |input, cx| input.set_text("60", cx));
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value("60", cx));
         self.form_keepalive_max
-            .update(cx, |input, cx| input.set_text("3", cx));
+            .as_ref().unwrap().update(cx, |s, cx| s.reset_value("3", cx));
         self.form_tcp_nodelay = false;
         self.form_ftp_passive_mode = true;
         self.form_ftp_passive_nat_workaround = true;
@@ -1612,9 +1587,7 @@ impl SshView {
     pub(crate) fn open_app_settings(&mut self, cx: &mut Context<Self>) {
         self.close_profile_editor(cx);
         self.close_app_settings(cx);
-        self.form_terminal_font_size.update(cx, |input, cx| {
-            input.set_text(&self.terminal_font_size.round().to_string(), cx)
-        });
+        self.form_terminal_font_size.as_ref().unwrap().update(cx, |s, cx| s.reset_value(&self.terminal_font_size.round().to_string(), cx));
 
         let ssh_view = cx.entity().clone();
         cx.defer(move |cx| aux_windows::spawn_app_settings_window(ssh_view, cx));
@@ -1641,8 +1614,8 @@ impl SshView {
     pub(crate) fn save_app_settings(&mut self, cx: &mut Context<Self>) {
         if let Ok(size) = self
             .form_terminal_font_size
-            .read(cx)
-            .current_text(cx)
+            .as_ref().unwrap().read(cx)
+            .value().to_string()
             .parse::<f32>()
         {
             self.terminal_font_size = size.clamp(10.0, 20.0);
@@ -1654,9 +1627,7 @@ impl SshView {
     fn set_form_protocol(&mut self, protocol: ProtocolType, cx: &mut Context<Self>) {
         let port = protocol.default_port();
         self.form_protocol = protocol;
-        self.form_port.update(cx, |input, cx| {
-            input.set_text(&port.to_string(), cx);
-        });
+        self.form_port.as_ref().unwrap().update(cx, |s, cx| s.reset_value(&port.to_string(), cx));
         cx.notify();
     }
 
@@ -1667,7 +1638,7 @@ impl SshView {
 
     pub(crate) fn save_profile_from_form(&mut self, cx: &mut Context<Self>) {
         let editing_id = self.editing_profile_id;
-        let field = |input: &Entity<TextInput>| input.read(cx).current_text(cx);
+        let field = |input: &Option<Entity<InputState>>| input.as_ref().unwrap().read(cx).value().to_string();
         let name = field(&self.form_name);
         let host = field(&self.form_host);
         let port: u16 = field(&self.form_port).parse().unwrap_or(22);
@@ -2047,6 +2018,7 @@ impl SshViewModel {
 
 impl Render for SshView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.ensure_form_inputs(window, cx);
         self.host_window_handle = Some(window.window_handle());
         let handle = cx.entity().clone();
         div()
@@ -2095,7 +2067,7 @@ impl Render for SshView {
                                                 &self.vm.file_tree,
                                                 self.selected_session_id,
                                                 self.file_list_scroll.clone(),
-                                                self.file_path_input.clone(),
+                                                self.file_path_input.clone().unwrap(),
                                                 self.follow_terminal,
                                                 matches!(
                                                     self.vm.terminal.terminal_kind,
@@ -2162,7 +2134,7 @@ impl Render for SshView {
             .when(self.show_file_rename, {
                 let app: &App = cx;
                 let rename_handle = handle.clone();
-                let rename_input = self.file_rename_input.clone();
+                let rename_input = self.file_rename_input.clone().unwrap();
                 move |root| {
                     root.child(file_rename::render_file_rename_overlay(
                         rename_handle.clone(),
