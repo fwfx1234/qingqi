@@ -2,11 +2,10 @@
 
 use std::time::Duration;
 
-use gpui::{px, Context, Pixels, Task, Timer};
+use gpui::{Context, Task, Timer};
 
 static INTERVAL: Duration = Duration::from_millis(500);
 static PAUSE_DELAY: Duration = Duration::from_millis(300);
-pub(super) const CURSOR_WIDTH: Pixels = px(2.0);
 
 /// Manages the Input cursor blinking.
 ///
@@ -90,13 +89,5 @@ impl BlinkCursor {
                 .ok();
             }
         });
-    }
-
-    pub fn toggle(&mut self, _cx: &mut Context<Self>) {
-        // No-op: blink is timer-driven in this implementation
-    }
-
-    pub fn resume(&mut self, _cx: &mut Context<Self>) {
-        // No-op
     }
 }

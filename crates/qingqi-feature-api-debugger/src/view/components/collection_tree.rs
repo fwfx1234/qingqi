@@ -7,12 +7,10 @@ use gpui::{
     StatefulInteractiveElement, Styled, div, px,
 };
 use qingqi_ui::components::list::ListItem;
-use qingqi_ui::layer::context_menu::{ContextMenuExt, PopupMenuItem};
 use qingqi_ui::components::theme::Theme;
 use qingqi_ui::components::tree::{TreeItem, TreeState, tree};
-use qingqi_ui::components::icon::Icon;
-use qingqi_ui::components::icon::IconName;
-use qingqi_ui::{theme, ui};
+use qingqi_ui::layer::context_menu::{ContextMenuExt, PopupMenuItem};
+use qingqi_ui::{icon, theme, ui};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MenuKind {
@@ -120,7 +118,7 @@ pub fn collection_tree(
                             .items_center()
                             .gap(px(4.0))
                             .child(
-                                Icon::new(IconName::SquareTerminal)
+                                icon!(square_terminal)
                                     .size(px(12.0))
                                     .text_color(ui::text_tertiary(cx)),
                             )
@@ -182,24 +180,24 @@ pub fn collection_tree(
                             .items_center()
                             .gap(px(4.0))
                             .child(if is_folder {
-                                Icon::new(if is_expanded {
-                                    IconName::ChevronDown
+                                if is_expanded {
+                                    icon!(chevron_down)
                                 } else {
-                                    IconName::ChevronRight
-                                })
+                                    icon!(chevron_right)
+                                }
                                 .size(px(12.0))
                                 .text_color(ui::text_tertiary(cx))
                             } else {
-                                Icon::new(IconName::Folder)
+                                icon!(folder)
                                     .size(px(12.0))
                                     .text_color(ui::text_tertiary(cx))
                             })
                             .child(
-                                Icon::new(if is_expanded {
-                                    IconName::FolderOpen
+                                if is_expanded {
+                                    icon!(folder_open)
                                 } else {
-                                    IconName::FolderClosed
-                                })
+                                    icon!(folder_closed)
+                                }
                                 .size(px(14.0))
                                 .text_color(Theme::global(cx).primary),
                             )
@@ -337,16 +335,16 @@ pub fn collection_tree(
                         let v_confirm = view.clone();
                         let v_cancel = view.clone();
                         let renaming_icon = if has_scenarios {
-                            Icon::new(if entry.is_expanded() {
-                                IconName::ChevronDown
+                            (if entry.is_expanded() {
+                                icon!(chevron_down)
                             } else {
-                                IconName::ChevronRight
+                                icon!(chevron_right)
                             })
                             .size(px(12.0))
                             .text_color(ui::text_tertiary(cx))
                             .into_any_element()
                         } else {
-                            Icon::new(IconName::SquareTerminal)
+                            icon!(square_terminal)
                                 .size(px(12.0))
                                 .text_color(ui::text_tertiary(cx))
                                 .into_any_element()
@@ -455,16 +453,16 @@ pub fn collection_tree(
                         );
                     } else {
                         let req_icon = if has_scenarios {
-                            Icon::new(if entry.is_expanded() {
-                                IconName::ChevronDown
+                            (if entry.is_expanded() {
+                                icon!(chevron_down)
                             } else {
-                                IconName::ChevronRight
+                                icon!(chevron_right)
                             })
                             .size(px(12.0))
                             .text_color(ui::text_tertiary(cx))
                             .into_any_element()
                         } else {
-                            Icon::new(IconName::SquareTerminal)
+                            icon!(square_terminal)
                                 .size(px(12.0))
                                 .text_color(ui::text_tertiary(cx))
                                 .into_any_element()

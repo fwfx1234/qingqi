@@ -52,14 +52,14 @@ impl BackgroundSupervisor {
             return;
         }
 
-        arm_tray_icon_event(
+        start_tray_icon_loop(
             Arc::clone(&self.tasks),
             Arc::clone(&window_controller),
             tray_manager,
             Arc::clone(&power_manager),
             cx,
         );
-        arm_tray_menu_event(
+        start_tray_menu_loop(
             Arc::clone(&self.tasks),
             window_controller,
             power_manager,
@@ -67,10 +67,14 @@ impl BackgroundSupervisor {
         );
     }
 
+    #[cfg(test)]
+    pub fn task_count(&self) -> usize {
+        self.tasks.lock().map(|t| t.len()).unwrap_or(0)
+    }
+
     pub fn start_hotkey_events(&mut self, window_controller: WindowControllerHandle, cx: &mut App) {
-        println!("!!! start_hotkey_events called");
+        tracing::debug!("start_hotkey_events called");
         if !self.mark_started("hotkey-events") {
-            println!("!!! start_hotkey_events: already started, returning");
             return;
         }
 
@@ -85,7 +89,7 @@ impl BackgroundSupervisor {
                 let Some(event) = event else {
                     break;
                 };
-                println!("!!! Hotkey event received: id={}, state={:?}", event.id, event.state);
+                tracing::debug!(id = event.id, state = ?event.state, "hotkey event received");
                 if event.state != HotKeyState::Pressed {
                     continue;
                 }
@@ -239,64 +243,67 @@ fn push_background_task(tasks: &Arc<Mutex<Vec<Task<()>>>>, task: Task<()>) {
     }
 }
 
-fn arm_tray_icon_event(
+fn start_tray_icon_loop(
     tasks: Arc<Mutex<Vec<Task<()>>>>,
     window_controller: WindowControllerHandle,
     tray_manager: TrayManagerHandle,
     power_manager: Arc<Mutex<PowerManager>>,
     cx: &mut App,
 ) {
-    let tasks_for_task = Arc::clone(&tasks);
     let task = cx.spawn(async move |async_cx| {
-        let event = async_cx
-            .background_executor()
-            .spawn(async { qingqi_platform::tray::next_raw_tray_icon_event() })
-            .await;
-        let Some(event) = event else {
-            return;
-        };
-        let wc = Arc::clone(&window_controller);
-        let tm = tray_manager.clone();
-        let pm = Arc::clone(&power_manager);
-        let tasks_for_rearm = Arc::clone(&tasks_for_task);
-        let _ = async_cx.update(move |cx| {
-            if let Some(action) = action_for_tray_icon_event(event) {
-                if matches!(action, TrayIconAction::Main) && is_duplicate_main_tray_click(cx) {
-                    arm_tray_icon_event(tasks_for_rearm, wc, tm, pm, cx);
-                    return;
+        loop {
+            let event = async_cx
+                .background_executor()
+                .spawn(async { qingqi_platform::tray::next_raw_tray_icon_event() })
+                .await;
+            let Some(event) = event else {
+                break;
+            };
+            let wc = Arc::clone(&window_controller);
+            let tm = tray_manager.clone();
+            let pm = Arc::clone(&power_manager);
+            let _ = async_cx.update(move |cx| {
+                if let Some(action) = action_for_tray_icon_event(event) {
+                    if matches!(action, TrayIconAction::Main) && is_duplicate_main_tray_click(cx) {
+                        return;
+                    }
+                    handle_tray_icon_action(
+                        action,
+                        Arc::clone(&wc),
+                        tm.clone(),
+                        Arc::clone(&pm),
+                        cx,
+                    );
                 }
-                handle_tray_icon_action(action, Arc::clone(&wc), tm.clone(), Arc::clone(&pm), cx);
-            }
-            arm_tray_icon_event(tasks_for_rearm, wc, tm, pm, cx);
-        });
+            });
+        }
     });
     push_background_task(&tasks, task);
 }
 
-fn arm_tray_menu_event(
+fn start_tray_menu_loop(
     tasks: Arc<Mutex<Vec<Task<()>>>>,
     window_controller: WindowControllerHandle,
     power_manager: Arc<Mutex<PowerManager>>,
     cx: &mut App,
 ) {
-    let tasks_for_task = Arc::clone(&tasks);
     let task = cx.spawn(async move |async_cx| {
-        let event = async_cx
-            .background_executor()
-            .spawn(async { qingqi_platform::tray::next_raw_menu_event() })
-            .await;
-        let Some(event) = event else {
-            return;
-        };
-        let wc = Arc::clone(&window_controller);
-        let pm = Arc::clone(&power_manager);
-        let tasks_for_rearm = Arc::clone(&tasks_for_task);
-        let _ = async_cx.update(move |cx| {
-            if let Some(action) = action_for_menu_event(event) {
-                handle_tray_action(action, Arc::clone(&wc), Arc::clone(&pm), cx);
-            }
-            arm_tray_menu_event(tasks_for_rearm, wc, pm, cx);
-        });
+        loop {
+            let event = async_cx
+                .background_executor()
+                .spawn(async { qingqi_platform::tray::next_raw_menu_event() })
+                .await;
+            let Some(event) = event else {
+                break;
+            };
+            let wc = Arc::clone(&window_controller);
+            let pm = Arc::clone(&power_manager);
+            let _ = async_cx.update(move |cx| {
+                if let Some(action) = action_for_menu_event(event) {
+                    handle_tray_action(action, Arc::clone(&wc), Arc::clone(&pm), cx);
+                }
+            });
+        }
     });
     push_background_task(&tasks, task);
 }
@@ -468,5 +475,91 @@ mod tests {
             button,
             button_state,
         }
+    }
+
+    use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
+
+    use gpui::TestAppContext;
+    use qingqi_core::command_catalog::{COMMAND_CATALOG_KEY, CommandCatalogStore};
+    use qingqi_core::command_usage::CommandUsageStore;
+    use qingqi_core::plugin::PluginManager;
+    use qingqi_plugin::{
+        database::{DatabaseService, DatabaseSpec},
+        events::AppEventBus,
+        storage::AppPaths,
+    };
+
+    use qingqi_platform::power::PowerManager;
+
+    use crate::app::{
+        app_catalog::AppCatalog, app_index::AppIndexService, tray_manager::TrayManager,
+        window_controller::WindowController,
+    };
+
+    use super::{BackgroundSupervisor, TrayManagerHandle, WindowControllerHandle};
+
+    fn test_handles(
+        cx: &mut TestAppContext,
+    ) -> (
+        WindowControllerHandle,
+        TrayManagerHandle,
+        Arc<Mutex<PowerManager>>,
+    ) {
+        let paths = AppPaths::for_test("/tmp/qingqi-background-test-ignore");
+        let database = Arc::new(DatabaseService::new(paths));
+        database
+            .register_database(DatabaseSpec::feature(
+                "app-launcher",
+                "index",
+                "app-launcher/index.db",
+            ))
+            .unwrap();
+        let usage_store = CommandUsageStore::new(database.clone(), "command-usage");
+        let command_catalog_store = CommandCatalogStore::new(database.clone(), COMMAND_CATALOG_KEY);
+        let app_index = Arc::new(AppIndexService::new(database, usage_store.clone()));
+        let app_catalog = Arc::new(AppCatalog::new(app_index));
+        let events = AppEventBus::new();
+        let plugin_manager = PluginManager::new(events, usage_store, command_catalog_store);
+        let window_controller = Arc::new(Mutex::new(WindowController::new(
+            Arc::new(Mutex::new(plugin_manager)),
+            app_catalog,
+            AppEventBus::new(),
+        )));
+        let tray_manager = TrayManagerHandle::new(TrayManager::new());
+        let power_manager = Arc::new(Mutex::new(PowerManager::load(PathBuf::from(
+            "/tmp/qingqi-background-test-ignore/power.json",
+        ))));
+        (window_controller, tray_manager, power_manager)
+    }
+
+    #[gpui::test]
+    fn tray_events_spawn_exactly_two_tasks(cx: &mut TestAppContext) {
+        let (window_controller, tray_manager, power_manager) = test_handles(cx);
+        cx.update(|cx| {
+            let mut supervisor = BackgroundSupervisor::new();
+            assert_eq!(supervisor.task_count(), 0);
+            supervisor.start_tray_events(window_controller, tray_manager, power_manager, cx);
+            assert_eq!(supervisor.task_count(), 2, "icon loop + menu loop");
+        });
+    }
+
+    #[gpui::test]
+    fn tray_events_do_not_grow_on_rearm(cx: &mut TestAppContext) {
+        let (window_controller, tray_manager, power_manager) = test_handles(cx);
+        cx.update(|cx| {
+            let mut supervisor = BackgroundSupervisor::new();
+            supervisor.start_tray_events(
+                Arc::clone(&window_controller),
+                tray_manager.clone(),
+                Arc::clone(&power_manager),
+                cx,
+            );
+            let after_first = supervisor.task_count();
+            supervisor.start_tray_events(window_controller, tray_manager, power_manager, cx);
+            let after_second = supervisor.task_count();
+            assert_eq!(after_first, 2);
+            assert_eq!(after_second, 2, "second call must not push duplicate tasks");
+        });
     }
 }

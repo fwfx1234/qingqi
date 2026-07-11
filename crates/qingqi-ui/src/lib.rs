@@ -6,6 +6,11 @@ pub mod theme_loader;
 pub mod token;
 pub mod ui;
 
-pub use token::{install_tokens, tokens, tokens_mut, Token};
+#[doc(hidden)]
+pub mod __private {
+    pub use qingqi_ui_macros::lucide_path;
+}
+
+pub use token::{Token, install_tokens, tokens, tokens_mut};
 
 pub mod prelude;

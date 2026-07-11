@@ -13,7 +13,6 @@ use gpui::{
     Styled, Window, div, hsla, img, px, rgb, svg,
 };
 
-
 use crate::{assets, theme};
 use qingqi_plugin::plugin_spec::{PluginAccent, PluginCategory, PluginStatus};
 

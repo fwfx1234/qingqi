@@ -1,6 +1,6 @@
 use gpui::{
-    div, prelude::FluentBuilder, App, IntoElement, ParentElement, RenderOnce, SharedString,
-    StyleRefinement, Styled, Window, px,
+    App, IntoElement, ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder, px,
 };
 
 use crate::token::tokens;
@@ -40,6 +40,5 @@ impl RenderOnce for Tooltip {
             .text_color(t.foreground)
             .shadow_md()
             .child(self.text.clone())
-            
     }
 }

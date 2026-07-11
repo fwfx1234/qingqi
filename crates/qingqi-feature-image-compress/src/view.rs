@@ -13,11 +13,12 @@ use gpui::{
     App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
     StatefulInteractiveElement, Styled, Window, div, img, px,
 };
-use qingqi_ui::token::tokens;
-use qingqi_ui::components::theme::Theme;
-use qingqi_ui::components::button::{Button, ButtonVariant, ButtonVariants}; use qingqi_ui::components::styled::Size;
-use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::button::{Button, ButtonVariant, ButtonVariants};
 use qingqi_ui::components::styled::Selectable;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size;
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::token::tokens;
 
 use qingqi_plugin::plugin_spec::PluginAccent;
 use qingqi_ui::{
@@ -991,9 +992,7 @@ fn quality_button(
     _dark: bool,
     _cx: &App,
 ) -> Button {
-    Button::new(id)
-        .label(label.to_string())
-        .h(px(26.0))
+    Button::new(id).label(label.to_string()).h(px(26.0))
 }
 
 fn drop_zone(pending_count: usize, cx: &App) -> gpui::Div {

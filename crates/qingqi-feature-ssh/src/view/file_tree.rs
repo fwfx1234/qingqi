@@ -2,9 +2,8 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::*;
+use qingqi_ui::icon;
 use qingqi_ui::layer::context_menu::ContextMenuExt;
-use qingqi_ui::components::icon::Icon;
-use qingqi_ui::components::icon::IconName;
 
 use super::file_context_menu;
 use super::virtual_list;
@@ -333,17 +332,17 @@ fn file_row(
                 .items_center()
                 .gap(px(6.0))
                 .child(if is_parent {
-                    Icon::new(IconName::ChevronLeft)
+                    icon!(chevron_left)
                         .size(px(14.0))
                         .text_color(ui::text_secondary(cx))
                         .into_any_element()
                 } else if is_dir {
-                    Icon::new(IconName::Folder)
+                    icon!(folder)
                         .size(px(14.0))
                         .text_color(hsla(0.12, 0.7, 0.5, 1.0))
                         .into_any_element()
                 } else {
-                    Icon::new(IconName::File)
+                    icon!(file)
                         .size(px(14.0))
                         .text_color(ui::text_tertiary(cx))
                         .into_any_element()

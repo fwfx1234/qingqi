@@ -30,6 +30,8 @@ struct Handler {
     profile_id: i64,
     role: SshRole,
     disconnect_tx: broadcast::Sender<(i64, SshRole)>,
+    host: String,
+    port: u16,
 }
 
 #[derive(Default)]
@@ -44,17 +46,50 @@ impl client::Handler for Handler {
         &mut self,
         server_public_key: &keys::PublicKey,
     ) -> Result<bool, Self::Error> {
+        let algo = server_public_key.algorithm();
         let fpr = format!("{}", server_public_key.fingerprint(keys::HashAlg::Sha256));
-        debug!(
-            target: "qingqi_ssh",
-            fingerprint = %fpr,
-            algo = ?server_public_key.algorithm(),
-            "russh: 服务端 host key"
-        );
-        if let Ok(mut s) = self.state.lock() {
-            s.fingerprint = Some(fpr);
+        let endpoint = format!("{}:{}", self.host, self.port);
+
+        match keys::check_known_hosts(&self.host, self.port, server_public_key) {
+            Ok(true) => {
+                debug!(
+                    target: "qingqi_ssh",
+                    endpoint = %endpoint,
+                    algo = ?algo,
+                    fingerprint = %fpr,
+                    "ssh: host key 已匹配 known_hosts"
+                );
+                if let Ok(mut s) = self.state.lock() {
+                    s.fingerprint = Some(fpr);
+                }
+                Ok(true)
+            }
+            Ok(false) => {
+                debug!(
+                    target: "qingqi_ssh",
+                    endpoint = %endpoint,
+                    algo = ?algo,
+                    fingerprint = %fpr,
+                    "ssh: host key 未在 known_hosts 中，拒绝连接"
+                );
+                if let Ok(mut s) = self.state.lock() {
+                    s.fingerprint = Some(fpr);
+                }
+                Ok(false)
+            }
+            Err(keys::Error::KeyChanged { line }) => {
+                warn!(
+                    target: "qingqi_ssh",
+                    endpoint = %endpoint,
+                    algo = ?algo,
+                    fingerprint = %fpr,
+                    line,
+                    "ssh: host key 已变更（可能的中间人攻击），拒绝连接"
+                );
+                Err(keys::Error::KeyChanged { line }.into())
+            }
+            Err(e) => Err(e.into()),
         }
-        Ok(true)
     }
 
     async fn data(
@@ -145,6 +180,15 @@ impl client::Handler for Handler {
         let _ = self.disconnect_tx.send((self.profile_id, self.role));
         Ok(())
     }
+}
+
+fn check_known_hosts_at(
+    host: &str,
+    port: u16,
+    key: &keys::PublicKey,
+    path: &Path,
+) -> Result<bool, keys::Error> {
+    keys::check_known_hosts_path(host, port, key, path)
 }
 
 pub struct SshProtocol {
@@ -387,6 +431,8 @@ impl RemoteProtocol for SshProtocol {
             profile_id: self.profile_id,
             role: self.role,
             disconnect_tx: self.disconnect_tx.clone(),
+            host: self.host.clone(),
+            port: self.port,
         };
 
         let mut config = client::Config::default();
@@ -813,5 +859,105 @@ impl RemoteProtocol for SshProtocol {
         remote_file.write_all(data).await?;
         remote_file.flush().await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    const HOST: &str = "test.example.com";
+
+    // 有效的 ed25519 公钥 base64（来自 russh 自身测试向量，非机密）。
+    const KEY_A: &str = "AAAAC3NzaC1lZDI1NTE5AAAAIJdD7y3aLq454yWBdwLWbieU1ebz9/cu7/QEXn9OIeZJ";
+    const KEY_B: &str = "AAAAC3NzaC1lZDI1NTE5AAAAIA6rWI3G2sz07DnfFlrouTcysQlj2P+jpNSOEWD9OJ3X";
+
+    fn parse_key(b64: &str) -> keys::PublicKey {
+        keys::parse_public_key_base64(b64).unwrap()
+    }
+
+    fn known_hosts_line(host: &str, port: u16, key: &keys::PublicKey) -> String {
+        let openssh = key.to_openssh().unwrap();
+        if port == 22 {
+            format!("{} {}", host, openssh)
+        } else {
+            format!("[{}]:{} {}", host, port, openssh)
+        }
+    }
+
+    fn write_temp_known_hosts(content: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "qingqi_ssh_test_known_hosts_{}_{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::SeqCst)
+        ));
+        std::fs::write(&path, content).unwrap();
+        path
+    }
+
+    #[test]
+    fn matched_key_returns_true() {
+        let key = parse_key(KEY_A);
+        let path = write_temp_known_hosts(&known_hosts_line(HOST, 22, &key));
+
+        let result = check_known_hosts_at(HOST, 22, &key, &path).unwrap();
+        assert!(result, "已记录且匹配的 key 应返回 true");
+
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn unknown_host_returns_false() {
+        let key = parse_key(KEY_A);
+        let path = write_temp_known_hosts(&known_hosts_line(HOST, 22, &key));
+
+        let result = check_known_hosts_at("unknown.example.com", 22, &key, &path).unwrap();
+        assert!(!result, "未知 host 应返回 false");
+
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn key_changed_returns_error() {
+        let recorded = parse_key(KEY_A);
+        let presented = parse_key(KEY_B);
+        let path = write_temp_known_hosts(&known_hosts_line(HOST, 22, &recorded));
+
+        let err = check_known_hosts_at(HOST, 22, &presented, &path).unwrap_err();
+        assert!(
+            matches!(err, keys::Error::KeyChanged { .. }),
+            "同算法不同 key 应返回 KeyChanged，实际错误: {err:?}"
+        );
+
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn non_default_port_uses_bracket_syntax() {
+        let key = parse_key(KEY_A);
+        let port = 2222;
+        let line = known_hosts_line(HOST, port, &key);
+        let path = write_temp_known_hosts(&line);
+
+        assert!(
+            line.starts_with(&format!("[{HOST}]:{port}")),
+            "非 22 端口记录应使用 [host]:port 语法"
+        );
+
+        let matched = check_known_hosts_at(HOST, port, &key, &path).unwrap();
+        assert!(matched, "非 22 端口匹配 [host]:port 应返回 true");
+
+        let not_matched = check_known_hosts_at(HOST, 22, &key, &path).unwrap();
+        assert!(
+            !not_matched,
+            "端口不匹配的 [host]:port 记录不应对 port 22 返回 true"
+        );
+
+        std::fs::remove_file(path).ok();
     }
 }

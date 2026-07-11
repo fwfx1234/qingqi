@@ -10,6 +10,7 @@ use std::{
 
 use anyhow::{Result, anyhow, bail};
 use serde_json::Value;
+use url::Url;
 use uuid::Uuid;
 
 use crate::{
@@ -1130,14 +1131,14 @@ fn perform_request(
     }
 
     let resolved_url = resolve(&draft.url);
-    let mut resolved_params: Vec<String> = draft
+    let mut resolved_params: Vec<(String, String)> = draft
         .params
         .iter()
         .filter(|(_, v)| !v.trim().is_empty())
-        .map(|(k, v)| format!("{}={}", resolve(k), resolve(v)))
+        .map(|(k, v)| (resolve(k), resolve(v)))
         .collect();
     for (k, v) in &auth_query {
-        resolved_params.push(format!("{k}={v}"));
+        resolved_params.push((k.clone(), v.clone()));
     }
 
     let base_url = if resolved_url.starts_with("http://") || resolved_url.starts_with("https://") {
@@ -1154,7 +1155,7 @@ fn perform_request(
     let url = if resolved_params.is_empty() {
         base_url
     } else {
-        format!("{base_url}?{}", resolved_params.join("&"))
+        append_query_params(&base_url, &resolved_params)
     };
 
     let allows_body = request.method.allows_body();
@@ -1312,17 +1313,18 @@ pub fn code_snippet(
     request: &ApiRequest,
     lang: crate::code_gen::CodeLanguage,
 ) -> String {
-    let mut url = build_final_url(environment, request);
-    let query_auth: Vec<String> = request
+    let url = build_final_url(environment, request);
+    let query_auth: Vec<(String, String)> = request
         .auth
         .iter()
         .filter(|r| r.enabled && r.description == "query" && !r.key.trim().is_empty())
-        .map(|r| format!("{}={}", r.key.trim(), r.value.trim()))
+        .map(|r| (r.key.trim().to_string(), r.value.trim().to_string()))
         .collect();
-    if !query_auth.is_empty() {
-        let sep = if url.contains('?') { '&' } else { '?' };
-        url = format!("{url}{sep}{}", query_auth.join("&"));
-    }
+    let url = if query_auth.is_empty() {
+        url
+    } else {
+        append_query_params(&url, &query_auth)
+    };
 
     let mut headers: Vec<KeyValueRow> = request
         .headers
@@ -1370,6 +1372,24 @@ pub fn code_snippet(
     crate::code_gen::generate(lang, &code_req)
 }
 
+/// Append query parameters to a base URL using `Url`'s structured query API.
+/// Both regular params and query-located auth share this encoding path, so
+/// keys/values with `&`, `=`, spaces, or non-ASCII bytes are percent-encoded
+/// rather than being concatenated raw.
+fn append_query_params(base_url: &str, params: &[(String, String)]) -> String {
+    let mut url = match Url::parse(base_url) {
+        Ok(url) => url,
+        Err(_) => return base_url.to_string(),
+    };
+    {
+        let mut query = url.query_pairs_mut();
+        for (k, v) in params {
+            query.append_pair(k, v);
+        }
+    }
+    url.to_string()
+}
+
 fn build_final_url(environment: &ApiEnvironment, request: &ApiRequest) -> String {
     let base_url = substitute_vars(environment.base_url.trim(), environment);
     let request_path =
@@ -1387,22 +1407,21 @@ fn build_final_url(environment: &ApiEnvironment, request: &ApiRequest) -> String
         format!("{base}{route}")
     };
 
-    let query = request
+    let query: Vec<(String, String)> = request
         .params
         .iter()
         .filter(|row| row.enabled && !row.key.trim().is_empty())
         .map(|row| {
-            format!(
-                "{}={}",
-                row.key.trim(),
-                substitute_vars(row.value.trim(), environment)
+            (
+                row.key.trim().to_string(),
+                substitute_vars(row.value.trim(), environment),
             )
         })
-        .collect::<Vec<_>>();
+        .collect();
     if query.is_empty() {
         path
     } else {
-        format!("{path}?{}", query.join("&"))
+        append_query_params(&path, &query)
     }
 }
 
@@ -1457,12 +1476,13 @@ fn build_curl_preview(url: &str, method: HttpMethod, headers: &[String], body: &
 }
 
 fn build_form_urlencoded_body(raw_body: &str) -> String {
-    parse_kv_lines(raw_body)
-        .into_iter()
-        .filter(|(enabled, key, _)| *enabled && !key.trim().is_empty())
-        .map(|(_, key, value)| format!("{}={}", key.trim(), value.trim()))
-        .collect::<Vec<_>>()
-        .join("&")
+    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+    for (enabled, key, value) in parse_kv_lines(raw_body) {
+        if enabled && !key.trim().is_empty() {
+            serializer.append_pair(key.trim(), value.trim());
+        }
+    }
+    serializer.finish()
 }
 
 fn default_content_type(mode: BodyMode) -> Option<&'static str> {
@@ -3059,5 +3079,161 @@ mod tests {
     fn format_auth_for_input_unknown_type_uppercases_key() {
         let text = format_auth_for_input("oauth2", "tok");
         assert_eq!(text, "OAUTH2=tok");
+    }
+
+    // ── Query parameter encoding regression tests (FIX-016) ──
+
+    /// Verify that special characters in query keys/values are percent-encoded
+    /// and survive a round-trip through `Url::parse`. Compares parsed query
+    /// pairs rather than fragile strings.
+    #[test]
+    fn query_params_special_chars_roundtrip() {
+        let cases = vec![
+            ("a b", "space in key"),
+            ("a&b", "ampersand in key"),
+            ("key", "x=y"),
+            ("key", "中文"),
+            ("key", "+%#?"),
+            ("key", ""),
+        ];
+        for (raw_key, raw_value) in cases {
+            let base = "https://example.com/path";
+            let encoded =
+                append_query_params(base, &[(raw_key.to_string(), raw_value.to_string())]);
+            let parsed = Url::parse(&encoded).expect("encoded URL is valid");
+            let pairs: Vec<_> = parsed.query_pairs().collect();
+            assert_eq!(
+                pairs.len(),
+                1,
+                "single pair for ({raw_key}, {raw_value}): {encoded}"
+            );
+            assert_eq!(pairs[0].0, raw_key, "key roundtrip for {raw_key}");
+            assert_eq!(pairs[0].1, raw_value, "value roundtrip for {raw_value}");
+        }
+    }
+
+    /// Multiple query params each with special characters must all survive
+    /// encoding without merging or losing any.
+    #[test]
+    fn query_params_multiple_special_pairs() {
+        let params: Vec<(String, String)> = vec![
+            ("filter".to_string(), "a&b".to_string()),
+            ("q".to_string(), "hello world".to_string()),
+            ("expr".to_string(), "x=y".to_string()),
+        ];
+        let encoded = append_query_params("https://api.test/search", &params);
+        let parsed = Url::parse(&encoded).expect("valid url");
+        let pairs: Vec<_> = parsed.query_pairs().collect();
+        assert_eq!(pairs.len(), 3);
+        assert_eq!(pairs[0], ("filter".into(), "a&b".into()));
+        assert_eq!(pairs[1], ("q".into(), "hello world".into()));
+        assert_eq!(pairs[2], ("expr".into(), "x=y".into()));
+    }
+
+    /// Query-located auth must go through the same encoding path as regular
+    /// params so `&`/`=` in the value don't corrupt the URL.
+    #[test]
+    fn code_snippet_query_auth_encoded() {
+        let environment = ApiEnvironment {
+            name: "T".into(),
+            badge: "T".into(),
+            color: 0,
+            base_url: "https://h.example.com".into(),
+            variables: Vec::new(),
+            headers: Vec::new(),
+        };
+        let mut apikey = KeyValueRow::new("sig", "a=b&c");
+        apikey.description = "query".into();
+        let request = ApiRequest {
+            node_id: String::new(),
+            title: "t".into(),
+            method: HttpMethod::Get,
+            path: "/endpoint".into(),
+            params: vec![KeyValueRow::new("normal", "v")],
+            path_rows: Vec::new(),
+            body: String::new(),
+            body_mode: BodyMode::None,
+            headers: Vec::new(),
+            cookies: Vec::new(),
+            auth: vec![apikey],
+            pre_ops: String::new(),
+            post_ops: String::new(),
+            scenarios: Vec::new(),
+        };
+        let curl = code_snippet(&environment, &request, crate::code_gen::CodeLanguage::Curl);
+        let url_str = curl
+            .lines()
+            .find_map(|line| {
+                let trimmed = line.trim();
+                let inner = trimmed.strip_prefix("\"")?.strip_suffix("\"")?;
+                Some(inner.to_string())
+            })
+            .expect("url line in snippet");
+        let parsed = Url::parse(&url_str).expect("valid url in snippet");
+        let sig = parsed
+            .query_pairs()
+            .find(|(k, _)| k == "sig")
+            .map(|(_, v)| v.to_string())
+            .expect("sig param present");
+        assert_eq!(sig, "a=b&c");
+    }
+
+    /// form_urlencoded body must encode special characters, including `&`,
+    /// `=`, spaces, and non-ASCII bytes.
+    #[test]
+    fn build_form_urlencoded_encodes_special_chars() {
+        let body =
+            build_form_urlencoded_body("name=alice bob\nfilter=a&b\nexpr=x=y\nemoji=中文\nempty=");
+        let parsed: Vec<(String, String)> = url::form_urlencoded::parse(body.as_bytes())
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect();
+        assert_eq!(parsed.len(), 5);
+        assert_eq!(parsed[0], ("name".into(), "alice bob".into()));
+        assert_eq!(parsed[1], ("filter".into(), "a&b".into()));
+        assert_eq!(parsed[2], ("expr".into(), "x=y".into()));
+        assert_eq!(parsed[3], ("emoji".into(), "中文".into()));
+        assert_eq!(parsed[4], ("empty".into(), "".into()));
+    }
+
+    /// build_final_url must encode query params via the structured API and
+    /// round-trip cleanly through `Url`.
+    #[test]
+    fn build_final_url_encodes_query_params() {
+        let environment = ApiEnvironment {
+            name: "T".into(),
+            badge: "T".into(),
+            color: 0,
+            base_url: "https://api.example.com".into(),
+            variables: Vec::new(),
+            headers: Vec::new(),
+        };
+        let request = ApiRequest {
+            node_id: String::new(),
+            title: "t".into(),
+            method: HttpMethod::Get,
+            path: "/search".into(),
+            params: vec![
+                KeyValueRow::new("q", "a b"),
+                KeyValueRow::new("filter", "x=y"),
+                KeyValueRow::new("tag", "中文"),
+            ],
+            path_rows: Vec::new(),
+            body: String::new(),
+            body_mode: BodyMode::None,
+            headers: Vec::new(),
+            cookies: Vec::new(),
+            auth: Vec::new(),
+            pre_ops: String::new(),
+            post_ops: String::new(),
+            scenarios: Vec::new(),
+        };
+        let url = build_final_url(&environment, &request);
+        let parsed = Url::parse(&url).expect("valid url");
+        assert_eq!(parsed.path(), "/search");
+        let pairs: Vec<_> = parsed.query_pairs().collect();
+        assert_eq!(pairs.len(), 3);
+        assert_eq!(pairs[0], ("q".into(), "a b".into()));
+        assert_eq!(pairs[1], ("filter".into(), "x=y".into()));
+        assert_eq!(pairs[2], ("tag".into(), "中文".into()));
     }
 }

@@ -1,7 +1,7 @@
 use std::{
     fs,
     io::{Read, Write},
-    net::{TcpListener, TcpStream},
+    net::{IpAddr, TcpListener, TcpStream},
     process::Command,
     sync::{Arc, Mutex},
     thread,
@@ -126,13 +126,43 @@ fn proxy_serves_mobile_ca_certificate() {
 #[test]
 fn proxy_start_reports_port_bind_failure() {
     let rt = runtime("port-in-use");
-    let occupied = TcpListener::bind("0.0.0.0:0").unwrap();
+    let occupied = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = occupied.local_addr().unwrap().port();
 
     let result = rt.engine.start(port);
 
     assert!(result.is_err());
     assert!(!rt.engine.is_running());
+}
+
+#[test]
+fn proxy_default_listen_addr_is_loopback() {
+    let rt = runtime("loopback-listen");
+    let port = free_port();
+    rt.engine.start(port).unwrap();
+
+    let addr = rt.engine.listen_addr().expect("listen_addr应存在");
+    assert_eq!(addr.ip(), IpAddr::from([127, 0, 0, 1]));
+    assert_eq!(addr.port(), port);
+    rt.engine.stop();
+}
+
+#[test]
+fn proxy_running_state_reports_loopback() {
+    let rt = runtime("loopback-state");
+    let port = free_port();
+    rt.engine.start(port).unwrap();
+
+    assert!(rt.engine.is_running());
+    assert_eq!(rt.engine.port(), Some(port));
+    assert_eq!(
+        rt.engine.listen_addr().map(|a| a.ip()),
+        Some(IpAddr::from([127, 0, 0, 1]))
+    );
+    rt.engine.stop();
+
+    assert!(!rt.engine.is_running());
+    assert_eq!(rt.engine.listen_addr(), None);
 }
 
 #[test]

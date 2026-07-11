@@ -6,13 +6,12 @@ use gpui::{
     App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
     Styled, div, hsla, prelude::FluentBuilder, px,
 };
-use qingqi_ui::components::icon::IconName;
-use qingqi_ui::components::styled::Sizable;
-use qingqi_ui::components::styled::Size;
 use qingqi_ui::components::button::{Button, ButtonVariants};
 use qingqi_ui::components::input::{Input, InputState};
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size;
 use qingqi_ui::components::theme::Theme;
-use qingqi_ui::{theme, ui, ui::glass};
+use qingqi_ui::{icon, theme, ui, ui::glass};
 
 pub fn kv_editor_table(
     view: Entity<ApiDebuggerView>,
@@ -123,7 +122,7 @@ pub fn kv_editor_table(
                 .child(
                     Button::new(("kv-del", i))
                         .ghost()
-                        .icon(IconName::Close)
+                        .icon(icon!(x))
                         .with_size(Size::XSmall)
                         .on_click(move |_, _, cx| {
                             delete_view.update(cx, |view, cx| {
@@ -140,7 +139,7 @@ pub fn kv_editor_table(
             div().px(px(10.0)).py(px(7.0)).child(
                 Button::new("kv-add-row")
                     .ghost()
-                    .icon(IconName::Plus)
+                    .icon(icon!(plus))
                     .label("新增")
                     .with_size(Size::XSmall)
                     .on_click(move |_, window, cx| {

@@ -23,20 +23,42 @@ pub struct ThemeEntry {
 
 fn parse_hex(hex: &str) -> Option<Hsla> {
     let h = hex.trim_start_matches('#');
-    if h.len() != 6 { return None; }
+    if h.len() != 6 {
+        return None;
+    }
     let r = u8::from_str_radix(&h[0..2], 16).ok()? as f32 / 255.0;
     let g = u8::from_str_radix(&h[2..4], 16).ok()? as f32 / 255.0;
     let b = u8::from_str_radix(&h[4..6], 16).ok()? as f32 / 255.0;
     let max = r.max(g).max(b);
     let min = r.min(g).min(b);
     let l = (max + min) / 2.0;
-    if max == min { return Some(Hsla { h: 0.0, s: 0.0, l, a: 1.0 }); }
+    if max == min {
+        return Some(Hsla {
+            h: 0.0,
+            s: 0.0,
+            l,
+            a: 1.0,
+        });
+    }
     let d = max - min;
-    let s = if l > 0.5 { d / (2.0 - max - min) } else { d / (max + min) };
-    let h = if max == r { (g - b) / d + (if g < b { 6.0 } else { 0.0 }) }
-            else if max == g { (b - r) / d + 2.0 }
-            else { (r - g) / d + 4.0 };
-    Some(Hsla { h: h / 6.0, s, l, a: 1.0 })
+    let s = if l > 0.5 {
+        d / (2.0 - max - min)
+    } else {
+        d / (max + min)
+    };
+    let h = if max == r {
+        (g - b) / d + (if g < b { 6.0 } else { 0.0 })
+    } else if max == g {
+        (b - r) / d + 2.0
+    } else {
+        (r - g) / d + 4.0
+    };
+    Some(Hsla {
+        h: h / 6.0,
+        s,
+        l,
+        a: 1.0,
+    })
 }
 
 /// Apply color overrides (dot-separated keys) onto a Token.
@@ -102,12 +124,16 @@ pub fn load_theme_file(json: &str) -> Vec<(String, crate::token::Token)> {
         Err(_) => return Vec::new(),
     };
     let simple_name = parsed.name.clone().unwrap_or_default();
-    parsed.themes.iter().filter_map(|entry| {
-        let token = token_from_entry(entry);
-        let mode_cap = entry.mode.capitalize_first();
-        let display = format!("{} {}", simple_name, mode_cap);
-        Some((display, token))
-    }).collect()
+    parsed
+        .themes
+        .iter()
+        .filter_map(|entry| {
+            let token = token_from_entry(entry);
+            let mode_cap = entry.mode.capitalize_first();
+            let display = format!("{} {}", simple_name, mode_cap);
+            Some((display, token))
+        })
+        .collect()
 }
 
 pub fn resolve_variant<'a>(
@@ -117,13 +143,22 @@ pub fn resolve_variant<'a>(
 ) -> Option<&'a crate::token::Token> {
     let suffix = if is_dark { "Dark" } else { "Light" };
     let full = format!("{} {}", name, suffix);
-    themes.iter().find(|(n, _)| n.as_str() == full.as_str()).map(|(_, t)| t)
+    themes
+        .iter()
+        .find(|(n, _)| n.as_str() == full.as_str())
+        .map(|(_, t)| t)
 }
 
 pub fn list_base_names(themes: &[(String, crate::token::Token)]) -> Vec<String> {
-    let mut names: Vec<String> = themes.iter().map(|(n, _)| {
-        n.strip_suffix(" Light").or_else(|| n.strip_suffix(" Dark")).unwrap_or(n).to_string()
-    }).collect();
+    let mut names: Vec<String> = themes
+        .iter()
+        .map(|(n, _)| {
+            n.strip_suffix(" Light")
+                .or_else(|| n.strip_suffix(" Dark"))
+                .unwrap_or(n)
+                .to_string()
+        })
+        .collect();
     names.sort();
     names.dedup();
     names
@@ -137,10 +172,15 @@ pub fn apply_custom_token(token: crate::token::Token, cx: &mut App) {
     cx.set_global(crate::token::TokenState { token });
 }
 
-trait CapitalizeExt { fn capitalize_first(&self) -> String; }
+trait CapitalizeExt {
+    fn capitalize_first(&self) -> String;
+}
 impl CapitalizeExt for str {
     fn capitalize_first(&self) -> String {
         let mut c = self.chars();
-        match c.next() { None => String::new(), Some(f) => f.to_uppercase().collect::<String>() + c.as_str() }
+        match c.next() {
+            None => String::new(),
+            Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+        }
     }
 }

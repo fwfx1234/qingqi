@@ -132,21 +132,94 @@ impl DownloadTask {
     }
 }
 
+pub fn sanitize_file_name(raw: &str) -> String {
+    // 1. Take the last component when both '/' and '\' are treated as separators.
+    let component = raw
+        .trim()
+        .split(|c: char| c == '/' || c == '\\')
+        .filter(|s| !s.is_empty())
+        .last()
+        .unwrap_or("")
+        .to_string();
+
+    // 2. "." , ".." or empty -> "download".
+    let mut name = if component.is_empty() || component == "." || component == ".." {
+        "download".to_string()
+    } else {
+        component
+    };
+
+    // 3. Strip control characters.
+    name.retain(|c| !c.is_control());
+
+    // 4. Replace Windows-reserved characters.
+    name = name.replace(
+        |c: char| matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*'),
+        "_",
+    );
+
+    // 5. Strip trailing spaces and dots.
+    while name.ends_with(' ') || name.ends_with('.') {
+        name.pop();
+    }
+
+    // 6. Prefix case-insensitive Windows device names.
+    let stem_lower = name.split('.').next().unwrap_or("").to_ascii_lowercase();
+    let is_device = matches!(
+        stem_lower.as_str(),
+        "con"
+            | "prn"
+            | "aux"
+            | "nul"
+            | "com1"
+            | "com2"
+            | "com3"
+            | "com4"
+            | "com5"
+            | "com6"
+            | "com7"
+            | "com8"
+            | "com9"
+            | "lpt1"
+            | "lpt2"
+            | "lpt3"
+            | "lpt4"
+            | "lpt5"
+            | "lpt6"
+            | "lpt7"
+            | "lpt8"
+            | "lpt9"
+    );
+    if is_device {
+        name.insert(0, '_');
+    }
+
+    // 7. Final fallback.
+    if name.is_empty() {
+        name = "download".to_string();
+    }
+
+    name
+}
+
 pub fn extract_file_name(url: &str, content_disposition: Option<&str>) -> String {
     if let Some(cd) = content_disposition {
         if let Some(name) = parse_content_disposition(cd) {
-            return name;
+            return sanitize_file_name(&name);
         }
     }
 
-    url.split('?')
+    let decoded = url
+        .split('?')
         .next()
         .unwrap_or(url)
         .split('/')
         .last()
         .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| "download".to_string())
+        .map(decode_percent_lossy)
+        .unwrap_or_else(|| "download".to_string());
+
+    sanitize_file_name(&decoded)
 }
 
 fn parse_content_disposition(cd: &str) -> Option<String> {
@@ -156,25 +229,10 @@ fn parse_content_disposition(cd: &str) -> Option<String> {
         let val = val.split(';').next().unwrap_or(val).trim();
         if let Some(pos) = val.rfind("''") {
             let encoded = &val[pos + 2..];
-            let decoded: String = encoded
-                .split('%')
-                .enumerate()
-                .flat_map(|(i, part)| {
-                    if i == 0 {
-                        return part.chars().collect::<Vec<_>>();
-                    }
-                    if part.len() >= 2 {
-                        if let Ok(byte) = u8::from_str_radix(&part[..2], 16) {
-                            let mut chars = vec![byte as char];
-                            chars.extend(part[2..].chars());
-                            return chars;
-                        }
-                    }
-                    part.chars().collect()
-                })
-                .collect();
-            if !decoded.is_empty() {
-                return Some(decoded);
+            if let Ok(decoded) = urlencoding::decode(encoded) {
+                if !decoded.is_empty() {
+                    return Some(decoded.into_owned());
+                }
             }
         }
     }
@@ -182,6 +240,7 @@ fn parse_content_disposition(cd: &str) -> Option<String> {
     // Try filename="..."
     if let Some(idx) = cd.find("filename=") {
         let val = &cd[idx + 9..];
+        let val = val.split(';').next().unwrap_or(val);
         let val = val.trim().trim_matches('"').trim();
         if !val.is_empty() {
             return Some(val.to_string());
@@ -198,9 +257,8 @@ pub fn guess_file_name(url: &str) -> String {
         .last()
         .filter(|s| !s.is_empty() && s.contains('.'))
         .unwrap_or("download");
-    percent_encoding::percent_decode_str(name)
-        .decode_utf8_lossy()
-        .to_string()
+    let decoded = decode_percent_lossy(name);
+    sanitize_file_name(&decoded)
 }
 
 pub fn file_extension(name: &str) -> &str {
@@ -275,35 +333,9 @@ pub fn parse_custom_headers(raw: &str) -> Vec<(String, String)> {
     headers
 }
 
-mod percent_encoding {
-    pub struct PercentDecodeStr<'a>(pub &'a str);
-
-    impl<'a> PercentDecodeStr<'a> {
-        pub fn decode_utf8_lossy(&self) -> std::borrow::Cow<'a, str> {
-            let mut result = String::new();
-            let mut bytes = self.0.bytes();
-            while let Some(b) = bytes.next() {
-                if b == b'%' {
-                    let hex: String = bytes.by_ref().take(2).map(|b| b as char).collect();
-                    if hex.len() == 2 {
-                        if let Ok(val) = u8::from_str_radix(&hex, 16) {
-                            result.push(val as char);
-                            continue;
-                        }
-                    }
-                    result.push('%');
-                    result.push_str(&hex);
-                } else {
-                    result.push(b as char);
-                }
-            }
-            std::borrow::Cow::Owned(result)
-        }
-    }
-
-    pub fn percent_decode_str(s: &str) -> PercentDecodeStr<'_> {
-        PercentDecodeStr(s)
-    }
+fn decode_percent_lossy(value: &str) -> String {
+    let bytes = urlencoding::decode_binary(value.as_bytes());
+    String::from_utf8_lossy(bytes.as_ref()).into_owned()
 }
 
 #[cfg(test)]
@@ -339,6 +371,20 @@ mod tests {
             extract_file_name(
                 "https://example.com/dl",
                 Some(r#"attachment; filename="report.pdf""#)
+            ),
+            "report.pdf"
+        );
+        assert_eq!(
+            extract_file_name(
+                "https://example.com/dl",
+                Some("attachment; filename*=UTF-8''%E4%B8%AD%E6%96%87%20%E6%8A%A5%E5%91%8A.pdf")
+            ),
+            "中文 报告.pdf"
+        );
+        assert_eq!(
+            extract_file_name(
+                "https://example.com/dl",
+                Some(r#"attachment; filename="report.pdf"; size=123"#)
             ),
             "report.pdf"
         );
@@ -407,6 +453,47 @@ mod tests {
         let headers = parse_custom_headers("no-colon\nX-Key: val");
         assert_eq!(headers.len(), 1);
         assert_eq!(headers[0], ("X-Key".to_string(), "val".to_string()));
+    }
+
+    #[test]
+    fn sanitize_file_name_table_driven() {
+        let dir = std::path::PathBuf::from("/tmp/sandbox-dir");
+        let cases = [
+            "../secret.txt",
+            "%2e%2e%2fsecret.txt",
+            "..%5csecret.txt",
+            "/etc/passwd",
+            "C:\\Windows\\win.ini",
+            "\\\\server\\share\\a.txt",
+            "CON",
+            "nul.txt",
+            "name\0.txt",
+            "normal file.zip",
+            "中文图片.png",
+        ];
+
+        for raw in cases {
+            // Inputs that are still percent-encoded get decoded first by the caller path,
+            // but sanitize_file_name only sees the already-decoded string. Simulate the
+            // decode step here to match real usage.
+            let decoded = decode_percent_lossy(raw);
+            let result = sanitize_file_name(&decoded);
+
+            assert!(!result.is_empty(), "empty result for input: {raw}");
+            assert_ne!(result, ".", "result is '.' for input: {raw}");
+            assert_ne!(result, "..", "result is '..' for input: {raw}");
+            assert_eq!(
+                std::path::Path::new(&result).components().count(),
+                1,
+                "multi-component result '{}' for input: {raw}",
+                result
+            );
+            assert_eq!(
+                dir.join(&result).parent(),
+                Some(dir.as_ref()),
+                "directory escape for input: {raw}, result: {result}"
+            );
+        }
     }
 
     #[test]

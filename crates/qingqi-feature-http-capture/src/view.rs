@@ -20,20 +20,21 @@ use gpui::{
     ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task,
     Window, div, px,
 };
-use qingqi_ui::components::button::{Button, ButtonVariant, ButtonVariants}; use qingqi_ui::components::styled::Size;
-use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::button::{Button, ButtonVariant, ButtonVariants};
 use qingqi_ui::components::styled::Disableable;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size;
 
-use qingqi_ui::token::tokens;
+use qingqi_plugin::{
+    events::{AppEventBus, AppEventKind},
+    plugin_spec::PluginAccent,
+};
 use qingqi_ui::components::divider::Divider;
 use qingqi_ui::components::input::{Input, InputState};
 use qingqi_ui::components::scroll::ScrollableElement;
 use qingqi_ui::components::scroll::ScrollbarExt;
 use qingqi_ui::components::theme::Theme;
-use qingqi_plugin::{
-    events::{AppEventBus, AppEventKind},
-    plugin_spec::PluginAccent,
-};
+use qingqi_ui::token::tokens;
 use qingqi_ui::{
     theme,
     ui::{self, components},
@@ -616,7 +617,10 @@ fn proxy_value_row(
 }
 
 fn small_action(id: &'static str, label: &str, _cx: &App) -> Button {
-    Button::new(id).label(label.to_string()).with_size(Size::Small).with_size(Size::XSmall)
+    Button::new(id)
+        .label(label.to_string())
+        .with_size(Size::Small)
+        .with_size(Size::XSmall)
 }
 
 fn capture_input(state: Entity<InputState>) -> Input {

@@ -9,13 +9,14 @@ use gpui::{
     Styled, Subscription, Window, div, prelude::FluentBuilder, px,
 };
 
-use qingqi_ui::components::scroll::ScrollbarExt;
+use qingqi_ui::components::button::{Button, ButtonVariant, ButtonVariants};
 use qingqi_ui::components::scroll::ScrollableElement;
-use qingqi_ui::components::widgets::{Slider, SliderState};
+use qingqi_ui::components::scroll::ScrollbarExt;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size;
 use qingqi_ui::components::switch::Switch;
 use qingqi_ui::components::theme::Theme;
-use qingqi_ui::components::button::{Button, ButtonVariant, ButtonVariants}; use qingqi_ui::components::styled::Size;
-use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::widgets::{Slider, SliderState};
 
 use qingqi_plugin::plugin::{InlineView, PluginId};
 use qingqi_ui::ui::components;
@@ -184,6 +185,10 @@ impl SettingsView {
     fn set_show_interfaces(&mut self, show: bool) {
         let _ = self.service.set_network_speed_show_interfaces(show);
     }
+
+    fn set_public_ip_enabled(&mut self, enabled: bool) {
+        let _ = self.service.set_public_ip_enabled(enabled);
+    }
 }
 
 impl Render for SettingsView {
@@ -325,6 +330,18 @@ impl Render for SettingsView {
                                     cx,
                                 ),
                                 cx,
+                            ))
+                            .child(components::settings_row(
+                                "显示公网 IP",
+                                "开启后会访问 api.ipify.org 获取公网 IP",
+                                toggle(
+                                    entity.clone(),
+                                    cx,
+                                    "public-ip-enabled",
+                                    s.public_ip_enabled,
+                                    SettingsView::set_public_ip_enabled,
+                                ),
+                                cx,
                             )),
                         cx,
                     ))
@@ -334,7 +351,7 @@ impl Render for SettingsView {
                                 .px(theme::space_4())
                                 .py(theme::space_2())
                                 .text_size(theme::font_size_caption())
-                            .text_color(Theme::global(cx).muted_foreground)
+                                .text_color(Theme::global(cx).muted_foreground)
                                 .child(message.clone()),
                         )
                     }),
@@ -452,9 +469,13 @@ fn seg_btn<T: Copy + PartialEq + std::fmt::Debug + 'static>(
     let active = mode == current;
     let id = ElementId::Name(format!("seg-{:?}", mode).into());
     let mut btn = if active {
-        Button::new(id).with_variant(ButtonVariant::Primary).label(label)
+        Button::new(id)
+            .with_variant(ButtonVariant::Primary)
+            .label(label)
     } else {
-        Button::new(id).with_variant(ButtonVariant::Ghost).label(label)
+        Button::new(id)
+            .with_variant(ButtonVariant::Ghost)
+            .label(label)
     };
     btn = btn.with_size(Size::XSmall);
     btn.on_click(move |_, _, cx| {
@@ -476,18 +497,15 @@ fn slider_row(
         .flex()
         .items_center()
         .gap_3()
-        .child(
-            div()
-                .flex_1()
-                .min_w(px(120.0))
-                .when_some(slider, |el, s| el.child(
-                    Slider::new()
-                        .value(s.read(cx).value)
-                        .min(s.read(cx).min)
-                        .max(s.read(cx).max)
-                        .horizontal(),
-                )),
-        )
+        .child(div().flex_1().min_w(px(120.0)).when_some(slider, |el, s| {
+            el.child(
+                Slider::new()
+                    .value(s.read(cx).value)
+                    .min(s.read(cx).min)
+                    .max(s.read(cx).max)
+                    .horizontal(),
+            )
+        }))
         .child(
             div()
                 .min_w(px(54.0))

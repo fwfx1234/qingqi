@@ -56,7 +56,16 @@ pub fn spawn_app_settings_window(clipboard_view: Entity<ClipboardView>, cx: &mut
     let view_for_window = clipboard_view.clone();
     match cx.open_window(options, move |window, cx| {
         let settings = cx.new(|cx| AppSettingsWindow::new(view_for_window, window, cx));
-        cx.new(|cx| Root::new(settings, window, cx))
+        cx.new(|cx| {
+            let mut root = Root::new(settings, window, cx);
+            root.set_background(gpui::Hsla {
+                h: 0.0,
+                s: 0.0,
+                l: 0.0,
+                a: 0.0,
+            });
+            root
+        })
     }) {
         Ok(handle) => {
             clipboard_view.update(cx, |view, cx| {
@@ -112,6 +121,9 @@ impl Render for AppSettingsWindow {
         let view = self.clipboard_view.read(cx);
         let handle = self.clipboard_view.clone();
         let config = view.settings_snapshot();
+        let dark = t.is_dark();
+        let glass_bg =
+            qingqi_ui::theme::rgba_with_alpha(t.background.into(), if dark { 0.35 } else { 0.9 });
 
         let ignore_input = view.ignore_patterns_input.clone();
         let max_chars_input = view.max_text_chars_input.clone();
@@ -122,7 +134,7 @@ impl Render for AppSettingsWindow {
         else {
             return div()
                 .size_full()
-                .bg(t.popover)
+                .bg(glass_bg)
                 .flex()
                 .items_center()
                 .justify_center()
@@ -135,7 +147,7 @@ impl Render for AppSettingsWindow {
             .size_full()
             .flex()
             .flex_col()
-            .bg(t.popover)
+            .bg(glass_bg)
             .child(settings_titlebar("剪贴板设置", app))
             .child(div().flex_1().min_h(px(0.0)).overflow_y_scrollbar().child(
                 settings::settings_panel(
@@ -162,7 +174,7 @@ fn settings_titlebar(title: impl Into<SharedString>, cx: &App) -> impl IntoEleme
         .flex_none()
         .flex()
         .items_center()
-        .bg(t.list)
+        .bg(t.list.opacity(0.5))
         .border_b_1()
         .border_color(qingqi_ui::ui::border_light(cx))
         .child(qingqi_ui::ui::traffic_light::macos_traffic_lights())
@@ -210,7 +222,7 @@ pub fn app_settings_window_options(cx: &App) -> WindowOptions {
         kind: WindowKind::PopUp,
         show: false,
         is_resizable: true,
-        window_background: WindowBackgroundAppearance::Opaque,
+        window_background: WindowBackgroundAppearance::Transparent,
         window_min_size: Some(window_size),
         window_decorations: Some(WindowDecorations::Client),
         ..Default::default()

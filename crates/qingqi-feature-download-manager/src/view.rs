@@ -7,10 +7,10 @@ use gpui::{
     App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
     StatefulInteractiveElement, Styled, Subscription, Window, div, px,
 };
-use qingqi_ui::components::styled::Selectable;
-use qingqi_ui::components::styled::Sizable;
 use qingqi_ui::components::button::{Button, ButtonCustomVariant, ButtonVariants};
 use qingqi_ui::components::input::{Input, InputState};
+use qingqi_ui::components::styled::Selectable;
+use qingqi_ui::components::styled::Sizable;
 use qingqi_ui::components::widgets::Tag;
 
 use qingqi_plugin::{

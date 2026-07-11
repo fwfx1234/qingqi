@@ -2,7 +2,7 @@
 
 use std::{char, ops::Range};
 
-use gpui::{App, Context, Window};
+use gpui::{Context, Window};
 use ropey::Rope;
 use sum_tree::Bias;
 
@@ -21,7 +21,7 @@ impl From<char> for CharType {
     fn from(c: char) -> Self {
         match c {
             '_' => CharType::Word,
-            c if c.is_ascii_alphanumeric() => CharType::Word,
+            c if c.is_alphanumeric() => CharType::Word,
             c if c == '\n' || c == '\r' => CharType::Newline,
             c if c.is_whitespace() => CharType::Whitespace,
             _ => CharType::Other,
@@ -49,8 +49,25 @@ impl InputState {
         };
 
         self.selected_range = (range.start..range.end).into();
+        self.selection_reversed = false;
         self.selected_word_range = Some(self.selected_range);
         cx.notify()
+    }
+
+    /// Select the complete logical line at the given UTF-8 offset.
+    pub(super) fn select_line(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
+        let offset = self.text.clip_offset(offset, Bias::Left);
+        let row = self.text.offset_to_point(offset).row;
+        let start = self.text.line_start_offset(row);
+        let end = if row + 1 < self.text.lines_len() {
+            self.text.line_start_offset(row + 1)
+        } else {
+            self.text.len()
+        };
+        self.selected_range = (start..end).into();
+        self.selection_reversed = false;
+        self.selected_word_range = None;
+        cx.notify();
     }
 }
 
@@ -83,19 +100,4 @@ impl TextSelector {
 
         Some(start..end)
     }
-}
-
-// CharType classification helper
-pub(crate) fn char_type(c: char) -> CharType {
-    CharType::from(c)
-}
-
-/// Returns true if the character is a word boundary character.
-pub(crate) fn is_word_char(c: char) -> bool {
-    matches!(CharType::from(c), CharType::Word)
-}
-
-/// Check if char is whitespace (but not newline)
-pub(crate) fn is_space_char(c: char) -> bool {
-    matches!(CharType::from(c), CharType::Whitespace)
 }

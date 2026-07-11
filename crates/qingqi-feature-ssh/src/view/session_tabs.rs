@@ -2,9 +2,8 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::*;
-use qingqi_ui::components::icon::Icon;
-use qingqi_ui::components::icon::IconName;
 use qingqi_plugin::plugin_spec::PluginAccent;
+use qingqi_ui::icon;
 use qingqi_ui::theme;
 use qingqi_ui::ui;
 
@@ -154,9 +153,5 @@ fn close_button(
         .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
             handle.update(cx, |view, cx| view.close_session(session_id, cx));
         })
-        .child(
-            Icon::new(IconName::Close)
-                .size(px(10.0))
-                .text_color(ui::text_tertiary(cx)),
-        )
+        .child(icon!(x).size(px(10.0)).text_color(ui::text_tertiary(cx)))
 }

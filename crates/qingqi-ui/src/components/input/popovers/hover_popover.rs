@@ -11,7 +11,10 @@ pub struct HoverPopoverModel {
 
 impl HoverPopoverModel {
     pub fn new(_editor: Entity<InputState>, _window: &mut Window, _cx: &mut Context<Self>) -> Self {
-        Self { is_open: false, content: None }
+        Self {
+            is_open: false,
+            content: None,
+        }
     }
 
     pub fn show(&mut self, _content: String, _window: &mut Window, _cx: &mut Context<Self>) {

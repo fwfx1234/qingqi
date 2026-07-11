@@ -1,6 +1,6 @@
-use gpui::{App, IntoElement, ParentElement, SharedString, Styled, div, px};
 use crate::components::theme::ActiveTheme;
 use crate::theme;
+use gpui::{App, IntoElement, ParentElement, SharedString, Styled, div, px};
 
 /// Unified settings card — header with title + optional subtitle, content below.
 pub fn settings_card(
@@ -13,17 +13,30 @@ pub fn settings_card(
     let t = cx.theme();
 
     let mut header = div().flex().flex_col().gap_0p5().child(
-        div().text_size(theme::font_size_body()).font_weight(gpui::FontWeight::SEMIBOLD)
-            .text_color(t.foreground()).child(title),
+        div()
+            .text_size(theme::font_size_body())
+            .font_weight(gpui::FontWeight::SEMIBOLD)
+            .text_color(t.foreground())
+            .child(title),
     );
     if let Some(st) = subtitle {
         header = header.child(
-            div().text_size(theme::font_size_caption()).text_color(t.muted_foreground).child(st.into()),
+            div()
+                .text_size(theme::font_size_caption())
+                .text_color(t.muted_foreground)
+                .child(st.into()),
         );
     }
 
-    div().rounded(theme::radius_md()).px_3().py_2().border_1().border_color(t.border())
-        .flex().flex_col().gap_2()
+    div()
+        .rounded(theme::radius_md())
+        .px_3()
+        .py_2()
+        .border_1()
+        .border_color(t.border())
+        .flex()
+        .flex_col()
+        .gap_2()
         .child(header)
         .child(content)
 }
@@ -50,9 +63,25 @@ pub fn settings_row(
         .justify_between()
         .gap(theme::space_4())
         .child(
-            div().flex_1().min_w(px(0.0)).flex().flex_col().gap_0p5()
-                .child(div().text_size(theme::font_size_body()).font_weight(gpui::FontWeight::MEDIUM).text_color(t.foreground()).child(label))
-                .child(div().text_size(theme::font_size_caption()).text_color(t.muted_foreground).child(desc)),
+            div()
+                .flex_1()
+                .min_w(px(0.0))
+                .flex()
+                .flex_col()
+                .gap_0p5()
+                .child(
+                    div()
+                        .text_size(theme::font_size_body())
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_color(t.foreground())
+                        .child(label),
+                )
+                .child(
+                    div()
+                        .text_size(theme::font_size_caption())
+                        .text_color(t.muted_foreground)
+                        .child(desc),
+                ),
         )
         .child(control)
 }

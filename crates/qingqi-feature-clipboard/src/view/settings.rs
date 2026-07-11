@@ -199,7 +199,7 @@ fn settings_card(rows: Vec<gpui::AnyElement>, cx: &App) -> impl IntoElement {
     let t = Theme::global(cx);
     div()
         .rounded(theme::radius_lg())
-        .bg(t.list)
+        .bg(t.list.opacity(0.85))
         .border_1()
         .border_color(ui::border_light(cx))
         .flex()

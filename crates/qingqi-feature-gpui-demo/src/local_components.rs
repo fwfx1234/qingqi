@@ -1,9 +1,9 @@
 //! Local implementations of qingqi-ui widgets that have no qingqi-ui equivalent.
 
 use gpui::{
-    div, prelude::FluentBuilder, px, App, Element, ElementId, Entity, InteractiveElement,
-    IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled,
-    StyleRefinement, Window, hsla,
+    App, Element, ElementId, Entity, InteractiveElement, IntoElement, ParentElement, RenderOnce,
+    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div, hsla,
+    prelude::FluentBuilder, px,
 };
 use qingqi_ui::token::tokens;
 
@@ -79,12 +79,10 @@ impl RenderOnce for Badge {
                     None => div().child(dot_el),
                 }
             }
-            _ => {
-                match self.child {
-                    Some(child) => div().child(div().absolute().child(child)),
-                    None => div(),
-                }
-            }
+            _ => match self.child {
+                Some(child) => div().child(div().absolute().child(child)),
+                None => div(),
+            },
         }
     }
 }
@@ -128,7 +126,11 @@ impl RenderOnce for Checkbox {
             .rounded(px(4.0))
             .border_1()
             .border_color(if checked { token.accent } else { token.border })
-            .bg(if checked { token.accent } else { token.background })
+            .bg(if checked {
+                token.accent
+            } else {
+                token.background
+            })
             .flex()
             .items_center()
             .justify_center()
@@ -137,12 +139,12 @@ impl RenderOnce for Checkbox {
             .when(checked, |c| c.child("✓"));
 
         match self.label {
-            Some(label) => div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(checkbox)
-                .child(div().text_size(px(13.0)).text_color(token.foreground).child(label)),
+            Some(label) => div().flex().items_center().gap_2().child(checkbox).child(
+                div()
+                    .text_size(px(13.0))
+                    .text_color(token.foreground)
+                    .child(label),
+            ),
             None => div().child(checkbox),
         }
     }
@@ -229,41 +231,36 @@ impl RenderOnce for Slider {
         let state = self.state.read(cx);
         let pct = ((state.value - state.min) / (state.max - state.min)).clamp(0.0, 1.0);
 
-        div()
-            .w_full()
-            .h(px(24.0))
-            .flex()
-            .items_center()
-            .child(
-                div()
-                    .flex_1()
-                    .h(px(4.0))
-                    .rounded(px(2.0))
-                    .bg(token.border)
-                    .relative()
-                    .child(
-                        div()
-                            .absolute()
-                            .left(px(0.0))
-                            .top(px(0.0))
-                            .h_full()
-                            .w(gpui::relative(pct))
-                            .rounded(px(2.0))
-                            .bg(token.accent),
-                    )
-                    .child(
-                        div()
-                            .absolute()
-                            .left(px(pct * 100.0))
-                            .top(px(-6.0))
-                            .size(px(16.0))
-                            .rounded(px(8.0))
-                            .bg(token.accent)
-                            .border_2()
-                            .border_color(token.background)
-                            .ml(px(-8.0)),
-                    ),
-            )
+        div().w_full().h(px(24.0)).flex().items_center().child(
+            div()
+                .flex_1()
+                .h(px(4.0))
+                .rounded(px(2.0))
+                .bg(token.border)
+                .relative()
+                .child(
+                    div()
+                        .absolute()
+                        .left(px(0.0))
+                        .top(px(0.0))
+                        .h_full()
+                        .w(gpui::relative(pct))
+                        .rounded(px(2.0))
+                        .bg(token.accent),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .left(px(pct * 100.0))
+                        .top(px(-6.0))
+                        .size(px(16.0))
+                        .rounded(px(8.0))
+                        .bg(token.accent)
+                        .border_2()
+                        .border_color(token.background)
+                        .ml(px(-8.0)),
+                ),
+        )
     }
 }
 
@@ -347,9 +344,17 @@ impl RenderOnce for TabBar {
                         .px(px(4.0))
                         .py(px(6.0))
                         .border_b_2()
-                        .border_color(if active { token.accent } else { hsla(0.0, 0.0, 0.0, 0.0) })
+                        .border_color(if active {
+                            token.accent
+                        } else {
+                            hsla(0.0, 0.0, 0.0, 0.0)
+                        })
                         .text_size(px(12.0))
-                        .text_color(if active { token.foreground } else { token.muted_foreground })
+                        .text_color(if active {
+                            token.foreground
+                        } else {
+                            token.muted_foreground
+                        })
                         .child(tab.clone())
                 }))
         }
@@ -374,19 +379,31 @@ pub enum TagVariant {
 
 impl Tag {
     pub fn warning() -> Self {
-        Self { variant: TagVariant::Warning, child: None }
+        Self {
+            variant: TagVariant::Warning,
+            child: None,
+        }
     }
 
     pub fn success() -> Self {
-        Self { variant: TagVariant::Success, child: None }
+        Self {
+            variant: TagVariant::Success,
+            child: None,
+        }
     }
 
     pub fn info() -> Self {
-        Self { variant: TagVariant::Info, child: None }
+        Self {
+            variant: TagVariant::Info,
+            child: None,
+        }
     }
 
     pub fn danger() -> Self {
-        Self { variant: TagVariant::Danger, child: None }
+        Self {
+            variant: TagVariant::Danger,
+            child: None,
+        }
     }
 
     pub fn child(mut self, child: impl IntoElement) -> Self {
@@ -412,6 +429,10 @@ impl RenderOnce for Tag {
             .bg(bg)
             .text_size(px(10.0))
             .text_color(fg)
-            .child(self.child.map(|c| c.into_any_element()).unwrap_or_else(|| div().into_any_element()))
+            .child(
+                self.child
+                    .map(|c| c.into_any_element())
+                    .unwrap_or_else(|| div().into_any_element()),
+            )
     }
 }

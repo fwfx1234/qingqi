@@ -1,6 +1,8 @@
 //! Scrollable extension trait — local replacement for qingqi-ui::scroll::ScrollableElement.
 
-use gpui::{prelude::*, Div, IntoElement, Stateful, StatefulInteractiveElement, InteractiveElement, Element};
+use gpui::{
+    Div, Element, InteractiveElement, IntoElement, Stateful, StatefulInteractiveElement, prelude::*,
+};
 
 #[derive(Clone, Copy)]
 pub enum ScrollbarAxis {
@@ -15,8 +17,12 @@ pub trait ScrollableElement: Sized {
 }
 
 impl<E: InteractiveElement + Element> ScrollableElement for Stateful<E> {
-    fn vertical_scrollbar(self) -> Self { self.overflow_scroll() }
-    fn overflow_scrollbar(self) -> Self { self.overflow_scroll() }
+    fn vertical_scrollbar(self) -> Self {
+        self.overflow_scroll()
+    }
+    fn overflow_scrollbar(self) -> Self {
+        self.overflow_scroll()
+    }
 }
 
 /// Extension trait for overflow_y_scrollbar (plugin compat).
@@ -25,7 +31,9 @@ pub trait ScrollbarExt: Sized {
 }
 
 impl<E: InteractiveElement + Element> ScrollbarExt for Stateful<E> {
-    fn overflow_y_scrollbar(self) -> Self { self.overflow_scroll() }
+    fn overflow_y_scrollbar(self) -> Self {
+        self.overflow_scroll()
+    }
 }
 
 pub use super::scrollbar::ScrollbarShow;

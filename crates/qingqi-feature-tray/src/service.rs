@@ -2,7 +2,7 @@ use std::{
     net::{IpAddr, UdpSocket},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc::{Receiver, Sender, channel},
     },
     time::Duration,
@@ -25,6 +25,8 @@ use crate::{
     view::NetworkSpeedPopupView,
 };
 
+pub type FetchPublicIpFn = Arc<dyn Fn() -> Option<String> + Send + Sync>;
+
 pub struct NetworkSpeedService {
     plugin_id: PluginId,
     settings_store: NetworkSpeedSettingsStore,
@@ -36,10 +38,24 @@ pub struct NetworkSpeedService {
     tray_host: Mutex<Option<TrayHostRef>>,
     started: AtomicBool,
     ip_refreshing: Arc<AtomicBool>,
+    ip_generation: Arc<AtomicU64>,
+    fetch_public_ip: FetchPublicIpFn,
 }
 
 impl NetworkSpeedService {
     pub fn new(plugin_id: PluginId, settings_store: NetworkSpeedSettingsStore) -> Self {
+        Self::with_fetch(
+            plugin_id,
+            settings_store,
+            Arc::new(fetch_public_ip_from_api),
+        )
+    }
+
+    pub fn with_fetch(
+        plugin_id: PluginId,
+        settings_store: NetworkSpeedSettingsStore,
+        fetch_public_ip: FetchPublicIpFn,
+    ) -> Self {
         Self {
             plugin_id,
             settings_store,
@@ -51,6 +67,8 @@ impl NetworkSpeedService {
             tray_host: Mutex::new(None),
             started: AtomicBool::new(false),
             ip_refreshing: Arc::new(AtomicBool::new(false)),
+            ip_generation: Arc::new(AtomicU64::new(0)),
+            fetch_public_ip,
         }
     }
 
@@ -88,7 +106,9 @@ impl NetworkSpeedService {
         tray_host.register_tray_item(&self.plugin_id, tray_item_spec(&settings, &snapshot))?;
 
         if !self.started.swap(true, Ordering::SeqCst) {
-            self.refresh_ip_cache_background();
+            if settings.public_ip_enabled {
+                self.refresh_ip_cache_background();
+            }
             Self::schedule_next_sample(
                 Arc::clone(self),
                 settings.network_speed_update_interval(),
@@ -109,7 +129,9 @@ impl NetworkSpeedService {
         let settings = self.settings();
         let snapshot = self.snapshot();
         let height = crate::model::popup_content_height(&settings, &snapshot);
-        self.refresh_ip_cache_background();
+        if settings.public_ip_enabled {
+            self.refresh_ip_cache_background();
+        }
         tray_host.open_tray_popup(
             &self.plugin_id,
             item_id,
@@ -130,7 +152,14 @@ impl NetworkSpeedService {
         tray_host: TrayHostRef,
         cx: &mut App,
     ) -> Result<()> {
-        tray_host.close_tray_popup(&self.plugin_id, item_id, cx)
+        let result = tray_host.close_tray_popup(&self.plugin_id, item_id, cx);
+        let settings = self.settings();
+        if !settings.public_ip_enabled {
+            if let Ok(mut cached) = self.public_ip.lock() {
+                *cached = None;
+            }
+        }
+        result
     }
 
     pub fn set_network_speed_visible(&self, visible: bool) -> Result<NetworkSpeedSettings> {
@@ -182,6 +211,17 @@ impl NetworkSpeedService {
         self.save_and_refresh(|settings| settings.network_speed_max_interfaces = max_interfaces)
     }
 
+    pub fn set_public_ip_enabled(&self, enabled: bool) -> Result<NetworkSpeedSettings> {
+        let settings = self.save_and_refresh(|settings| settings.public_ip_enabled = enabled)?;
+        self.ip_generation.fetch_add(1, Ordering::SeqCst);
+        if !enabled {
+            if let Ok(mut cached) = self.public_ip.lock() {
+                *cached = None;
+            }
+        }
+        Ok(settings)
+    }
+
     fn attach_tray_host(&self, tray_host: TrayHostRef) {
         if let Ok(mut current) = self.tray_host.lock() {
             *current = Some(tray_host);
@@ -217,19 +257,27 @@ impl NetworkSpeedService {
         if self.ip_refreshing.swap(true, Ordering::SeqCst) {
             return;
         }
+        let public_ip_enabled = self.settings().public_ip_enabled;
+        let generation = self.ip_generation.load(Ordering::SeqCst);
         let public_ip = Arc::clone(&self.public_ip);
         let local_ip = Arc::clone(&self.local_ip);
         let update_subscribers = Arc::clone(&self.update_subscribers);
         let ip_refreshing = Arc::clone(&self.ip_refreshing);
+        let ip_generation = Arc::clone(&self.ip_generation);
+        let fetch_public_ip = Arc::clone(&self.fetch_public_ip);
         std::thread::spawn(move || {
             let next_local_ip = detect_local_ip();
             if let Ok(mut current) = local_ip.lock() {
                 *current = next_local_ip;
             }
 
-            let next_public_ip = fetch_public_ip_from_api();
-            if let Ok(mut current) = public_ip.lock() {
-                *current = next_public_ip;
+            if public_ip_enabled && ip_generation.load(Ordering::SeqCst) == generation {
+                let next_public_ip = fetch_public_ip();
+                if ip_generation.load(Ordering::SeqCst) == generation {
+                    if let Ok(mut current) = public_ip.lock() {
+                        *current = next_public_ip;
+                    }
+                }
             }
             notify_update_subscribers(&update_subscribers);
             ip_refreshing.store(false, Ordering::SeqCst);
@@ -327,4 +375,135 @@ fn detect_local_ip() -> Option<String> {
     let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
     socket.connect("8.8.8.8:80").ok()?;
     socket.local_addr().ok().map(|addr| addr.ip().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use qingqi_plugin::{database::DatabaseService, dict_store::PluginDictStore};
+
+    use crate::settings::NetworkSpeedSettingsStore;
+
+    use super::*;
+
+    fn temp_store() -> NetworkSpeedSettingsStore {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("qingqi-tray-test-{nanos}"));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let paths = qingqi_plugin::storage::AppPaths::for_test(dir);
+        let database = DatabaseService::new(paths);
+        let dict = PluginDictStore::for_database(database, "test.db");
+        NetworkSpeedSettingsStore::new(dict)
+    }
+
+    fn counting_fetch(counter: &Arc<AtomicUsize>, result: Option<String>) -> FetchPublicIpFn {
+        let counter = Arc::clone(counter);
+        Arc::new(move || {
+            counter.fetch_add(1, Ordering::SeqCst);
+            result.clone()
+        })
+    }
+
+    fn make_service(
+        store: NetworkSpeedSettingsStore,
+        fetch: FetchPublicIpFn,
+    ) -> Arc<NetworkSpeedService> {
+        let plugin_id: qingqi_plugin::plugin::PluginId = "test".into();
+        Arc::new(NetworkSpeedService::with_fetch(plugin_id, store, fetch))
+    }
+
+    #[test]
+    fn default_and_old_config_disable_public_ip() {
+        let store = temp_store();
+
+        let default_settings = crate::settings::NetworkSpeedSettings::default();
+        assert!(!default_settings.public_ip_enabled);
+
+        let loaded = store.load().expect("load settings");
+        assert!(!loaded.public_ip_enabled);
+    }
+
+    #[test]
+    fn public_ip_disabled_does_not_call_fetch() {
+        let store = temp_store();
+        let counter = Arc::new(AtomicUsize::new(0));
+        let fetch = counting_fetch(&counter, Some("1.2.3.4".to_string()));
+        let service = make_service(store, fetch);
+
+        service.refresh_ip_cache_background();
+        std::thread::sleep(Duration::from_millis(200));
+
+        assert_eq!(counter.load(Ordering::SeqCst), 0);
+        assert!(service.public_ip().is_none());
+    }
+
+    #[test]
+    fn public_ip_enabled_triggers_fetch_once_and_respects_ip_refreshing() {
+        let store = temp_store();
+        store.set_public_ip_enabled(true).expect("enable public ip");
+
+        let counter = Arc::new(AtomicUsize::new(0));
+        let fetch = counting_fetch(&counter, Some("1.2.3.4".to_string()));
+        let service = make_service(store, fetch);
+
+        service.refresh_ip_cache_background();
+        service.refresh_ip_cache_background();
+        service.refresh_ip_cache_background();
+        std::thread::sleep(Duration::from_millis(200));
+
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+        assert_eq!(service.public_ip(), Some("1.2.3.4".to_string()));
+    }
+
+    #[test]
+    fn toggling_public_ip_enabled_clears_cache() {
+        let store = temp_store();
+        store.set_public_ip_enabled(true).expect("enable public ip");
+
+        let counter = Arc::new(AtomicUsize::new(0));
+        let fetch = counting_fetch(&counter, Some("5.6.7.8".to_string()));
+        let service = make_service(store, fetch);
+
+        service.refresh_ip_cache_background();
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(service.public_ip(), Some("5.6.7.8".to_string()));
+
+        service
+            .set_public_ip_enabled(false)
+            .expect("disable public ip");
+        assert!(service.public_ip().is_none());
+    }
+
+    #[test]
+    fn disabling_public_ip_discards_in_flight_result() {
+        let store = temp_store();
+        store.set_public_ip_enabled(true).expect("enable public ip");
+
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let release_rx = Arc::new(Mutex::new(release_rx));
+        let fetch: FetchPublicIpFn = Arc::new(move || {
+            started_tx.send(()).unwrap();
+            release_rx.lock().unwrap().recv().unwrap();
+            Some("9.8.7.6".to_string())
+        });
+        let service = make_service(store, fetch);
+
+        service.refresh_ip_cache_background();
+        started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        service
+            .set_public_ip_enabled(false)
+            .expect("disable public ip");
+        release_tx.send(()).unwrap();
+
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while service.ip_refreshing.load(Ordering::SeqCst) && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(service.public_ip().is_none());
+    }
 }

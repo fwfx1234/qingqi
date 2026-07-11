@@ -11,13 +11,13 @@ use std::{
 
 use gpui::{
     App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement, KeyDownEvent,
-    SharedString,
-    ParentElement, Render, ScrollStrategy, StatefulInteractiveElement, Styled, Subscription, Task,
-    UniformListScrollHandle, Window, div, prelude::FluentBuilder, px, size, uniform_list,
+    ParentElement, Render, ScrollStrategy, SharedString, StatefulInteractiveElement, Styled,
+    Subscription, Task, UniformListScrollHandle, Window, div, prelude::FluentBuilder, px, size,
+    uniform_list,
 };
+use qingqi_ui::components::input::{Escape, Input, InputState};
 use qingqi_ui::components::scroll::Scrollbar;
 use qingqi_ui::components::theme::Theme;
-use qingqi_ui::components::input::{Input, InputState};
 use qingqi_ui::{theme, ui};
 
 use crate::{
@@ -1136,6 +1136,12 @@ impl Render for Launcher {
             .flex()
             .flex_col()
             .overflow_hidden()
+            // Input registers Escape as an action, which stops normal key
+            // bubbling. Capture the action here so Esc still dismisses the
+            // launcher while the query field has focus.
+            .capture_action(cx.listener(|this, _: &Escape, window, cx| {
+                this.dismiss(window, cx);
+            }))
             .capture_key_down(cx.listener(Self::handle_launcher_key))
             .child(
                 div()

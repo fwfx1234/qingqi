@@ -7,15 +7,6 @@ use gpui::{
     px,
 };
 
-use qingqi_ui::components::styled::Disableable;
-use qingqi_ui::components::styled::Selectable;
-use qingqi_ui::components::button::{Button, ButtonVariants};
-use qingqi_ui::components::input::{Input, InputState};
-use qingqi_ui::components::sidebar::{Sidebar, SidebarMenu, SidebarMenuItem};
-use qingqi_ui::components::switch::Switch;
-use qingqi_ui::components::theme::Theme;
-use qingqi_ui::components::styled::Sizable;
-use qingqi_ui::components::styled::Size as ComponentSize;
 use qingqi_platform::macos::PermissionStatus;
 use qingqi_plugin::{
     app::AppIndexSnapshot,
@@ -24,6 +15,15 @@ use qingqi_plugin::{
     storage::AppPaths,
     theme::ThemeMode,
 };
+use qingqi_ui::components::button::{Button, ButtonVariants};
+use qingqi_ui::components::input::{Input, InputState};
+use qingqi_ui::components::sidebar::{Sidebar, SidebarMenu, SidebarMenuItem};
+use qingqi_ui::components::styled::Disableable;
+use qingqi_ui::components::styled::Selectable;
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size as ComponentSize;
+use qingqi_ui::components::switch::Switch;
+use qingqi_ui::components::theme::Theme;
 use qingqi_ui::{
     theme,
     ui::{self, components},

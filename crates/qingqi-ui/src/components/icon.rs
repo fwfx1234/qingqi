@@ -1,106 +1,150 @@
-//! Icon + IconName — local replacement for qingqi-ui::icon.
+//! Built-in, SVG-backed Lucide icons for GPUI.
 
-use super::styled::Size;
-use super::Sizable;
-use gpui::{Styled, App, IntoElement, RenderOnce, SharedString, Hsla, Window, svg};
+use super::{Sizable, styled::Size};
+use gpui::{
+    App, Hsla, IntoElement, Pixels, RenderOnce, SharedString, Styled, Window,
+    prelude::FluentBuilder, px, svg,
+};
 
-pub trait IconNamed { fn path(self) -> SharedString; }
+const DEFAULT_ICON_SIZE: Pixels = px(16.0);
 
-#[derive(Clone, Debug)]
-pub enum IconName {
-    ALargeSmall, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Asterisk, Bell, BookOpen, Bot,
-    Building2, Calendar, CaseSensitive, ChartPie, Check, ChevronDown, ChevronLeft, ChevronRight,
-    ChevronsUpDown, ChevronUp, CircleCheck, CircleUser, CircleX, Close, Copy, Dash, Delete,
-    Ellipsis, EllipsisVertical, ExternalLink, Eye, EyeOff, File, Folder, FolderClosed, FolderOpen,
-    Frame, GalleryVerticalEnd, GitHub, Globe, Heart, HeartOff, Inbox, Info, Inspector,
-    LayoutDashboard, Loader, LoaderCircle, Map, Maximize, Menu, Minimize, Minus, Moon, Palette,
-    PanelBottom, PanelLeft, PanelRight, Pencil, Phone, Play, Plus, Quote, Refresh, Regex, Settings2,
-    Replace, Search, Settings, Space, SquareTerminal, Star, StarOff, StopCircle, Sun, Terminal, Trash,
-    Undo, Upload, User, X, ZoomIn, ZoomOut,
-    TriangleAlert,
-}
-
-impl IconNamed for IconName {
-    fn path(self) -> SharedString {
-        let name = format!("{:?}", self).to_lowercase();
-        let converted = match name.as_str() {
-            "alargesmall" => "a-large-small",
-            "arrowdown" => "arrow-down", "arrowleft" => "arrow-left",
-            "arrowright" => "arrow-right", "arrowup" => "arrow-up",
-            "bookopen" => "book-open", "building2" => "building-2",
-            "casesensitive" => "case-sensitive", "chartpie" => "chart-pie",
-            "chevrondown" => "chevron-down", "chevronleft" => "chevron-left",
-            "chevronright" => "chevron-right", "chevronsupdown" => "chevrons-up-down",
-            "chevronup" => "chevron-up", "circlecheck" => "circle-check",
-            "circleuser" => "circle-user", "circlex" => "circle-x",
-            "ellipsisvertical" => "ellipsis-vertical", "externallink" => "external-link",
-            "eyeoff" => "eye-off", "eyeon" => "eye",
-            "folderclosed" => "folder-closed", "folderopen" => "folder-open",
-            "galleryverticalend" => "gallery-vertical-end", "github" => "github-root",
-            "heartoff" => "heart-off", "layoutdashboard" => "layout-dashboard",
-            "loadercircle" | "loader" => "loader",
-            "panelbottom" => "panel-bottom", "panelleft" => "panel-left",
-            "panelright" => "panel-right", "squareterminal" => "square-terminal",
-            "stopcircle" => "stop-circle",
-            "zoomin" => "zoom-in", "zoomout" => "zoom-out",
-            "refresh" => "refresh-cw",
-            _ => return kebab_from_camel(&name).into(),
-        };
-        SharedString::from(format!("icons/{}.svg", converted))
-    }
-}
-
-fn kebab_from_camel(s: &str) -> String {
-    let mut result = String::new();
-    for (i, c) in s.chars().enumerate() {
-        if c.is_ascii_uppercase() && i > 0 { result.push('-'); }
-        result.push(c.to_ascii_lowercase());
-    }
-    format!("icons/{}.svg", result)
-}
-
-impl IconNamed for &'static str {
-    fn path(self) -> SharedString {
-        SharedString::from(if self.starts_with("icons/") { self.to_string() } else { format!("icons/{}.svg", self) })
-    }
-}
-
-impl IconNamed for String {
-    fn path(self) -> SharedString {
-        SharedString::from(if self.starts_with("icons/") { self } else { format!("icons/{}.svg", self) })
-    }
-}
-
-#[derive(IntoElement, Clone)]
+#[derive(Clone, Debug, IntoElement)]
 pub struct Icon {
     path: SharedString,
-    size: Option<Size>,
+    size: Pixels,
     color: Option<Hsla>,
 }
 
 impl Icon {
-    pub fn new(name: impl IconNamed) -> Self { Self::build(name) }
-    pub fn build(named: impl IconNamed) -> Self { Self { path: named.path(), size: None, color: None } }
-    pub fn text_color(mut self, color: impl Into<Hsla>) -> Self { self.color = Some(color.into()); self }
-    pub fn size(mut self, size: impl Into<Size>) -> Self { self.size = Some(size.into()); self }
-}
+    #[doc(hidden)]
+    pub fn from_lucide_path(path: &'static str) -> Self {
+        Self {
+            path: path.into(),
+            size: DEFAULT_ICON_SIZE,
+            color: None,
+        }
+    }
 
-impl From<IconName> for Icon {
-    fn from(name: IconName) -> Self { Self::new(name) }
+    pub fn size(mut self, size: Pixels) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn color(mut self, color: impl Into<Hsla>) -> Self {
+        self.color = Some(color.into());
+        self
+    }
+
+    pub fn text_color(self, color: impl Into<Hsla>) -> Self {
+        self.color(color)
+    }
+
+    pub fn asset_path(&self) -> &str {
+        self.path.as_ref()
+    }
 }
 
 impl Sizable for Icon {
-    fn with_size(mut self, size: impl Into<Size>) -> Self { self.size = Some(size.into()); self }
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = match size.into() {
+            Size::Size(size) => size,
+            Size::XSmall => px(12.0),
+            Size::Small => px(14.0),
+            Size::Medium => DEFAULT_ICON_SIZE,
+            Size::Large => px(20.0),
+        };
+        self
+    }
 }
 
 impl RenderOnce for Icon {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let size_px = match self.size {
-            Some(Size::Size(p)) => p / gpui::px(1.0),
-            _ => 16.0,
-        };
-        let svg_el = svg().path(self.path.clone()).flex_none();
-        let sized = svg_el.w(gpui::px(size_px)).h(gpui::px(size_px));
-        if let Some(color) = self.color { sized.text_color(color) } else { sized }
+        svg()
+            .path(self.path)
+            .flex_none()
+            .size(self.size)
+            .when_some(self.color, |icon, color| icon.text_color(color))
+    }
+}
+
+#[macro_export]
+macro_rules! icon {
+    ($name:ident) => {
+        $crate::components::Icon::from_lucide_path($crate::__private::lucide_path!($name))
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn constructors_use_lucide_namespace() {
+        assert_eq!(crate::icon!(search).asset_path(), "lucide/search.svg");
+        assert_eq!(
+            crate::icon!(folder_open).asset_path(),
+            "lucide/folder-open.svg"
+        );
+        assert_eq!(
+            crate::icon!(triangle_alert).asset_path(),
+            "lucide/triangle-alert.svg"
+        );
+        assert_eq!(crate::icon!(search).size, DEFAULT_ICON_SIZE);
+        assert!(crate::icon!(search).color.is_none());
+
+        let color = gpui::hsla(0.5, 0.8, 0.4, 1.0);
+        let icon = crate::icon!(search).size(px(24.0)).color(color);
+        assert_eq!(icon.size, px(24.0));
+        assert_eq!(icon.color, Some(color));
+    }
+
+    #[test]
+    fn every_generated_lucide_asset_is_loadable_and_tintable() {
+        let paths = crate::assets::lucide_paths().collect::<Vec<_>>();
+        assert!(paths.len() > 1_000, "expected the complete Lucide set");
+
+        for path in paths {
+            use gpui::AssetSource as _;
+
+            let bytes = crate::assets::ProjectAssets
+                .load(&path)
+                .expect("ProjectAssets loads without error")
+                .expect("generated Lucide path is embedded");
+            let svg = std::str::from_utf8(&bytes).expect("Lucide SVG is UTF-8");
+            assert!(
+                svg.contains("viewBox=\"0 0 24 24\""),
+                "invalid viewBox: {path}"
+            );
+            assert!(
+                svg.contains("currentColor"),
+                "icon cannot be tinted: {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn embedded_assets_match_the_committed_icon_manifest() {
+        use gpui::AssetSource as _;
+        use std::collections::BTreeSet;
+
+        let embedded = crate::assets::lucide_paths()
+            .map(|path| {
+                path.strip_prefix("lucide/")
+                    .expect("Lucide path uses namespace")
+                    .strip_suffix(".svg")
+                    .expect("Lucide asset is SVG")
+                    .to_string()
+            })
+            .collect::<BTreeSet<_>>();
+        let manifest = include_str!("../../assets/lucide-icons.txt")
+            .lines()
+            .map(str::to_owned)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(embedded, manifest);
+
+        let listed = crate::assets::ProjectAssets
+            .list("lucide")
+            .expect("Lucide namespace can be listed");
+        assert_eq!(listed.len(), embedded.len());
     }
 }

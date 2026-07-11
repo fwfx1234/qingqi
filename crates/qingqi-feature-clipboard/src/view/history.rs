@@ -2,13 +2,12 @@ use super::*;
 use std::sync::Arc;
 
 use gpui::{UniformListScrollHandle, hsla, uniform_list};
-use qingqi_ui::components::icon::Icon;
-use qingqi_ui::components::icon::IconName;
+use qingqi_ui::components::button::{Button, ButtonVariants};
+use qingqi_ui::components::scroll::{Scrollbar, ScrollbarShow};
 use qingqi_ui::components::styled::Sizable;
 use qingqi_ui::components::styled::Size as ComponentSize;
-use qingqi_ui::components::button::{Button, ButtonCustomVariant, ButtonVariants};
-use qingqi_ui::components::scroll::{Scrollbar, ScrollbarShow};
 use qingqi_ui::components::theme::Theme;
+use qingqi_ui::icon;
 
 pub(super) fn keyboard_filters() -> [ClipboardFilter; 5] {
     [
@@ -71,7 +70,7 @@ pub(super) fn search_field(query_input: Entity<InputState>, cx: &App) -> gpui::D
         .items_center()
         .gap(px(6.0))
         .child(
-            Icon::new(IconName::Search)
+            icon!(search)
                 .with_size(ComponentSize::Small)
                 .text_color(t.muted_foreground),
         )
@@ -165,28 +164,29 @@ pub(super) fn preview_panel(
                         .child(div().flex_1())
                         .child({
                             let panel_toggle = panel.clone();
-                            let (icon, tooltip) = if wrap_enabled {
-                                (IconName::CaseSensitive, "关闭自动换行")
-                            } else {
-                                (IconName::ALargeSmall, "开启自动换行")
-                            };
-                            Button::new("clipboard-preview-toggle-wrap")
-                                .icon(icon)
-                                .tooltip(tooltip)
-                                .compact()
-                                .with_size(ComponentSize::Small)
-                                .custom(
-                                    ButtonCustomVariant::new(cx)
-                                        .color(t.transparent)
-                                        .foreground(t.muted_foreground)
-                                        .hover(t.list_hover)
-                                        .active(t.secondary_active),
-                                )
+                            div()
+                                .id("clipboard-preview-toggle-wrap")
+                                .size(px(24.0))
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(px(4.0))
+                                .text_color(t.muted_foreground)
+                                .bg(if wrap_enabled {
+                                    t.secondary_active
+                                } else {
+                                    t.transparent
+                                })
+                                .hover(move |this| this.bg(t.list_hover))
+                                .active(move |this| this.bg(t.secondary_active))
+                                .cursor_pointer()
                                 .on_click(move |_event, window, cx| {
                                     panel_toggle.update(cx, |panel, cx| {
                                         panel.toggle_preview_wrap(window, cx);
                                     });
                                 })
+                                .child(icon!(wrap_text).size(px(16.0)).color(t.muted_foreground))
                         })
                         .child(if item.pinned {
                             div()
@@ -197,13 +197,11 @@ pub(super) fn preview_panel(
                                 .text_color(ui::accent_color(
                                     qingqi_plugin::plugin_spec::PluginAccent::Blue,
                                 ))
-                                .child(
-                                    Icon::new(IconName::Star)
-                                        .with_size(ComponentSize::Small)
-                                        .text_color(ui::accent_color(
-                                            qingqi_plugin::plugin_spec::PluginAccent::Blue,
-                                        )),
-                                )
+                                .child(icon!(star).with_size(ComponentSize::Small).text_color(
+                                    ui::accent_color(
+                                        qingqi_plugin::plugin_spec::PluginAccent::Blue,
+                                    ),
+                                ))
                                 .child("已置顶")
                                 .into_any_element()
                         } else {
@@ -393,7 +391,7 @@ fn empty_state_text(query: &str, cx: &App, is_empty: bool) -> impl IntoElement {
         .justify_center()
         .gap(px(8.0))
         .child(
-            Icon::new(IconName::Copy)
+            icon!(copy)
                 .with_size(ComponentSize::Large)
                 .text_color(t.muted_foreground),
         )
@@ -512,7 +510,7 @@ fn history_row(
                                 .child(title),
                         )
                         .children(pinned.then(|| {
-                            Icon::new(IconName::Star)
+                            icon!(star)
                                 .with_size(ComponentSize::Small)
                                 .text_color(ui::accent_color(
                                     qingqi_plugin::plugin_spec::PluginAccent::Blue,
@@ -535,11 +533,7 @@ fn history_row(
                 .gap(px(2.0))
                 .child(
                     Button::new(("clipboard-row-pin", index))
-                        .icon(if pinned {
-                            IconName::Star
-                        } else {
-                            IconName::StarOff
-                        })
+                        .icon(if pinned { icon!(star) } else { icon!(star_off) })
                         .tooltip(if pinned { "取消置顶" } else { "置顶" })
                         .ghost()
                         .with_size(ComponentSize::Small)
@@ -555,7 +549,7 @@ fn history_row(
                 )
                 .child(
                     Button::new(("clipboard-row-delete", index))
-                        .icon(IconName::Delete)
+                        .icon(icon!(trash_2))
                         .tooltip("删除")
                         .ghost()
                         .with_size(ComponentSize::Small)
@@ -761,7 +755,7 @@ fn preview_empty(cx: &App) -> impl IntoElement {
         .flex_col()
         .gap(px(10.0))
         .child(
-            Icon::new(IconName::Copy)
+            icon!(copy)
                 .with_size(ComponentSize::Large)
                 .text_color(t.muted_foreground),
         )

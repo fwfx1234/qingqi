@@ -1,7 +1,7 @@
 use gpui::ElementId;
+use qingqi_ui::components::button::Button;
 use qingqi_ui::components::styled::Sizable;
 use qingqi_ui::components::styled::Size;
-use qingqi_ui::components::button::Button;
 use qingqi_ui::components::switch::Switch;
 
 use super::*;

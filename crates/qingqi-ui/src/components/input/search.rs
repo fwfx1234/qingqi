@@ -4,14 +4,16 @@ use std::ops::Range;
 use std::rc::Rc;
 
 use aho_corasick::AhoCorasick;
-use gpui::{App, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Pixels, Render, Styled, Subscription, Window, actions, div, prelude::FluentBuilder as _};
+use gpui::{App, Entity, KeyBinding};
 use ropey::Rope;
 
-use crate::token::tokens;
+use super::{InputState, SelectUp};
 
-use super::{Input, InputState};
+pub(super) const CONTEXT: &str = "QingqiSearchPanel";
 
-const CONTEXT: &str = "SearchPanel";
+pub(super) fn init(cx: &mut App) {
+    cx.bind_keys([KeyBinding::new("shift-enter", SelectUp, Some(CONTEXT))]);
+}
 
 #[derive(Debug, Clone)]
 pub struct SearchMatcher {
@@ -19,7 +21,7 @@ pub struct SearchMatcher {
     pub query: Option<AhoCorasick>,
     pub matched_ranges: Rc<Vec<Range<usize>>>,
     pub current_match_ix: usize,
-    replacing: bool,
+    pub(crate) replacing: bool,
 }
 
 impl SearchMatcher {
@@ -79,14 +81,14 @@ impl SearchMatcher {
         self.matched_ranges.is_empty()
     }
 
-    fn label(&self) -> String {
+    pub(crate) fn label(&self) -> String {
         if self.len() == 0 {
             return "0/0".to_string();
         }
         format!("{}/{}", self.current_match_ix + 1, self.len())
     }
 
-    fn update_cursor_by_offset(&mut self, offset: usize) {
+    pub(crate) fn update_cursor_by_offset(&mut self, offset: usize) {
         for (ix, range) in self.matched_ranges.iter().enumerate() {
             self.current_match_ix = ix;
             if range.contains(&offset) || range.end >= offset {
@@ -125,30 +127,37 @@ impl DoubleEndedIterator for SearchMatcher {
     }
 }
 
-pub(super) struct SearchPanel {
+pub(crate) struct SearchPanel {
     pub open: bool,
     pub case_insensitive: bool,
     pub replace_mode: bool,
-    pub matcher: SearchMatcher,
+    pub query_input: Entity<InputState>,
+    pub replace_input: Entity<InputState>,
 }
 
-impl Default for SearchPanel {
-    fn default() -> Self {
+impl SearchPanel {
+    pub fn new(query_input: Entity<InputState>, replace_input: Entity<InputState>) -> Self {
         Self {
-            open: false,
+            open: true,
             case_insensitive: true,
             replace_mode: false,
-            matcher: SearchMatcher::new(),
+            query_input,
+            replace_input,
         }
     }
 }
 
-impl SearchPanel {
-    pub fn next(&mut self) {
-        self.matcher.next();
-    }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    pub fn prev(&mut self) {
-        self.matcher.next_back();
+    #[test]
+    fn matcher_handles_unicode_ranges_and_case() {
+        let mut matcher = SearchMatcher::new();
+        matcher.update(&Rope::from("Hello 世界 hello"));
+        matcher.update_query("hello", true);
+        assert_eq!(&*matcher.matched_ranges, &[0..5, 13..18]);
+        matcher.update_query("世界", false);
+        assert_eq!(&*matcher.matched_ranges, &[6..12]);
     }
 }

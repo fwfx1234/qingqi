@@ -8,9 +8,11 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-gpui.workspace = true
+gpui = { workspace = true, features = ["test-support"] }
+image.workspace = true
 qingqi-plugin = { path = "../qingqi-plugin" }
 qingqi-ui = { path = "../qingqi-ui" }
+rfd.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

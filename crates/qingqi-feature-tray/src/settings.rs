@@ -14,6 +14,7 @@ const KEY_POPUP_HEIGHT: &str = "popup_height";
 const KEY_SHOW_TOTALS: &str = "show_totals";
 const KEY_SHOW_INTERFACES: &str = "show_interfaces";
 const KEY_MAX_INTERFACES: &str = "max_interfaces";
+const KEY_PUBLIC_IP_ENABLED: &str = "public_ip_enabled";
 
 const DEFAULT_UPDATE_INTERVAL_MS: u64 = 1000;
 const MIN_UPDATE_INTERVAL_MS: u64 = 500;
@@ -97,6 +98,7 @@ pub struct NetworkSpeedSettings {
     pub network_speed_show_totals: bool,
     pub network_speed_show_interfaces: bool,
     pub network_speed_max_interfaces: u8,
+    pub public_ip_enabled: bool,
 }
 
 impl Default for NetworkSpeedSettings {
@@ -111,6 +113,7 @@ impl Default for NetworkSpeedSettings {
             network_speed_show_totals: true,
             network_speed_show_interfaces: true,
             network_speed_max_interfaces: 5,
+            public_ip_enabled: false,
         }
     }
 }
@@ -206,6 +209,10 @@ impl NetworkSpeedSettingsStore {
                 .get_u64(SETTINGS_NAMESPACE, KEY_MAX_INTERFACES)?
                 .and_then(|value| u8::try_from(value).ok())
                 .unwrap_or(defaults.network_speed_max_interfaces),
+            public_ip_enabled: self
+                .dict
+                .get_bool(SETTINGS_NAMESPACE, KEY_PUBLIC_IP_ENABLED)?
+                .unwrap_or(defaults.public_ip_enabled),
         }
         .sanitized())
     }
@@ -256,6 +263,11 @@ impl NetworkSpeedSettingsStore {
             SETTINGS_NAMESPACE,
             KEY_MAX_INTERFACES,
             settings.network_speed_max_interfaces as u64,
+        )?;
+        self.dict.set_bool(
+            SETTINGS_NAMESPACE,
+            KEY_PUBLIC_IP_ENABLED,
+            settings.public_ip_enabled,
         )?;
         Ok(settings)
     }
@@ -314,5 +326,9 @@ impl NetworkSpeedSettingsStore {
         max_interfaces: u8,
     ) -> Result<NetworkSpeedSettings> {
         self.update(|settings| settings.network_speed_max_interfaces = max_interfaces)
+    }
+
+    pub fn set_public_ip_enabled(&self, enabled: bool) -> Result<NetworkSpeedSettings> {
+        self.update(|settings| settings.public_ip_enabled = enabled)
     }
 }

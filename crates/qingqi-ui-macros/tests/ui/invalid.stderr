@@ -1,0 +1,5 @@
+error: unknown Lucide icon `serach`
+ --> tests/ui/invalid.rs:4:26
+  |
+4 |     let _ = lucide_path!(serach);
+  |                          ^^^^^^

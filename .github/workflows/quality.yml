@@ -1,0 +1,129 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    name: Format (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        run: rustup show
+
+      - name: Fmt check
+        run: cargo fmt --all -- --check
+
+  check-linux:
+    name: Check (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        run: rustup show
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+            target
+          key: ubuntu-${{ runner.arch }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ubuntu-${{ runner.arch }}-cargo-
+
+      - name: Check
+        run: cargo check --workspace --all-targets --locked
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+  check-macos:
+    name: Check (macos-latest)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        run: rustup show
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+            target
+          key: macos-${{ runner.arch }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            macos-${{ runner.arch }}-cargo-
+
+      - name: Check
+        run: cargo check --workspace --all-targets --locked
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+  check-windows:
+    name: Check (windows-latest)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        run: rustup show
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+            target
+          key: windows-x86_64-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            windows-x86_64-cargo-
+
+      - name: Configure GPUI shader compiler
+        shell: pwsh
+        run: |
+          $fxc = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Filter fxc.exe -Recurse |
+            Where-Object { $_.FullName -match "\\x64\\fxc\.exe$" } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $fxc) {
+            throw "fxc.exe not found in Windows SDK"
+          }
+          "GPUI_FXC_PATH=$fxc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Check
+        run: cargo check --workspace --all-targets --locked
+
+      - name: Test
+        run: cargo test --workspace --locked

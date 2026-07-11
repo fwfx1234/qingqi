@@ -15,7 +15,9 @@ pub struct ThemeService {
 }
 
 impl ThemeService {
-    pub fn new(themes_dir: PathBuf) -> Self { Self { themes_dir } }
+    pub fn new(themes_dir: PathBuf) -> Self {
+        Self { themes_dir }
+    }
 
     fn seed_builtin_themes(&self) -> Result<()> {
         fs::create_dir_all(&self.themes_dir)?;
@@ -44,11 +46,15 @@ impl ThemeService {
         ];
         for (name, content) in builtins {
             let path = self.themes_dir.join(format!("{name}.json"));
-            if !path.exists() { fs::write(&path, *content)?; }
+            if !path.exists() {
+                fs::write(&path, *content)?;
+            }
             // also parse and cache
             let parsed = theme_loader::load_theme_file(content);
             if let Ok(mut cache) = THEME_CACHE.lock() {
-                for (n, t) in parsed { cache.insert(n, t); }
+                for (n, t) in parsed {
+                    cache.insert(n, t);
+                }
             }
         }
         Ok(())
@@ -64,7 +70,9 @@ impl ThemeService {
                     if let Ok(content) = fs::read_to_string(entry.path()) {
                         let parsed = theme_loader::load_theme_file(&content);
                         if let Ok(mut cache) = THEME_CACHE.lock() {
-                            for (n, t) in parsed { cache.insert(n, t); }
+                            for (n, t) in parsed {
+                                cache.insert(n, t);
+                            }
                         }
                     }
                 }
@@ -79,9 +87,14 @@ impl ThemeService {
     pub fn theme_names(&self) -> Vec<String> {
         let names = if let Ok(cache) = THEME_CACHE.lock() {
             theme_loader::list_base_names(
-                &cache.iter().map(|(k, v)| (k.clone(), v.clone())).collect::<Vec<_>>()
+                &cache
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect::<Vec<_>>(),
             )
-        } else { Vec::new() };
+        } else {
+            Vec::new()
+        };
         names
     }
 
@@ -95,13 +108,20 @@ impl ThemeService {
             ),
         };
 
-        let variant_name = format!("{} {}", theme_name, if effective_dark { "Dark" } else { "Light" });
+        let variant_name = format!(
+            "{} {}",
+            theme_name,
+            if effective_dark { "Dark" } else { "Light" }
+        );
 
         let token = if let Ok(cache) = THEME_CACHE.lock() {
-            cache.get(&variant_name)
+            cache
+                .get(&variant_name)
                 .or_else(|| cache.get(theme_name))
                 .cloned()
-        } else { None };
+        } else {
+            None
+        };
 
         if let Some(token) = token {
             apply_custom_token(token, cx);

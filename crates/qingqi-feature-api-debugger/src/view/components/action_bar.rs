@@ -4,15 +4,13 @@ use super::shared::circle_badge;
 use crate::service::{ApiEnvironment, ApiRequest, HttpMethod};
 use crate::view::ApiDebuggerView;
 use gpui::{App, Entity, InteractiveElement, IntoElement, ParentElement, Styled, div, px};
-use qingqi_ui::layer::popover::Popover;
-use qingqi_ui::components::theme::Theme;
-use qingqi_ui::components::icon::Icon;
-use qingqi_ui::components::icon::IconName;
-use qingqi_ui::components::styled::Sizable;
-use qingqi_ui::components::styled::Size;
 use qingqi_ui::components::button::{Button, ButtonVariants};
 use qingqi_ui::components::input::{Input, InputState};
-use qingqi_ui::{theme, ui, ui::glass};
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size;
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::layer::popover::Popover;
+use qingqi_ui::{icon, theme, ui, ui::glass};
 
 pub fn action_bar(
     view: Entity<ApiDebuggerView>,
@@ -74,11 +72,7 @@ pub fn action_bar(
                                         .flex_1()
                                         .child(current.label()),
                                 )
-                                .child(
-                                    Icon::new(IconName::ChevronDown)
-                                        .size(px(10.0))
-                                        .text_color(method_color),
-                                ),
+                                .child(icon!(chevron_down).size(px(10.0)).text_color(method_color)),
                         )
                 })
                 .content(move |_state, _window, _cx| {
@@ -195,7 +189,7 @@ pub fn action_bar(
                                         .child(selected_env.name.clone()),
                                 )
                                 .child(
-                                    Icon::new(IconName::ChevronDown)
+                                    icon!(chevron_down)
                                         .size(px(10.0))
                                         .text_color(ui::text_secondary(cx)),
                                 ),
@@ -278,7 +272,7 @@ pub fn action_bar(
         } else {
             Button::new("api-send-btn")
                 .primary()
-                .icon(IconName::ArrowRight)
+                .icon(icon!(arrow_right))
                 .label("发送")
                 .with_size(Size::Small)
                 .on_click({

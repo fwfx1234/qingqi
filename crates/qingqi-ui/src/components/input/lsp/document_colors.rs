@@ -1,12 +1,9 @@
 //! Document color provider trait.
 
 use anyhow::Result;
-use gpui::{App, Context, Hsla, Task, Window};
+use gpui::{App, Task, Window};
 use lsp_types::ColorInformation;
 use ropey::Rope;
-use std::rc::Rc;
-
-use crate::components::input::InputState;
 
 pub trait DocumentColorProvider {
     fn document_colors(

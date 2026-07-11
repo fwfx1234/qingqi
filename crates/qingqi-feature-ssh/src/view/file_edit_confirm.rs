@@ -2,8 +2,8 @@
 
 use gpui::prelude::*;
 use gpui::*;
-use qingqi_ui::components::styled::Sizable;
 use qingqi_ui::components::button::{Button, ButtonVariants};
+use qingqi_ui::components::styled::Sizable;
 use qingqi_ui::components::theme::Theme;
 use qingqi_ui::ui;
 use qingqi_ui::ui::glass;

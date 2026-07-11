@@ -3,8 +3,8 @@
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use gpui::{
-    prelude::*, App, Context, FocusHandle, IntoElement, ParentElement, Render,
-    SharedString, Window, div, uniform_list,
+    App, Context, FocusHandle, IntoElement, ParentElement, Render, SharedString, Window, div,
+    prelude::*, uniform_list,
 };
 
 use super::list::ListItem;
@@ -18,24 +18,48 @@ pub struct TreeItem {
     state: Rc<RefCell<TreeItemState>>,
 }
 
-struct TreeItemState { expanded: bool, disabled: bool }
+struct TreeItemState {
+    expanded: bool,
+    disabled: bool,
+}
 
 impl TreeItem {
     pub fn new(id: impl Into<SharedString>, label: impl Into<SharedString>) -> Self {
         Self {
-            id: id.into(), label: label.into(), children: Vec::new(),
-            state: Rc::new(RefCell::new(TreeItemState { expanded: false, disabled: false })),
+            id: id.into(),
+            label: label.into(),
+            children: Vec::new(),
+            state: Rc::new(RefCell::new(TreeItemState {
+                expanded: false,
+                disabled: false,
+            })),
         }
     }
-    pub fn child(mut self, child: TreeItem) -> Self { self.children.push(child); self }
-    pub fn children(mut self, children: impl IntoIterator<Item = TreeItem>) -> Self {
-        self.children.extend(children); self
+    pub fn child(mut self, child: TreeItem) -> Self {
+        self.children.push(child);
+        self
     }
-    pub fn expanded(self, expanded: bool) -> Self { self.state.borrow_mut().expanded = expanded; self }
-    pub fn disabled(self, disabled: bool) -> Self { self.state.borrow_mut().disabled = disabled; self }
-    pub fn is_folder(&self) -> bool { self.children.len() > 0 }
-    pub fn is_disabled(&self) -> bool { self.state.borrow().disabled }
-    pub fn is_expanded(&self) -> bool { self.state.borrow().expanded }
+    pub fn children(mut self, children: impl IntoIterator<Item = TreeItem>) -> Self {
+        self.children.extend(children);
+        self
+    }
+    pub fn expanded(self, expanded: bool) -> Self {
+        self.state.borrow_mut().expanded = expanded;
+        self
+    }
+    pub fn disabled(self, disabled: bool) -> Self {
+        self.state.borrow_mut().disabled = disabled;
+        self
+    }
+    pub fn is_folder(&self) -> bool {
+        self.children.len() > 0
+    }
+    pub fn is_disabled(&self) -> bool {
+        self.state.borrow().disabled
+    }
+    pub fn is_expanded(&self) -> bool {
+        self.state.borrow().expanded
+    }
 }
 
 #[derive(Clone)]
@@ -45,17 +69,32 @@ pub struct TreeEntry {
 }
 
 impl TreeEntry {
-    pub fn item(&self) -> &TreeItem { &self.item }
-    pub fn depth(&self) -> usize { self.depth }
-    pub fn is_folder(&self) -> bool { self.item.is_folder() }
-    pub fn is_expanded(&self) -> bool { self.item.is_expanded() }
-    pub fn is_disabled(&self) -> bool { self.item.is_disabled() }
+    pub fn item(&self) -> &TreeItem {
+        &self.item
+    }
+    pub fn depth(&self) -> usize {
+        self.depth
+    }
+    pub fn is_folder(&self) -> bool {
+        self.item.is_folder()
+    }
+    pub fn is_expanded(&self) -> bool {
+        self.item.is_expanded()
+    }
+    pub fn is_disabled(&self) -> bool {
+        self.item.is_disabled()
+    }
 }
 
 fn flatten(items: &[TreeItem], depth: usize, out: &mut Vec<TreeEntry>) {
     for item in items {
-        out.push(TreeEntry { item: item.clone(), depth });
-        if item.is_expanded() { flatten(&item.children, depth + 1, out); }
+        out.push(TreeEntry {
+            item: item.clone(),
+            depth,
+        });
+        if item.is_expanded() {
+            flatten(&item.children, depth + 1, out);
+        }
     }
 }
 
@@ -63,7 +102,8 @@ pub struct TreeState {
     _focus_handle: FocusHandle,
     entries: Vec<TreeEntry>,
     selected_ix: Option<usize>,
-    render_item_cell: Rc<RefCell<Option<Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem>>>>,
+    render_item_cell:
+        Rc<RefCell<Option<Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem>>>>,
 }
 
 impl TreeState {
@@ -95,7 +135,9 @@ impl TreeState {
     }
 
     pub(crate) fn attach_renderer<F>(&self, f: F)
-    where F: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem + 'static {
+    where
+        F: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem + 'static,
+    {
         *self.render_item_cell.borrow_mut() = Some(Rc::new(f));
     }
 
@@ -124,7 +166,8 @@ impl Render for TreeState {
                     let (entries_snapshot, selected) = {
                         let st = entity.read(cx);
                         // We only clone the entries in the visible range
-                        let visible_entries: Vec<TreeEntry> = visible_range.clone()
+                        let visible_entries: Vec<TreeEntry> = visible_range
+                            .clone()
                             .map(|ix| st.entries[ix].clone())
                             .collect();
                         (visible_entries, st.selected_ix)
@@ -152,9 +195,13 @@ impl Render for TreeState {
 }
 
 pub fn tree<R>(state: &gpui::Entity<TreeState>, render_item: R) -> Tree
-where R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem + 'static,
+where
+    R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem + 'static,
 {
-    Tree { entity: state.clone(), _render_item: Rc::new(render_item) }
+    Tree {
+        entity: state.clone(),
+        _render_item: Rc::new(render_item),
+    }
 }
 
 pub struct Tree {
@@ -165,7 +212,10 @@ pub struct Tree {
 impl IntoElement for Tree {
     type Element = gpui::AnyElement;
     fn into_element(self) -> Self::Element {
-        div().id("tree").child(self.entity.clone()).into_any_element()
+        div()
+            .id("tree")
+            .child(self.entity.clone())
+            .into_any_element()
     }
 }
 

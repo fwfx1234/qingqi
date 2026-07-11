@@ -5,12 +5,11 @@ use gpui::{
     App, Entity, InteractiveElement, IntoElement, MouseButton, ParentElement,
     StatefulInteractiveElement, Styled, div, prelude::FluentBuilder, px,
 };
-use qingqi_ui::components::theme::Theme;
-use qingqi_ui::components::icon::IconName;
+use qingqi_ui::components::button::{Button, ButtonVariants};
 use qingqi_ui::components::styled::Sizable;
 use qingqi_ui::components::styled::Size;
-use qingqi_ui::components::button::{Button, ButtonVariants};
-use qingqi_ui::{theme, ui};
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::{icon, theme, ui};
 
 pub fn context_menu_overlay(
     view: Entity<ApiDebuggerView>,
@@ -64,9 +63,9 @@ pub fn context_menu_overlay(
 
 fn menu_header(title: String, kind: MenuKind, cx: &App) -> impl IntoElement {
     let icon = match kind {
-        MenuKind::Folder => IconName::Folder,
-        MenuKind::Request => IconName::SquareTerminal,
-        MenuKind::Scenario => IconName::SquareTerminal,
+        MenuKind::Folder => icon!(folder),
+        MenuKind::Request => icon!(square_terminal),
+        MenuKind::Scenario => icon!(square_terminal),
     };
     div()
         .px(px(12.0))

@@ -156,7 +156,7 @@ pub fn kv_input(
     value: &str,
     placeholder: &str,
 ) -> Entity<InputState> {
-    input_state(window, cx, value, placeholder, false)
+    input_state(window, cx, value, placeholder, false, false)
 }
 
 pub fn single_input(
@@ -165,7 +165,16 @@ pub fn single_input(
     value: &str,
     placeholder: &str,
 ) -> Entity<InputState> {
-    input_state(window, cx, value, placeholder, false)
+    input_state(window, cx, value, placeholder, false, false)
+}
+
+pub fn masked_single_input(
+    window: &mut Window,
+    cx: &mut App,
+    value: &str,
+    placeholder: &str,
+) -> Entity<InputState> {
+    input_state(window, cx, value, placeholder, false, true)
 }
 
 pub fn multiline_input(
@@ -174,7 +183,7 @@ pub fn multiline_input(
     value: &str,
     placeholder: &str,
 ) -> Entity<InputState> {
-    input_state(window, cx, value, placeholder, true)
+    input_state(window, cx, value, placeholder, true, false)
 }
 
 fn input_state(
@@ -183,6 +192,7 @@ fn input_state(
     value: &str,
     placeholder: &str,
     multiline: bool,
+    masked: bool,
 ) -> Entity<InputState> {
     let value = value.to_string();
     let placeholder = placeholder.to_string();
@@ -197,6 +207,9 @@ fn input_state(
         };
         input.set_placeholder(placeholder.clone(), window, cx);
         input.reset_value(value.clone(), cx);
+        if masked {
+            input.set_masked(true, window, cx);
+        }
         input
     })
 }
@@ -355,5 +368,126 @@ pub fn sample_response() -> ApiResponse {
         curl: String::new(),
         logs: vec![String::from("尚未发送请求")],
         assertion_results: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::{App, TestAppContext};
+
+    use super::*;
+
+    fn build_auth_probe(
+        bearer_val: &str,
+        user_val: &str,
+        pass_val: &str,
+        name_val: &str,
+        value_val: &str,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> AuthInputProbe {
+        AuthInputProbe {
+            bearer: masked_single_input(window, cx, bearer_val, "Token"),
+            basic_user: single_input(window, cx, user_val, "用户名"),
+            basic_pass: masked_single_input(window, cx, pass_val, "密码"),
+            apikey_name: single_input(window, cx, name_val, "Key"),
+            apikey_value: masked_single_input(window, cx, value_val, "Value"),
+        }
+    }
+
+    struct AuthInputProbe {
+        bearer: Entity<InputState>,
+        basic_user: Entity<InputState>,
+        basic_pass: Entity<InputState>,
+        apikey_name: Entity<InputState>,
+        apikey_value: Entity<InputState>,
+    }
+
+    #[gpui::test]
+    fn auth_secret_fields_are_masked(cx: &mut TestAppContext) {
+        let window_cx = cx.add_empty_window();
+        let probe = window_cx.update(|window, cx| {
+            build_auth_probe(
+                "tok-secret",
+                "alice",
+                "pw-secret",
+                "X-API-Key",
+                "val-secret",
+                window,
+                cx,
+            )
+        });
+
+        window_cx.read(|cx| {
+            assert!(
+                probe.bearer.read(cx).is_masked(),
+                "bearer token must be masked"
+            );
+            assert!(
+                !probe.basic_user.read(cx).is_masked(),
+                "basic user must remain plaintext"
+            );
+            assert!(
+                probe.basic_pass.read(cx).is_masked(),
+                "basic password must be masked"
+            );
+            assert!(
+                !probe.apikey_name.read(cx).is_masked(),
+                "apikey name must remain plaintext"
+            );
+            assert!(
+                probe.apikey_value.read(cx).is_masked(),
+                "apikey value must be masked"
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn masked_fields_preserve_value(cx: &mut TestAppContext) {
+        let window_cx = cx.add_empty_window();
+        let probe = window_cx.update(|window, cx| {
+            build_auth_probe("tok-123", "bob", "pw-456", "X-Key", "val-789", window, cx)
+        });
+
+        window_cx.read(|cx| {
+            assert_eq!(probe.bearer.read(cx).value().as_ref(), "tok-123");
+            assert_eq!(probe.basic_pass.read(cx).value().as_ref(), "pw-456");
+            assert_eq!(probe.apikey_value.read(cx).value().as_ref(), "val-789");
+        });
+    }
+
+    #[gpui::test]
+    fn masked_state_survives_reset_value(cx: &mut TestAppContext) {
+        let window_cx = cx.add_empty_window();
+        let probe = window_cx
+            .update(|window, cx| build_auth_probe("tok-a", "u", "p", "k", "v", window, cx));
+
+        let bearer = probe.bearer.clone();
+        let pass = probe.basic_pass.clone();
+        let value = probe.apikey_value.clone();
+
+        window_cx.update(|_window, cx| {
+            bearer.update(cx, |input, cx| input.reset_value("tok-new", cx));
+            pass.update(cx, |input, cx| input.reset_value("pw-new", cx));
+            value.update(cx, |input, cx| input.reset_value("val-new", cx));
+        });
+
+        window_cx.read(|cx| {
+            assert!(
+                bearer.read(cx).is_masked(),
+                "bearer stays masked after reset"
+            );
+            assert_eq!(bearer.read(cx).value().as_ref(), "tok-new");
+            assert!(
+                pass.read(cx).is_masked(),
+                "basic pass stays masked after reset"
+            );
+            assert_eq!(pass.read(cx).value().as_ref(), "pw-new");
+            assert!(
+                value.read(cx).is_masked(),
+                "apikey value stays masked after reset"
+            );
+            assert_eq!(value.read(cx).value().as_ref(), "val-new");
+        });
     }
 }

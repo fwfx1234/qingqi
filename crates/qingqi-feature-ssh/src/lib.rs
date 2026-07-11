@@ -1,5 +1,7 @@
 //! SSH 远程管理插件 — 库入口
 
+#![recursion_limit = "1024"]
+
 pub mod connection;
 pub mod download;
 mod log_util;

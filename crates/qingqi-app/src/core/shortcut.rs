@@ -257,9 +257,9 @@ impl ShortcutService {
     }
 
     pub fn dispatch_global(&self, hotkey_id: u32) -> Option<ShortcutTarget> {
-        println!("!!! dispatch_global: hotkey_id={}, registered_ids={:?}", hotkey_id, self.hotkey_ids.keys().collect::<Vec<_>>());
+        tracing::debug!(hotkey_id, registered_ids = ?self.hotkey_ids.keys().collect::<Vec<_>>(), "dispatch_global called");
         let Some(shortcut_id) = self.hotkey_ids.get(&hotkey_id) else {
-            println!("!!! dispatch_global: hotkey_id {} not found!", hotkey_id);
+            tracing::debug!(hotkey_id, "dispatch_global: hotkey_id not found");
             return None;
         };
         let Some(resolved) = self
@@ -696,5 +696,44 @@ mod tests {
         let resolved = resolve_shortcuts(&[disabled]);
         assert!(!resolved[0].active);
         assert!(resolved[0].error.is_none());
+    }
+
+    #[test]
+    fn dispatch_global_returns_target_for_known_hotkey_id() {
+        let mut service = ShortcutService::default();
+        let descriptor = ShortcutDescriptor::new(
+            "open_launcher",
+            "core",
+            "Open Launcher",
+            ShortcutScope::Global,
+            "Alt+Space",
+            ShortcutTarget::CoreAction(CoreShortcutAction::ToggleLauncher),
+        );
+        service.shortcuts = vec![descriptor.clone()];
+        service.resolved = vec![ResolvedShortcut {
+            descriptor,
+            normalized_accelerator: "Alt+Space".into(),
+            active: true,
+            overridden_by: None,
+            error: None,
+            hotkey: None,
+        }];
+        service.hotkey_ids.insert(42, "open_launcher".into());
+
+        let target = service.dispatch_global(42);
+        assert!(matches!(
+            target,
+            Some(ShortcutTarget::CoreAction(
+                CoreShortcutAction::ToggleLauncher
+            ))
+        ));
+    }
+
+    #[test]
+    fn dispatch_global_returns_none_for_unknown_hotkey_id() {
+        let mut service = ShortcutService::default();
+        service.hotkey_ids.insert(42, "open_launcher".into());
+
+        assert!(service.dispatch_global(99).is_none());
     }
 }

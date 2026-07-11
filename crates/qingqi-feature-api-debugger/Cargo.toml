@@ -20,7 +20,11 @@ serde_json.workspace = true
 serde_yaml = "0.9.34"
 time.workspace = true
 tracing.workspace = true
+url.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

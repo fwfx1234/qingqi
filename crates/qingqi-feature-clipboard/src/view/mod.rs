@@ -10,12 +10,12 @@ use gpui::{
     Window, div, img, px,
 };
 
-use qingqi_ui::components::theme::Theme;
-use qingqi_ui::components::icon::IconName;
-use qingqi_ui::components::styled::Sizable;
-use qingqi_ui::components::styled::Size as ComponentSize;
 use qingqi_ui::components::button::{Button, ButtonCustomVariant, ButtonVariants};
 use qingqi_ui::components::input::{Input, InputState};
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size as ComponentSize;
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::icon;
 
 use crate::{
     history_store::{self, ClipboardConfig, ClipboardRecord},
@@ -104,6 +104,7 @@ impl ClipboardView {
 
     pub(crate) fn init(&mut self, cx: &mut Context<Self>) {
         self.focus_handle = Some(cx.focus_handle());
+        self.focus_pending = true;
     }
 
     pub(crate) fn refresh_async(&mut self, cx: &mut Context<Self>) {
@@ -118,7 +119,7 @@ impl ClipboardView {
     }
 
     pub(crate) fn reopen(&mut self, cx: &mut Context<Self>) {
-        self.focus_pending = false;
+        self.focus_pending = true;
         if let Ok(service) = self.service.lock() {
             let _ = service.capture_current(cx);
         }
@@ -370,6 +371,14 @@ impl ClipboardView {
         self.focus_pending = false;
     }
 
+    fn focus_history(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(focus_handle) = self.focus_handle.as_ref() {
+            window.focus(focus_handle);
+        }
+        self.focus_pending = false;
+        cx.notify();
+    }
+
     fn query_focused(&self, window: &Window, cx: &App) -> bool {
         self.query_input
             .as_ref()
@@ -438,6 +447,16 @@ impl ClipboardView {
 
         if key == "escape" {
             window.defer(cx, |window, _cx| window.remove_window());
+            cx.stop_propagation();
+            return;
+        }
+
+        if key == "tab" {
+            if self.query_focused(window, cx) {
+                self.focus_history(window, cx);
+            } else {
+                self.focus_search(window, cx);
+            }
             cx.stop_propagation();
             return;
         }
@@ -957,17 +976,12 @@ impl Render for ClipboardView {
         self.observe_query_input(cx);
 
         if self.focus_pending {
-            if let Some(query_input) = self.query_input.as_ref() {
-                window.focus(&query_input.focus_handle(cx));
+            if let Some(focus_handle) = self.focus_handle.clone() {
+                self.focus_pending = false;
+                window.defer(cx, move |window, _cx| {
+                    window.focus(&focus_handle);
+                });
             }
-            self.focus_pending = false;
-        } else if let Some(focus_handle) = self.focus_handle.as_ref()
-            && !focus_handle.is_focused(window)
-            && !self.query_focused(window, cx)
-            && !self.preview_focused(window, cx)
-            && !self.settings_input_focused(window, cx)
-        {
-            window.focus(focus_handle);
         }
 
         let handle = cx.entity();
@@ -983,7 +997,12 @@ impl Render for ClipboardView {
         else {
             return div()
                 .size_full()
-                .bg(t.background)
+                .bg(gpui::Hsla {
+                    h: 0.0,
+                    s: 0.0,
+                    l: 0.0,
+                    a: 0.0,
+                })
                 .child("剪贴板组件加载中...")
                 .into_any_element();
         };
@@ -991,7 +1010,7 @@ impl Render for ClipboardView {
 
         let gear_handle = handle.clone();
         let gear_button = Button::new("clipboard-open-settings")
-            .icon(IconName::Settings2)
+            .icon(icon!(settings).color(t.muted_foreground))
             .tooltip("设置")
             .with_size(ComponentSize::Size(px(28.0)))
             .custom(
@@ -1028,12 +1047,17 @@ impl Render for ClipboardView {
             .h_full()
             .flex()
             .flex_col()
-            .bg(qingqi_ui::ui::glass::sidebar(app))
+            .bg(gpui::Hsla {
+                h: 0.0,
+                s: 0.0,
+                l: 0.0,
+                a: 0.0,
+            })
             .border_r_1()
             .border_color(qingqi_ui::ui::glass::border(app));
 
-        let left_panel = if let Some(ref fh) = self.focus_handle {
-            left_panel.track_focus(fh)
+        let left_panel = if let Some(focus_handle) = self.focus_handle.as_ref() {
+            left_panel.track_focus(focus_handle)
         } else {
             left_panel
         };
@@ -1067,7 +1091,12 @@ impl Render for ClipboardView {
         div()
             .size_full()
             .flex()
-            .bg(t.background)
+            .bg(gpui::Hsla {
+                h: 0.0,
+                s: 0.0,
+                l: 0.0,
+                a: 0.0,
+            })
             .text_color(t.foreground)
             .font_family(ui::font_ui())
             .capture_key_down(cx.listener(Self::handle_panel_key))

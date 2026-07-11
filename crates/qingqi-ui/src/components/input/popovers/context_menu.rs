@@ -1,7 +1,7 @@
 //! Right-click context menu.
 
-use gpui::{Context, Entity, IntoElement, Render, Pixels, Window, div, px};
 use gpui::prelude::FluentBuilder as _;
+use gpui::{Context, Entity, IntoElement, Pixels, Render, Window, div, px};
 
 use crate::components::input::InputState;
 
@@ -25,7 +25,13 @@ impl ContextMenuModel {
         }
     }
 
-    pub fn show(&mut self, _position: gpui::Point<Pixels>, _actions: Vec<ContextMenuAction>, _window: &mut Window, _cx: &mut Context<Self>) {
+    pub fn show(
+        &mut self,
+        _position: gpui::Point<Pixels>,
+        _actions: Vec<ContextMenuAction>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
         self.is_open = true;
     }
 

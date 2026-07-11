@@ -18,26 +18,28 @@ pub mod input;
 pub mod input_compat;
 pub mod label;
 pub mod radio;
+pub mod scrollbar;
 pub mod tab;
 pub mod tooltip;
-pub mod scrollbar;
 
 // ── Re-exports ─────────────────────────────────────────────────────────
-pub use button::{Button, ButtonVariant, ButtonVariants, ButtonRounded, ButtonCustomVariant};
-pub use divider::{Divider, DividerStyle};
-pub use icon::{Icon, IconNamed, IconName};
-pub use list::ListItem;
-pub use scroll::{ScrollableElement, ScrollbarExt};
-pub use root::{Root, WindowExt};
-pub use sidebar::{Sidebar, SidebarMenu, SidebarMenuItem, Side, Collapsible};
-pub use styled::{Size, Sizable, Disableable, Selectable, StyleSized, StyledExt, h_flex, v_flex};
-pub use switch::Switch;
-pub use tree::{TreeItem, TreeEntry, TreeState, tree};
-pub use checkbox::Checkbox;
-pub use theme::{ActiveTheme, ThemeMode};
-pub use widgets::{Tag, TagVariant, Badge, Progress, DropdownMenu, Slider, SelectItem};
 pub use crate::token::Token;
+pub use button::{Button, ButtonCustomVariant, ButtonRounded, ButtonVariant, ButtonVariants};
+pub use checkbox::Checkbox;
+pub use divider::{Divider, DividerStyle};
+pub use icon::Icon;
 pub use input::{Input, InputState};
+pub use list::ListItem;
+pub use root::{Root, WindowExt};
+pub use scroll::{ScrollableElement, ScrollbarExt};
+pub use sidebar::{Collapsible, Side, Sidebar, SidebarMenu, SidebarMenuItem};
+pub use styled::{Disableable, Selectable, Sizable, Size, StyleSized, StyledExt, h_flex, v_flex};
+pub use switch::Switch;
+pub use theme::{ActiveTheme, ThemeMode};
+pub use tree::{TreeEntry, TreeItem, TreeState, tree};
+pub use widgets::{Badge, DropdownMenu, Progress, SelectItem, Slider, Tag, TagVariant};
 
-/// Initialize function for qingqi-ui (called by app runtime).
-pub fn init(_cx: &mut gpui::App) {}
+/// Initialize qingqi-ui global actions (called once by the app runtime).
+pub fn init(cx: &mut gpui::App) {
+    input::init(cx);
+}

@@ -212,7 +212,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{ThemeMode, ThemeStore};
+    use super::{ThemeMode, ThemeStore, default_theme_name};
 
     fn temp_config_path(name: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -315,7 +315,7 @@ mod tests {
     fn persists_theme_name() {
         let path = temp_config_path("theme-name.json");
         let mut store = ThemeStore::new(path.clone());
-        assert_eq!(store.theme(), "Default");
+        assert_eq!(store.theme(), default_theme_name());
         store.set_theme("Custom Theme".into()).expect("set theme");
 
         let saved = fs::read_to_string(&path).expect("read saved theme");
@@ -334,7 +334,7 @@ mod tests {
         fs::write(&path, "\"Auto\"").expect("write legacy config");
 
         let store = ThemeStore::new(path.clone());
-        assert_eq!(store.theme(), "Default");
+        assert_eq!(store.theme(), default_theme_name());
 
         let _ = fs::remove_dir_all(path.parent().expect("temp parent"));
     }

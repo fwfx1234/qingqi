@@ -45,6 +45,7 @@ tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "std", "registry", "time", "local-time"] }
 tray-icon = { version = "0.21", default-features = false }
 unicode-segmentation = "1.12"
+url = "2.5"
 usvg = "0.45"
 uuid = { version = "1.16", features = ["v4"] }
 resvg = "0.45"

@@ -20,10 +20,20 @@ pub enum DiagnosticSeverity {
 
 impl DiagnosticPopoverModel {
     pub fn new(_editor: Entity<InputState>, _window: &mut Window, _cx: &mut Context<Self>) -> Self {
-        Self { is_open: false, message: None, severity: DiagnosticSeverity::Error }
+        Self {
+            is_open: false,
+            message: None,
+            severity: DiagnosticSeverity::Error,
+        }
     }
 
-    pub fn show(&mut self, _message: String, _severity: DiagnosticSeverity, _window: &mut Window, _cx: &mut Context<Self>) {
+    pub fn show(
+        &mut self,
+        _message: String,
+        _severity: DiagnosticSeverity,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
         self.is_open = true;
     }
 

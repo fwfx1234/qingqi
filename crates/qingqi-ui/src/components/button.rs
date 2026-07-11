@@ -2,10 +2,10 @@
 
 use std::rc::Rc;
 
-use super::styled::{Size, Sizable};
-use super::theme::{ActiveTheme};
-use super::icon::{Icon, IconNamed};
-use super::styled::{focus_ring};
+use super::icon::Icon;
+use super::styled::focus_ring;
+use super::styled::{Sizable, Size};
+use super::theme::ActiveTheme;
 use gpui::{
     Action, AnyElement, App, ClickEvent, Corners, Div, Edges, ElementId, Hsla, InteractiveElement,
     Interactivity, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce, SharedString,
@@ -24,7 +24,9 @@ pub enum ButtonRounded {
 }
 
 impl From<Pixels> for ButtonRounded {
-    fn from(px: Pixels) -> Self { ButtonRounded::Size(px) }
+    fn from(px: Pixels) -> Self {
+        ButtonRounded::Size(px)
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -39,15 +41,33 @@ pub struct ButtonCustomVariant {
 
 pub trait ButtonVariants: Sized {
     fn with_variant(self, variant: ButtonVariant) -> Self;
-    fn primary(self) -> Self { self.with_variant(ButtonVariant::Primary) }
-    fn danger(self) -> Self { self.with_variant(ButtonVariant::Danger) }
-    fn warning(self) -> Self { self.with_variant(ButtonVariant::Warning) }
-    fn success(self) -> Self { self.with_variant(ButtonVariant::Success) }
-    fn info(self) -> Self { self.with_variant(ButtonVariant::Info) }
-    fn ghost(self) -> Self { self.with_variant(ButtonVariant::Ghost) }
-    fn link(self) -> Self { self.with_variant(ButtonVariant::Link) }
-    fn text(self) -> Self { self.with_variant(ButtonVariant::Text) }
-    fn custom(self, style: ButtonCustomVariant) -> Self { self.with_variant(ButtonVariant::Custom(style)) }
+    fn primary(self) -> Self {
+        self.with_variant(ButtonVariant::Primary)
+    }
+    fn danger(self) -> Self {
+        self.with_variant(ButtonVariant::Danger)
+    }
+    fn warning(self) -> Self {
+        self.with_variant(ButtonVariant::Warning)
+    }
+    fn success(self) -> Self {
+        self.with_variant(ButtonVariant::Success)
+    }
+    fn info(self) -> Self {
+        self.with_variant(ButtonVariant::Info)
+    }
+    fn ghost(self) -> Self {
+        self.with_variant(ButtonVariant::Ghost)
+    }
+    fn link(self) -> Self {
+        self.with_variant(ButtonVariant::Link)
+    }
+    fn text(self) -> Self {
+        self.with_variant(ButtonVariant::Text)
+    }
+    fn custom(self, style: ButtonCustomVariant) -> Self {
+        self.with_variant(ButtonVariant::Custom(style))
+    }
 }
 
 impl ButtonCustomVariant {
@@ -61,12 +81,30 @@ impl ButtonCustomVariant {
             shadow: false,
         }
     }
-    pub fn color(mut self, c: Hsla) -> Self { self.color = c; self }
-    pub fn foreground(mut self, c: Hsla) -> Self { self.foreground = c; self }
-    pub fn border(mut self, c: Hsla) -> Self { self.border = c; self }
-    pub fn hover(mut self, c: Hsla) -> Self { self.hover = c; self }
-    pub fn active(mut self, c: Hsla) -> Self { self.active = c; self }
-    pub fn shadow(mut self, s: bool) -> Self { self.shadow = s; self }
+    pub fn color(mut self, c: Hsla) -> Self {
+        self.color = c;
+        self
+    }
+    pub fn foreground(mut self, c: Hsla) -> Self {
+        self.foreground = c;
+        self
+    }
+    pub fn border(mut self, c: Hsla) -> Self {
+        self.border = c;
+        self
+    }
+    pub fn hover(mut self, c: Hsla) -> Self {
+        self.hover = c;
+        self
+    }
+    pub fn active(mut self, c: Hsla) -> Self {
+        self.active = c;
+        self
+    }
+    pub fn shadow(mut self, s: bool) -> Self {
+        self.shadow = s;
+        self
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -85,13 +123,23 @@ pub enum ButtonVariant {
 }
 
 impl ButtonVariant {
-    fn is_link(&self) -> bool { matches!(self, Self::Link) }
-    fn is_text(&self) -> bool { matches!(self, Self::Text) }
-    fn is_ghost(&self) -> bool { matches!(self, Self::Ghost) }
-    fn no_padding(&self) -> bool { self.is_link() || self.is_text() }
+    fn is_link(&self) -> bool {
+        matches!(self, Self::Link)
+    }
+    fn is_text(&self) -> bool {
+        matches!(self, Self::Text)
+    }
+    fn is_ghost(&self) -> bool {
+        matches!(self, Self::Ghost)
+    }
+    fn no_padding(&self) -> bool {
+        self.is_link() || self.is_text()
+    }
 
     fn bg_color(&self, outline: bool, cx: &mut App) -> Hsla {
-        if outline { return cx.theme().background(); }
+        if outline {
+            return cx.theme().background();
+        }
         match self {
             Self::Primary => cx.theme().primary(),
             Self::Secondary => cx.theme().secondary(),
@@ -106,79 +154,265 @@ impl ButtonVariant {
 
     fn text_color(&self, outline: bool, cx: &mut App) -> Hsla {
         match self {
-            Self::Primary => if outline { cx.theme().primary() } else { cx.theme().primary_foreground() },
+            Self::Primary => {
+                if outline {
+                    cx.theme().primary()
+                } else {
+                    cx.theme().primary_foreground()
+                }
+            }
             Self::Secondary | Self::Ghost => cx.theme().secondary_foreground(),
-            Self::Danger => if outline { cx.theme().danger() } else { cx.theme().danger_foreground() },
-            Self::Warning => if outline { cx.theme().warning() } else { cx.theme().warning_foreground() },
-            Self::Success => if outline { cx.theme().success() } else { cx.theme().success_foreground() },
-            Self::Info => if outline { cx.theme().info() } else { cx.theme().info_foreground() },
+            Self::Danger => {
+                if outline {
+                    cx.theme().danger()
+                } else {
+                    cx.theme().danger_foreground()
+                }
+            }
+            Self::Warning => {
+                if outline {
+                    cx.theme().warning()
+                } else {
+                    cx.theme().warning_foreground()
+                }
+            }
+            Self::Success => {
+                if outline {
+                    cx.theme().success()
+                } else {
+                    cx.theme().success_foreground()
+                }
+            }
+            Self::Info => {
+                if outline {
+                    cx.theme().info()
+                } else {
+                    cx.theme().info_foreground()
+                }
+            }
             Self::Link => cx.theme().link(),
             Self::Text => cx.theme().foreground(),
-            Self::Custom(colors) => if outline { colors.color } else { colors.foreground },
+            Self::Custom(colors) => {
+                if outline {
+                    colors.color
+                } else {
+                    colors.foreground
+                }
+            }
         }
     }
 
     fn border_color(&self, bg: Hsla, outline: bool, cx: &mut App) -> Hsla {
         match self {
-            Self::Secondary => if outline { cx.theme().border() } else { bg },
-            Self::Primary => if outline { cx.theme().primary() } else { bg },
-            Self::Danger => if outline { cx.theme().danger() } else { bg },
-            Self::Info => if outline { cx.theme().info() } else { bg },
-            Self::Warning => if outline { cx.theme().warning() } else { bg },
-            Self::Success => if outline { cx.theme().success() } else { bg },
+            Self::Secondary => {
+                if outline {
+                    cx.theme().border()
+                } else {
+                    bg
+                }
+            }
+            Self::Primary => {
+                if outline {
+                    cx.theme().primary()
+                } else {
+                    bg
+                }
+            }
+            Self::Danger => {
+                if outline {
+                    cx.theme().danger()
+                } else {
+                    bg
+                }
+            }
+            Self::Info => {
+                if outline {
+                    cx.theme().info()
+                } else {
+                    bg
+                }
+            }
+            Self::Warning => {
+                if outline {
+                    cx.theme().warning()
+                } else {
+                    bg
+                }
+            }
+            Self::Success => {
+                if outline {
+                    cx.theme().success()
+                } else {
+                    bg
+                }
+            }
             Self::Ghost | Self::Link | Self::Text => cx.theme().transparent(),
             Self::Custom(colors) => colors.border,
         }
     }
 
-    fn underline(&self, _: &App) -> bool { matches!(self, Self::Link) }
+    fn underline(&self, _: &App) -> bool {
+        matches!(self, Self::Link)
+    }
     fn shadow(&self, outline: bool, _: &App) -> bool {
-        match self { Self::Primary | Self::Secondary | Self::Danger => outline, Self::Custom(c) => c.shadow, _ => false }
+        match self {
+            Self::Primary | Self::Secondary | Self::Danger => outline,
+            Self::Custom(c) => c.shadow,
+            _ => false,
+        }
     }
 
     fn normal(&self, outline: bool, cx: &mut App) -> StyledState {
         let bg = self.bg_color(outline, cx);
         let border = self.border_color(bg, outline, cx);
         let fg = self.text_color(outline, cx);
-        StyledState { bg, border, fg, underline: self.underline(cx), shadow: self.shadow(outline, cx) }
+        StyledState {
+            bg,
+            border,
+            fg,
+            underline: self.underline(cx),
+            shadow: self.shadow(outline, cx),
+        }
     }
 
     fn hovered(&self, outline: bool, cx: &mut App) -> StyledState {
         let bg = match self {
-            Self::Primary => if outline { cx.theme().secondary_hover() } else { cx.theme().primary_hover() },
+            Self::Primary => {
+                if outline {
+                    cx.theme().secondary_hover()
+                } else {
+                    cx.theme().primary_hover()
+                }
+            }
             Self::Secondary => cx.theme().secondary_hover(),
-            Self::Danger => if outline { cx.theme().secondary_hover() } else { cx.theme().danger_hover() },
-            Self::Warning => if outline { cx.theme().secondary_hover() } else { cx.theme().warning_hover() },
-            Self::Success => if outline { cx.theme().secondary_hover() } else { cx.theme().success_hover() },
-            Self::Info => if outline { cx.theme().secondary_hover() } else { cx.theme().info_hover() },
-            Self::Ghost => if cx.theme().is_dark() {
-                {let mut c = cx.theme().secondary(); c.l = (c.l + 0.1).clamp(0.0, 1.0); c.opacity(0.8) }
-            } else {
-                {let mut c = cx.theme().secondary(); c.l = (c.l - 0.1).clamp(0.0, 1.0); c.opacity(0.8) }
-            },
+            Self::Danger => {
+                if outline {
+                    cx.theme().secondary_hover()
+                } else {
+                    cx.theme().danger_hover()
+                }
+            }
+            Self::Warning => {
+                if outline {
+                    cx.theme().secondary_hover()
+                } else {
+                    cx.theme().warning_hover()
+                }
+            }
+            Self::Success => {
+                if outline {
+                    cx.theme().secondary_hover()
+                } else {
+                    cx.theme().success_hover()
+                }
+            }
+            Self::Info => {
+                if outline {
+                    cx.theme().secondary_hover()
+                } else {
+                    cx.theme().info_hover()
+                }
+            }
+            Self::Ghost => {
+                if cx.theme().is_dark() {
+                    {
+                        let mut c = cx.theme().secondary();
+                        c.l = (c.l + 0.1).clamp(0.0, 1.0);
+                        c.opacity(0.8)
+                    }
+                } else {
+                    {
+                        let mut c = cx.theme().secondary();
+                        c.l = (c.l - 0.1).clamp(0.0, 1.0);
+                        c.opacity(0.8)
+                    }
+                }
+            }
             Self::Link | Self::Text => cx.theme().transparent(),
-            Self::Custom(colors) => if outline { cx.theme().secondary_hover() } else { colors.hover },
+            Self::Custom(colors) => {
+                if outline {
+                    cx.theme().secondary_hover()
+                } else {
+                    colors.hover
+                }
+            }
         };
         let border = self.border_color(bg, outline, cx);
-        let fg = if matches!(self, Self::Link) { cx.theme().link_hover() } else { self.text_color(outline, cx) };
-        StyledState { bg, border, fg, underline: self.underline(cx), shadow: self.shadow(outline, cx) }
+        let fg = if matches!(self, Self::Link) {
+            cx.theme().link_hover()
+        } else {
+            self.text_color(outline, cx)
+        };
+        StyledState {
+            bg,
+            border,
+            fg,
+            underline: self.underline(cx),
+            shadow: self.shadow(outline, cx),
+        }
     }
 
     fn active(&self, outline: bool, cx: &mut App) -> StyledState {
         let bg = match self {
-            Self::Primary => if outline { cx.theme().primary_active().opacity(0.1) } else { cx.theme().primary_active() },
+            Self::Primary => {
+                if outline {
+                    cx.theme().primary_active().opacity(0.1)
+                } else {
+                    cx.theme().primary_active()
+                }
+            }
             Self::Secondary => cx.theme().secondary_active(),
-            Self::Ghost => if cx.theme().is_dark() {
-                {let mut c = cx.theme().secondary(); c.l = (c.l + 0.2).clamp(0.0, 1.0); c.opacity(0.8) }
-            } else {
-                {let mut c = cx.theme().secondary(); c.l = (c.l - 0.2).clamp(0.0, 1.0); c.opacity(0.8) }
-            },
-            Self::Danger => if outline { cx.theme().danger_active().opacity(0.1) } else { cx.theme().danger_active() },
-            Self::Warning => if outline { cx.theme().warning_active().opacity(0.1) } else { cx.theme().warning_active() },
-            Self::Success => if outline { cx.theme().success_active().opacity(0.1) } else { cx.theme().success_active() },
-            Self::Info => if outline { cx.theme().info_active().opacity(0.1) } else { cx.theme().info_active() },
+            Self::Ghost => {
+                if cx.theme().is_dark() {
+                    {
+                        let mut c = cx.theme().secondary();
+                        c.l = (c.l + 0.2).clamp(0.0, 1.0);
+                        c.opacity(0.8)
+                    }
+                } else {
+                    {
+                        let mut c = cx.theme().secondary();
+                        c.l = (c.l - 0.2).clamp(0.0, 1.0);
+                        c.opacity(0.8)
+                    }
+                }
+            }
+            Self::Danger => {
+                if outline {
+                    cx.theme().danger_active().opacity(0.1)
+                } else {
+                    cx.theme().danger_active()
+                }
+            }
+            Self::Warning => {
+                if outline {
+                    cx.theme().warning_active().opacity(0.1)
+                } else {
+                    cx.theme().warning_active()
+                }
+            }
+            Self::Success => {
+                if outline {
+                    cx.theme().success_active().opacity(0.1)
+                } else {
+                    cx.theme().success_active()
+                }
+            }
+            Self::Info => {
+                if outline {
+                    cx.theme().info_active().opacity(0.1)
+                } else {
+                    cx.theme().info_active()
+                }
+            }
             Self::Link | Self::Text => cx.theme().transparent(),
-            Self::Custom(colors) => if outline { colors.active.opacity(0.1) } else { colors.active },
+            Self::Custom(colors) => {
+                if outline {
+                    colors.active.opacity(0.1)
+                } else {
+                    colors.active
+                }
+            }
         };
         let border = self.border_color(bg, outline, cx);
         let fg = match self {
@@ -186,7 +420,13 @@ impl ButtonVariant {
             Self::Text => cx.theme().foreground().opacity(0.7),
             _ => self.text_color(outline, cx),
         };
-        StyledState { bg, border, fg, underline: self.underline(cx), shadow: self.shadow(outline, cx) }
+        StyledState {
+            bg,
+            border,
+            fg,
+            underline: self.underline(cx),
+            shadow: self.shadow(outline, cx),
+        }
     }
 
     fn selected(&self, outline: bool, cx: &mut App) -> StyledState {
@@ -206,7 +446,13 @@ impl ButtonVariant {
             Self::Text => cx.theme().foreground().opacity(0.7),
             _ => self.text_color(false, cx),
         };
-        StyledState { bg, border, fg, underline: self.underline(cx), shadow: self.shadow(outline, cx) }
+        StyledState {
+            bg,
+            border,
+            fg,
+            underline: self.underline(cx),
+            shadow: self.shadow(outline, cx),
+        }
     }
 
     fn disabled(&self, outline: bool, cx: &mut App) -> StyledState {
@@ -223,12 +469,26 @@ impl ButtonVariant {
         let fg = cx.theme().muted_foreground.opacity(0.5);
         let (bg, border) = if outline {
             (cx.theme().transparent(), cx.theme().border().opacity(0.5))
-        } else { (bg, bg) };
-        StyledState { bg, border, fg, underline: self.underline(cx), shadow: false }
+        } else {
+            (bg, bg)
+        };
+        StyledState {
+            bg,
+            border,
+            fg,
+            underline: self.underline(cx),
+            shadow: false,
+        }
     }
 }
 
-struct StyledState { bg: Hsla, border: Hsla, fg: Hsla, underline: bool, shadow: bool }
+struct StyledState {
+    bg: Hsla,
+    border: Hsla,
+    fg: Hsla,
+    underline: bool,
+    shadow: bool,
+}
 
 // ── Button ─────────────────────────────────────────────────────────────
 
@@ -253,11 +513,21 @@ pub struct Button {
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
     on_hover: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
     loading: bool,
-    dropdown_menu_fn: Option<Rc<dyn Fn(super::widgets::DropdownMenu, &mut Window, &mut App) -> super::widgets::DropdownMenu>>,
+    dropdown_menu_fn: Option<
+        Rc<
+            dyn Fn(
+                super::widgets::DropdownMenu,
+                &mut Window,
+                &mut App,
+            ) -> super::widgets::DropdownMenu,
+        >,
+    >,
 }
 
 impl From<Button> for AnyElement {
-    fn from(button: Button) -> Self { button.into_any_element() }
+    fn from(button: Button) -> Self {
+        button.into_any_element()
+    }
 }
 
 impl Button {
@@ -286,46 +556,104 @@ impl Button {
         }
     }
 
-    pub fn outline(mut self) -> Self { self.outline = true; self }
-    pub fn rounded(mut self, r: impl Into<ButtonRounded>) -> Self { self.rounded = r.into(); self }
-    pub fn label(mut self, label: impl Into<SharedString>) -> Self { self.label = Some(label.into()); self }
-    pub fn icon(mut self, icon: impl Into<Icon>) -> Self { self.icon = Some(icon.into()); self }
-    pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self { self.tooltip = Some(tooltip.into()); self }
-    pub fn compact(mut self) -> Self { self.compact = true; self }
-    pub fn on_click(mut self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
-        self.on_click = Some(Rc::new(handler)); self
+    pub fn outline(mut self) -> Self {
+        self.outline = true;
+        self
     }
-    pub fn loading(mut self, loading: bool) -> Self { self.loading = loading; self }
+    pub fn rounded(mut self, r: impl Into<ButtonRounded>) -> Self {
+        self.rounded = r.into();
+        self
+    }
+    pub fn label(mut self, label: impl Into<SharedString>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+    pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
+        self.icon = Some(icon.into());
+        self
+    }
+    pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
+        self.tooltip = Some(tooltip.into());
+        self
+    }
+    pub fn compact(mut self) -> Self {
+        self.compact = true;
+        self
+    }
+    pub fn on_click(
+        mut self,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_click = Some(Rc::new(handler));
+        self
+    }
+    pub fn loading(mut self, loading: bool) -> Self {
+        self.loading = loading;
+        self
+    }
     pub fn dropdown_menu<F>(mut self, f: F) -> Self
-    where F: Fn(super::widgets::DropdownMenu, &mut Window, &mut App) -> super::widgets::DropdownMenu + 'static {
+    where
+        F: Fn(super::widgets::DropdownMenu, &mut Window, &mut App) -> super::widgets::DropdownMenu
+            + 'static,
+    {
         self.dropdown_menu_fn = Some(Rc::new(f));
         self
     }
 
-    fn clickable(&self) -> bool { !(self.disabled || self.loading) && self.on_click.is_some() }
-    fn hoverable(&self) -> bool { !(self.disabled || self.loading) && self.on_hover.is_some() }
+    fn clickable(&self) -> bool {
+        !(self.disabled || self.loading) && self.on_click.is_some()
+    }
+    fn hoverable(&self) -> bool {
+        !(self.disabled || self.loading) && self.on_hover.is_some()
+    }
 }
 
 impl super::styled::Disableable for Button {
-    fn disabled(mut self, disabled: bool) -> Self { self.disabled = disabled; self }
+    fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
 }
 
 impl super::styled::Selectable for Button {
-    fn selected(mut self, selected: bool) -> Self { self.selected = selected; self }
-    fn is_selected(&self) -> bool { self.selected }
+    fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+    fn is_selected(&self) -> bool {
+        self.selected
+    }
 }
 
 impl Sizable for Button {
-    fn with_size(mut self, size: impl Into<Size>) -> Self { self.size = size.into(); self }
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = size.into();
+        self
+    }
 }
 
 impl ButtonVariants for Button {
-    fn with_variant(mut self, variant: ButtonVariant) -> Self { self.variant = variant; self }
+    fn with_variant(mut self, variant: ButtonVariant) -> Self {
+        self.variant = variant;
+        self
+    }
 }
 
-impl Styled for Button { fn style(&mut self) -> &mut StyleRefinement { &mut self.style } }
-impl ParentElement for Button { fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) { self.children.extend(elements) } }
-impl InteractiveElement for Button { fn interactivity(&mut self) -> &mut Interactivity { self.base.interactivity() } }
+impl Styled for Button {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+impl ParentElement for Button {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements)
+    }
+}
+impl InteractiveElement for Button {
+    fn interactivity(&mut self) -> &mut Interactivity {
+        self.base.interactivity()
+    }
+}
 
 impl RenderOnce for Button {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -396,38 +724,55 @@ impl RenderOnce for Button {
             })
             .when(self.disabled, |this| {
                 let d = style.disabled(self.outline, cx);
-                this.bg(d.bg).text_color(d.fg).border_color(d.border).shadow_none()
+                this.bg(d.bg)
+                    .text_color(d.fg)
+                    .border_color(d.border)
+                    .shadow_none()
             })
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                if is_disabled { cx.stop_propagation(); return; }
+                if is_disabled {
+                    cx.stop_propagation();
+                    return;
+                }
                 window.prevent_default();
             })
             .when_some(self.on_click, |this, on_click| {
                 this.on_click(move |event, window, cx| {
-                    if !clickable { cx.stop_propagation(); return; }
+                    if !clickable {
+                        cx.stop_propagation();
+                        return;
+                    }
                     (on_click)(event, window, cx);
                 })
             })
             .when_some(self.on_hover.filter(|_| hoverable), |this, on_hover| {
-                this.on_hover(move |hovered, window, cx| { (on_hover)(hovered, window, cx); })
+                this.on_hover(move |hovered, window, cx| {
+                    (on_hover)(hovered, window, cx);
+                })
             })
             .child(
                 super::styled::h_flex()
                     .id("label")
                     .items_center()
                     .justify_center()
-                    .map(|this| match self.size { Size::XSmall => this.text_xs(), Size::Small => this.text_sm(), _ => this.text_size(px(14.0)) })
+                    .map(|this| match self.size {
+                        Size::XSmall => this.text_xs(),
+                        Size::Small => this.text_sm(),
+                        _ => this.text_size(px(14.0)),
+                    })
                     .when(!self.loading, |this| {
-                        this.when_some(self.icon, |this, icon| this.child(icon.with_size(icon_size)))
+                        this.when_some(self.icon, |this, icon| {
+                            this.child(icon.with_size(icon_size))
+                        })
                     })
                     .when_some(self.label, |this, label| {
                         this.child(div().flex_none().line_height(relative(1.)).child(label))
                     })
-                    .children(self.children)
+                    .children(self.children),
             )
-            .when_some(self.tooltip.clone(), |this, tooltip| {
-                this
+            .when_some(self.tooltip.clone(), |this, tooltip| this)
+            .when(is_focused, |this| {
+                focus_ring(this, is_focused, px(2.0), window, cx)
             })
-            .when(is_focused, |this| focus_ring(this, is_focused, px(2.0), window, cx))
     }
 }

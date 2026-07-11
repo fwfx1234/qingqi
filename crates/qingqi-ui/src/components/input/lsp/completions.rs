@@ -1,9 +1,8 @@
 //! Completion provider trait.
 
 use anyhow::Result;
-use gpui::{Context, Task, Window};
+use gpui::{Context, Task};
 use ropey::Rope;
-use std::rc::Rc;
 
 use crate::components::input::InputState;
 
@@ -26,15 +25,11 @@ pub trait CompletionProvider {
 }
 
 pub struct InlineCompletion {
-    pub(crate) item: Option<String>,
-    pub(crate) task: Task<Result<Vec<String>>>,
+    pub item: Option<String>,
 }
 
 impl Default for InlineCompletion {
     fn default() -> Self {
-        Self {
-            item: None,
-            task: Task::ready(Ok(vec![])),
-        }
+        Self { item: None }
     }
 }

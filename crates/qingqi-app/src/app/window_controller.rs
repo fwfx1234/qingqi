@@ -189,9 +189,8 @@ impl WindowController {
         let controller_for_entity = Arc::clone(&controller);
         match cx.open_window(options, move |window, cx| {
             window.set_window_title("Qingqi");
-            let query_input = cx.new(|cx| {
-                InputState::new(window, cx).placeholder("搜索工具、命令、文件...")
-            });
+            let query_input =
+                cx.new(|cx| InputState::new(window, cx).placeholder("搜索工具、命令、文件..."));
             let launcher = cx
                 .new(|cx| Launcher::new(Arc::clone(&plugin_manager), Arc::clone(&app_catalog), cx));
             let handle = launcher.clone();
@@ -206,7 +205,9 @@ impl WindowController {
             // Defer focus to next frame so that the on_focus listener registered
             // via `cx.on_focus` (which uses deferred activate) is active by then.
             let fh = query_input.focus_handle(cx);
-            window.on_next_frame(move |window, _cx| { window.focus(&fh); });
+            window.on_next_frame(move |window, _cx| {
+                window.focus(&fh);
+            });
             cx.new(|cx| Root::new(launcher, window, cx))
         }) {
             Ok(handle) => {
@@ -288,8 +289,9 @@ impl WindowController {
         let window_started = Instant::now();
         match cx.open_window(options, move |window, cx| {
             window.set_window_title(&title);
-            let plugin = cx
-                .new(|_| PluginWindow::new(Arc::clone(&controller_for_window), view, client_drawn));
+            let plugin = cx.new(|cx| {
+                PluginWindow::new(cx, Arc::clone(&controller_for_window), view, client_drawn)
+            });
             cx.new(|cx| Root::new(plugin, window, cx))
         }) {
             Ok(handle) => {
@@ -563,8 +565,9 @@ impl WindowController {
         let window_started = Instant::now();
         match cx.open_window(options, move |window, cx| {
             window.set_window_title(&title);
-            let plugin = cx
-                .new(|_| PluginWindow::new(Arc::clone(&controller_for_window), view, client_drawn));
+            let plugin = cx.new(|cx| {
+                PluginWindow::new(cx, Arc::clone(&controller_for_window), view, client_drawn)
+            });
             cx.new(|cx| Root::new(plugin, window, cx))
         }) {
             Ok(handle) => {
@@ -939,20 +942,38 @@ struct PluginWindow {
     /// Whether this window uses client decorations. Non-macOS platforms need
     /// an overlaid close button; macOS keeps native traffic lights.
     client_drawn: bool,
+    /// Set to true after the app-aware on_release hook has run, so that
+    /// `Drop` does not redundantly invoke `on_close` / `close_idle_plugin`.
+    closed: bool,
 }
 
 impl PluginWindow {
     fn new(
+        cx: &Context<Self>,
         controller: WindowControllerHandle,
         view: Box<dyn WindowView>,
         client_drawn: bool,
     ) -> Self {
         let plugin_id = view.plugin_id().to_string();
+        let controller2 = Arc::clone(&controller);
+        let plugin_id2 = plugin_id.clone();
+        cx.on_release(move |this: &mut Self, cx: &mut App| {
+            if this.closed {
+                return;
+            }
+            this.closed = true;
+            if let Some(mut view) = this.view.take() {
+                view.on_close_with_app(cx);
+            }
+            lock_or_recover(&controller2, "window_controller").close_idle_plugin(&plugin_id2);
+        })
+        .detach();
         Self {
             controller,
             view: Some(view),
             plugin_id,
             client_drawn,
+            closed: false,
         }
     }
 
@@ -1008,9 +1029,195 @@ impl Render for PluginWindow {
 
 impl Drop for PluginWindow {
     fn drop(&mut self) {
+        if self.closed {
+            return;
+        }
         if let Some(mut view) = self.view.take() {
             view.on_close();
         }
         lock_or_recover(&self.controller, "window_controller").close_idle_plugin(&self.plugin_id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use gpui::{App, Context, TestAppContext, Window};
+    use qingqi_plugin::events::AppEventBus;
+    use qingqi_plugin::plugin::PluginId;
+
+    use crate::app::app_catalog::AppCatalog;
+    use crate::app::app_index::AppIndexService;
+    use qingqi_core::plugin::PluginManager;
+    use qingqi_plugin::plugin::WindowView;
+
+    use super::*;
+
+    /// Helper to build a WindowController suitable for [`PluginWindow`] tests.
+    fn test_controller() -> WindowControllerHandle {
+        let paths = qingqi_plugin::storage::AppPaths::for_test("/tmp/qingqi-test-ignore");
+        let database = std::sync::Arc::new(qingqi_plugin::database::DatabaseService::new(paths));
+        database
+            .register_database(qingqi_plugin::database::DatabaseSpec::feature(
+                "app-launcher",
+                "index",
+                "app-launcher/index.db",
+            ))
+            .unwrap();
+        let usage_store =
+            qingqi_core::command_usage::CommandUsageStore::new(database.clone(), "command-usage");
+        let app_index =
+            std::sync::Arc::new(AppIndexService::new(database.clone(), usage_store.clone()));
+        let app_catalog = std::sync::Arc::new(AppCatalog::new(app_index));
+        let events = AppEventBus::new();
+        let command_catalog_store = qingqi_core::command_catalog::CommandCatalogStore::new(
+            database,
+            qingqi_core::command_catalog::COMMAND_CATALOG_KEY,
+        );
+        let plugin_manager = PluginManager::new(events, usage_store, command_catalog_store);
+        std::sync::Arc::new(Mutex::new(WindowController::new(
+            std::sync::Arc::new(Mutex::new(plugin_manager)),
+            app_catalog,
+            AppEventBus::new(),
+        )))
+    }
+
+    /// A [`WindowView`] that counts how many times its app-aware close hook fires.
+    struct CountingAppCloseView {
+        plugin_id: PluginId,
+        count: Rc<RefCell<usize>>,
+    }
+
+    impl WindowView for CountingAppCloseView {
+        fn plugin_id(&self) -> PluginId {
+            self.plugin_id.clone()
+        }
+
+        fn title(&self) -> std::sync::Arc<str> {
+            "Test".into()
+        }
+
+        fn render(&mut self, _window: &mut Window, _cx: &mut App) -> gpui::AnyElement {
+            gpui::div().into_any_element()
+        }
+
+        fn on_close_with_app(&mut self, _cx: &mut App) {
+            *self.count.borrow_mut() += 1;
+        }
+    }
+
+    /// A [`WindowView`] that only implements the legacy `on_close()` to prove
+    /// the default `on_close_with_app` forwards correctly.
+    struct LegacyCloseView {
+        plugin_id: PluginId,
+        count: Rc<RefCell<usize>>,
+    }
+
+    impl WindowView for LegacyCloseView {
+        fn plugin_id(&self) -> PluginId {
+            self.plugin_id.clone()
+        }
+
+        fn title(&self) -> std::sync::Arc<str> {
+            "Legacy".into()
+        }
+
+        fn render(&mut self, _window: &mut Window, _cx: &mut App) -> gpui::AnyElement {
+            gpui::div().into_any_element()
+        }
+
+        fn on_close(&mut self) {
+            *self.count.borrow_mut() += 1;
+        }
+    }
+
+    /// A trivial slot view that holds an optional child entity. Dropping the
+    /// child from the slot triggers GPUI's standard release machinery — the
+    /// same path `PluginWindow` takes when its containing window closes.
+    struct SlotView {
+        child: Option<gpui::Entity<PluginWindow>>,
+    }
+
+    impl gpui::Render for SlotView {
+        fn render(
+            &mut self,
+            _window: &mut Window,
+            _cx: &mut Context<Self>,
+        ) -> impl gpui::IntoElement {
+            gpui::div()
+        }
+    }
+
+    #[gpui::test]
+    fn plugin_window_entity_release_calls_app_aware_hook_once(cx: &mut TestAppContext) {
+        let count = Rc::new(RefCell::new(0));
+        let count_clone = Rc::clone(&count);
+        let controller = test_controller();
+
+        let (slot_entity, cx) = cx.add_window_view(|_window, cx| {
+            let plugin_entity = cx.new(|cx| {
+                PluginWindow::new(
+                    cx,
+                    controller,
+                    Box::new(CountingAppCloseView {
+                        plugin_id: "test.app-close".into(),
+                        count: count_clone,
+                    }),
+                    false,
+                )
+            });
+            SlotView {
+                child: Some(plugin_entity),
+            }
+        });
+
+        // Clear the slot so GPUI releases the PluginWindow on the next flush.
+        slot_entity.update(cx, |slot, _cx| {
+            slot.child = None;
+        });
+        cx.update(|_window, _cx| {});
+
+        assert_eq!(
+            *count.borrow(),
+            1,
+            "app-aware close hook must fire exactly once on entity release"
+        );
+    }
+
+    #[gpui::test]
+    fn plugin_window_legacy_on_close_forwards_to_app_aware_hook(cx: &mut TestAppContext) {
+        let count = Rc::new(RefCell::new(0));
+        let count_clone = Rc::clone(&count);
+        let controller = test_controller();
+
+        let (slot_entity, cx) = cx.add_window_view(|_window, cx| {
+            let plugin_entity = cx.new(|cx| {
+                PluginWindow::new(
+                    cx,
+                    controller,
+                    Box::new(LegacyCloseView {
+                        plugin_id: "test.legacy".into(),
+                        count: count_clone,
+                    }),
+                    false,
+                )
+            });
+            SlotView {
+                child: Some(plugin_entity),
+            }
+        });
+
+        slot_entity.update(cx, |slot, _cx| {
+            slot.child = None;
+        });
+        cx.update(|_window, _cx| {});
+
+        assert_eq!(
+            *count.borrow(),
+            1,
+            "legacy on_close must still be invoked via default on_close_with_app"
+        );
     }
 }

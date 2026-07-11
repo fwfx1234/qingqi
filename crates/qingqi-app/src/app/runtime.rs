@@ -212,7 +212,10 @@ pub fn run(host: AppHost) -> Result<()> {
         power_manager,
         shortcut_service,
         paths,
-        _log_guard: _,
+        // Keep the non-blocking log worker alive for the entire
+        // application lifetime so runtime logs are flushed before
+        // plugin and database shutdown.
+        _log_guard,
     } = host;
     let plugins = Arc::new(Mutex::new(plugins));
     {
@@ -348,7 +351,7 @@ pub fn run(host: AppHost) -> Result<()> {
         if std::env::var("QINGQI_TEST_LAUNCHER").is_ok() {
             let window_controller = Arc::clone(&window_controller);
             cx.defer(move |cx| {
-                println!("!!! Auto-opening launcher for testing");
+                tracing::debug!("auto-opening launcher for testing");
                 WindowController::show_launcher(window_controller, cx);
             });
         }
@@ -579,4 +582,46 @@ fn set_menus(cx: &mut App) {
             MenuItem::action("退出", Quit),
         ],
     }]);
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use super::*;
+
+    /// Verifies that a non-blocking log worker stays alive and flushes
+    /// records only after its `WorkerGuard` is dropped.  This is the
+    /// invariant `_log_guard` relies on in `run()`.
+    #[test]
+    fn log_worker_flushes_after_guard_drop() {
+        let dir = std::env::temp_dir().join("qingqi-runtime-test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let file_appender = tracing_appender::rolling::daily(&dir, "qingqi");
+        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+
+        let file_layer = tracing_subscriber::fmt::layer()
+            .with_ansi(false)
+            .with_timer(log_timer())
+            .with_writer(non_blocking)
+            .with_filter(tracing_subscriber::EnvFilter::new("info"));
+
+        tracing::subscriber::with_default(tracing_subscriber::registry().with(file_layer), || {
+            tracing::info!(target: "qingqi::test", "runtime log during session");
+        });
+
+        // Simulate what `run()` now does: keep the guard alive, then drop.
+        drop(guard);
+
+        let log_file = dir.join(format!("qingqi.{}", OffsetDateTime::now_utc().date()));
+        let content = fs::read_to_string(&log_file).expect("log file should exist");
+        assert!(
+            content.contains("runtime log during session"),
+            "runtime log must be flushed to disk"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

@@ -3,7 +3,13 @@ use gpui::*;
 use crate::token::tokens;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Side { #[default] Top, Bottom, Left, Right }
+pub enum Side {
+    #[default]
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
 
 pub struct Tooltip {
     pub content: SharedString,
@@ -12,7 +18,10 @@ pub struct Tooltip {
 
 impl Tooltip {
     pub fn new(content: impl Into<SharedString>) -> Self {
-        Self { content: content.into(), side: Side::Bottom }
+        Self {
+            content: content.into(),
+            side: Side::Bottom,
+        }
     }
 }
 

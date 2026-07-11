@@ -6,10 +6,10 @@ use gpui::{
     App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
     Styled, div, hsla, prelude::FluentBuilder, px,
 };
-use qingqi_ui::components::styled::Sizable;
-use qingqi_ui::components::styled::Size;
 use qingqi_ui::components::button::{Button, ButtonVariants};
 use qingqi_ui::components::input::{Input, InputState};
+use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size;
 use qingqi_ui::components::theme::Theme;
 use qingqi_ui::{theme, ui, ui::glass};
 

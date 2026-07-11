@@ -23,6 +23,8 @@ use qingqi_plugin::events::{AppEventBus, AppEventKind};
 /// 代理捕获引擎状态。
 struct EngineState {
     proxy_state: ProxyState,
+    /// 当前监听地址（运行时有效）
+    listen_addr: Option<SocketAddr>,
     /// 通知 tokio runtime 关闭的信号发送端
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
     /// 后台线程 join handle
@@ -53,6 +55,7 @@ impl CaptureEngine {
         Self {
             state: Mutex::new(EngineState {
                 proxy_state: ProxyState::Stopped,
+                listen_addr: None,
                 shutdown_tx: None,
                 thread_handle: None,
             }),
@@ -116,7 +119,7 @@ impl CaptureEngine {
             Arc::new(mgr.cert_pem()?)
         };
 
-        let addr = SocketAddr::from(([0, 0, 0, 0], port));
+        let addr = SocketAddr::from(([127, 0, 0, 1], port));
         let std_listener = TcpListener::bind(addr)?;
         std_listener.set_nonblocking(true)?;
 
@@ -242,6 +245,7 @@ impl CaptureEngine {
 
         state.shutdown_tx = Some(shutdown_tx);
         state.thread_handle = Some(thread_handle);
+        state.listen_addr = Some(addr);
         state.proxy_state = ProxyState::Running { port };
         self.events
             .publish(manifest::PLUGIN_ID, AppEventKind::FeatureChanged);
@@ -282,6 +286,7 @@ impl CaptureEngine {
         // 更新状态
         if let Ok(mut s) = self.state.lock() {
             s.proxy_state = ProxyState::Stopped;
+            s.listen_addr = None;
         }
         self.events
             .publish(manifest::PLUGIN_ID, AppEventKind::FeatureChanged);
@@ -309,6 +314,11 @@ impl CaptureEngine {
             .lock()
             .map(|s| s.proxy_state.clone())
             .unwrap_or(ProxyState::Stopped)
+    }
+
+    /// 当前监听地址（仅在运行时有效）。
+    pub fn listen_addr(&self) -> Option<SocketAddr> {
+        self.state.lock().ok().and_then(|s| s.listen_addr)
     }
 
     /// 证书状态。

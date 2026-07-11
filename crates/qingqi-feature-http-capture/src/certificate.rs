@@ -1,8 +1,11 @@
 use std::{
-    fs,
+    fs, io,
     path::{Path, PathBuf},
     process::Command,
 };
+
+#[cfg(unix)]
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
 use anyhow::Context;
 use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, KeyPair, KeyUsagePurpose};
@@ -57,6 +60,7 @@ impl CaManager {
     pub fn ensure_ca(&mut self) -> anyhow::Result<()> {
         if self.cert_path.exists() && self.key_path.exists() {
             // 从文件加载
+            check_key_permissions(&self.key_path).context("检查 CA 私钥文件权限失败")?;
             let cert_pem = fs::read_to_string(&self.cert_path).context("读取 CA 证书文件失败")?;
             let key_pem = fs::read_to_string(&self.key_path).context("读取 CA 私钥文件失败")?;
 
@@ -110,7 +114,7 @@ impl CaManager {
 
         // 持久化到文件
         fs::write(&self.cert_path, ca.pem()).context("写入 CA 证书文件失败")?;
-        fs::write(&self.key_path, key.serialize_pem()).context("写入 CA 私钥文件失败")?;
+        write_private_key(&self.key_path, &key.serialize_pem()).context("写入 CA 私钥文件失败")?;
         fs::write(&self.mobile_cert_path, ca.pem()).context("写入 CA 证书 CRT 文件失败")?;
 
         self.ca_params = Some(params);
@@ -278,6 +282,50 @@ impl CaManager {
     }
 }
 
+/// 写入私钥文件并强制收紧权限到 `0o600`。
+///
+/// Unix 上使用 `mode(0o600)` 创建并用 `set_permissions` 修正已存在文件。
+/// 仅返回 I/O 错误，绝不泄露密钥材料。
+fn write_private_key(path: &Path, pem: &str) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)?;
+        io::Write::write_all(&mut file, pem.as_bytes())?;
+        file.sync_all()?;
+        // 覆盖已存在文件时 mode 可能受 umask 影响，显式再收紧
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        fs::write(path, pem)
+    }
+}
+
+/// 检查已有私钥文件权限，若比 `0o600` 更宽松则自动收紧。
+/// 任何检查或修复失败都会阻止私钥继续加载。
+fn check_key_permissions(path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        let meta = fs::metadata(path)?;
+        let mode = meta.permissions().mode() & 0o777;
+        if mode != 0o600 {
+            tracing::warn!("CA 私钥文件权限过宽 (mode={:04o})，自动收紧为 0o600", mode);
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        fs::metadata(path)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -328,5 +376,87 @@ mod tests {
         let mgr = CaManager::new(paths).unwrap();
         let pem = mgr.cert_pem().unwrap();
         assert!(!pem.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_private_key_has_mode_0o600() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!(
+            "qingqi-ca-perm-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::create_dir_all(&dir);
+        let key_path = dir.join("test-key.pem");
+        let pem = "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n";
+        write_private_key(&key_path, pem).unwrap();
+
+        let mode = fs::metadata(&key_path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "新生成私钥权限应为 0o600");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn existing_key_0o644_gets_restricted_to_0o600() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!(
+            "qingqi-ca-fixperm-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::create_dir_all(&dir);
+        let key_path = dir.join("test-key.pem");
+        let pem = "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n";
+        fs::write(&key_path, pem).unwrap();
+        fs::set_permissions(&key_path, fs::Permissions::from_mode(0o644)).unwrap();
+
+        // 模拟 CaManager 加载路径：先 write 创建 manager，再检查权限收紧逻辑
+        check_key_permissions(&key_path).unwrap();
+
+        let mode = fs::metadata(&key_path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "0o644 的私钥应被收紧为 0o600");
+    }
+
+    #[test]
+    fn key_permission_check_propagates_metadata_errors() {
+        let missing = std::env::temp_dir().join(format!(
+            "qingqi-ca-missing-key-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        assert!(check_key_permissions(&missing).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_private_key_fails_on_nonwritable_dir() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!(
+            "qingqi-ca-nowrite-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::create_dir_all(&dir);
+        let key_path = dir.join("test-key.pem");
+        let pem = "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n";
+
+        // 移除目录写权限
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o500)).unwrap();
+
+        let result = write_private_key(&key_path, pem);
+        assert!(result.is_err(), "不可写目录写入应返回错误");
+
+        // 恢复权限以便清理
+        let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o700));
+        let _ = fs::remove_dir_all(&dir);
     }
 }

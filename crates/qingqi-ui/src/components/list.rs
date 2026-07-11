@@ -1,10 +1,10 @@
 //! List component — local replacement for qingqi-ui::list.
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use gpui::{
-    prelude::*, App, IntoElement, Pixels, RenderOnce,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window, div, px,
+    App, IntoElement, Pixels, RenderOnce, StatefulInteractiveElement, StyleRefinement, Styled,
+    Window, div, prelude::*, px,
 };
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::styled::StyledExt;
 
@@ -18,8 +18,17 @@ pub struct ListItem {
 
 impl ListItem {
     pub fn new(id: impl Into<gpui::ElementId>) -> Self {
-        let d = div().id(id).h(px(32.)).px_3().gap_2().items_center().text_size(px(13.));
-        Self { base: d, style: StyleRefinement::default() }
+        let d = div()
+            .id(id)
+            .h(px(32.))
+            .px_3()
+            .gap_2()
+            .items_center()
+            .text_size(px(13.));
+        Self {
+            base: d,
+            style: StyleRefinement::default(),
+        }
     }
 
     pub fn pl(mut self, padding: Pixels) -> Self {
@@ -41,7 +50,9 @@ impl ListItem {
 }
 
 impl Styled for ListItem {
-    fn style(&mut self) -> &mut StyleRefinement { &mut self.style }
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
 }
 
 impl RenderOnce for ListItem {

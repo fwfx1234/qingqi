@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, prelude::FluentBuilder, App, ElementId, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window, hsla, px,
+    App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
+    StatefulInteractiveElement, Styled, Window, div, hsla, prelude::FluentBuilder, px,
 };
 
 use crate::token::tokens;
@@ -68,7 +68,11 @@ impl RenderOnce for Tab {
             .px_3()
             .py_1p5()
             .text_size(px(13.0))
-            .text_color(if selected { t.foreground } else { t.muted_foreground })
+            .text_color(if selected {
+                t.foreground
+            } else {
+                t.muted_foreground
+            })
             .font_weight(if selected {
                 gpui::FontWeight::SEMIBOLD
             } else {
@@ -78,9 +82,11 @@ impl RenderOnce for Tab {
 
         match self.variant {
             TabVariant::Default => {
-                tab = tab
-                    .border_b_2()
-                    .border_color(if selected { t.accent } else { gpui::hsla(0.0, 0.0, 0.0, 0.0) });
+                tab = tab.border_b_2().border_color(if selected {
+                    t.accent
+                } else {
+                    gpui::hsla(0.0, 0.0, 0.0, 0.0)
+                });
             }
             TabVariant::Pill => {
                 tab = tab.rounded(px(6.0)).bg(if selected {
@@ -182,6 +188,5 @@ impl RenderOnce for TabBar {
                 }
                 tab
             }))
-            
     }
 }

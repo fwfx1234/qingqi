@@ -21,7 +21,7 @@ use qingqi_plugin::job::{JobId, JobProvider, JobSnapshot};
 use super::{
     model::{
         DownloadSettings, DownloadTask, FileCategory, TaskStatus, file_extension, guess_file_name,
-        parse_custom_headers,
+        parse_custom_headers, sanitize_file_name,
     },
     store::DownloadStore,
 };
@@ -29,6 +29,8 @@ use super::{
 const SPEED_WINDOW_MS: u128 = 2000;
 const BUFFER_SIZE: usize = 64 * 1024;
 const MIN_UPDATE_INTERVAL_MS: u128 = 200;
+
+type DownloadSleeper = Arc<dyn Fn(Duration) + Send + Sync>;
 
 struct ActiveDownload {
     cancel_flag: Arc<AtomicBool>,
@@ -44,6 +46,8 @@ pub struct DownloadService {
     settings: Arc<Mutex<DownloadSettings>>,
     /// 复用的 HTTP 客户端，设置变更时重建以节省 TLS 握手和连接建立开销
     client: Arc<Mutex<reqwest::blocking::Client>>,
+    /// 重试退避等待，可由测试注入以提高测试速度并避免真实长 sleep。
+    sleeper: Arc<Mutex<DownloadSleeper>>,
 }
 
 impl DownloadService {
@@ -57,6 +61,9 @@ impl DownloadService {
             revision: Arc::new(AtomicU64::new(0)),
             settings: Arc::new(Mutex::new(settings)),
             client: Arc::new(Mutex::new(client)),
+            sleeper: Arc::new(Mutex::new(
+                Arc::new(|dur: Duration| thread::sleep(dur)) as DownloadSleeper
+            )),
         }
     }
 
@@ -80,7 +87,14 @@ impl DownloadService {
             revision: Arc::clone(&self.revision),
             settings: Arc::clone(&self.settings),
             client: Arc::clone(&self.client),
+            sleeper: lock_or_recover(&self.sleeper, "download-sleeper").clone(),
         }
+    }
+
+    #[cfg(test)]
+    pub fn set_sleeper(&self, sleeper: DownloadSleeper) {
+        let mut s = lock_or_recover(&self.sleeper, "download-sleeper");
+        *s = sleeper;
     }
 
     fn load_settings_from_store(store: &DownloadStore, save_dir: &Path) -> DownloadSettings {
@@ -308,6 +322,7 @@ struct DownloadRuntime {
     revision: Arc<AtomicU64>,
     settings: Arc<Mutex<DownloadSettings>>,
     client: Arc<Mutex<reqwest::blocking::Client>>,
+    sleeper: DownloadSleeper,
 }
 
 impl DownloadRuntime {
@@ -400,6 +415,7 @@ impl DownloadRuntime {
         let revision = Arc::clone(&self.revision);
         let settings = Arc::clone(&self.settings);
         let client = self.http_client();
+        let sleeper = self.sleeper.clone();
         let scheduler = self.clone();
         let task_id = task_id.to_string();
         let url = task.url.clone();
@@ -420,6 +436,7 @@ impl DownloadRuntime {
                 &store,
                 &settings,
                 &client,
+                &sleeper,
             );
 
             lock_or_recover(&active_map, "download-active-map").remove(&task_id);
@@ -716,16 +733,17 @@ impl DownloadService {
     }
 
     fn resolve_save_path_in_dir(dir: &Path, file_name: &str) -> PathBuf {
-        let base = dir.join(file_name);
+        let safe = sanitize_file_name(file_name);
+        let base = dir.join(&safe);
         if !base.exists() {
             return base;
         }
 
-        let stem = Path::new(file_name)
+        let stem = Path::new(&safe)
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("file");
-        let ext = Path::new(file_name)
+        let ext = Path::new(&safe)
             .extension()
             .and_then(|s| s.to_str())
             .map(|e| format!(".{e}"))
@@ -818,6 +836,7 @@ fn download_file(
     store: &Arc<Mutex<DownloadStore>>,
     settings: &Arc<Mutex<DownloadSettings>>,
     client: &reqwest::blocking::Client,
+    sleeper: &DownloadSleeper,
 ) -> Result<(), DownloadError> {
     let (user_agent, referer, cookie, custom_headers_str, speed_limit_kbps, retry_limit) = {
         let s = lock_or_recover(&settings, "download-settings");
@@ -831,162 +850,329 @@ fn download_file(
         )
     };
 
-    let mut request = client.get(url);
+    let max_attempts = retry_limit as usize + 1;
+    let mut last_error: Option<anyhow::Error> = None;
 
-    if !user_agent.is_empty() {
-        request = request.header("User-Agent", &user_agent);
-    }
-    if !referer.is_empty() {
-        request = request.header("Referer", &referer);
-    }
-    if !cookie.is_empty() {
-        request = request.header("Cookie", &cookie);
-    }
-    for (key, value) in parse_custom_headers(&custom_headers_str) {
-        request = request.header(&key, &value);
-    }
-    if initial_downloaded > 0 {
-        request = request.header("Range", format!("bytes={}-", initial_downloaded));
-    }
-
-    let mut response = request.send().context("无法连接服务器")?;
-
-    if !response.status().is_success() && response.status().as_u16() != 206 {
-        let status = response.status();
-        let err = DownloadError::Other(anyhow!("服务器返回错误: {}", status));
-        // Auto-retry for transient errors
-        if retry_limit > 0 && is_retryable(status.as_u16()) {
-            let attempts = {
-                let s = lock_or_recover(&store, "download-store");
-                s.get_task(task_id)
-                    .ok()
-                    .flatten()
-                    .map(|t| t.downloaded)
-                    .unwrap_or(0)
-            };
-            if attempts == 0 {
-                // Simple: retry once by setting to pending and re-dispatching
-                let _ = store
-                    .lock()
-                    .unwrap()
-                    .update_status(task_id, TaskStatus::Pending, "");
-                return Err(err);
-            }
-        }
-        return Err(err);
-    }
-
-    let total_size = if initial_downloaded > 0 && response.status().as_u16() == 206 {
-        parse_content_range(response.headers().get("Content-Range"))
-    } else {
-        response
-            .headers()
-            .get("Content-Length")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.parse::<u64>().ok())
-    };
-
-    let is_resumed = initial_downloaded > 0 && response.status().as_u16() == 206;
-
-    // Update file_size if we got it from response
-    if let Some(size) = total_size {
-        let s = lock_or_recover(&store, "download-store");
-        if let Ok(Some(mut task)) = s.get_task(task_id) {
-            task.file_size = Some(size);
-            log_error!(s.update_task(&task), warn, "更新下载任务信息失败");
-        }
-    }
-
-    let mut file = if is_resumed {
-        OpenOptions::new()
-            .append(true)
-            .open(save_path)
-            .with_context(|| format!("无法打开文件 {}", save_path))?
-    } else {
-        progress.store(0, Ordering::Relaxed);
-        if let Some(parent) = Path::new(save_path).parent() {
-            log_error!(fs::create_dir_all(parent), error, "创建下载子目录失败");
-        }
-        File::create(save_path).with_context(|| format!("无法创建文件 {}", save_path))?
-    };
-
-    let mut downloaded = initial_downloaded;
-    let mut speed_tracker = SpeedTracker::new();
-    let mut last_db_update = Instant::now();
-
-    let mut buf = vec![0u8; BUFFER_SIZE];
-    loop {
+    'attempts: for attempt in 1..=max_attempts {
         if cancel_flag.load(Ordering::Relaxed) {
             return Err(DownloadError::Cancelled);
         }
-
         if pause_flag.load(Ordering::Relaxed) {
             return Err(DownloadError::Paused);
         }
 
-        let n = response.read(&mut buf).context("下载数据读取失败")?;
-        if n == 0 {
-            break;
+        let local_file_len = Path::new(save_path).metadata().map(|m| m.len()).ok();
+
+        let effective_downloaded = if initial_downloaded > 0 {
+            match local_file_len {
+                Some(len) if len == initial_downloaded => initial_downloaded,
+                _ => 0,
+            }
+        } else {
+            0
+        };
+
+        let mut response = match try_request(
+            client,
+            url,
+            effective_downloaded,
+            &user_agent,
+            &referer,
+            &cookie,
+            &custom_headers_str,
+        ) {
+            Ok(resp) => resp,
+            Err(err) => {
+                tracing::warn!(
+                    task_id,
+                    attempt,
+                    max_attempts,
+                    error = %err,
+                    status = "",
+                    "download request failed"
+                );
+                if attempt < max_attempts {
+                    last_error = Some(err);
+                    let delay = backoff_delay(attempt);
+                    (sleeper)(delay);
+                    continue;
+                }
+                return Err(DownloadError::Other(err.context("无法连接服务器")));
+            }
+        };
+
+        let status_code = response.status().as_u16();
+        let is_206 = status_code == 206;
+
+        if !response.status().is_success() && !is_206 {
+            if is_retryable(status_code) && attempt < max_attempts {
+                tracing::warn!(
+                    task_id,
+                    attempt,
+                    max_attempts,
+                    status = status_code,
+                    error = "",
+                    "download got retryable HTTP status"
+                );
+                last_error = Some(anyhow!("服务器返回错误: {}", response.status()));
+                let delay = backoff_delay(attempt);
+                (sleeper)(delay);
+                continue;
+            }
+            return Err(DownloadError::Other(anyhow!(
+                "服务器返回错误: {}",
+                response.status()
+            )));
         }
 
-        file.write_all(&buf[..n]).context("写入文件失败")?;
-        downloaded += n as u64;
-        progress.store(downloaded, Ordering::Relaxed);
-        speed_tracker.add_bytes(n);
+        let parsed_range = if is_206 {
+            parse_content_range(response.headers().get("Content-Range"))
+        } else {
+            None
+        };
 
-        let current_speed = speed_tracker.current_speed();
-        *lock_or_recover(&speed, "download-speed") = current_speed;
-
-        // Speed limit throttling
-        if speed_limit_kbps > 0 {
-            let expected_bytes_per_sec = speed_limit_kbps as f64 * 1024.0;
-            let actual_speed = speed_tracker.current_speed();
-            if actual_speed > expected_bytes_per_sec {
-                let delay = (actual_speed / expected_bytes_per_sec - 1.0) * 0.1;
-                if delay > 0.0 {
-                    thread::sleep(Duration::from_secs_f64(delay.min(0.5)));
+        if is_206 {
+            match parsed_range {
+                Some(ref cr) if cr.start == effective_downloaded => {}
+                _ => {
+                    let start_display = parsed_range
+                        .as_ref()
+                        .map(|cr| cr.start.to_string())
+                        .unwrap_or_else(|| "未解析".to_string());
+                    return Err(DownloadError::Other(anyhow!(
+                        "服务器返回 206 但 Content-Range 起点 {} 不等于本地进度 {}",
+                        start_display,
+                        effective_downloaded
+                    )));
                 }
             }
         }
 
-        if last_db_update.elapsed().as_millis() >= MIN_UPDATE_INTERVAL_MS {
-            log_error!(
-                store.lock().unwrap().update_progress(
-                    task_id,
-                    downloaded,
-                    current_speed,
-                    TaskStatus::Downloading
-                ),
-                warn,
-                "更新下载进度失败"
-            );
-            last_db_update = Instant::now();
+        let total_size = match parsed_range {
+            Some(ref cr) => Some(cr.total),
+            None => response
+                .headers()
+                .get("Content-Length")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.parse::<u64>().ok()),
+        };
+
+        let is_resumed = is_206 && effective_downloaded > 0;
+
+        if let Some(size) = total_size {
+            let s = lock_or_recover(&store, "download-store");
+            if let Ok(Some(mut task)) = s.get_task(task_id) {
+                task.file_size = Some(size);
+                log_error!(s.update_task(&task), warn, "更新下载任务信息失败");
+            }
         }
+
+        let mut file = if is_resumed {
+            let current_len = fs::metadata(save_path)
+                .context("无法读取本地文件元数据")?
+                .len();
+            if current_len != effective_downloaded {
+                return Err(DownloadError::Other(anyhow!(
+                    "本地文件长度 {} 不等于续传起点 {}",
+                    current_len,
+                    effective_downloaded
+                )));
+            }
+            OpenOptions::new()
+                .append(true)
+                .open(save_path)
+                .with_context(|| format!("无法打开文件 {}", save_path))?
+        } else {
+            progress.store(0, Ordering::Relaxed);
+            if let Some(parent) = Path::new(save_path).parent() {
+                log_error!(fs::create_dir_all(parent), error, "创建下载子目录失败");
+            }
+            File::create(save_path).with_context(|| format!("无法创建文件 {}", save_path))?
+        };
+
+        let mut downloaded = if is_resumed { effective_downloaded } else { 0 };
+        let response_start = downloaded;
+        let mut speed_tracker = SpeedTracker::new();
+        let mut last_db_update = Instant::now();
+
+        let mut buf = vec![0u8; BUFFER_SIZE];
+        loop {
+            if cancel_flag.load(Ordering::Relaxed) {
+                return Err(DownloadError::Cancelled);
+            }
+
+            if pause_flag.load(Ordering::Relaxed) {
+                return Err(DownloadError::Paused);
+            }
+
+            let n = match response.read(&mut buf) {
+                Ok(n) => n,
+                Err(error) if attempt < max_attempts => {
+                    let error = anyhow!(error).context("下载数据读取失败");
+                    tracing::warn!(
+                        task_id,
+                        attempt,
+                        max_attempts,
+                        error = %error,
+                        "download body read failed"
+                    );
+                    last_error = Some(error);
+                    drop(file);
+                    (sleeper)(backoff_delay(attempt));
+                    continue 'attempts;
+                }
+                Err(error) => {
+                    return Err(DownloadError::Other(
+                        anyhow!(error).context("下载数据读取失败"),
+                    ));
+                }
+            };
+            if n == 0 {
+                break;
+            }
+
+            file.write_all(&buf[..n]).context("写入文件失败")?;
+            downloaded += n as u64;
+            progress.store(downloaded, Ordering::Relaxed);
+            speed_tracker.add_bytes(n);
+
+            let current_speed = speed_tracker.current_speed();
+            *lock_or_recover(&speed, "download-speed") = current_speed;
+
+            if speed_limit_kbps > 0 {
+                let expected_bytes_per_sec = speed_limit_kbps as f64 * 1024.0;
+                let actual_speed = speed_tracker.current_speed();
+                if actual_speed > expected_bytes_per_sec {
+                    let delay = (actual_speed / expected_bytes_per_sec - 1.0) * 0.1;
+                    if delay > 0.0 {
+                        thread::sleep(Duration::from_secs_f64(delay.min(0.5)));
+                    }
+                }
+            }
+
+            if last_db_update.elapsed().as_millis() >= MIN_UPDATE_INTERVAL_MS {
+                log_error!(
+                    store.lock().unwrap().update_progress(
+                        task_id,
+                        downloaded,
+                        current_speed,
+                        TaskStatus::Downloading
+                    ),
+                    warn,
+                    "更新下载进度失败"
+                );
+                last_db_update = Instant::now();
+            }
+        }
+
+        file.flush().context("刷新下载文件失败")?;
+
+        let received = downloaded.saturating_sub(response_start);
+        let expected_received = parsed_range
+            .as_ref()
+            .map(|range| range.end - range.start + 1)
+            .or_else(|| {
+                response
+                    .headers()
+                    .get("Content-Length")
+                    .and_then(|value| value.to_str().ok())
+                    .and_then(|value| value.parse::<u64>().ok())
+            });
+        let final_size_valid = parsed_range
+            .as_ref()
+            .is_none_or(|range| downloaded == range.total && range.end + 1 == range.total);
+        if expected_received.is_some_and(|expected| received != expected) || !final_size_valid {
+            let error = anyhow!(
+                "下载响应不完整: 本次接收 {} 字节，声明 {:?} 字节，最终大小 {}",
+                received,
+                expected_received,
+                downloaded
+            );
+            if attempt < max_attempts {
+                last_error = Some(error);
+                drop(file);
+                (sleeper)(backoff_delay(attempt));
+                continue 'attempts;
+            }
+            return Err(DownloadError::Other(error));
+        }
+
+        store
+            .lock()
+            .unwrap()
+            .update_progress(task_id, downloaded, 0.0, TaskStatus::Completed)?;
+
+        return Ok(());
     }
 
-    log_error!(file.flush(), warn, "刷新下载文件失败");
+    Err(DownloadError::Other(
+        last_error.unwrap_or_else(|| anyhow!("所有重试均失败")),
+    ))
+}
 
-    // Mark as completed
-    store
-        .lock()
-        .unwrap()
-        .update_progress(task_id, downloaded, 0.0, TaskStatus::Completed)?;
+fn try_request(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    effective_downloaded: u64,
+    user_agent: &str,
+    referer: &str,
+    cookie: &str,
+    custom_headers_str: &str,
+) -> anyhow::Result<reqwest::blocking::Response> {
+    let mut request = client.get(url);
+    if !user_agent.is_empty() {
+        request = request.header("User-Agent", user_agent);
+    }
+    if !referer.is_empty() {
+        request = request.header("Referer", referer);
+    }
+    if !cookie.is_empty() {
+        request = request.header("Cookie", cookie);
+    }
+    for (key, value) in parse_custom_headers(custom_headers_str) {
+        request = request.header(&key, &value);
+    }
+    if effective_downloaded > 0 {
+        request = request.header("Range", format!("bytes={}-", effective_downloaded));
+    }
+    request.send().map_err(|e| anyhow!(e))
+}
 
-    Ok(())
+fn backoff_delay(attempt: usize) -> Duration {
+    let exp = 2_u32.pow((attempt as u32).min(5));
+    let millis = (200_u64 * exp as u64).min(8000);
+    Duration::from_millis(millis)
 }
 
 fn is_retryable(status_code: u16) -> bool {
     matches!(status_code, 408 | 425 | 429) || (500..600).contains(&status_code)
 }
 
-fn parse_content_range(header: Option<&reqwest::header::HeaderValue>) -> Option<u64> {
+#[derive(Debug, PartialEq)]
+struct ContentRange {
+    start: u64,
+    end: u64,
+    total: u64,
+}
+
+fn parse_content_range(header: Option<&reqwest::header::HeaderValue>) -> Option<ContentRange> {
     let val = header?.to_str().ok()?;
-    // Format: bytes 0-999/1000 or bytes 0-999/*
-    let total_str = val.rsplit('/').next()?;
+    let (unit, rest) = val.split_once(' ')?;
+    if unit != "bytes" {
+        return None;
+    }
+    let (range, total_str) = rest.split_once('/')?;
+    let (start_str, end_str) = range.split_once('-')?;
+    let start = start_str.parse::<u64>().ok()?;
+    let end = end_str.parse::<u64>().ok()?;
     if total_str == "*" {
         return None;
     }
-    total_str.parse().ok()
+    let total = total_str.parse::<u64>().ok()?;
+    if start > end || end >= total {
+        return None;
+    }
+    Some(ContentRange { start, end, total })
 }
 
 struct SpeedTracker {
@@ -1143,6 +1329,43 @@ mod tests {
         (base_url, release_tx, handle)
     }
 
+    fn spawn_record_response_server(
+        status: u16,
+        extra_headers: &str,
+        body: &[u8],
+    ) -> (String, thread::JoinHandle<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let extra = extra_headers.to_string();
+        let body = body.to_vec();
+        let handle = thread::spawn(move || {
+            let mut captured = String::new();
+            if let Some(mut stream) = accept_with_timeout(&listener) {
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+                let mut buffer = [0; 2048];
+                let n = stream.read(&mut buffer).unwrap_or(0);
+                captured = String::from_utf8_lossy(&buffer[..n]).to_string();
+                let status_text = match status {
+                    200 => "OK",
+                    206 => "Partial Content",
+                    _ => "Error",
+                };
+                let response = format!(
+                    "HTTP/1.1 {} {}\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n",
+                    status,
+                    status_text,
+                    extra,
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.write_all(&body);
+            }
+            captured
+        });
+        (base_url, handle)
+    }
+
     fn task_status(service: &DownloadService, task_id: &str) -> Option<TaskStatus> {
         service
             .tasks_snapshot()
@@ -1191,6 +1414,518 @@ mod tests {
         assert_eq!(
             task_status(&service, &second.id),
             Some(TaskStatus::Completed)
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn parse_content_range_bytes_100_199_over_200() {
+        let header = reqwest::header::HeaderValue::from_static("bytes 100-199/200");
+        assert_eq!(
+            parse_content_range(Some(&header)),
+            Some(ContentRange {
+                start: 100,
+                end: 199,
+                total: 200
+            })
+        );
+    }
+
+    #[test]
+    fn parse_content_range_star_returns_none() {
+        let header = reqwest::header::HeaderValue::from_static("bytes 0-999/*");
+        assert_eq!(parse_content_range(Some(&header)), None);
+    }
+
+    #[test]
+    fn parse_content_range_malformed_returns_none() {
+        assert_eq!(
+            parse_content_range(Some(&reqwest::header::HeaderValue::from_static("bogus"))),
+            None
+        );
+        assert_eq!(
+            parse_content_range(Some(&reqwest::header::HeaderValue::from_static(
+                "bytes 100"
+            ))),
+            None
+        );
+        assert_eq!(
+            parse_content_range(Some(&reqwest::header::HeaderValue::from_static(
+                "bytes abc-def/ghi"
+            ))),
+            None
+        );
+        assert_eq!(parse_content_range(None), None);
+        for invalid in ["bytes 100-99/200", "bytes 0-200/200", "bytes 0-0/0"] {
+            let header = reqwest::header::HeaderValue::from_str(invalid).unwrap();
+            assert_eq!(parse_content_range(Some(&header)), None, "{invalid}");
+        }
+    }
+
+    #[test]
+    fn resume_rejects_206_with_mismatched_start() {
+        let (service, root) = make_service();
+        service
+            .set_network_options("", "", "", "", "", 30, 0)
+            .unwrap();
+
+        let (base_url, server) =
+            spawn_record_response_server(206, "Content-Range: bytes 0-99/200\r\n", &[b'X'; 100]);
+
+        let task = service.add_task(&format!("{base_url}/test.bin")).unwrap();
+
+        service
+            .store()
+            .lock()
+            .unwrap()
+            .update_progress(&task.id, 100, 0.0, TaskStatus::Paused)
+            .unwrap();
+        let save_path = PathBuf::from(&task.save_path);
+        if let Some(parent) = save_path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        File::create(&save_path)
+            .unwrap()
+            .write_all(&[b'A'; 100])
+            .unwrap();
+
+        service.start_download(&task.id).unwrap();
+
+        assert!(
+            wait_until(Duration::from_secs(5), || {
+                task_status(&service, &task.id) == Some(TaskStatus::Failed)
+            }),
+            "task should fail when 206 start mismatches local progress"
+        );
+
+        let task = service
+            .tasks_snapshot()
+            .into_iter()
+            .find(|t| t.id == task.id)
+            .unwrap();
+        assert!(
+            task.error_msg.contains("Content-Range"),
+            "error was: {}",
+            task.error_msg
+        );
+
+        let request = server.join().unwrap();
+        assert!(
+            request.contains("Range: bytes=100-"),
+            "should have sent Range header"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn resume_with_200_response_resets_progress_and_rewrites_file() {
+        let (service, root) = make_service();
+        service
+            .set_network_options("", "", "", "", "", 30, 0)
+            .unwrap();
+
+        let new_body = b"fresh-content";
+        let (base_url, server) = spawn_record_response_server(200, "", new_body);
+
+        let task = service.add_task(&format!("{base_url}/test.bin")).unwrap();
+
+        service
+            .store()
+            .lock()
+            .unwrap()
+            .update_progress(&task.id, 100, 0.0, TaskStatus::Paused)
+            .unwrap();
+        let save_path = PathBuf::from(&task.save_path);
+        if let Some(parent) = save_path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        File::create(&save_path)
+            .unwrap()
+            .write_all(&[b'A'; 100])
+            .unwrap();
+
+        service.start_download(&task.id).unwrap();
+
+        assert!(
+            wait_until(Duration::from_secs(5), || {
+                task_status(&service, &task.id) == Some(TaskStatus::Completed)
+            }),
+            "task should complete"
+        );
+
+        let content = fs::read(&save_path).unwrap();
+        assert_eq!(
+            content,
+            new_body.to_vec(),
+            "file should contain only new response body"
+        );
+
+        let request = server.join().unwrap();
+        assert!(
+            request.contains("Range: bytes=100-"),
+            "should have sent Range header"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn missing_local_file_with_db_progress_does_not_append() {
+        let (service, root) = make_service();
+        service
+            .set_network_options("", "", "", "", "", 30, 0)
+            .unwrap();
+
+        let body = b"full-content-from-start";
+        let (base_url, server) = spawn_record_response_server(200, "", body);
+
+        let task = service.add_task(&format!("{base_url}/test.bin")).unwrap();
+
+        service
+            .store()
+            .lock()
+            .unwrap()
+            .update_progress(&task.id, 100, 0.0, TaskStatus::Paused)
+            .unwrap();
+        let save_path = PathBuf::from(&task.save_path);
+        if save_path.exists() {
+            fs::remove_file(&save_path).unwrap();
+        }
+
+        service.start_download(&task.id).unwrap();
+
+        assert!(
+            wait_until(Duration::from_secs(5), || {
+                task_status(&service, &task.id) == Some(TaskStatus::Completed)
+            }),
+            "task should complete"
+        );
+
+        let content = fs::read(&save_path).unwrap();
+        assert_eq!(content, body.to_vec());
+
+        let request = server.join().unwrap();
+        assert!(
+            !request.contains("Range:"),
+            "should NOT have sent Range header when local file missing"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    fn make_service_with_sleeper(sleeper: DownloadSleeper) -> (DownloadService, PathBuf) {
+        let (service, root) = make_service();
+        service.set_sleeper(sleeper);
+        (service, root)
+    }
+
+    fn spawn_sequence_server(
+        status_codes: Vec<u16>,
+    ) -> (String, Arc<AtomicU64>, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let counter = Arc::new(AtomicU64::new(0));
+        let counter_task = counter.clone();
+        let handle = thread::spawn(move || {
+            let mut index = 0;
+            loop {
+                let Some(mut stream) = accept_with_timeout(&listener) else {
+                    return;
+                };
+                counter_task.fetch_add(1, Ordering::Relaxed);
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+                let mut buffer = [0; 2048];
+                let _ = stream.read(&mut buffer);
+                let code = status_codes.get(index).copied().unwrap_or(200);
+                index += 1;
+                let status_text = match code {
+                    200 => "OK",
+                    404 => "Not Found",
+                    500 => "Internal Server Error",
+                    503 => "Service Unavailable",
+                    _ => "Error",
+                };
+                let body = if code == 200 {
+                    format!("success-body-{index}")
+                } else {
+                    "error".to_string()
+                };
+                let headers = format!(
+                    "HTTP/1.1 {} {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    code,
+                    status_text,
+                    body.len()
+                );
+                let _ = stream.write_all(headers.as_bytes());
+                let _ = stream.write_all(body.as_bytes());
+            }
+        });
+        (base_url, counter, handle)
+    }
+
+    #[test]
+    fn retry_succeeds_after_two_500s_with_three_requests() {
+        let (service, root) = make_service_with_sleeper(Arc::new(|_dur| {
+            // 测试中注入极短 sleep 以避免真实长等待
+            thread::sleep(Duration::from_millis(1));
+        }));
+        service
+            .set_network_options("", "", "", "", "", 30, 2)
+            .unwrap();
+
+        let (base_url, counter, _server) = spawn_sequence_server(vec![500, 500, 200]);
+
+        let task = service.add_task(&format!("{base_url}/test.bin")).unwrap();
+        service.start_download(&task.id).unwrap();
+
+        assert!(
+            wait_until(Duration::from_secs(5), || {
+                task_status(&service, &task.id) == Some(TaskStatus::Completed)
+            }),
+            "task should eventually complete after retries"
+        );
+        assert_eq!(
+            counter.load(Ordering::Relaxed),
+            3,
+            "should make exactly 3 attempts"
+        );
+
+        let content = fs::read_to_string(PathBuf::from(
+            service
+                .tasks_snapshot()
+                .into_iter()
+                .find(|t| t.id == task.id)
+                .unwrap()
+                .save_path,
+        ))
+        .unwrap();
+        assert!(
+            content.starts_with("success-body-"),
+            "saved file content: {content}"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn retry_limit_zero_single_request_only() {
+        let (service, root) = make_service_with_sleeper(Arc::new(|_dur| {
+            thread::sleep(Duration::from_millis(1));
+        }));
+        service
+            .set_network_options("", "", "", "", "", 30, 0)
+            .unwrap();
+
+        let (base_url, counter, _server) = spawn_sequence_server(vec![500, 200]);
+
+        let task = service.add_task(&format!("{base_url}/test.bin")).unwrap();
+        service.start_download(&task.id).unwrap();
+
+        assert!(
+            wait_until(Duration::from_secs(5), || {
+                task_status(&service, &task.id) == Some(TaskStatus::Failed)
+            }),
+            "task should fail without retrying"
+        );
+        assert_eq!(
+            counter.load(Ordering::Relaxed),
+            1,
+            "should make only 1 request when retry_limit=0"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn no_retry_on_4xx_error() {
+        let (service, root) = make_service_with_sleeper(Arc::new(|_dur| {
+            thread::sleep(Duration::from_millis(1));
+        }));
+        service
+            .set_network_options("", "", "", "", "", 30, 3)
+            .unwrap();
+
+        let (base_url, counter, _server) = spawn_sequence_server(vec![404, 200]);
+
+        let task = service.add_task(&format!("{base_url}/test.bin")).unwrap();
+        service.start_download(&task.id).unwrap();
+
+        assert!(
+            wait_until(Duration::from_secs(5), || {
+                task_status(&service, &task.id) == Some(TaskStatus::Failed)
+            }),
+            "task should fail on 404 without retrying"
+        );
+        assert_eq!(
+            counter.load(Ordering::Relaxed),
+            1,
+            "should make only 1 request on 404"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn retry_on_transport_error_then_succeed() {
+        let (service, root) = make_service_with_sleeper(Arc::new(|_dur| {
+            thread::sleep(Duration::from_millis(1));
+        }));
+        service
+            .set_network_options("", "", "", "", "", 30, 3)
+            .unwrap();
+
+        // 模拟传输错误：第一次连接直接关闭，之后返回 200
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let counter = Arc::new(AtomicU64::new(0));
+        let counter_task = counter.clone();
+        let _server = thread::spawn(move || {
+            let mut index = 0;
+            loop {
+                let Some(stream) = accept_with_timeout(&listener) else {
+                    return;
+                };
+                counter_task.fetch_add(1, Ordering::Relaxed);
+                if index == 0 {
+                    // 模拟传输错误：不发送任何响应
+                    drop(stream);
+                } else {
+                    let mut stream = stream;
+                    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+                    let mut buffer = [0; 1024];
+                    let _ = stream.read(&mut buffer);
+                    let body = b"recovered";
+                    let headers = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    let _ = stream.write_all(headers.as_bytes());
+                    let _ = stream.write_all(body);
+                }
+                index += 1;
+            }
+        });
+
+        let task = service.add_task(&format!("{base_url}/test.bin")).unwrap();
+        service.start_download(&task.id).unwrap();
+
+        assert!(
+            wait_until(Duration::from_secs(5), || {
+                task_status(&service, &task.id) == Some(TaskStatus::Completed)
+            }),
+            "task should recover after transport error"
+        );
+        assert!(
+            counter.load(Ordering::Relaxed) >= 2,
+            "should make at least 2 requests (1 failure + 1 success)"
+        );
+
+        let content = fs::read_to_string(PathBuf::from(
+            service
+                .tasks_snapshot()
+                .into_iter()
+                .find(|t| t.id == task.id)
+                .unwrap()
+                .save_path,
+        ))
+        .unwrap();
+        assert_eq!(content, "recovered");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn retry_on_truncated_response_body_then_succeed() {
+        let (service, root) = make_service_with_sleeper(Arc::new(|_| {}));
+        service
+            .set_network_options("", "", "", "", "", 30, 1)
+            .unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let counter = Arc::new(AtomicU64::new(0));
+        let counter_task = Arc::clone(&counter);
+        let server = thread::spawn(move || {
+            for index in 0..2 {
+                let Some(mut stream) = accept_with_timeout(&listener) else {
+                    return;
+                };
+                counter_task.fetch_add(1, Ordering::Relaxed);
+                let mut request = [0; 1024];
+                let _ = stream.read(&mut request);
+                if index == 0 {
+                    let _ = stream.write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\nConnection: close\r\n\r\nshort",
+                    );
+                } else {
+                    let _ = stream.write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\nrecovered",
+                    );
+                }
+            }
+        });
+
+        let task = service.add_task(&format!("{base_url}/test.bin")).unwrap();
+        service.start_download(&task.id).unwrap();
+
+        assert!(
+            wait_until(Duration::from_secs(5), || {
+                task_status(&service, &task.id) == Some(TaskStatus::Completed)
+            }),
+            "task should retry after a truncated response body"
+        );
+        assert_eq!(counter.load(Ordering::Relaxed), 2);
+        assert_eq!(fs::read_to_string(&task.save_path).unwrap(), "recovered");
+        server.join().unwrap();
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn cancel_during_backoff_prevents_further_requests() {
+        let (service, root) = make_service_with_sleeper(Arc::new(|_dur| {
+            thread::sleep(Duration::from_millis(50));
+        }));
+        // retry_limit=1: 最多 2 次尝试
+        service
+            .set_network_options("", "", "", "", "", 30, 1)
+            .unwrap();
+
+        // 始终返回 500，退避期间取消后不应再发起请求
+        let (base_url, counter, _server) = spawn_sequence_server(vec![500, 500, 500]);
+
+        let task = service.add_task(&format!("{base_url}/test.bin")).unwrap();
+        service.start_download(&task.id).unwrap();
+
+        // 等待第一次请求完成并确认处于 Downloading 状态
+        assert!(
+            wait_until(Duration::from_secs(3), || {
+                counter.load(Ordering::Relaxed) >= 1
+                    && task_status(&service, &task.id) == Some(TaskStatus::Downloading)
+            }),
+            "task should be in Downloading after first attempt"
+        );
+
+        // 取消任务
+        service.cancel_task(&task.id).unwrap();
+
+        // 确认状态变为 Cancelled
+        assert!(
+            wait_until(Duration::from_secs(5), || {
+                task_status(&service, &task.id) == Some(TaskStatus::Cancelled)
+            }),
+            "task should be cancelled"
+        );
+
+        let request_count = counter.load(Ordering::Relaxed);
+        // 第一次 500 后进入退避，取消后应停止，不应有第二次请求
+        assert!(
+            request_count <= 1,
+            "cancel during backoff should not trigger more requests, got {request_count}"
         );
 
         let _ = fs::remove_dir_all(root);

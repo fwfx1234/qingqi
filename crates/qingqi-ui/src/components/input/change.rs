@@ -36,19 +36,3 @@ impl Change {
         self.version = version
     }
 }
-
-/// A group of changes that should be undone/redone together.
-#[derive(Debug, Default)]
-pub(crate) struct ChangeGroup {
-    pub(crate) changes: Vec<Change>,
-}
-
-impl ChangeGroup {
-    pub fn new() -> Self {
-        Self { changes: Vec::new() }
-    }
-
-    pub fn push(&mut self, change: Change) {
-        self.changes.push(change);
-    }
-}

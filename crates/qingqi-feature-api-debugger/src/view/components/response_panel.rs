@@ -6,12 +6,11 @@ use gpui::{
     AnyElement, App, Entity, InteractiveElement, IntoElement, ParentElement,
     StatefulInteractiveElement, Styled, div, prelude::FluentBuilder, px,
 };
-use qingqi_ui::components::theme::Theme;
-use qingqi_ui::components::icon::IconName;
+use qingqi_ui::components::button::{Button, ButtonVariants};
 use qingqi_ui::components::styled::Sizable;
 use qingqi_ui::components::styled::Size;
-use qingqi_ui::components::button::{Button, ButtonVariants};
-use qingqi_ui::{theme, ui, ui::glass};
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::{icon, theme, ui, ui::glass};
 
 pub fn response_panel(
     view: Entity<ApiDebuggerView>,
@@ -213,7 +212,7 @@ fn response_body_view(
                     .child(
                         Button::new("api-response-binary-warning-icon")
                             .ghost()
-                            .icon(IconName::TriangleAlert)
+                            .icon(icon!(triangle_alert))
                             .with_size(Size::XSmall),
                     )
                     .child("二进制/图片响应，文本预览可能乱码，建议点击「保存」后查看"),
@@ -437,9 +436,9 @@ fn response_action_button(
         ResponseBodyAction::Save => 2,
     };
     let icon = match action {
-        ResponseBodyAction::Copy => IconName::Copy,
-        ResponseBodyAction::Format => IconName::CaseSensitive,
-        ResponseBodyAction::Save => IconName::File,
+        ResponseBodyAction::Copy => icon!(copy),
+        ResponseBodyAction::Format => icon!(case_sensitive),
+        ResponseBodyAction::Save => icon!(file),
     };
     Button::new(("api-response-action", id_index))
         .ghost()

@@ -5,14 +5,13 @@ use gpui::{
     Render, SharedString, StatefulInteractiveElement, Styled, Subscription, TitlebarOptions,
     Window, WindowBounds, WindowKind, WindowOptions, div, px, size,
 };
-use qingqi_ui::components::icon::IconName;
+use qingqi_ui::components::button::{Button, ButtonVariants};
+use qingqi_ui::components::input::{Input, InputState};
 use qingqi_ui::components::root::Root;
 use qingqi_ui::components::styled::Sizable;
 use qingqi_ui::components::styled::Size;
-use qingqi_ui::components::button::{Button, ButtonVariants};
-use qingqi_ui::components::input::{Input, InputState};
 use qingqi_ui::components::theme::Theme;
-use qingqi_ui::{theme, ui, ui::glass};
+use qingqi_ui::{icon, theme, ui, ui::glass};
 
 pub fn open_env_editor_window(debugger: Entity<ApiDebuggerView>, cx: &mut App) {
     if debugger.read(cx).env_editor_window.is_some() {
@@ -259,7 +258,7 @@ fn env_chips_bar(
         .child(
             Button::new("api-env-win-new")
                 .ghost()
-                .icon(IconName::Plus)
+                .icon(icon!(plus))
                 .with_size(Size::XSmall)
                 .on_click({
                     let h = handle.clone();
@@ -342,7 +341,7 @@ fn env_bottom_bar(handle: Entity<ApiDebuggerView>, cx: &App) -> impl IntoElement
         .child(
             Button::new("api-env-win-export")
                 .ghost()
-                .icon(IconName::File)
+                .icon(icon!(file))
                 .with_size(Size::XSmall)
                 .tooltip("导出")
                 .on_click({
@@ -355,7 +354,7 @@ fn env_bottom_bar(handle: Entity<ApiDebuggerView>, cx: &App) -> impl IntoElement
         .child(
             Button::new("api-env-win-import")
                 .ghost()
-                .icon(IconName::FolderOpen)
+                .icon(icon!(folder_open))
                 .with_size(Size::XSmall)
                 .tooltip("导入")
                 .on_click({

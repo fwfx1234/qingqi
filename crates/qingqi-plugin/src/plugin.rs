@@ -95,6 +95,9 @@ pub trait WindowView {
     fn on_reopen(&mut self, _window: &mut Window, _cx: &mut App) {}
     fn on_input_changed(&mut self, _text: &str, _cx: &mut App) {}
     fn on_close(&mut self) {}
+    fn on_close_with_app(&mut self, _cx: &mut App) {
+        self.on_close();
+    }
 }
 
 pub trait InlineView {

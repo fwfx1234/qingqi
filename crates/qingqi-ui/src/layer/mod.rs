@@ -1,17 +1,17 @@
 use gpui::{App, Global};
 
-mod dialog;
-mod sheet;
-pub mod notification;
 pub mod context_menu;
+mod dialog;
+pub mod notification;
 pub mod popover;
+mod sheet;
 mod tooltip;
 
-pub use dialog::{Dialog, DialogButton, ActiveDialog};
-pub use sheet::{Sheet, ActiveSheet, Placement};
+pub use context_menu::{ContextMenuExt, MenuItemVariant, PopupMenu, PopupMenuItem};
+pub use dialog::{ActiveDialog, Dialog, DialogButton};
 pub use notification::{Notification, NotificationList, NotificationType};
-pub use context_menu::{ContextMenuExt, PopupMenu, PopupMenuItem, MenuItemVariant};
 pub use popover::Popover;
+pub use sheet::{ActiveSheet, Placement, Sheet};
 pub use tooltip::Tooltip;
 
 #[allow(dead_code)]

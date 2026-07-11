@@ -6,12 +6,12 @@ use gpui::{
     AnyWindowHandle, App, AppContext, Context, Entity, InteractiveElement, IntoElement,
     ParentElement, Render, Styled, Window, div, prelude::FluentBuilder, px,
 };
-use qingqi_ui::components::tree::TreeState;
-use qingqi_ui::components::icon::IconName;
+use qingqi_ui::components::button::{Button, ButtonVariants};
 use qingqi_ui::components::styled::Sizable;
 use qingqi_ui::components::styled::Size;
-use qingqi_ui::components::button::{Button, ButtonVariants};
+use qingqi_ui::components::tree::TreeState;
 use qingqi_ui::components::widgets::DropdownMenu;
+use qingqi_ui::icon;
 use qingqi_ui::layer::context_menu::PopupMenuItem;
 
 use crate::code_gen::CodeLanguage;
@@ -257,14 +257,19 @@ impl ApiDebuggerView {
             body_input: types::multiline_input(window, cx, &init_body, "{ }"),
             headers_kv: types::KvEditor::from_text(window, cx, &init_headers),
             cookies_kv: types::KvEditor::from_text(window, cx, &init_cookies),
-            auth_bearer_input: types::single_input(window, cx, &init_auth_form.bearer, "Token"),
+            auth_bearer_input: types::masked_single_input(
+                window,
+                cx,
+                &init_auth_form.bearer,
+                "Token",
+            ),
             auth_basic_user_input: types::single_input(
                 window,
                 cx,
                 &init_auth_form.basic_user,
                 "用户名",
             ),
-            auth_basic_pass_input: types::single_input(
+            auth_basic_pass_input: types::masked_single_input(
                 window,
                 cx,
                 &init_auth_form.basic_pass,
@@ -276,7 +281,7 @@ impl ApiDebuggerView {
                 &init_auth_form.apikey_name,
                 "Key（如 X-API-Key）",
             ),
-            auth_apikey_value_input: types::single_input(
+            auth_apikey_value_input: types::masked_single_input(
                 window,
                 cx,
                 &init_auth_form.apikey_value,
@@ -412,7 +417,7 @@ impl Render for ApiDebuggerView {
                                             .child(
                                                 Button::new("api-sidebar-new")
                                                     .ghost()
-                                                    .icon(IconName::Plus)
+                                                    .icon(icon!(plus))
                                                     .with_size(Size::XSmall)
                                                     .dropdown_menu({
                                                         let view = entity.clone();

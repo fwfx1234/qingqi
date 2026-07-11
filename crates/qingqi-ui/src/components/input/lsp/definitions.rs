@@ -3,9 +3,8 @@
 use anyhow::Result;
 use gpui::{Context, Task, Window};
 use ropey::Rope;
-use std::rc::Rc;
 
-use super::InputState;
+use crate::components::input::InputState;
 
 pub trait DefinitionProvider {
     fn definition(
@@ -19,5 +18,6 @@ pub trait DefinitionProvider {
 
 #[derive(Default)]
 pub struct HoverDefinition {
+    #[allow(dead_code)]
     pub offset: Option<usize>,
 }

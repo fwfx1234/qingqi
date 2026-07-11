@@ -2,10 +2,8 @@
 
 use anyhow::Result;
 use gpui::{Context, Entity, Task, Window};
-use ropey::Rope;
-use std::rc::Rc;
 
-use super::InputState;
+use crate::components::input::InputState;
 
 pub trait CodeActionProvider {
     fn id(&self) -> &str;
@@ -29,6 +27,7 @@ pub trait CodeActionProvider {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct CodeActionItem {
     pub provider_id: String,
     pub action: lsp_types::CodeActionOrCommand,

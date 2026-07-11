@@ -3,9 +3,8 @@
 use anyhow::Result;
 use gpui::{Context, Task, Window};
 use ropey::Rope;
-use std::rc::Rc;
 
-use super::InputState;
+use crate::components::input::InputState;
 
 pub trait HoverProvider {
     fn hover(

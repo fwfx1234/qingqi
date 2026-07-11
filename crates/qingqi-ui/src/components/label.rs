@@ -1,6 +1,6 @@
 use gpui::{
-    div, prelude::FluentBuilder, App, IntoElement, ParentElement, RenderOnce, SharedString,
-    StyleRefinement, Styled, Window,
+    App, IntoElement, ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder,
 };
 
 use crate::token::tokens;
@@ -34,9 +34,6 @@ impl Styled for Label {
 impl RenderOnce for Label {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = tokens(cx);
-        div()
-            .text_color(t.foreground)
-            
-            .child(self.label.clone())
+        div().text_color(t.foreground).child(self.label.clone())
     }
 }

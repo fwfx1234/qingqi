@@ -3,7 +3,12 @@ use gpui::*;
 use crate::token::tokens;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Placement { Top, Bottom, Left, Right }
+pub enum Placement {
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
 
 pub struct Sheet {
     pub placement: Placement,
@@ -16,13 +21,35 @@ pub struct Sheet {
 
 impl Sheet {
     pub fn new(placement: Placement) -> Self {
-        Self { placement, size: px(400.0), title: None, content: None, resizable: true, overlay: true }
+        Self {
+            placement,
+            size: px(400.0),
+            title: None,
+            content: None,
+            resizable: true,
+            overlay: true,
+        }
     }
-    pub fn size(mut self, s: Pixels) -> Self { self.size = s; self }
-    pub fn title(mut self, t: impl Into<SharedString>) -> Self { self.title = Some(t.into()); self }
-    pub fn content(mut self, c: impl IntoElement) -> Self { self.content = Some(c.into_any_element()); self }
-    pub fn resizable(mut self, r: bool) -> Self { self.resizable = r; self }
-    pub fn overlay(mut self, o: bool) -> Self { self.overlay = o; self }
+    pub fn size(mut self, s: Pixels) -> Self {
+        self.size = s;
+        self
+    }
+    pub fn title(mut self, t: impl Into<SharedString>) -> Self {
+        self.title = Some(t.into());
+        self
+    }
+    pub fn content(mut self, c: impl IntoElement) -> Self {
+        self.content = Some(c.into_any_element());
+        self
+    }
+    pub fn resizable(mut self, r: bool) -> Self {
+        self.resizable = r;
+        self
+    }
+    pub fn overlay(mut self, o: bool) -> Self {
+        self.overlay = o;
+        self
+    }
 }
 
 pub struct ActiveSheet {
@@ -56,7 +83,8 @@ impl RenderOnce for Sheet {
         let overlay = if self.overlay {
             div()
                 .absolute()
-                .top_0().left_0()
+                .top_0()
+                .left_0()
                 .size_full()
                 .bg(token.overlay)
         } else {
@@ -74,11 +102,13 @@ impl RenderOnce for Sheet {
             .gap_3();
 
         if let Some(title) = &self.title {
-            sheet = sheet.child(div()
-                .text_size(px(16.0))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(token.foreground)
-                .child(title.clone()));
+            sheet = sheet.child(
+                div()
+                    .text_size(px(16.0))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(token.foreground)
+                    .child(title.clone()),
+            );
         }
 
         if let Some(content) = self.content {
@@ -87,7 +117,8 @@ impl RenderOnce for Sheet {
 
         div()
             .absolute()
-            .top_0().left_0()
+            .top_0()
+            .left_0()
             .size_full()
             .child(overlay)
             .child(pos_style.child(sheet))

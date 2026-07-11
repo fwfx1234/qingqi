@@ -1,15 +1,16 @@
+use crate::local_components::{Slider, SliderState, TabBar};
 use gpui::{
     AnyElement, App, AppContext, Context, Entity, IntoElement, ParentElement, Render, SharedString,
     Styled, Window, div, px,
 };
-use crate::local_components::{Slider, SliderState, TabBar};
-use qingqi_ui::components::widgets::Badge;
+use qingqi_ui::components::button::{Button, ButtonVariant, ButtonVariants};
 use qingqi_ui::components::checkbox::Checkbox;
-use qingqi_ui::components::switch::Switch;
-use qingqi_ui::components::widgets::Tag;
-use qingqi_ui::components::theme::Theme;
-use qingqi_ui::components::button::{Button, ButtonVariant, ButtonVariants}; use qingqi_ui::components::styled::Size;
 use qingqi_ui::components::styled::Sizable;
+use qingqi_ui::components::styled::Size;
+use qingqi_ui::components::switch::Switch;
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::components::widgets::Badge;
+use qingqi_ui::components::widgets::Tag;
 use std::sync::Arc;
 
 use crate::manifest;
@@ -178,10 +179,22 @@ fn component_column(
                 .flex()
                 .gap_2()
                 .flex_wrap()
-                .child(Button::new("demo-primary").label("Primary").with_variant(ButtonVariant::Primary))
+                .child(
+                    Button::new("demo-primary")
+                        .label("Primary")
+                        .with_variant(ButtonVariant::Primary),
+                )
                 .child(Button::new("demo-secondary").label("Secondary"))
-                .child(Button::new("demo-danger").label("Danger").with_variant(ButtonVariant::Danger))
-                .child(Button::new("demo-ghost").label("Ghost").with_variant(ButtonVariant::Ghost)),
+                .child(
+                    Button::new("demo-danger")
+                        .label("Danger")
+                        .with_variant(ButtonVariant::Danger),
+                )
+                .child(
+                    Button::new("demo-ghost")
+                        .label("Ghost")
+                        .with_variant(ButtonVariant::Ghost),
+                ),
         )
         .child(
             div()
@@ -195,14 +208,18 @@ fn component_column(
                         .with_size(Size::Small),
                 )
                 .child(
-                    Badge::new()
-                        .count(3)
-                        .child(Button::new("demo-badge-btn").label("通知").with_size(Size::Small)),
+                    Badge::new().count(3).child(
+                        Button::new("demo-badge-btn")
+                            .label("通知")
+                            .with_size(Size::Small),
+                    ),
                 )
                 .child(
-                    Badge::new()
-                        .dot()
-                        .child(Button::new("demo-dot-btn").label("状态").with_size(Size::Small)),
+                    Badge::new().dot().child(
+                        Button::new("demo-dot-btn")
+                            .label("状态")
+                            .with_size(Size::Small),
+                    ),
                 ),
         )
         .child(
@@ -329,9 +346,21 @@ fn state_column(accent: PluginAccent, cx: &App) -> impl IntoElement {
                 .mt_2()
                 .flex()
                 .gap_2()
-                .child(Button::new("demo-outline-btn").label("Outline").with_variant(ButtonVariant::Secondary))
-                .child(Button::new("demo-success-btn").label("Success").with_variant(ButtonVariant::Success))
-                .child(Button::new("demo-warning-btn").label("Warning").with_variant(ButtonVariant::Warning)),
+                .child(
+                    Button::new("demo-outline-btn")
+                        .label("Outline")
+                        .with_variant(ButtonVariant::Secondary),
+                )
+                .child(
+                    Button::new("demo-success-btn")
+                        .label("Success")
+                        .with_variant(ButtonVariant::Success),
+                )
+                .child(
+                    Button::new("demo-warning-btn")
+                        .label("Warning")
+                        .with_variant(ButtonVariant::Warning),
+                ),
         )
 }
 

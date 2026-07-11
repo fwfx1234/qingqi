@@ -21,5 +21,11 @@ lsp-types = "0.97"
 tree-sitter = "0.25"
 serde = { workspace = true }
 serde_json.workspace = true
+include_dir = "0.7"
+qingqi-ui-macros = { path = "../qingqi-ui-macros" }
+
+[dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }
+
 [lints]
 workspace = true

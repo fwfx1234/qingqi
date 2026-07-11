@@ -1,6 +1,6 @@
 //! Code action menu popover.
 
-use gpui::{App, Context, Entity, IntoElement, Render, Window, div, prelude::FluentBuilder as _};
+use gpui::{Context, Entity, IntoElement, Render, Window, div};
 
 use crate::components::input::InputState;
 
@@ -19,11 +19,22 @@ impl CodeActionMenu {
         Self { is_open: false }
     }
 
-    pub fn handle_action(&mut self, _action: Box<dyn gpui::Action>, _window: &mut Window, _cx: &mut Context<Self>) -> bool {
+    pub fn handle_action(
+        &mut self,
+        _action: Box<dyn gpui::Action>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> bool {
         false
     }
 
-    pub fn show(&mut self, _cursor: usize, _items: Vec<CodeActionItem>, _window: &mut Window, _cx: &mut Context<Self>) {
+    pub fn show(
+        &mut self,
+        _cursor: usize,
+        _items: Vec<CodeActionItem>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
         self.is_open = true;
     }
 

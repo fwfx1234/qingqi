@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, prelude::FluentBuilder, App, ElementId, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window, hsla, px,
+    App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
+    StatefulInteractiveElement, Styled, Window, div, hsla, prelude::FluentBuilder, px,
 };
 
 use crate::token::tokens;
@@ -71,7 +71,11 @@ impl RenderOnce for Checkbox {
             .items_center()
             .justify_center()
             .text_size(px(10.0))
-            .text_color(if checked { gpui::white() } else { gpui::hsla(0.0, 0.0, 0.0, 0.0) })
+            .text_color(if checked {
+                gpui::white()
+            } else {
+                gpui::hsla(0.0, 0.0, 0.0, 0.0)
+            })
             .child(if checked { "✓" } else { "" });
 
         let checkbox = if let Some(on_click) = self.on_click {
@@ -90,8 +94,7 @@ impl RenderOnce for Checkbox {
                 .items_center()
                 .gap_2()
                 .child(checkbox)
-                .child(div().text_color(t.foreground).child(label))
-                ,
+                .child(div().text_color(t.foreground).child(label)),
             None => div().child(checkbox),
         }
     }

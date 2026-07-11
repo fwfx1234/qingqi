@@ -2,9 +2,16 @@ use gpui::*;
 use std::time::Duration;
 
 use crate::token::tokens;
+use crate::{components::Icon, icon};
 
 #[derive(Debug, Clone, Copy, Default)]
-pub enum NotificationType { #[default] Info, Success, Warning, Error }
+pub enum NotificationType {
+    #[default]
+    Info,
+    Success,
+    Warning,
+    Error,
+}
 
 impl NotificationType {
     pub fn color(&self, cx: &App) -> Hsla {
@@ -17,12 +24,12 @@ impl NotificationType {
         }
     }
 
-    pub fn icon(&self) -> &'static str {
+    pub fn icon(&self) -> Icon {
         match self {
-            Self::Info => "ℹ",
-            Self::Success => "✓",
-            Self::Warning => "⚠",
-            Self::Error => "✕",
+            Self::Info => icon!(info),
+            Self::Success => icon!(circle_check),
+            Self::Warning => icon!(triangle_alert),
+            Self::Error => icon!(circle_x),
         }
     }
 }
@@ -37,15 +44,37 @@ pub struct Notification {
 
 impl Notification {
     pub fn new(type_: NotificationType, message: impl Into<SharedString>) -> Self {
-        Self { type_, title: None, message: message.into(), auto_hide: Some(Duration::from_secs(3)) }
+        Self {
+            type_,
+            title: None,
+            message: message.into(),
+            auto_hide: Some(Duration::from_secs(3)),
+        }
     }
-    pub fn success(message: impl Into<SharedString>) -> Self { Self::new(NotificationType::Success, message) }
-    pub fn error(message: impl Into<SharedString>) -> Self { Self::new(NotificationType::Error, message) }
-    pub fn warning(message: impl Into<SharedString>) -> Self { Self::new(NotificationType::Warning, message) }
-    pub fn info(message: impl Into<SharedString>) -> Self { Self::new(NotificationType::Info, message) }
-    pub fn title(mut self, t: impl Into<SharedString>) -> Self { self.title = Some(t.into()); self }
-    pub fn auto_hide(mut self, dur: Duration) -> Self { self.auto_hide = Some(dur); self }
-    pub fn sticky(mut self) -> Self { self.auto_hide = None; self }
+    pub fn success(message: impl Into<SharedString>) -> Self {
+        Self::new(NotificationType::Success, message)
+    }
+    pub fn error(message: impl Into<SharedString>) -> Self {
+        Self::new(NotificationType::Error, message)
+    }
+    pub fn warning(message: impl Into<SharedString>) -> Self {
+        Self::new(NotificationType::Warning, message)
+    }
+    pub fn info(message: impl Into<SharedString>) -> Self {
+        Self::new(NotificationType::Info, message)
+    }
+    pub fn title(mut self, t: impl Into<SharedString>) -> Self {
+        self.title = Some(t.into());
+        self
+    }
+    pub fn auto_hide(mut self, dur: Duration) -> Self {
+        self.auto_hide = Some(dur);
+        self
+    }
+    pub fn sticky(mut self) -> Self {
+        self.auto_hide = None;
+        self
+    }
 }
 
 #[derive(Clone)]
@@ -55,11 +84,24 @@ pub struct NotificationList {
 }
 
 impl NotificationList {
-    pub fn new() -> Self { Self { notifications: Vec::new(), max_visible: 5 } }
-    pub fn push(&mut self, note: Notification) { self.notifications.push(note); }
-    pub fn clear(&mut self) { self.notifications.clear(); }
-    pub fn is_empty(&self) -> bool { self.notifications.is_empty() }
-    pub fn len(&self) -> usize { self.notifications.len() }
+    pub fn new() -> Self {
+        Self {
+            notifications: Vec::new(),
+            max_visible: 5,
+        }
+    }
+    pub fn push(&mut self, note: Notification) {
+        self.notifications.push(note);
+    }
+    pub fn clear(&mut self) {
+        self.notifications.clear();
+    }
+    pub fn is_empty(&self) -> bool {
+        self.notifications.is_empty()
+    }
+    pub fn len(&self) -> usize {
+        self.notifications.len()
+    }
 }
 
 impl RenderOnce for NotificationList {
@@ -75,25 +117,46 @@ impl RenderOnce for NotificationList {
             .flex()
             .flex_col()
             .gap_2()
-            .children(self.notifications.iter().take(self.max_visible).map(|note| {
-                let color = note.type_.color(cx);
-                let icon = note.type_.icon();
-                div()
-                    .bg(token.surface)
-                    .rounded(px(8.0))
-                    .border_1()
-                    .border_color(token.border)
-                    .p_3()
-                    .flex()
-                    .gap_2()
-                    .items_start()
-                    .shadow_lg()
-                    .child(div().text_color(color).child(icon))
-                    .child(div().flex().flex_col().gap_0p5()
-                        .when_some(note.title.as_ref(), |d, t| {
-                            d.child(div().text_size(px(13.0)).font_weight(FontWeight::SEMIBOLD).text_color(token.foreground).child(t.clone()))
-                        })
-                        .child(div().text_size(px(12.0)).text_color(token.muted_foreground).child(note.message.clone())))
-            }))
+            .children(
+                self.notifications
+                    .iter()
+                    .take(self.max_visible)
+                    .map(|note| {
+                        let color = note.type_.color(cx);
+                        let icon = note.type_.icon();
+                        div()
+                            .bg(token.surface)
+                            .rounded(px(8.0))
+                            .border_1()
+                            .border_color(token.border)
+                            .p_3()
+                            .flex()
+                            .gap_2()
+                            .items_start()
+                            .shadow_lg()
+                            .child(div().text_color(color).child(icon.size(px(18.0))))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap_0p5()
+                                    .when_some(note.title.as_ref(), |d, t| {
+                                        d.child(
+                                            div()
+                                                .text_size(px(13.0))
+                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .text_color(token.foreground)
+                                                .child(t.clone()),
+                                        )
+                                    })
+                                    .child(
+                                        div()
+                                            .text_size(px(12.0))
+                                            .text_color(token.muted_foreground)
+                                            .child(note.message.clone()),
+                                    ),
+                            )
+                    }),
+            )
     }
 }

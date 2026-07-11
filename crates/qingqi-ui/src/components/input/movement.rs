@@ -3,8 +3,7 @@
 use gpui::{Context, Window};
 
 use super::{
-    InputState, RopeExt,
-    MoveDown, MoveEnd, MoveHome, MoveLeft, MovePageDown, MovePageUp, MoveRight,
+    InputState, MoveDown, MoveEnd, MoveHome, MoveLeft, MovePageDown, MovePageUp, MoveRight,
     MoveToEnd, MoveToNextWord, MoveToPreviousWord, MoveToStart, MoveUp,
 };
 
@@ -15,10 +14,6 @@ pub(crate) enum MoveDirection {
 }
 
 impl InputState {
-    pub(super) fn update_preferred_column(&mut self) {
-        self.preferred_column = None;
-    }
-
     pub(crate) fn move_to(
         &mut self,
         offset: usize,
@@ -38,15 +33,38 @@ impl InputState {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.mode.is_single_line() { return; }
+        if self.mode.is_single_line() {
+            return;
+        }
 
         let offset = self.cursor();
         let display_point = self.text_wrapper.offset_to_display_point(offset);
         let new_row = (display_point.row as isize + move_lines).max(0) as usize;
-        let new_offset = self.text_wrapper.display_point_to_offset(
-            super::text_wrapper::DisplayPoint::new(new_row, display_point.local_row, display_point.column)
-        );
-        let direction = if move_lines < 0 { MoveDirection::Up } else { MoveDirection::Down };
+
+        // Clamp local_row to the target line's wrapped line count
+        let new_local_row = if let Some(line_item) = self.text_wrapper.line(new_row) {
+            let wrapped_count = line_item.lines_len();
+            if wrapped_count == 0 {
+                0
+            } else {
+                display_point.local_row.min(wrapped_count - 1)
+            }
+        } else {
+            display_point.local_row
+        };
+
+        let new_offset =
+            self.text_wrapper
+                .display_point_to_offset(super::text_wrapper::DisplayPoint::new(
+                    new_row,
+                    new_local_row,
+                    display_point.column,
+                ));
+        let direction = if move_lines < 0 {
+            MoveDirection::Up
+        } else {
+            MoveDirection::Down
+        };
         self.move_to(new_offset, Some(direction), cx);
         cx.notify();
     }
@@ -68,8 +86,12 @@ impl InputState {
     }
 
     pub(super) fn up(&mut self, action: &MoveUp, window: &mut Window, cx: &mut Context<Self>) {
-        if self.handle_action_for_context_menu(Box::new(action.clone()), window, cx) { return; }
-        if self.mode.is_single_line() { return; }
+        if self.handle_action_for_context_menu(Box::new(action.clone()), window, cx) {
+            return;
+        }
+        if self.mode.is_single_line() {
+            return;
+        }
         if !self.selected_range.is_empty() {
             self.move_to(
                 self.previous_boundary(self.selected_range.start.saturating_sub(1)),
@@ -81,8 +103,12 @@ impl InputState {
     }
 
     pub(super) fn down(&mut self, action: &MoveDown, window: &mut Window, cx: &mut Context<Self>) {
-        if self.handle_action_for_context_menu(Box::new(action.clone()), window, cx) { return; }
-        if self.mode.is_single_line() { return; }
+        if self.handle_action_for_context_menu(Box::new(action.clone()), window, cx) {
+            return;
+        }
+        if self.mode.is_single_line() {
+            return;
+        }
         if !self.selected_range.is_empty() {
             self.move_to(
                 self.next_boundary(self.selected_range.end.saturating_sub(1)),
@@ -94,15 +120,28 @@ impl InputState {
     }
 
     pub(super) fn page_up(&mut self, _: &MovePageUp, window: &mut Window, cx: &mut Context<Self>) {
-        if self.mode.is_single_line() { return; }
-        let Some(last_layout) = &self.last_layout else { return };
+        if self.mode.is_single_line() {
+            return;
+        }
+        let Some(last_layout) = &self.last_layout else {
+            return;
+        };
         let display_lines = (self.input_bounds.size.height / last_layout.line_height) as isize;
         self.move_vertical(-display_lines, window, cx);
     }
 
-    pub(super) fn page_down(&mut self, _: &MovePageDown, window: &mut Window, cx: &mut Context<Self>) {
-        if self.mode.is_single_line() { return; }
-        let Some(last_layout) = &self.last_layout else { return };
+    pub(super) fn page_down(
+        &mut self,
+        _: &MovePageDown,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.mode.is_single_line() {
+            return;
+        }
+        let Some(last_layout) = &self.last_layout else {
+            return;
+        };
         let display_lines = (self.input_bounds.size.height / last_layout.line_height) as isize;
         self.move_vertical(display_lines, window, cx);
     }
@@ -117,7 +156,12 @@ impl InputState {
         self.move_to(offset, Some(MoveDirection::Down), cx);
     }
 
-    pub(super) fn move_to_start(&mut self, _: &MoveToStart, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn move_to_start(
+        &mut self,
+        _: &MoveToStart,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.move_to(0, None, cx);
     }
 
@@ -125,12 +169,22 @@ impl InputState {
         self.move_to(self.text.len(), None, cx);
     }
 
-    pub(super) fn move_to_previous_word(&mut self, _: &MoveToPreviousWord, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn move_to_previous_word(
+        &mut self,
+        _: &MoveToPreviousWord,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let offset = self.previous_start_of_word();
         self.move_to(offset, None, cx);
     }
 
-    pub(super) fn move_to_next_word(&mut self, _: &MoveToNextWord, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn move_to_next_word(
+        &mut self,
+        _: &MoveToNextWord,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let offset = self.next_end_of_word();
         self.move_to(offset, None, cx);
     }

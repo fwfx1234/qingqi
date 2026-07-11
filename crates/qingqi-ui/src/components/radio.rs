@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, prelude::FluentBuilder, App, ElementId, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window, hsla, px,
+    App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
+    StatefulInteractiveElement, Styled, Window, div, hsla, prelude::FluentBuilder, px,
 };
 
 use crate::token::tokens;
@@ -70,13 +70,11 @@ impl RenderOnce for Radio {
             .flex()
             .items_center()
             .justify_center()
-            .child(
-                div()
-                    .w(px(8.0))
-                    .h(px(8.0))
-                    .rounded(px(4.0))
-                    .bg(if checked { t.accent } else { gpui::hsla(0.0, 0.0, 0.0, 0.0) }),
-            );
+            .child(div().w(px(8.0)).h(px(8.0)).rounded(px(4.0)).bg(if checked {
+                t.accent
+            } else {
+                gpui::hsla(0.0, 0.0, 0.0, 0.0)
+            }));
 
         let radio = if let Some(on_click) = self.on_click {
             radio.on_click(move |_, window, cx| {
@@ -93,8 +91,7 @@ impl RenderOnce for Radio {
                 .items_center()
                 .gap_2()
                 .child(radio)
-                .child(div().text_color(t.foreground).child(label))
-                ,
+                .child(div().text_color(t.foreground).child(label)),
             None => div().child(radio),
         }
     }

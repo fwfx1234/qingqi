@@ -34,7 +34,12 @@ impl Selection {
 
 impl From<Range<usize>> for Selection {
     fn from(value: Range<usize>) -> Self {
-        Self::new(value.start, value.end)
+        // Normalize direction: ensure start <= end
+        if value.start <= value.end {
+            Self::new(value.start, value.end)
+        } else {
+            Self::new(value.end, value.start)
+        }
     }
 }
 

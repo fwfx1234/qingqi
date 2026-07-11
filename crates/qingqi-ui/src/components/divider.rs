@@ -1,6 +1,9 @@
 //! Divider component — local replacement for qingqi-ui::divider.
 
-use gpui::{App, Axis, Div, Hsla, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _};
+use gpui::{
+    App, Axis, Div, Hsla, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder as _,
+};
 
 use super::styled::StyledExt;
 use super::theme::ActiveTheme;
@@ -23,11 +26,23 @@ pub struct Divider {
 
 impl Divider {
     pub fn vertical() -> Self {
-        Self { base: div().h_full(), axis: Axis::Vertical, color: None, style: StyleRefinement::default(), line_style: DividerStyle::Solid }
+        Self {
+            base: div().h_full(),
+            axis: Axis::Vertical,
+            color: None,
+            style: StyleRefinement::default(),
+            line_style: DividerStyle::Solid,
+        }
     }
 
     pub fn horizontal() -> Self {
-        Self { base: div(), axis: Axis::Horizontal, color: None, style: StyleRefinement::default(), line_style: DividerStyle::Solid }
+        Self {
+            base: div(),
+            axis: Axis::Horizontal,
+            color: None,
+            style: StyleRefinement::default(),
+            line_style: DividerStyle::Solid,
+        }
     }
 
     pub fn color(mut self, color: impl Into<Hsla>) -> Self {
@@ -42,7 +57,9 @@ impl Divider {
 }
 
 impl Styled for Divider {
-    fn style(&mut self) -> &mut StyleRefinement { &mut self.style }
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
 }
 
 impl RenderOnce for Divider {

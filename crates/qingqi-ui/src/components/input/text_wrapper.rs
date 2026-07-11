@@ -2,7 +2,7 @@
 
 use std::ops::Range;
 
-use gpui::{App, Font, LineFragment, Pixels, ShapedLine, Size, Window, point, px, size};
+use gpui::{App, Font, LineFragment, Pixels, ShapedLine, px};
 use ropey::Rope;
 use smallvec::SmallVec;
 
@@ -15,16 +15,13 @@ pub(super) struct LineItem {
 }
 
 impl LineItem {
-    pub(super) fn len(&self) -> usize { self.line.len() }
-    pub(super) fn lines_len(&self) -> usize { self.wrapped_lines.len() }
-    pub(super) fn height(&self, line_height: Pixels) -> Pixels {
-        self.lines_len() as f32 * line_height
+    pub(super) fn lines_len(&self) -> usize {
+        self.wrapped_lines.len()
     }
 }
 
 #[derive(Debug, Default)]
 pub(super) struct LongestRow {
-    pub row: usize,
     pub len: usize,
 }
 
@@ -37,7 +34,11 @@ pub struct DisplayPoint {
 
 impl DisplayPoint {
     pub fn new(row: usize, local_row: usize, column: usize) -> Self {
-        Self { row, local_row, column }
+        Self {
+            row,
+            local_row,
+            column,
+        }
     }
 }
 
@@ -49,7 +50,10 @@ pub struct LineLayout {
 
 impl LineLayout {
     pub fn new() -> Self {
-        Self { wrapped_lines: SmallVec::new(), len: 0 }
+        Self {
+            wrapped_lines: SmallVec::new(),
+            len: 0,
+        }
     }
 
     pub fn set_wrapped_lines(&mut self, lines: SmallVec<[ShapedLine; 1]>) {
@@ -57,8 +61,12 @@ impl LineLayout {
         self.wrapped_lines = lines;
     }
 
-    pub fn len(&self) -> usize { self.len }
-    pub fn is_empty(&self) -> bool { self.wrapped_lines.is_empty() }
+    pub fn len(&self) -> usize {
+        self.len
+    }
+    pub fn is_empty(&self) -> bool {
+        self.wrapped_lines.is_empty()
+    }
 }
 
 pub struct TextWrapper {
@@ -86,28 +94,44 @@ impl TextWrapper {
         }
     }
 
-    pub fn set_default_text(&mut self, text: &Rope) { self.text = text.clone(); }
-    pub fn len(&self) -> usize { self.soft_lines }
+    pub fn set_default_text(&mut self, text: &Rope) {
+        self.text = text.clone();
+    }
+    pub fn len(&self) -> usize {
+        self.soft_lines
+    }
 
-    pub fn line(&self, row: usize) -> Option<&LineItem> {
+    pub(super) fn line(&self, row: usize) -> Option<&LineItem> {
         self.lines.iter().skip(row).next()
     }
 
     pub fn set_wrap_width(&mut self, wrap_width: Option<Pixels>, cx: &mut App) {
-        if wrap_width == self.wrap_width { return; }
+        if wrap_width == self.wrap_width {
+            return;
+        }
         self.wrap_width = wrap_width;
         self.update_all(&self.text.clone(), cx);
     }
 
     pub fn set_font(&mut self, font: Font, font_size: Pixels, cx: &mut App) {
-        if self.font.eq(&font) && self.font_size == font_size { return; }
+        if self.font.eq(&font) && self.font_size == font_size {
+            return;
+        }
         self.font = font;
         self.font_size = font_size;
         self.update_all(&self.text.clone(), cx);
     }
 
     pub fn prepare_if_need(&mut self, text: &Rope, cx: &mut App) {
-        if self._initialized { return; }
+        if self._initialized {
+            return;
+        }
+        self._initialized = true;
+        self.update_all(text, cx);
+    }
+
+    /// Rebuild all wrapping metadata after a programmatic or masked edit.
+    pub fn reset(&mut self, text: &Rope, cx: &mut App) {
         self._initialized = true;
         self.update_all(text, cx);
     }
@@ -119,10 +143,19 @@ impl TextWrapper {
         new_text: &Rope,
         cx: &mut App,
     ) {
-        let mut line_wrapper = cx.text_system().line_wrapper(self.font.clone(), self.font_size);
-        self._update(changed_text, range, new_text, &mut |line_str, wrap_width| {
-            line_wrapper.wrap_line(&[LineFragment::text(line_str)], wrap_width).collect::<Vec<_>>()
-        });
+        let mut line_wrapper = cx
+            .text_system()
+            .line_wrapper(self.font.clone(), self.font_size);
+        self._update(
+            changed_text,
+            range,
+            new_text,
+            &mut |line_str, wrap_width| {
+                line_wrapper
+                    .wrap_line(&[LineFragment::text(line_str)], wrap_width)
+                    .collect::<Vec<_>>()
+            },
+        );
     }
 
     fn _update<F>(
@@ -146,23 +179,30 @@ impl TextWrapper {
         self.soft_lines = self.soft_lines.saturating_sub(old_lines_count);
         self.lines.drain(start_row..end_row);
 
-        let wrap_width = self.wrap_width.unwrap_or(px(800.0));
+        let wrap_width = self.wrap_width.unwrap_or(px(100000.0));
         let start_row_offset = changed_text.offset_to_point(range.start).row;
 
-        for row in start_row_offset..=changed_text.offset_to_point(range.start + new_text.len()).row {
+        for row in start_row_offset
+            ..=changed_text
+                .offset_to_point(range.start + new_text.len())
+                .row
+        {
             let line = changed_text.slice_line(row);
             let line_str = line.to_string();
             let wrapped = wrap_line(&line_str, wrap_width);
-            let wrapped_lines: Vec<Range<usize>> = boundaries_to_ranges(&wrapped);
+            let wrapped_lines = boundaries_to_ranges(&wrapped, line_str.len());
             self.soft_lines += wrapped_lines.len().max(1);
 
             if line.len() > self.longest_row.len {
-                self.longest_row = LongestRow { row, len: line.len() };
+                self.longest_row = LongestRow { len: line.len() };
             }
 
             self.lines.insert(
                 start_row + (row - start_row_offset),
-                LineItem { line: Rope::from(line.to_string()), wrapped_lines },
+                LineItem {
+                    line: Rope::from(line.to_string()),
+                    wrapped_lines,
+                },
             );
         }
     }
@@ -172,8 +212,10 @@ impl TextWrapper {
         self.lines.clear();
         self.soft_lines = 0;
 
-        let wrap_width = self.wrap_width.unwrap_or(px(800.0));
-        let mut line_wrapper = cx.text_system().line_wrapper(self.font.clone(), self.font_size);
+        let wrap_width = self.wrap_width.unwrap_or(px(100000.0));
+        let mut line_wrapper = cx
+            .text_system()
+            .line_wrapper(self.font.clone(), self.font_size);
 
         for row in 0..text.lines_len() {
             let line = text.slice_line(row);
@@ -181,19 +223,25 @@ impl TextWrapper {
             let fragment = LineFragment::text(&line_str);
             let fragments = [fragment];
             let wrapped = line_wrapper.wrap_line(&fragments, wrap_width);
-            let wrapped_lines: Vec<Range<usize>> = boundaries_to_ranges(&wrapped.collect::<Vec<_>>());
+            let wrapped_lines = boundaries_to_ranges(&wrapped.collect::<Vec<_>>(), line_str.len());
 
             self.soft_lines += wrapped_lines.len().max(1);
 
             if line.len() > self.longest_row.len {
-                self.longest_row = LongestRow { row, len: line.len() };
+                self.longest_row = LongestRow { len: line.len() };
             }
 
-            self.lines.push(LineItem { line: Rope::from(line.to_string()), wrapped_lines });
+            self.lines.push(LineItem {
+                line: Rope::from(line.to_string()),
+                wrapped_lines,
+            });
         }
 
         if self.lines.is_empty() {
-            self.lines.push(LineItem { line: Rope::new(), wrapped_lines: vec![0..0] });
+            self.lines.push(LineItem {
+                line: Rope::new(),
+                wrapped_lines: vec![0..0],
+            });
             self.soft_lines = 1;
         }
     }
@@ -217,7 +265,11 @@ impl TextWrapper {
         }
         let last_row = self.lines.len().saturating_sub(1);
         if let Some(last_line) = self.lines.last() {
-            DisplayPoint::new(last_row, last_line.wrapped_lines.len().saturating_sub(1), last_line.line.len())
+            DisplayPoint::new(
+                last_row,
+                last_line.wrapped_lines.len().saturating_sub(1),
+                last_line.line.len(),
+            )
         } else {
             DisplayPoint::new(0, 0, 0)
         }
@@ -245,9 +297,19 @@ impl TextWrapper {
         let offset = self.display_point_to_offset(point);
         self.text.offset_to_point(offset)
     }
+
+    pub fn display_row_for_offset(&self, offset: usize) -> usize {
+        let point = self.offset_to_display_point(offset);
+        self.lines
+            .iter()
+            .take(point.row)
+            .map(LineItem::lines_len)
+            .sum::<usize>()
+            + point.local_row
+    }
 }
 
-fn boundaries_to_ranges(boundaries: &[gpui::Boundary]) -> Vec<Range<usize>> {
+fn boundaries_to_ranges(boundaries: &[gpui::Boundary], line_len: usize) -> Vec<Range<usize>> {
     let mut ranges = Vec::new();
     let mut start = 0;
     for boundary in boundaries {
@@ -256,6 +318,9 @@ fn boundaries_to_ranges(boundaries: &[gpui::Boundary]) -> Vec<Range<usize>> {
             ranges.push(start..end);
         }
         start = end;
+    }
+    if start < line_len {
+        ranges.push(start..line_len);
     }
     if ranges.is_empty() {
         ranges.push(0..0);

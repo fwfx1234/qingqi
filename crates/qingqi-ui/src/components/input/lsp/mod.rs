@@ -1,23 +1,32 @@
 //! LSP integration stubs for the input field.
 
-use anyhow::Result;
-use gpui::{App, Context, Hsla, Task, Window};
-use ropey::Rope;
 use std::rc::Rc;
+use std::sync::Once;
 
-use crate::components::input::InputState;
-
+pub mod code_actions;
 pub mod completions;
 pub mod definitions;
-pub mod hover;
-pub mod code_actions;
 pub mod document_colors;
+pub mod hover;
 
+pub use code_actions::*;
 pub use completions::*;
 pub use definitions::*;
-pub use hover::*;
-pub use code_actions::*;
 pub use document_colors::*;
+pub use hover::*;
+
+/// The compatibility types remain exported, but no LSP provider is executed in this release.
+pub const LSP_SUPPORTED: bool = false;
+
+static WARN_UNSUPPORTED: Once = Once::new();
+
+pub(crate) fn warn_unsupported(feature: &str) {
+    WARN_UNSUPPORTED.call_once(|| {
+        eprintln!(
+            "qingqi-ui input: LSP integration is disabled; `{feature}` was propagated to the parent"
+        );
+    });
+}
 
 /// LSP ServerCapabilities
 pub struct Lsp {
@@ -26,10 +35,6 @@ pub struct Lsp {
     pub hover_provider: Option<Rc<dyn HoverProvider>>,
     pub definition_provider: Option<Rc<dyn DefinitionProvider>>,
     pub document_color_provider: Option<Rc<dyn DocumentColorProvider>>,
-
-    document_colors: Vec<(lsp_types::Range, Hsla)>,
-    _hover_task: Task<Result<()>>,
-    _document_color_task: Task<Result<()>>,
 }
 
 impl Default for Lsp {
@@ -40,21 +45,6 @@ impl Default for Lsp {
             hover_provider: None,
             definition_provider: None,
             document_color_provider: None,
-            document_colors: vec![],
-            _hover_task: Task::ready(Ok(())),
-            _document_color_task: Task::ready(Ok(())),
         }
-    }
-}
-
-impl Lsp {
-    pub(crate) fn update(&mut self, _text: &Rope, _window: &mut Window, _cx: &mut Context<InputState>) {
-        // Stub
-    }
-
-    pub(crate) fn reset(&mut self) {
-        self.document_colors.clear();
-        self._hover_task = Task::ready(Ok(()));
-        self._document_color_task = Task::ready(Ok(()));
     }
 }
