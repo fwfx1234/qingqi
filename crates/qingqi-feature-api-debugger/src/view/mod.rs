@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use gpui::{
     AnyWindowHandle, App, AppContext, Context, Entity, InteractiveElement, IntoElement,
-    ParentElement, Render, Styled, Window, div, prelude::FluentBuilder, px,
+    ParentElement, Render, Styled, Subscription, Window, div, prelude::FluentBuilder, px,
 };
 use qingqi_ui::components::button::{Button, ButtonVariants};
 use qingqi_ui::components::styled::Sizable;
@@ -88,6 +88,7 @@ pub struct ApiDebuggerView {
     pub(crate) last_revision: u64,
     pub(crate) tree_state: Entity<TreeState>,
     pub(crate) collapsed_nodes: RefCell<HashSet<String>>,
+    pub(crate) subscriptions: Vec<Subscription>,
 }
 
 impl ApiDebuggerView {
@@ -223,6 +224,8 @@ impl ApiDebuggerView {
             cx.new(|cx| TreeState::new(cx).items(items))
         };
 
+        let rename_inline_input = types::single_input(window, cx, "", "重命名...");
+
         Self {
             service,
             groups,
@@ -249,7 +252,7 @@ impl ApiDebuggerView {
             rename_input: types::single_input(window, cx, "", "输入新名称..."),
             rename_node_id: String::new(),
             renaming_node_id: String::new(),
-            rename_inline_input: types::single_input(window, cx, "", "重命名..."),
+            rename_inline_input,
             env_editor_window: None,
             path_input: types::single_input(window, cx, &init_path, "/api/v1/user/info"),
             params_kv: types::KvEditor::from_text(window, cx, &init_params),
@@ -314,6 +317,7 @@ impl ApiDebuggerView {
             last_revision: rev,
             tree_state,
             collapsed_nodes: RefCell::new(HashSet::new()),
+            subscriptions: Vec::new(),
         }
     }
 }

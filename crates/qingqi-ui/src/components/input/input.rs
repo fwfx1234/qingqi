@@ -1,10 +1,12 @@
 //! Input — the builder-style element that wraps an [`InputState`].
 
+use std::sync::Arc;
+
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, AppContext as _, DefiniteLength, Entity, InteractiveElement as _, IntoElement,
-    MouseButton, ParentElement as _, RenderOnce, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Window, div, px, relative,
+    AnyElement, App, AppContext as _, Context, DefiniteLength, Entity, InteractiveElement as _,
+    IntoElement, MouseButton, ParentElement as _, RenderOnce, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Window, div, px, relative,
 };
 
 use super::{InputState, LINE_HEIGHT_REMS, input_line_height};
@@ -26,6 +28,7 @@ pub struct Input {
     bordered: bool,
     focus_bordered: bool,
     size: Size,
+    on_blur: Option<Arc<dyn Fn(&mut Window, &mut Context<InputState>)>>,
 }
 
 impl Input {
@@ -43,7 +46,16 @@ impl Input {
             bordered: true,
             focus_bordered: true,
             size: Size::Medium,
+            on_blur: None,
         }
+    }
+
+    pub fn on_blur(
+        mut self,
+        f: impl Fn(&mut Window, &mut Context<InputState>) + 'static,
+    ) -> Self {
+        self.on_blur = Some(Arc::new(f));
+        self
     }
 
     pub fn prefix(mut self, prefix: impl IntoElement) -> Self {
@@ -126,6 +138,12 @@ impl Disableable for Input {
 
 impl RenderOnce for Input {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        if self.on_blur.is_some() {
+            let on_blur = self.on_blur.unwrap();
+            cx.update_entity(&self.state, |state, _cx| {
+                state.on_blur = Some(on_blur);
+            });
+        }
         if let Some(disabled) = self.disabled {
             cx.update_entity(&self.state, |state, cx| {
                 if state.disabled != disabled {

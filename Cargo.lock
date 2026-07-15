@@ -5609,6 +5609,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "qingqi-feature-display-optimizer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "gpui",
+ "plist",
+ "qingqi-platform",
+ "qingqi-plugin",
+ "qingqi-ui",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tracing",
+]
+
+[[package]]
 name = "qingqi-feature-download-manager"
 version = "0.1.0"
 dependencies = [

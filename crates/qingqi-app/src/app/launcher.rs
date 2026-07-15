@@ -15,7 +15,7 @@ use gpui::{
     Subscription, Task, UniformListScrollHandle, Window, div, prelude::FluentBuilder, px, size,
     uniform_list,
 };
-use qingqi_ui::components::input::{Escape, Input, InputState};
+use qingqi_ui::components::input::{Enter, Escape, Input, InputState, MoveDown, MoveUp};
 use qingqi_ui::components::scroll::Scrollbar;
 use qingqi_ui::components::theme::Theme;
 use qingqi_ui::{theme, ui};
@@ -1136,11 +1136,20 @@ impl Render for Launcher {
             .flex()
             .flex_col()
             .overflow_hidden()
-            // Input registers Escape as an action, which stops normal key
-            // bubbling. Capture the action here so Esc still dismisses the
-            // launcher while the query field has focus.
+            // Input registers Escape/Enter/MoveUp/MoveDown as actions, which
+            // stops normal key bubbling. Capture these actions here so they
+            // still work while the query field has focus.
             .capture_action(cx.listener(|this, _: &Escape, window, cx| {
                 this.dismiss(window, cx);
+            }))
+            .capture_action(cx.listener(|this, _: &Enter, window, cx| {
+                this.confirm(window, cx);
+            }))
+            .capture_action(cx.listener(|this, _: &MoveUp, _, cx| {
+                this.select_prev(cx);
+            }))
+            .capture_action(cx.listener(|this, _: &MoveDown, _, cx| {
+                this.select_next(cx);
             }))
             .capture_key_down(cx.listener(Self::handle_launcher_key))
             .child(

@@ -1,7 +1,7 @@
 use super::ApiDebuggerView;
 use super::components::collection_tree::MenuKind;
 use crate::model::NodeKind;
-use gpui::App;
+use gpui::{App, Context};
 
 impl ApiDebuggerView {
     #[allow(dead_code)]
@@ -173,7 +173,7 @@ impl ApiDebuggerView {
         self.close_collection_menu();
     }
 
-    pub(crate) fn confirm_inline_rename(&mut self, cx: &App) {
+    pub(crate) fn confirm_inline_rename(&mut self, cx: &mut Context<Self>) {
         let new_name = self
             .rename_inline_input
             .read(cx)
@@ -192,10 +192,32 @@ impl ApiDebuggerView {
         }
         self.service.rename_collection_item_async(node_id, new_name);
         self.notice = String::from("正在重命名...");
+        cx.notify();
     }
 
     pub(crate) fn cancel_inline_rename(&mut self) {
         self.renaming_node_id = String::new();
+    }
+
+    pub(crate) fn toggle_expansion(&mut self, node_id: String, cx: &mut App) {
+        {
+            let mut collapsed = self.collapsed_nodes.borrow_mut();
+            if collapsed.contains(&node_id) {
+                collapsed.remove(&node_id);
+            } else {
+                collapsed.insert(node_id);
+            }
+        }
+        let items = super::components::collection_tree::build_tree_items(
+            &self.groups,
+            &mut 0,
+            &self.collapsed_nodes.borrow(),
+        );
+        let saved_ix = self.tree_state.read(cx).selected_index();
+        self.tree_state.update(cx, |tree, cx| {
+            tree.set_items(items, cx);
+            tree.set_selected_index(saved_ix, cx);
+        });
     }
 
     pub(crate) fn confirm_rename(&mut self, cx: &App) {

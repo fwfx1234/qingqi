@@ -4,12 +4,12 @@ use crate::service::{ApiGroup, HttpMethod};
 use crate::view::ApiDebuggerView;
 use gpui::{
     App, Entity, InteractiveElement, IntoElement, MouseButton, ParentElement,
-    StatefulInteractiveElement, Styled, div, px,
+    StatefulInteractiveElement, Styled, Window, div, px,
 };
+use qingqi_ui::components::input::Input;
 use qingqi_ui::components::list::ListItem;
 use qingqi_ui::components::theme::Theme;
 use qingqi_ui::components::tree::{TreeItem, TreeState, tree};
-use qingqi_ui::layer::context_menu::{ContextMenuExt, PopupMenuItem};
 use qingqi_ui::{icon, theme, ui};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -69,8 +69,9 @@ pub fn build_tree_items(
                 collapsed,
             ));
 
+            let folder_expanded = !collapsed.contains(&format!("g:{}", gid));
             TreeItem::new(format!("g:{}", gid), group.name.clone())
-                .expanded(true)
+                .expanded(folder_expanded)
                 .children(children)
         })
         .collect()
@@ -91,13 +92,14 @@ pub fn collection_tree(
         .flex_col()
         .child(tree(
             &tree_state,
-            move |ix, entry, selected, _window, cx| {
+            move |ix, entry, selected, window, cx| {
                 let item = entry.item();
                 let id: String = item.id.to_string();
                 let label: String = item.label.to_string();
                 let depth = entry.depth();
                 let id_clone = id.clone();
                 let label_clone = label.clone();
+                let _ = cx;
 
                 let mut list_item = ListItem::new(ix).pl(px(8.0 + depth as f32 * 16.0));
 
@@ -117,6 +119,7 @@ pub fn collection_tree(
                             .flex()
                             .items_center()
                             .gap(px(4.0))
+                            .hover(|s| s.bg(ui::glass::hover_bg(cx)))
                             .child(
                                 icon!(square_terminal)
                                     .size(px(12.0))
@@ -139,147 +142,201 @@ pub fn collection_tree(
                                 });
                                 window.refresh();
                             })
-                            .context_menu({
-                                let v = view.clone();
-                                let nid = node_id.clone();
-                                move |menu, _window, _| {
-                                    let v1 = v.clone();
-                                    let n1 = nid.clone();
-                                    let v2 = v.clone();
-                                    let n2 = nid.clone();
-                                    menu.item(PopupMenuItem::new("重命名").on_click(
-                                        move |_, _, cx| {
-                                            v1.update(cx, |view, cx| {
-                                                view.collection_menu_node_id = n1.clone();
-                                                view.open_rename(cx);
-                                            });
-                                        },
-                                    ))
-                                    .item(
-                                        PopupMenuItem::new("删除").on_click(move |_, _, cx| {
-                                            v2.update(cx, |view, _cx| {
-                                                view.collection_menu_node_id = n2.clone();
-                                                view.delete_selected_collection_item();
-                                            });
-                                        }),
-                                    )
-                                }
-                            }),
+                            .on_mouse_down(
+                                MouseButton::Right,
+                                {
+                                    let v = view.clone();
+                                    let nid = node_id.clone();
+                                    let lbl = label_clone.clone();
+                                    move |event, _window, cx| {
+                                        cx.stop_propagation();
+                                        v.update(cx, |view, _cx| {
+                                            view.collection_menu_node_id = nid.clone();
+                                            view.collection_menu_kind = Some(MenuKind::Scenario);
+                                            view.collection_menu_title = lbl.clone();
+                                                view.collection_menu_position = Some((
+                                                    f32::from(event.position.x),
+                                                    f32::from(event.position.y),
+                                                ));
+                                            view.show_collection_menu = true;
+                                        });
+                                    }
+                                },
+                            ),
                     );
                 } else if id_clone.starts_with("g:") {
                     let group_id = id_clone.strip_prefix("g:").unwrap_or("").to_string();
                     let is_folder = entry.is_folder();
                     let is_expanded = entry.is_expanded();
-                    list_item = list_item.child(
-                        div()
-                            .id(("grp-item", ix))
-                            .px(px(6.0))
-                            .py(px(5.0))
-                            .rounded(px(4.0))
-                            .flex()
-                            .items_center()
-                            .gap(px(4.0))
-                            .child(if is_folder {
-                                if is_expanded {
-                                    icon!(chevron_down)
-                                } else {
-                                    icon!(chevron_right)
-                                }
-                                .size(px(12.0))
-                                .text_color(ui::text_tertiary(cx))
-                            } else {
-                                icon!(folder)
+                    let toggle_id = format!("g:{}", group_id);
+                    let is_renaming = {
+                        let renaming_id = view.read(cx).renaming_node_id.clone();
+                        !renaming_id.is_empty() && group_id == renaming_id
+                    };
+                    if is_renaming {
+                        let rename_input = view.read(cx).rename_inline_input.clone();
+                        let v_confirm = view.clone();
+                        let v_enter = view.clone();
+                        list_item = list_item.child(
+                            div()
+                                .id(("grp-item", ix))
+                                .px(px(6.0))
+                                .py(px(4.0))
+                                .rounded(px(4.0))
+                                .flex()
+                                .items_center()
+                                .hover(|s| s.bg(ui::glass::hover_bg(cx)))
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    |_, _, cx| cx.stop_propagation(),
+                                )
+                                .child(
+                                    div()
+                                        .size(px(18.0))
+                                        .flex_none()
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .child(
+                                            if is_expanded {
+                                                icon!(folder_open)
+                                            } else {
+                                                icon!(folder_closed)
+                                            }
+                                            .size(px(14.0))
+                                            .text_color(Theme::global(cx).primary),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .py(px(2.0))
+                                        .child(
+                                            Input::new(&rename_input)
+                                                .appearance(false)
+                                                .bordered(false)
+                                                .focus_bordered(false)
+                                                .h(px(22.0))
+                                                .text_size(px(12.0))
+                                                .on_blur(move |_, cx| {
+                                                    v_confirm.update(cx, |view, cx| {
+                                                        view.confirm_inline_rename(cx);
+                                                    });
+                                                }),
+                                        ),
+                                )
+                                .on_key_down(move |event, _, cx| {
+                                    if event.keystroke.key == "enter" {
+                                        v_enter.update(cx, |view, cx| {
+                                            view.confirm_inline_rename(cx);
+                                        });
+                                    }
+                                })
+                                .on_mouse_down(
+                                    MouseButton::Right,
+                                    {
+                                        let v = view.clone();
+                                        let gid = group_id.clone();
+                                        let lbl = label_clone.clone();
+                                        move |event, _window, cx| {
+                                            cx.stop_propagation();
+                                            v.update(cx, |view, _cx| {
+                                                view.collection_menu_node_id = gid.clone();
+                                                view.collection_menu_kind =
+                                                    Some(MenuKind::Folder);
+                                                view.collection_menu_title = lbl.clone();
+                                                view.collection_menu_position = Some((
+                                                    f32::from(event.position.x),
+                                                    f32::from(event.position.y),
+                                                ));
+                                                view.show_collection_menu = true;
+                                            });
+                                        }
+                                    },
+                                ),
+                        );
+                    } else {
+                        let v_toggle = view.clone();
+                        let v_right = view.clone();
+                        list_item = list_item.child(
+                            div()
+                                .id(("grp-item", ix))
+                                .px(px(6.0))
+                                .py(px(5.0))
+                                .rounded(px(4.0))
+                                .flex()
+                                .items_center()
+                                .gap(px(4.0))
+                                .hover(|s| s.bg(ui::glass::hover_bg(cx)))
+                                .child(if is_folder {
+                                    (if is_expanded {
+                                        icon!(chevron_down)
+                                    } else {
+                                        icon!(chevron_right)
+                                    })
                                     .size(px(12.0))
                                     .text_color(ui::text_tertiary(cx))
-                            })
-                            .child(
-                                if is_expanded {
-                                    icon!(folder_open)
+                                    .into_any_element()
                                 } else {
-                                    icon!(folder_closed)
-                                }
-                                .size(px(14.0))
-                                .text_color(Theme::global(cx).primary),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(12.0))
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .text_color(ui::text_secondary(cx))
-                                    .truncate()
-                                    .child(label_clone.clone()),
-                            )
-                            .context_menu({
-                                let v = view.clone();
-                                let gid = group_id.clone();
-                                move |menu, _window, _| {
-                                    let v1 = v.clone();
-                                    let v2 = v.clone();
-                                    let v3 = v.clone();
-                                    let v4 = v.clone();
-                                    let v5 = v.clone();
-                                    let v6 = v.clone();
-                                    let v7 = v.clone();
-                                    let v8 = v.clone();
-                                    let n1 = gid.clone();
-                                    let n2 = gid.clone();
-                                    let n3 = gid.clone();
-                                    let n4 = gid.clone();
-                                    menu.item(PopupMenuItem::new("新建文件夹").on_click(
-                                        move |_, _, cx| {
-                                            v1.update(cx, |view, _cx| {
-                                                view.collection_menu_node_id = n1.clone();
-                                                view.create_new_folder();
+                                    icon!(folder)
+                                        .size(px(12.0))
+                                        .text_color(ui::text_tertiary(cx))
+                                        .into_any_element()
+                                })
+                                .child(
+                                    if is_expanded {
+                                        icon!(folder_open)
+                                    } else {
+                                        icon!(folder_closed)
+                                    }
+                                    .size(px(14.0))
+                                    .text_color(Theme::global(cx).primary),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(12.0))
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_color(ui::text_secondary(cx))
+                                        .truncate()
+                                        .child(label_clone.clone()),
+                                )
+                                .on_click({
+                                    let gid = group_id.clone();
+                                    move |_, _, cx| {
+                                        if is_folder {
+                                            cx.stop_propagation();
+                                            v_toggle.update(cx, |view, cx| {
+                                                view.toggle_expansion(
+                                                    format!("g:{}", gid.clone()),
+                                                    cx,
+                                                );
                                             });
-                                        },
-                                    ))
-                                    .item(PopupMenuItem::new("新建接口").on_click(
-                                        move |_, _, cx| {
-                                            v2.update(cx, |view, _cx| {
-                                                view.collection_menu_node_id = n2.clone();
-                                                view.create_new_endpoint();
+                                        }
+                                    }
+                                })
+                                .on_mouse_down(
+                                    MouseButton::Right,
+                                    {
+                                        let gid = group_id.clone();
+                                        let lbl = label_clone.clone();
+                                        move |event, _window, cx| {
+                                            cx.stop_propagation();
+                                            v_right.update(cx, |view, _cx| {
+                                                view.collection_menu_node_id = gid.clone();
+                                                view.collection_menu_kind =
+                                                    Some(MenuKind::Folder);
+                                                view.collection_menu_title = lbl.clone();
+                                                view.collection_menu_position = Some((
+                                                    f32::from(event.position.x),
+                                                    f32::from(event.position.y),
+                                                ));
+                                                view.show_collection_menu = true;
                                             });
-                                        },
-                                    ))
-                                    .item(PopupMenuItem::new("导入 cURL").on_click(
-                                        move |_, _, cx| {
-                                            v3.update(cx, |view, _cx| {
-                                                view.show_curl_import = true;
-                                            });
-                                        },
-                                    ))
-                                    .item(PopupMenuItem::new("导入 OpenAPI").on_click(
-                                        move |_, _, cx| {
-                                            v4.update(cx, |view, _cx| view.import_openapi_file());
-                                        },
-                                    ))
-                                    .item(PopupMenuItem::new("导入 Postman").on_click(
-                                        move |_, _, cx| {
-                                            v5.update(cx, |view, _cx| view.import_postman_file());
-                                        },
-                                    ))
-                                    .item(PopupMenuItem::new("导出为 OpenAPI").on_click(
-                                        move |_, _, cx| {
-                                            v6.update(cx, |view, _cx| view.export_openapi());
-                                        },
-                                    ))
-                                    .item(PopupMenuItem::new("重命名").on_click(move |_, _, cx| {
-                                        v7.update(cx, |view, cx| {
-                                            view.collection_menu_node_id = n3.clone();
-                                            view.open_rename(cx);
-                                        });
-                                    }))
-                                    .item(
-                                        PopupMenuItem::new("删除").on_click(move |_, _, cx| {
-                                            v8.update(cx, |view, _cx| {
-                                                view.collection_menu_node_id = n4.clone();
-                                                view.delete_selected_collection_item();
-                                            });
-                                        }),
-                                    )
-                                }
-                            }),
-                    );
+                                        }
+                                    },
+                                ),
+                        );
+                    }
                 } else {
                     let method_str = id_clone.split(':').nth(2).unwrap_or("GET").to_string();
                     let method = match method_str.as_str() {
@@ -306,24 +363,10 @@ pub fn collection_tree(
                         .unwrap_or(0);
                     let node_id = id_clone.splitn(4, ':').nth(3).unwrap_or("").to_string();
                     let v = view.clone();
+                    let v_confirm = view.clone();
+                    let v_cancel = view.clone();
+                    let v_enter = view.clone();
                     let has_scenarios = entry.is_folder();
-
-                    if has_scenarios {
-                        let is_expanded = entry.is_expanded();
-                        let currently_collapsed =
-                            view.read(cx).collapsed_nodes.borrow().contains(&node_id);
-                        if currently_collapsed == is_expanded {
-                            let nid = node_id.clone();
-                            view.update(cx, |view, _cx| {
-                                let mut c = view.collapsed_nodes.borrow_mut();
-                                if is_expanded {
-                                    c.remove(&nid);
-                                } else {
-                                    c.insert(nid);
-                                }
-                            });
-                        }
-                    }
 
                     let is_renaming = {
                         let renaming_id = view.read(cx).renaming_node_id.clone();
@@ -332,8 +375,6 @@ pub fn collection_tree(
 
                     if is_renaming {
                         let rename_input = view.read(cx).rename_inline_input.clone();
-                        let v_confirm = view.clone();
-                        let v_cancel = view.clone();
                         let renaming_icon = if has_scenarios {
                             (if entry.is_expanded() {
                                 icon!(chevron_down)
@@ -342,24 +383,25 @@ pub fn collection_tree(
                             })
                             .size(px(12.0))
                             .text_color(ui::text_tertiary(cx))
-                            .into_any_element()
                         } else {
                             icon!(square_terminal)
                                 .size(px(12.0))
                                 .text_color(ui::text_tertiary(cx))
-                                .into_any_element()
                         };
                         list_item = list_item.child(
                             div()
                                 .id(("req-item", ix))
                                 .px(px(6.0))
                                 .py(px(4.0))
-                                .h(px(30.0))
                                 .rounded(px(4.0))
-                                .bg(Theme::global(cx).popover)
                                 .flex()
                                 .items_center()
-                                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                                .border_1()
+                                .border_color(Theme::global(cx).primary)
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    |_, _, cx| cx.stop_propagation(),
+                                )
                                 .child(
                                     div()
                                         .size(px(18.0))
@@ -371,19 +413,25 @@ pub fn collection_tree(
                                 )
                                 .child(
                                     div()
-                                        .min_w(px(42.0))
-                                        .flex_shrink_0()
-                                        .font_family("SF Mono")
-                                        .text_size(px(11.0))
-                                        .font_weight(gpui::FontWeight::BOLD)
-                                        .text_color(method_color)
-                                        .whitespace_nowrap()
-                                        .child(method_str),
+                                        .flex_1()
+                                        .py(px(2.0))
+                                        .child(
+                                            Input::new(&rename_input)
+                                                .appearance(false)
+                                                .bordered(false)
+                                                .focus_bordered(false)
+                                                .h(px(22.0))
+                                                .text_size(px(12.0))
+                                                .on_blur(move |_, cx| {
+                                                    v_confirm.update(cx, |view, cx| {
+                                                        view.confirm_inline_rename(cx);
+                                                    });
+                                                }),
+                                        ),
                                 )
-                                .child(div().flex_1().child(rename_input.clone()))
                                 .on_key_down(move |event, _, cx| {
                                     if event.keystroke.key == "enter" {
-                                        v_confirm.update(cx, |view, cx| {
+                                        v_enter.update(cx, |view, cx| {
                                             view.confirm_inline_rename(cx);
                                         });
                                     } else if event.keystroke.key == "escape" {
@@ -392,67 +440,31 @@ pub fn collection_tree(
                                         });
                                     }
                                 })
-                                .context_menu({
-                                    let v = view.clone();
-                                    let nid = node_id.clone();
-                                    move |menu, _window, _| {
-                                        let v1 = v.clone();
-                                        let v2 = v.clone();
-                                        let v3 = v.clone();
-                                        let v4 = v.clone();
-                                        let n1 = nid.clone();
-                                        let n2 = nid.clone();
-                                        let n3 = nid.clone();
-                                        let n4 = nid.clone();
-                                        menu.item(PopupMenuItem::new("新建用例").on_click(
-                                            move |_, _, cx| {
-                                                v1.update(cx, |view, _cx| {
-                                                    view.collection_menu_node_id = n1.clone();
-                                                    view.create_new_case();
-                                                });
-                                            },
-                                        ))
-                                        .item(PopupMenuItem::new("复制路径").on_click(
-                                            move |_, _, cx| {
-                                                let nd = n2.clone();
-                                                v2.update(cx, |view, cx| {
-                                                    if !nd.is_empty() {
-                                                        if let Ok(Some(node)) =
-                                                            view.service.get_collection_node(&nd)
-                                                        {
-                                                            cx.write_to_clipboard(
-                                                                gpui::ClipboardItem::new_string(
-                                                                    node.url.clone(),
-                                                                ),
-                                                            );
-                                                            view.notice =
-                                                                format!("已复制: {}", node.url);
-                                                        }
-                                                    }
-                                                });
-                                            },
-                                        ))
-                                        .item(PopupMenuItem::new("重命名").on_click(
-                                            move |_, _, cx| {
-                                                v3.update(cx, |view, cx| {
-                                                    view.collection_menu_node_id = n3.clone();
-                                                    view.open_rename(cx);
-                                                });
-                                            },
-                                        ))
-                                        .item(
-                                            PopupMenuItem::new("删除").on_click(move |_, _, cx| {
-                                                v4.update(cx, |view, _cx| {
-                                                    view.collection_menu_node_id = n4.clone();
-                                                    view.delete_selected_collection_item();
-                                                });
-                                            }),
-                                        )
-                                    }
-                                }),
+                                .on_mouse_down(
+                                    MouseButton::Right,
+                                    {
+                                        let v = view.clone();
+                                        let nid = node_id.clone();
+                                        let lbl = label_clone.clone();
+                                        move |event, _window, cx| {
+                                            cx.stop_propagation();
+                                            v.update(cx, |view, _cx| {
+                                                view.collection_menu_node_id = nid.clone();
+                                                view.collection_menu_kind =
+                                                    Some(MenuKind::Request);
+                                                view.collection_menu_title = lbl.clone();
+                                                view.collection_menu_position = Some((
+                                                    f32::from(event.position.x),
+                                                    f32::from(event.position.y),
+                                                ));
+                                                view.show_collection_menu = true;
+                                            });
+                                        }
+                                    },
+                                ),
                         );
                     } else {
-                        let req_icon = if has_scenarios {
+                        let req_icon: gpui::AnyElement = if has_scenarios {
                             (if entry.is_expanded() {
                                 icon!(chevron_down)
                             } else {
@@ -467,53 +479,133 @@ pub fn collection_tree(
                                 .text_color(ui::text_tertiary(cx))
                                 .into_any_element()
                         };
-                        list_item = list_item.child(
-                            div()
-                                .id(("req-item", ix))
-                                .px(px(6.0))
-                                .py(px(4.0))
-                                .rounded(px(4.0))
-                                .flex()
-                                .items_center()
-                                .child(
-                                    div()
-                                        .size(px(18.0))
-                                        .flex_none()
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .child(req_icon),
-                                )
-                                .child({
-                                    let ts2 = ts.clone();
-                                    div()
-                                        .id(("req-content", ix))
-                                        .flex_1()
-                                        .flex()
-                                        .items_center()
-                                        .gap(px(4.0))
-                                        .pl(px(2.0))
-                                        .child(
-                                            div()
-                                                .min_w(px(42.0))
-                                                .flex_shrink_0()
-                                                .font_family("SF Mono")
-                                                .text_size(px(11.0))
-                                                .font_weight(gpui::FontWeight::BOLD)
-                                                .text_color(method_color)
-                                                .whitespace_nowrap()
-                                                .child(method_str.clone()),
-                                        )
-                                        .child(
-                                            div()
-                                                .flex_1()
-                                                .text_size(px(12.0))
-                                                .truncate()
-                                                .child(display_name),
-                                        )
-                                        .on_mouse_down(
-                                            MouseButton::Left,
-                                            move |_event, window, cx| {
+                        if has_scenarios {
+                            let nid = node_id.clone();
+                            list_item = list_item.child(
+                                div()
+                                    .id(("req-item", ix))
+                                    .px(px(6.0))
+                                    .py(px(4.0))
+                                    .rounded(px(4.0))
+                                    .flex()
+                                    .items_center()
+                                    .hover(|s| s.bg(ui::glass::hover_bg(cx)))
+                                    .child(
+                                        div()
+                                            .size(px(18.0))
+                                            .flex_none()
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .child(req_icon),
+                                    )
+                                    .child({
+                                        let ts2 = ts.clone();
+                                        div()
+                                            .id(("req-content", ix))
+                                            .flex_1()
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(4.0))
+                                            .pl(px(2.0))
+                                            .child(
+                                                div()
+                                                    .min_w(px(42.0))
+                                                    .flex_shrink_0()
+                                                    .font_family("SF Mono")
+                                                    .text_size(px(11.0))
+                                                    .font_weight(gpui::FontWeight::BOLD)
+                                                    .text_color(method_color)
+                                                    .whitespace_nowrap()
+                                                    .child(method_str.clone()),
+                                            )
+                                            .child(
+                                                div()
+                                                    .flex_1()
+                                                    .text_size(px(12.0))
+                                                    .truncate()
+                                                    .child(display_name),
+                                            )
+                                            .on_click(move |_, _, cx| {
+                                                cx.stop_propagation();
+                                                ts2.update(cx, |tree, cx| {
+                                                    tree.set_selected_index(Some(ix), cx);
+                                                });
+                                                v.update(cx, |view, cx| {
+                                                    view.toggle_expansion(nid.clone(), cx);
+                                                });
+                                            })
+                                    })
+                                    .on_mouse_down(
+                                        MouseButton::Right,
+                                        {
+                                            let v = view.clone();
+                                            let nid = node_id.clone();
+                                            let lbl = label_clone.clone();
+                                            move |event, _window, cx| {
+                                                cx.stop_propagation();
+                                                v.update(cx, |view, _cx| {
+                                                    view.collection_menu_node_id = nid.clone();
+                                                    view.collection_menu_kind =
+                                                        Some(MenuKind::Request);
+                                                    view.collection_menu_title = lbl.clone();
+                                                    view.collection_menu_position = Some((
+                                                        f32::from(event.position.x),
+                                                        f32::from(event.position.y),
+                                                    ));
+                                                    view.show_collection_menu = true;
+                                                });
+                                            }
+                                        },
+                                    ),
+                            );
+                        } else {
+                            list_item = list_item.child(
+                                div()
+                                    .id(("req-item", ix))
+                                    .px(px(6.0))
+                                    .py(px(4.0))
+                                    .rounded(px(4.0))
+                                    .flex()
+                                    .items_center()
+                                    .hover(|s| s.bg(ui::glass::hover_bg(cx)))
+                                    .child(
+                                        div()
+                                            .size(px(18.0))
+                                            .flex_none()
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .child(req_icon),
+                                    )
+                                    .child({
+                                        let ts2 = ts.clone();
+                                        div()
+                                            .id(("req-content", ix))
+                                            .flex_1()
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(4.0))
+                                            .pl(px(2.0))
+                                            .child(
+                                                div()
+                                                    .min_w(px(42.0))
+                                                    .flex_shrink_0()
+                                                    .font_family("SF Mono")
+                                                    .text_size(px(11.0))
+                                                    .font_weight(gpui::FontWeight::BOLD)
+                                                    .text_color(method_color)
+                                                    .whitespace_nowrap()
+                                                    .child(method_str.clone()),
+                                            )
+                                            .child(
+                                                div()
+                                                    .flex_1()
+                                                    .text_size(px(12.0))
+                                                    .truncate()
+                                                    .child(display_name),
+                                            )
+                                            .on_click(move |_, window, cx| {
                                                 cx.stop_propagation();
                                                 ts2.update(cx, |tree, cx| {
                                                     tree.set_selected_index(Some(ix), cx);
@@ -522,72 +614,37 @@ pub fn collection_tree(
                                                     view.select_request(req_idx, window, cx)
                                                 });
                                                 window.refresh();
-                                            },
-                                        )
-                                })
-                                .context_menu({
-                                    let v = view.clone();
-                                    let nid = node_id.clone();
-                                    move |menu, _window, _| {
-                                        let v1 = v.clone();
-                                        let v2 = v.clone();
-                                        let v3 = v.clone();
-                                        let v4 = v.clone();
-                                        let n1 = nid.clone();
-                                        let n2 = nid.clone();
-                                        let n3 = nid.clone();
-                                        let n4 = nid.clone();
-                                        menu.item(PopupMenuItem::new("新建用例").on_click(
-                                            move |_, _, cx| {
-                                                v1.update(cx, |view, _cx| {
-                                                    view.collection_menu_node_id = n1.clone();
-                                                    view.create_new_case();
+                                            })
+                                    })
+                                    .on_mouse_down(
+                                        MouseButton::Right,
+                                        {
+                                            let v = view.clone();
+                                            let nid = node_id.clone();
+                                            let lbl = label_clone.clone();
+                                            move |event, _window, cx| {
+                                                cx.stop_propagation();
+                                                v.update(cx, |view, _cx| {
+                                                    view.collection_menu_node_id = nid.clone();
+                                                    view.collection_menu_kind =
+                                                        Some(MenuKind::Request);
+                                                    view.collection_menu_title = lbl.clone();
+                                                    view.collection_menu_position = Some((
+                                                        f32::from(event.position.x),
+                                                        f32::from(event.position.y),
+                                                    ));
+                                                    view.show_collection_menu = true;
                                                 });
-                                            },
-                                        ))
-                                        .item(PopupMenuItem::new("复制路径").on_click(
-                                            move |_, _, cx| {
-                                                let nd = n2.clone();
-                                                v2.update(cx, |view, cx| {
-                                                    if !nd.is_empty() {
-                                                        if let Ok(Some(node)) =
-                                                            view.service.get_collection_node(&nd)
-                                                        {
-                                                            cx.write_to_clipboard(
-                                                                gpui::ClipboardItem::new_string(
-                                                                    node.url.clone(),
-                                                                ),
-                                                            );
-                                                            view.notice =
-                                                                format!("已复制: {}", node.url);
-                                                        }
-                                                    }
-                                                });
-                                            },
-                                        ))
-                                        .item(PopupMenuItem::new("重命名").on_click(
-                                            move |_, _, cx| {
-                                                v3.update(cx, |view, cx| {
-                                                    view.collection_menu_node_id = n3.clone();
-                                                    view.open_rename(cx);
-                                                });
-                                            },
-                                        ))
-                                        .item(
-                                            PopupMenuItem::new("删除").on_click(move |_, _, cx| {
-                                                v4.update(cx, |view, _cx| {
-                                                    view.collection_menu_node_id = n4.clone();
-                                                    view.delete_selected_collection_item();
-                                                });
-                                            }),
-                                        )
-                                    }
-                                }),
-                        );
+                                            }
+                                        },
+                                    ),
+                            );
+                        }
                     }
                 }
 
                 list_item
             },
+            _cx,
         ))
 }

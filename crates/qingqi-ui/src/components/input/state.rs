@@ -270,6 +270,7 @@ pub struct InputState {
     ime_initial_state: Option<(Rope, Selection)>,
     pub(crate) on_change: Option<Arc<dyn Fn(&str, &mut Window, &mut Context<Self>)>>,
     pub(crate) on_submit: Option<Arc<dyn Fn(&str, &mut Window, &mut Context<Self>)>>,
+    pub(crate) on_blur: Option<Arc<dyn Fn(&mut Window, &mut Context<Self>)>>,
 
     // LSP stubs
     #[allow(dead_code)]
@@ -355,6 +356,7 @@ impl InputState {
             ime_initial_state: None,
             on_change: None,
             on_submit: None,
+            on_blur: None,
             lsp: Lsp::default(),
             search_panel: None,
             context_menu: None,
@@ -767,9 +769,12 @@ impl InputState {
         cx.emit(InputEvent::Focus);
     }
 
-    fn on_blur(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| cursor.stop(cx));
         cx.emit(InputEvent::Blur);
+        if let Some(on_blur) = &self.on_blur {
+            on_blur(window, cx);
+        }
         cx.notify();
     }
 

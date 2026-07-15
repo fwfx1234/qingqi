@@ -29,7 +29,16 @@ impl BlinkCursor {
     }
 
     pub fn start(&mut self, cx: &mut Context<Self>) {
-        self.blink(self.epoch, cx);
+        self.visible = true;
+        cx.notify();
+
+        let epoch = self.next_epoch();
+        self._task = cx.spawn(async move |this, cx| {
+            Timer::after(PAUSE_DELAY).await;
+            if let Some(this) = this.upgrade() {
+                this.update(cx, |this, cx| this.blink(epoch, cx)).ok();
+            }
+        });
     }
 
     pub fn stop(&mut self, cx: &mut Context<Self>) {

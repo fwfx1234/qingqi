@@ -194,19 +194,18 @@ impl Render for TreeState {
     }
 }
 
-pub fn tree<R>(state: &gpui::Entity<TreeState>, render_item: R) -> Tree
+pub fn tree<R>(state: &gpui::Entity<TreeState>, render_item: R, cx: &App) -> Tree
 where
     R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem + 'static,
 {
+    state.read(cx).attach_renderer(render_item);
     Tree {
         entity: state.clone(),
-        _render_item: Rc::new(render_item),
     }
 }
 
 pub struct Tree {
     entity: gpui::Entity<TreeState>,
-    _render_item: Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem>,
 }
 
 impl IntoElement for Tree {
