@@ -778,6 +778,7 @@ impl ApiDebuggerDataSource {
 fn map_collection_node(
     row: &rusqlite::Row,
 ) -> std::result::Result<CollectionNode, rusqlite::Error> {
+    let request_json: String = row.get(6)?;
     Ok(CollectionNode {
         id: row.get(0)?,
         parent_id: row.get(1)?,
@@ -785,7 +786,7 @@ fn map_collection_node(
         name: row.get(3)?,
         method: row.get(4)?,
         url: row.get(5)?,
-        request_json: row.get(6)?,
+        request: RequestSnapshot::from_json(&request_json),
         sort_order: row.get(7)?,
         expanded: row.get::<_, i64>(8)? != 0,
         created_at: row.get(9)?,

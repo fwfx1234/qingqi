@@ -278,7 +278,13 @@ fn parse_header(s: &str) -> Option<KeyValueRow> {
     if let Some(pos) = s.find(": ") {
         let key = s[..pos].trim().to_string();
         let value = s[pos + 2..].trim().to_string();
-        Some(KeyValueRow::new(key, value))
+        let mut row = KeyValueRow::new(key, value.trim_start_matches('@'));
+        row.value_type = if value.starts_with('@') {
+            String::from("file")
+        } else {
+            String::from("text")
+        };
+        Some(row)
     } else if let Some(pos) = s.find(':') {
         let key = s[..pos].trim().to_string();
         let value = s[pos + 1..].trim().to_string();

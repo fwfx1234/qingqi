@@ -21,7 +21,7 @@ pub fn manifest() -> Manifest {
         icon: IconRef::asset("icons/capture.svg"),
         prefixes: vec!["cap".into(), "capture".into(), "httpcap".into()],
         mode: PluginWindowMode::Window,
-        window: WindowSpec::ratio(0.86, 0.82),
+        window: WindowSpec::ratio(0.86, 0.82).with_dock_icon(),
         category: PluginCategory::Tool,
         status: PluginStatus::Ready,
         background: false,
@@ -33,7 +33,7 @@ pub fn manifest() -> Manifest {
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Window,
-            window: WindowSpec::ratio(0.86, 0.82),
+            window: WindowSpec::ratio(0.86, 0.82).with_dock_icon(),
         }),
         stats: Some(PluginStats {
             primary: "代理抓包".into(),

@@ -1,7 +1,15 @@
 use gpui::{App, AppContext, Entity, Window};
 use qingqi_ui::components::input::InputState;
 
-use crate::service::{self, ApiGroup, ApiRequest, ApiResponse, AuthType, KeyValueRow};
+use crate::service::{
+    self, ApiGroup, ApiRequest, ApiResponse, AuthType, BodyMode, EditorTab, KeyValueRow,
+};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KvEditorTarget {
+    Tab(EditorTab),
+    Body(BodyMode),
+}
 
 #[derive(Clone)]
 pub struct KvRow {
@@ -80,6 +88,55 @@ impl KvEditor {
     pub fn toggle(&mut self, index: usize) {
         if let Some(row) = self.rows.get_mut(index) {
             row.enabled = !row.enabled;
+        }
+    }
+
+    pub fn update_row_values(&mut self, rows: &[KeyValueRow], cx: &mut App) {
+        let len = self.rows.len().min(rows.len());
+        for i in 0..len {
+            let row = &mut self.rows[i];
+            let new = &rows[i];
+            if row.key.read(cx).value() != new.key {
+                row.key.update(cx, |input, input_cx| {
+                    input.reset_value(new.key.clone(), input_cx)
+                });
+            }
+            if row.value.read(cx).value() != new.value {
+                row.value.update(cx, |input, input_cx| {
+                    input.reset_value(new.value.clone(), input_cx)
+                });
+            }
+            if row.value_type.read(cx).value() != new.value_type {
+                row.value_type.update(cx, |input, input_cx| {
+                    input.reset_value(new.value_type.clone(), input_cx)
+                });
+            }
+            if row.description.read(cx).value() != new.description {
+                row.description.update(cx, |input, input_cx| {
+                    input.reset_value(new.description.clone(), input_cx)
+                });
+            }
+        }
+    }
+
+    pub fn adjust_row_count(
+        &mut self,
+        window: &mut Window,
+        cx: &mut App,
+        rows: &[KeyValueRow],
+    ) {
+        while self.rows.len() > rows.len() {
+            self.rows.pop();
+        }
+        while self.rows.len() < rows.len() {
+            let row = &rows[self.rows.len()];
+            self.rows.push(KvRow {
+                enabled: row.enabled,
+                key: kv_input(window, cx, &row.key, "键"),
+                value: kv_input(window, cx, &row.value, "值"),
+                value_type: kv_input(window, cx, &row.value_type, "string"),
+                description: kv_input(window, cx, &row.description, "说明"),
+            });
         }
     }
 }
@@ -368,6 +425,7 @@ pub fn sample_response() -> ApiResponse {
         curl: String::new(),
         logs: vec![String::from("尚未发送请求")],
         assertion_results: Vec::new(),
+        body_bytes: None,
     }
 }
 

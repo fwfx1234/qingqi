@@ -1177,6 +1177,18 @@ impl InputState {
         }
     }
 
+    pub(crate) fn range_to_utf16_with_reversed(
+        &self,
+        range: &Range<usize>,
+        reversed: bool,
+    ) -> UTF16Selection {
+        UTF16Selection {
+            range: self.text.offset_to_offset_utf16(range.start)
+                ..self.text.offset_to_offset_utf16(range.end),
+            reversed,
+        }
+    }
+
     pub(crate) fn range_from_utf16(&self, range: &std::ops::Range<usize>) -> Range<usize> {
         self.text.offset_utf16_to_offset(range.start)..self.text.offset_utf16_to_offset(range.end)
     }
@@ -1208,6 +1220,7 @@ impl InputState {
                 .to_string();
             cx.write_to_clipboard(ClipboardItem::new_string(text));
         }
+        cx.notify();
     }
 
     pub(crate) fn cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
@@ -1788,10 +1801,10 @@ impl EntityInputHandler for InputState {
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<UTF16Selection> {
-        Some(UTF16Selection {
-            range: self.range_to_utf16(&self.selected_range.into()).range,
-            reversed: self.selection_reversed,
-        })
+        Some(self.range_to_utf16_with_reversed(
+            &self.selected_range.into(),
+            self.selection_reversed,
+        ))
     }
 
     fn marked_text_range(
@@ -2864,6 +2877,69 @@ mod tests {
                 state.undo(&Undo, window, cx);
                 assert_eq!(state.value().as_ref(), "foo 世界 foo");
             });
+        });
+    }
+
+    #[gpui::test]
+    fn copy_preserves_selection_and_cursor(cx: &mut TestAppContext) {
+        let (entity, cx) = cx.add_window_view(|window, cx| {
+            let mut state = InputState::new(window, cx);
+            state.text = Rope::from("hello world");
+            state.selected_range = (0..5).into();
+            state.selection_reversed = false;
+            state
+        });
+
+        cx.update(|window, cx| {
+            entity.update(cx, |state, cx| {
+                state.copy(&Copy {}, window, cx);
+            });
+        });
+
+        entity.read_with(cx, |state, _cx| {
+            assert_eq!(state.selected_range, Selection::new(0, 5));
+            assert!(!state.selection_reversed);
+            assert_eq!(state.cursor(), 5);
+        });
+    }
+
+    #[gpui::test]
+    fn copy_with_reversed_selection_preserves_direction(cx: &mut TestAppContext) {
+        let (entity, cx) = cx.add_window_view(|window, cx| {
+            let mut state = InputState::new(window, cx);
+            state.text = Rope::from("hello world");
+            state.selected_range = (0..5).into();
+            state.selection_reversed = true;
+            state
+        });
+
+        cx.update(|window, cx| {
+            entity.update(cx, |state, cx| {
+                state.copy(&Copy {}, window, cx);
+            });
+        });
+
+        entity.read_with(cx, |state, _cx| {
+            assert_eq!(state.selected_range, Selection::new(0, 5));
+            assert!(state.selection_reversed);
+            assert_eq!(state.cursor(), 0);
+        });
+    }
+
+    #[gpui::test]
+    fn range_to_utf16_with_reversed_preserves_flag(cx: &mut TestAppContext) {
+        let (entity, cx) = cx.add_window_view(|window, cx| {
+            let mut state = InputState::new(window, cx);
+            state.text = Rope::from("hello");
+            state
+        });
+
+        entity.read_with(cx, |state, _cx| {
+            let result = state.range_to_utf16_with_reversed(&(0..5), true);
+            assert!(result.reversed);
+
+            let result = state.range_to_utf16_with_reversed(&(0..5), false);
+            assert!(!result.reversed);
         });
     }
 }

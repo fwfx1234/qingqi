@@ -23,6 +23,7 @@ pub trait ThemeHandle {
 pub trait AppIndexHandle {
     fn snapshot(&self) -> AppIndexSnapshot;
     fn request_scan(&self) -> bool;
+    fn force_rescan(&self) -> bool;
 }
 
 pub trait ShortcutHandle {

@@ -1,14 +1,25 @@
+pub mod breakpoint;
 pub mod certificate;
+pub mod composer;
 pub mod engine;
+pub mod har;
 pub mod manifest;
 pub mod mock_engine;
+pub mod mock_enhanced;
 pub mod mock_model;
 pub mod mock_store;
 pub mod model;
+pub mod performance;
 pub mod plugin;
 pub mod proxy_handler;
+pub mod rewrite;
+pub mod request_diff;
+pub mod session_tree;
 pub mod store;
+pub mod text_tools;
+pub mod throttle;
 pub mod view;
+pub mod video_sniff;
 
 use std::sync::Arc;
 

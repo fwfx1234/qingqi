@@ -1,7 +1,7 @@
 use super::shared::{section_micro_label, transparent_surface};
-use crate::service::{AuthType, BodyMode, EditorTab};
+use crate::service::{ApiRequest, AuthType, BodyMode, EditorTab};
 use crate::view::ApiDebuggerView;
-use crate::view::types::{AuthFormInputs, KvRow};
+use crate::view::types::{AuthFormInputs, KvEditorTarget, KvRow};
 use gpui::{
     App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
     Styled, div, hsla, prelude::FluentBuilder, px,
@@ -18,9 +18,12 @@ pub fn editor_panel(
     editor_tab: EditorTab,
     text_input: Option<Entity<InputState>>,
     kv_rows: Vec<KvRow>,
+    body_urlencoded_rows: Vec<KvRow>,
+    body_form_data_rows: Vec<KvRow>,
     auth_form: AuthFormInputs,
     body_mode: BodyMode,
     auth_type: AuthType,
+    request: ApiRequest,
     cx: &App,
 ) -> impl IntoElement {
     let label = editor_tab.label();
@@ -66,9 +69,7 @@ pub fn editor_panel(
                         })
                         .on_click(move |_, _window, cx| {
                             bm_click.update(cx, |view, cx| {
-                                view.sync_models(cx);
-                                view.body_mode = BodyMode::from_db(&mode_val);
-                                view.persist_workspace();
+                                view.set_body_mode(BodyMode::from_db(&mode_val), cx);
                             });
                         })
                         .child(label),
@@ -144,7 +145,7 @@ pub fn editor_panel(
                         .on_click(move |_, _window, cx| {
                             au_click.update(cx, |view, cx| {
                                 view.auth_type = AuthType::from_db(&at_val);
-                                view.sync_models(cx);
+                                view.sync_auth_to_model(cx);
                                 view.persist_workspace();
                             });
                         })
@@ -188,7 +189,16 @@ pub fn editor_panel(
                         .into_iter()
                         .enumerate()
                         .map(move |(index, tab)| {
-                            editor_tab_button(tabs_view.clone(), index, tab, tab == editor_tab, cx)
+                            let (indicator, muted) = tab_indicator(tab, &request, body_mode);
+                            editor_tab_button(
+                                tabs_view.clone(),
+                                index,
+                                tab,
+                                tab == editor_tab,
+                                indicator,
+                                muted,
+                                cx,
+                            )
                         }),
                 ),
         )
@@ -206,13 +216,50 @@ pub fn editor_panel(
                     | EditorTab::Headers
                     | EditorTab::Path
                     | EditorTab::Cookies => {
-                        super::kv_editor::kv_editor_table(view.clone(), editor_tab, kv_rows, cx)
-                            .into_any_element()
+                        super::kv_editor::kv_editor_table(
+                            view.clone(),
+                            KvEditorTarget::Tab(editor_tab),
+                            kv_rows,
+                            editor_tab == EditorTab::Params,
+                            false,
+                            cx,
+                        )
+                        .into_any_element()
                     }
                     EditorTab::Auth => {
                         super::auth_panel::auth_form_panel(view.clone(), auth_type, auth_form, cx)
                             .into_any_element()
                     }
+                    EditorTab::Body
+                        if matches!(
+                            body_mode,
+                            BodyMode::FormUrlEncoded | BodyMode::FormData
+                        ) =>
+                    {
+                        let rows = if body_mode == BodyMode::FormData {
+                            body_form_data_rows
+                        } else {
+                            body_urlencoded_rows
+                        };
+                        super::kv_editor::kv_editor_table(
+                            view.clone(),
+                            KvEditorTarget::Body(body_mode),
+                            rows,
+                            false,
+                            body_mode == BodyMode::FormData,
+                            cx,
+                        )
+                        .into_any_element()
+                    }
+                    EditorTab::Body if body_mode == BodyMode::None => div()
+                        .h(px(160.0))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .text_size(px(11.0))
+                        .text_color(ui::text_tertiary(cx))
+                        .child("当前请求不发送 Body")
+                        .into_any_element(),
                     _ => {
                         let input = text_input.expect("non-KV editor tab must have a text input");
                         let hint = if editor_tab == EditorTab::Body {
@@ -264,6 +311,8 @@ pub fn editor_tab_button(
     index: usize,
     tab: EditorTab,
     active: bool,
+    indicator: Option<String>,
+    indicator_muted: bool,
     cx: &App,
 ) -> impl IntoElement {
     div()
@@ -295,15 +344,94 @@ pub fn editor_tab_button(
         })
         .flex()
         .items_center()
+        .gap(px(5.0))
         .child(tab.label())
+        .when_some(indicator, |tab, indicator| {
+            tab.child(
+                div()
+                    .min_w(px(15.0))
+                    .h(px(15.0))
+                    .px(px(4.0))
+                    .rounded(px(5.0))
+                    .bg(theme::rgba_with_alpha(
+                        Theme::global(cx).foreground.into(),
+                        if indicator_muted { 0.035 } else { 0.09 },
+                    ))
+                    .text_size(px(9.0))
+                    .text_color(if indicator_muted {
+                        ui::text_tertiary(cx)
+                    } else {
+                        Theme::global(cx).foreground
+                    })
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(indicator),
+            )
+        })
         .on_click(move |_, _window, cx| {
             view.update(cx, |view, cx| {
                 view.sync_models(cx);
-                view.persist_workspace();
                 view.editor_tab = tab;
+                view.sync_models(cx);
                 view.persist_workspace();
             });
         })
+}
+
+fn tab_indicator(
+    tab: EditorTab,
+    request: &ApiRequest,
+    body_mode: BodyMode,
+) -> (Option<String>, bool) {
+    let rows = match tab {
+        EditorTab::Params => Some(&request.params),
+        EditorTab::Path => Some(&request.path_rows),
+        EditorTab::Headers => Some(&request.headers),
+        EditorTab::Cookies => Some(&request.cookies),
+        _ => None,
+    };
+    if let Some(rows) = rows {
+        let configured = rows.iter().filter(|row| !row.key.trim().is_empty()).count();
+        let enabled = rows
+            .iter()
+            .any(|row| row.enabled && !row.key.trim().is_empty());
+        return ((configured > 0).then(|| configured.to_string()), !enabled);
+    }
+    match tab {
+        EditorTab::Body => {
+            let has_content = match body_mode {
+                BodyMode::FormUrlEncoded | BodyMode::FormData => request
+                    .body_payloads
+                    .rows(body_mode)
+                    .iter()
+                    .any(|row| !row.key.trim().is_empty()),
+                BodyMode::None => false,
+                mode => !request.body_payloads.raw(mode).trim().is_empty(),
+            };
+            (
+                has_content.then(|| body_mode.label().to_string()),
+                false,
+            )
+        }
+        EditorTab::Auth => (
+            request
+                .auth
+                .iter()
+                .any(|row| !row.key.trim().is_empty())
+                .then(|| String::from("•")),
+            false,
+        ),
+        EditorTab::PreOps => (
+            (!request.pre_ops.trim().is_empty()).then(|| String::from("•")),
+            false,
+        ),
+        EditorTab::PostOps => (
+            (!request.post_ops.trim().is_empty()).then(|| String::from("•")),
+            false,
+        ),
+        _ => (None, false),
+    }
 }
 
 fn auth_hint(text: &'static str, cx: &App) -> impl IntoElement {

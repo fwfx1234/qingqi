@@ -94,6 +94,8 @@ pub struct WindowSpec {
     pub always_on_top: bool,
     #[serde(default)]
     pub background: WindowBackgroundSpec,
+    #[serde(default)]
+    pub show_in_dock: bool,
 }
 
 // ── Compatibility aliases for ongoing Manifest → Manifest migration ──
@@ -144,6 +146,7 @@ impl WindowSpec {
             size: WindowSize::Fixed { width, height },
             always_on_top: false,
             background: WindowBackgroundSpec::Opaque,
+            show_in_dock: false,
         }
     }
 
@@ -154,6 +157,7 @@ impl WindowSpec {
             size: WindowSize::Fixed { width, height },
             always_on_top: true,
             background: WindowBackgroundSpec::Opaque,
+            show_in_dock: false,
         }
     }
 
@@ -162,6 +166,7 @@ impl WindowSpec {
             size: WindowSize::Ratio { width, height },
             always_on_top: false,
             background: WindowBackgroundSpec::Opaque,
+            show_in_dock: false,
         }
     }
 
@@ -171,6 +176,7 @@ impl WindowSpec {
             size: WindowSize::Ratio { width, height },
             always_on_top: false,
             background: WindowBackgroundSpec::Blurred,
+            show_in_dock: false,
         }
     }
 
@@ -179,6 +185,7 @@ impl WindowSpec {
             size: WindowSize::Auto,
             always_on_top: false,
             background: WindowBackgroundSpec::Opaque,
+            show_in_dock: false,
         }
     }
 
@@ -187,6 +194,44 @@ impl WindowSpec {
             size,
             always_on_top: false,
             background: WindowBackgroundSpec::Opaque,
+            show_in_dock: false,
         }
+    }
+
+    pub const fn with_dock_icon(mut self) -> Self {
+        self.show_in_dock = true;
+        self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{WindowBackgroundSpec, WindowSize, WindowSpec};
+
+    #[test]
+    fn dock_icon_is_opt_in() {
+        assert!(!WindowSpec::ratio(0.8, 0.8).show_in_dock);
+        assert!(WindowSpec::ratio(0.8, 0.8).with_dock_icon().show_in_dock);
+    }
+
+    #[test]
+    fn missing_dock_field_deserializes_as_false() {
+        let spec: WindowSpec = serde_json::from_str(
+            r#"{"size":{"Ratio":{"width":0.8,"height":0.7}},"always_on_top":false,"background":"Opaque"}"#,
+        )
+        .expect("legacy window spec should deserialize");
+
+        assert_eq!(
+            spec,
+            WindowSpec {
+                size: WindowSize::Ratio {
+                    width: 0.8,
+                    height: 0.7,
+                },
+                always_on_top: false,
+                background: WindowBackgroundSpec::Opaque,
+                show_in_dock: false,
+            }
+        );
     }
 }

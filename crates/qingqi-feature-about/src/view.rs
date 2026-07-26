@@ -39,7 +39,7 @@ impl Render for AboutView {
                         div()
                             .text_size(px(24.0))
                             .font_weight(gpui::FontWeight::BOLD)
-                            .child("Qingqi"),
+                            .child("启程 (Qingqi)"),
                     )
                     .child(
                         div()
@@ -110,7 +110,7 @@ impl Render for AboutView {
                         cx,
                     ))
                     .child(ui::status_bar(
-                        format!("Qingqi v{APP_VERSION} · Rust + GPUI"),
+                        format!("启程 (Qingqi) v{APP_VERSION} · Rust + GPUI"),
                         t.muted_foreground,
                         cx,
                     )),

@@ -242,7 +242,35 @@ pub(super) fn search_text(app: &AppEntry) -> String {
         values.push(alias.clone());
         values.push(normalize_query(alias));
     }
+    let pinyin = pinyin_initials(&app.name);
+    if !pinyin.is_empty() {
+        values.push(pinyin.clone());
+    }
+    for alias in &app.aliases {
+        let alias_pinyin = pinyin_initials(alias);
+        if !alias_pinyin.is_empty() && alias_pinyin != pinyin {
+            values.push(alias_pinyin);
+        }
+    }
     values.join("\n").to_lowercase()
+}
+
+/// Compute pinyin initials (first letter of each syllable) for Chinese characters.
+/// E.g., "微信" -> "wx", "腾讯QQ" -> "txqq".
+pub(super) fn pinyin_initials(text: &str) -> String {
+    use pinyin::ToPinyin;
+    let mut result = String::new();
+    let mut has_chinese = false;
+
+    for pinyin in text.to_pinyin().flatten() {
+        has_chinese = true;
+        let plain = pinyin.plain();
+        if let Some(first) = plain.chars().next() {
+            result.push(first);
+        }
+    }
+
+    if has_chinese { result } else { String::new() }
 }
 
 pub(super) fn normalize_query(value: &str) -> String {

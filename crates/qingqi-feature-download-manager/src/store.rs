@@ -29,7 +29,29 @@ impl DownloadStore {
             if version < 2 {
                 conn.execute_batch(SETTINGS_TABLE_MIGRATION)?;
             }
+            if version < 3 {
+                conn.execute_batch(SEGMENT_TABLE_MIGRATION)?;
+            }
             conn.execute(UPSERT_SCHEMA_VERSION, params![SCHEMA_VERSION])?;
+        }
+
+        let has_scheduled: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('download_tasks') WHERE name = 'scheduled_at'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
+            > 0;
+        if !has_scheduled {
+            conn.execute(
+                "ALTER TABLE download_tasks ADD COLUMN scheduled_at TEXT NOT NULL DEFAULT ''",
+                [],
+            )?;
+            conn.execute(
+                "ALTER TABLE download_tasks ADD COLUMN priority INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
         }
         Ok(())
     }
@@ -51,6 +73,8 @@ impl DownloadStore {
                 task.speed_bps,
                 task.created_at,
                 task.updated_at,
+                task.scheduled_at,
+                task.priority,
             ],
         )?;
         Ok(())
@@ -72,6 +96,8 @@ impl DownloadStore {
                 task.error_msg,
                 task.speed_bps,
                 now_label(),
+                task.scheduled_at,
+                task.priority,
             ],
         )?;
         Ok(())
@@ -143,6 +169,17 @@ impl DownloadStore {
     pub fn list_active_tasks(&self) -> Result<Vec<DownloadTask>> {
         let conn = self.connection()?;
         let mut stmt = conn.prepare(LIST_ACTIVE_TASKS)?;
+        let rows = stmt.query_map([], map_task)?;
+        let mut tasks = Vec::new();
+        for row in rows {
+            tasks.push(row?);
+        }
+        Ok(tasks)
+    }
+
+    pub fn list_scheduled_tasks(&self) -> Result<Vec<DownloadTask>> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(LIST_SCHEDULED_TASKS)?;
         let rows = stmt.query_map([], map_task)?;
         let mut tasks = Vec::new();
         for row in rows {
@@ -247,6 +284,50 @@ impl DownloadStore {
         Ok(counts)
     }
 
+    pub fn insert_segment(&self, segment: &super::model::DownloadSegment) -> Result<()> {
+        let conn = self.connection()?;
+        conn.execute(
+            INSERT_SEGMENT,
+            params![
+                segment.id,
+                segment.task_id,
+                segment.index as i64,
+                segment.start_byte as i64,
+                segment.end_byte as i64,
+                segment.downloaded as i64,
+                segment_status_to_db(segment.status),
+                segment.error_msg,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_segment_progress(&self, id: &str, downloaded: u64, status: super::model::SegmentStatus, error_msg: &str) -> Result<()> {
+        let conn = self.connection()?;
+        conn.execute(
+            UPDATE_SEGMENT_PROGRESS,
+            params![id, downloaded as i64, segment_status_to_db(status), error_msg],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_segments_by_task(&self, task_id: &str) -> Result<Vec<super::model::DownloadSegment>> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(LIST_SEGMENTS_BY_TASK)?;
+        let rows = stmt.query_map(params![task_id], map_segment)?;
+        let mut segments = Vec::new();
+        for row in rows {
+            segments.push(row?);
+        }
+        Ok(segments)
+    }
+
+    pub fn delete_segments_by_task(&self, task_id: &str) -> Result<usize> {
+        let conn = self.connection()?;
+        let affected = conn.execute(DELETE_SEGMENTS_BY_TASK, params![task_id])?;
+        Ok(affected)
+    }
+
     fn connection(&self) -> Result<PooledConnection> {
         self.pool
             .get()
@@ -271,7 +352,9 @@ CREATE TABLE IF NOT EXISTS download_tasks (
     error_msg   TEXT NOT NULL DEFAULT '',
     speed_bps   REAL NOT NULL DEFAULT 0.0,
     created_at  TEXT NOT NULL DEFAULT '',
-    updated_at  TEXT NOT NULL DEFAULT ''
+    updated_at  TEXT NOT NULL DEFAULT '',
+    scheduled_at TEXT NOT NULL DEFAULT '',
+    priority    INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_task_status
     ON download_tasks(status);
@@ -283,6 +366,19 @@ CREATE TABLE IF NOT EXISTS download_manager_settings (
     value       TEXT NOT NULL DEFAULT '',
     updated_at  INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS download_segments (
+    id          TEXT PRIMARY KEY,
+    task_id     TEXT NOT NULL DEFAULT '',
+    index       INTEGER NOT NULL DEFAULT 0,
+    start_byte  INTEGER NOT NULL DEFAULT 0,
+    end_byte    INTEGER NOT NULL DEFAULT 0,
+    downloaded  INTEGER NOT NULL DEFAULT 0,
+    status      TEXT NOT NULL DEFAULT 'Pending',
+    error_msg   TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (task_id) REFERENCES download_tasks(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_segment_task ON download_segments(task_id);
 ";
 
 pub const SETTINGS_TABLE_MIGRATION: &str = "
@@ -293,22 +389,36 @@ CREATE TABLE IF NOT EXISTS download_manager_settings (
 );
 ";
 
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SEGMENT_TABLE_MIGRATION: &str = "
+CREATE TABLE IF NOT EXISTS download_segments (
+    id          TEXT PRIMARY KEY,
+    task_id     TEXT NOT NULL DEFAULT '',
+    index       INTEGER NOT NULL DEFAULT 0,
+    start_byte  INTEGER NOT NULL DEFAULT 0,
+    end_byte    INTEGER NOT NULL DEFAULT 0,
+    downloaded  INTEGER NOT NULL DEFAULT 0,
+    status      TEXT NOT NULL DEFAULT 'Pending',
+    error_msg   TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_segment_task ON download_segments(task_id);
+";
+
+pub const SCHEMA_VERSION: i64 = 3;
 pub const READ_SCHEMA_VERSION: &str = "SELECT COALESCE(MAX(version), 0) FROM schema_info";
 pub const UPSERT_SCHEMA_VERSION: &str = "INSERT OR REPLACE INTO schema_info (version) VALUES (?1)";
 
 pub const INSERT_TASK: &str = "
 INSERT INTO download_tasks
      (id, url, file_name, save_path, file_size, downloaded,
-      status, category, error_msg, speed_bps, created_at, updated_at)
- VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+      status, category, error_msg, speed_bps, created_at, updated_at, scheduled_at, priority)
+ VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
 ";
 
 pub const UPDATE_TASK: &str = "
 UPDATE download_tasks
     SET url = ?2, file_name = ?3, save_path = ?4, file_size = ?5,
         downloaded = ?6, status = ?7, category = ?8, error_msg = ?9,
-        speed_bps = ?10, updated_at = ?11
+        speed_bps = ?10, updated_at = ?11, scheduled_at = ?12, priority = ?13
   WHERE id = ?1
 ";
 
@@ -326,37 +436,46 @@ UPDATE download_tasks
 
 pub const GET_TASK: &str = "
 SELECT id, url, file_name, save_path, file_size, downloaded,
-       status, category, error_msg, speed_bps, created_at, updated_at
+       status, category, error_msg, speed_bps, created_at, updated_at, scheduled_at, priority
   FROM download_tasks WHERE id = ?1
 ";
 
 pub const LIST_TASKS_ALL: &str = "
 SELECT id, url, file_name, save_path, file_size, downloaded,
-       status, category, error_msg, speed_bps, created_at, updated_at
+       status, category, error_msg, speed_bps, created_at, updated_at, scheduled_at, priority
   FROM download_tasks
  ORDER BY created_at DESC
 ";
 
 pub const LIST_TASKS_BY_STATUS: &str = "
 SELECT id, url, file_name, save_path, file_size, downloaded,
-       status, category, error_msg, speed_bps, created_at, updated_at
+       status, category, error_msg, speed_bps, created_at, updated_at, scheduled_at, priority
   FROM download_tasks WHERE status = ?1
  ORDER BY created_at DESC
 ";
 
 pub const LIST_TASKS_BY_CATEGORY: &str = "
 SELECT id, url, file_name, save_path, file_size, downloaded,
-       status, category, error_msg, speed_bps, created_at, updated_at
+       status, category, error_msg, speed_bps, created_at, updated_at, scheduled_at, priority
   FROM download_tasks WHERE category = ?1
  ORDER BY created_at DESC
 ";
 
 pub const LIST_ACTIVE_TASKS: &str = "
 SELECT id, url, file_name, save_path, file_size, downloaded,
-       status, category, error_msg, speed_bps, created_at, updated_at
+       status, category, error_msg, speed_bps, created_at, updated_at, scheduled_at, priority
   FROM download_tasks
  WHERE status IN ('Downloading', 'Pending')
  ORDER BY created_at ASC
+";
+
+pub const LIST_SCHEDULED_TASKS: &str = "
+SELECT id, url, file_name, save_path, file_size, downloaded,
+       status, category, error_msg, speed_bps, created_at, updated_at,
+       scheduled_at, priority
+  FROM download_tasks
+ WHERE status = 'Pending' AND scheduled_at != ''
+ ORDER BY scheduled_at ASC
 ";
 
 pub const DELETE_TASK: &str = "DELETE FROM download_tasks WHERE id = ?1";
@@ -379,6 +498,19 @@ pub const COUNT_FAILED: &str = "SELECT COUNT(*) FROM download_tasks WHERE status
 pub const SUM_DOWNLOADED: &str = "SELECT SUM(downloaded) FROM download_tasks";
 pub const COUNT_BY_STATUS_AND_CATEGORY: &str =
     "SELECT status, category, COUNT(*) FROM download_tasks GROUP BY status, category";
+
+pub const INSERT_SEGMENT: &str = "
+INSERT INTO download_segments (id, task_id, index, start_byte, end_byte, downloaded, status, error_msg)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+";
+pub const UPDATE_SEGMENT_PROGRESS: &str = "
+UPDATE download_segments SET downloaded = ?2, status = ?3, error_msg = ?4 WHERE id = ?1
+";
+pub const LIST_SEGMENTS_BY_TASK: &str = "
+SELECT id, task_id, index, start_byte, end_byte, downloaded, status, error_msg
+FROM download_segments WHERE task_id = ?1 ORDER BY index ASC
+";
+pub const DELETE_SEGMENTS_BY_TASK: &str = "DELETE FROM download_segments WHERE task_id = ?1";
 
 #[derive(Clone, Debug, Default)]
 pub struct DownloadStats {
@@ -427,6 +559,8 @@ fn map_task(row: &rusqlite::Row) -> std::result::Result<DownloadTask, rusqlite::
         speed_bps: row.get(9)?,
         created_at: row.get(10)?,
         updated_at: row.get(11)?,
+        scheduled_at: row.get(12)?,
+        priority: row.get::<_, i64>(13)? as i32,
     })
 }
 
@@ -473,6 +607,37 @@ fn category_from_db(s: &str) -> FileCategory {
         "Image" => FileCategory::Image,
         "Software" => FileCategory::Software,
         _ => FileCategory::Other,
+    }
+}
+
+fn map_segment(row: &rusqlite::Row) -> std::result::Result<super::model::DownloadSegment, rusqlite::Error> {
+    Ok(super::model::DownloadSegment {
+        id: row.get(0)?,
+        task_id: row.get(1)?,
+        index: row.get::<_, i64>(2)? as usize,
+        start_byte: row.get::<_, i64>(3)? as u64,
+        end_byte: row.get::<_, i64>(4)? as u64,
+        downloaded: row.get::<_, i64>(5)? as u64,
+        status: segment_status_from_db(&row.get::<_, String>(6)?),
+        error_msg: row.get(7)?,
+    })
+}
+
+fn segment_status_to_db(status: super::model::SegmentStatus) -> &'static str {
+    match status {
+        super::model::SegmentStatus::Pending => "Pending",
+        super::model::SegmentStatus::Downloading => "Downloading",
+        super::model::SegmentStatus::Completed => "Completed",
+        super::model::SegmentStatus::Failed => "Failed",
+    }
+}
+
+fn segment_status_from_db(s: &str) -> super::model::SegmentStatus {
+    match s {
+        "Downloading" => super::model::SegmentStatus::Downloading,
+        "Completed" => super::model::SegmentStatus::Completed,
+        "Failed" => super::model::SegmentStatus::Failed,
+        _ => super::model::SegmentStatus::Pending,
     }
 }
 
@@ -542,6 +707,8 @@ mod tests {
             speed_bps: 0.0,
             created_at: "2025-01-01 00:00:00".into(),
             updated_at: "2025-01-01 00:00:00".into(),
+            scheduled_at: String::new(),
+            priority: 0,
         }
     }
 

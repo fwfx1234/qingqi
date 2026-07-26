@@ -110,6 +110,8 @@ pub struct DownloadTask {
     pub speed_bps: f64,
     pub created_at: String,
     pub updated_at: String,
+    pub scheduled_at: String,
+    pub priority: i32,
 }
 
 impl DownloadTask {
@@ -129,6 +131,141 @@ impl DownloadTask {
             return Some(0);
         }
         Some((remaining as f64 / self.speed_bps) as u64)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SegmentStatus {
+    Pending,
+    Downloading,
+    Completed,
+    Failed,
+}
+
+impl SegmentStatus {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Pending => "等待中",
+            Self::Downloading => "下载中",
+            Self::Completed => "已完成",
+            Self::Failed => "失败",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DownloadSegment {
+    pub id: String,
+    pub task_id: String,
+    pub index: usize,
+    pub start_byte: u64,
+    pub end_byte: u64,
+    pub downloaded: u64,
+    pub status: SegmentStatus,
+    pub error_msg: String,
+}
+
+impl DownloadSegment {
+    pub fn total_size(&self) -> u64 {
+        self.end_byte.saturating_sub(self.start_byte) + 1
+    }
+
+    pub fn progress_percent(&self) -> f64 {
+        let total = self.total_size();
+        if total == 0 { return 100.0; }
+        (self.downloaded as f64 / total as f64 * 100.0).min(100.0)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TaskPriority {
+    Low,
+    Normal,
+    High,
+}
+
+impl TaskPriority {
+    pub fn from_i32(v: i32) -> Self {
+        match v {
+            1 => Self::High,
+            -1 => Self::Low,
+            _ => Self::Normal,
+        }
+    }
+
+    pub fn to_i32(self) -> i32 {
+        match self {
+            Self::High => 1,
+            Self::Low => -1,
+            Self::Normal => 0,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Low => "低",
+            Self::Normal => "普通",
+            Self::High => "高",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DownloadHistoryExport {
+    pub version: u32,
+    pub exported_at: String,
+    pub tasks: Vec<DownloadTask>,
+}
+
+impl DownloadHistoryExport {
+    pub fn new(tasks: Vec<DownloadTask>) -> Self {
+        use time::OffsetDateTime;
+        Self {
+            version: 1,
+            exported_at: OffsetDateTime::now_local()
+                .unwrap_or_else(|_| OffsetDateTime::now_utc())
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_else(|_| String::from("1970-01-01T00:00:00Z")),
+            tasks,
+        }
+    }
+
+    pub fn to_json(&self) -> serde_json::Result<String> {
+        serde_json::to_string_pretty(self)
+    }
+
+    pub fn from_json(json: &str) -> serde_json::Result<Self> {
+        serde_json::from_str(json)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UrlImportItem {
+    pub url: String,
+    pub file_name: Option<String>,
+    pub priority: i32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UrlImportList {
+    pub urls: Vec<UrlImportItem>,
+}
+
+impl UrlImportList {
+    pub fn from_plain_text(text: &str) -> Self {
+        let urls = super::model::extract_urls_from_text(text)
+            .into_iter()
+            .map(|url| UrlImportItem {
+                url,
+                file_name: None,
+                priority: 0,
+            })
+            .collect();
+        Self { urls }
+    }
+
+    pub fn from_json(json: &str) -> serde_json::Result<Self> {
+        serde_json::from_str(json)
     }
 }
 
@@ -277,6 +414,7 @@ pub struct DownloadSettings {
     pub referer: String,
     pub cookie: String,
     pub custom_headers: String,
+    pub segment_count: usize,
 }
 
 impl Default for DownloadSettings {
@@ -296,6 +434,7 @@ impl Default for DownloadSettings {
             referer: String::new(),
             cookie: String::new(),
             custom_headers: String::new(),
+            segment_count: 4,
         }
     }
 }
@@ -331,6 +470,25 @@ pub fn parse_custom_headers(raw: &str) -> Vec<(String, String)> {
         headers.push((key, value));
     }
     headers
+}
+
+pub fn calculate_segments(total_size: u64, segment_count: usize) -> Vec<(u64, u64)> {
+    if segment_count <= 1 || total_size == 0 {
+        return vec![(0, total_size.saturating_sub(1))];
+    }
+    let segment_count = segment_count.min(16);
+    let chunk_size = total_size / segment_count as u64;
+    let mut segments = Vec::new();
+    for i in 0..segment_count {
+        let start = i as u64 * chunk_size;
+        let end = if i == segment_count - 1 {
+            total_size.saturating_sub(1)
+        } else {
+            start + chunk_size - 1
+        };
+        segments.push((start, end));
+    }
+    segments
 }
 
 fn decode_percent_lossy(value: &str) -> String {
@@ -405,6 +563,8 @@ mod tests {
             speed_bps: 100.0,
             created_at: String::new(),
             updated_at: String::new(),
+            scheduled_at: String::new(),
+            priority: 0,
         };
         assert!((task.progress_percent() - 50.0).abs() < 0.01);
         assert_eq!(task.eta_seconds(), Some(5));

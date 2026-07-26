@@ -4,11 +4,12 @@ use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use gpui::{
     App, Context, FocusHandle, IntoElement, ParentElement, Render, SharedString, Window, div,
-    prelude::*, uniform_list,
+    prelude::*, px, uniform_list,
 };
 
 use super::list::ListItem;
 use super::styled::StyledExt;
+use crate::ui;
 
 #[derive(Clone)]
 pub struct TreeItem {
@@ -68,6 +69,8 @@ pub struct TreeEntry {
     depth: usize,
 }
 
+pub type TreeEntryClickHandler = Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App)>;
+
 impl TreeEntry {
     pub fn item(&self) -> &TreeItem {
         &self.item
@@ -104,6 +107,7 @@ pub struct TreeState {
     selected_ix: Option<usize>,
     render_item_cell:
         Rc<RefCell<Option<Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem>>>>,
+    entry_click_handler: Rc<RefCell<Option<TreeEntryClickHandler>>>,
 }
 
 impl TreeState {
@@ -113,6 +117,7 @@ impl TreeState {
             _focus_handle: cx.focus_handle(),
             entries: Vec::new(),
             render_item_cell: Rc::new(RefCell::new(None)),
+            entry_click_handler: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -141,6 +146,17 @@ impl TreeState {
         *self.render_item_cell.borrow_mut() = Some(Rc::new(f));
     }
 
+    pub fn set_entry_click_handler<F>(&self, handler: F)
+    where
+        F: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) + 'static,
+    {
+        *self.entry_click_handler.borrow_mut() = Some(Rc::new(handler));
+    }
+
+    pub fn clear_entry_click_handler(&self) {
+        *self.entry_click_handler.borrow_mut() = None;
+    }
+
     pub fn selected_index(&self) -> Option<usize> {
         self.selected_ix
     }
@@ -157,40 +173,73 @@ impl TreeState {
 impl Render for TreeState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let render_item_cell = self.render_item_cell.clone();
+        let entry_click_handler = self.entry_click_handler.clone();
         let entity = cx.entity().clone();
+        let is_empty = self.entries.is_empty();
 
-        div().id("tree-state").size_full().relative().child(
-            uniform_list("entries", self.entries.len(), {
-                move |visible_range: Range<usize>, window, cx| {
-                    // First, collect what we need from the entity without holding the borrow
-                    let (entries_snapshot, selected) = {
-                        let st = entity.read(cx);
-                        // We only clone the entries in the visible range
-                        let visible_entries: Vec<TreeEntry> = visible_range
-                            .clone()
-                            .map(|ix| st.entries[ix].clone())
-                            .collect();
-                        (visible_entries, st.selected_ix)
-                    };
-                    // Now we can call the user's render function with &mut cx
-                    let render_item = render_item_cell.borrow();
-                    let mut items: Vec<ListItem> = Vec::with_capacity(visible_range.len());
-                    for (offset, entry) in entries_snapshot.into_iter().enumerate() {
-                        let ix = visible_range.start + offset;
-                        let is_selected = Some(ix) == selected;
-                        let item = if let Some(ref f) = *render_item {
-                            (f)(ix, &entry, is_selected, window, cx)
-                        } else {
-                            ListItem::new(ix)
-                        };
-                        items.push(item);
-                    }
-                    items
-                }
+        div()
+            .id("tree-state")
+            .size_full()
+            .relative()
+            .min_h(px(40.0))
+            .when(is_empty, |el| {
+                el.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .size_full()
+                        .text_size(px(12.0))
+                        .text_color(ui::text_secondary(cx))
+                        .child("暂无数据"),
+                )
             })
-            .flex_grow()
-            .size_full(),
-        )
+            .when(!is_empty, |el| {
+                el.child(
+                    uniform_list("entries", self.entries.len(), {
+                        move |visible_range: Range<usize>, window, cx| {
+                            // First, collect what we need from the entity without holding the borrow
+                            let (entries_snapshot, selected) = {
+                                let st = entity.read(cx);
+                                // We only clone the entries in the visible range
+                                let visible_entries: Vec<TreeEntry> = visible_range
+                                    .clone()
+                                    .map(|ix| st.entries[ix].clone())
+                                    .collect();
+                                (visible_entries, st.selected_ix)
+                            };
+                            // Now we can call the user's render function with &mut cx
+                            let render_item = render_item_cell.borrow();
+                            let mut items: Vec<ListItem> = Vec::with_capacity(visible_range.len());
+                            for (offset, entry) in entries_snapshot.into_iter().enumerate() {
+                                let ix = visible_range.start + offset;
+                                let is_selected = Some(ix) == selected;
+                                let mut item = if let Some(ref f) = *render_item {
+                                    (f)(ix, &entry, is_selected, window, cx)
+                                } else {
+                                    ListItem::new(ix)
+                                };
+                                let click_handler = entry_click_handler.borrow().clone();
+                                let entry_for_click = entry.clone();
+                                let tree_entity = entity.clone();
+                                item = item.on_click(move |_, window, cx| {
+                                    if let Some(handler) = click_handler.as_ref() {
+                                        handler(ix, &entry_for_click, is_selected, window, cx);
+                                    } else {
+                                        tree_entity.update(cx, |tree, cx| {
+                                            tree.on_entry_click(ix, window, cx);
+                                        });
+                                    }
+                                });
+                                items.push(item);
+                            }
+                            items
+                        }
+                    })
+                    .flex_grow()
+                    .size_full(),
+                )
+            })
     }
 }
 
@@ -213,6 +262,8 @@ impl IntoElement for Tree {
     fn into_element(self) -> Self::Element {
         div()
             .id("tree")
+            .flex_1()
+            .size_full()
             .child(self.entity.clone())
             .into_any_element()
     }

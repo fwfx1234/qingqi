@@ -2,6 +2,7 @@ pub mod app_catalog;
 pub mod app_index;
 pub mod app_index_store;
 pub mod background;
+pub mod dock_agent;
 pub mod launcher;
 pub mod runtime;
 pub mod theme_service;

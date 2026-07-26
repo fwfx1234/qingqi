@@ -299,10 +299,18 @@ impl Token {
         gpui::white()
     }
     pub fn primary_hover(&self) -> Hsla {
-        self.surface_hover
+        if self.is_dark {
+            lighten_hsla(self.primary, 0.1)
+        } else {
+            darken_hsla(self.primary, 0.05)
+        }
     }
     pub fn primary_active(&self) -> Hsla {
-        self.surface_active
+        if self.is_dark {
+            lighten_hsla(self.primary, 0.2)
+        } else {
+            darken_hsla(self.primary, 0.1)
+        }
     }
 
     pub fn secondary_foreground(&self) -> Hsla {

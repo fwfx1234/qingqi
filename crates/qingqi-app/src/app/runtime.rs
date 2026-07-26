@@ -111,6 +111,10 @@ impl qingqi_plugin::host::AppIndexHandle for AppIndexHandleAdapter {
     fn request_scan(&self) -> bool {
         Arc::clone(&self.service).request_scan()
     }
+
+    fn force_rescan(&self) -> bool {
+        Arc::clone(&self.service).force_rescan()
+    }
 }
 
 impl qingqi_plugin::host::ShortcutHandle for ShortcutHandleAdapter {
@@ -574,7 +578,7 @@ pub fn run_command_with_input_with_trace(
 
 fn set_menus(cx: &mut App) {
     cx.set_menus(vec![Menu {
-        name: "Qingqi".into(),
+        name: "启程 (Qingqi)".into(),
         items: vec![
             MenuItem::action("打开启动器", OpenLauncher),
             MenuItem::action("剪贴板历史", OpenClipboard),

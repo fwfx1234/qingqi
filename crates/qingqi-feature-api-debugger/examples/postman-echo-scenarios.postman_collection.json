@@ -1,0 +1,246 @@
+{
+  "info": {
+    "_postman_id": "f357cd58-c279-4b96-9bb7-9dd9bd768478",
+    "name": "Qingqi API 调试场景",
+    "description": "基于 Postman Echo 的可调用公共 API 示例，无需 API Key。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "基础请求",
+      "item": [
+        {
+          "name": "查询参数",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "/get?source=qingqi&feature=api-debugger"
+            }
+          }
+        },
+        {
+          "name": "环境变量查询",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "/get?query={{SEARCH_TERM}}&environment={{ENV_NAME}}"
+            }
+          }
+        },
+        {
+          "name": "自定义 Header",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Qingqi-Client",
+                "value": "api-debugger"
+              }
+            ],
+            "url": {
+              "raw": "/headers"
+            }
+          }
+        },
+        {
+          "name": "Cookie",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "session_id=qingqi-demo; theme=light"
+              }
+            ],
+            "url": {
+              "raw": "/cookies"
+            }
+          }
+        },
+        {
+          "name": "Basic Auth",
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "postman",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "password",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "/basic-auth"
+            }
+          }
+        },
+        {
+          "name": "200 响应",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "/status/200"
+            }
+          }
+        },
+        {
+          "name": "404 响应",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "/status/404"
+            }
+          }
+        },
+        {
+          "name": "延迟 1 秒",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "/delay/1"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "请求体与方法",
+      "item": [
+        {
+          "name": "POST JSON",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"qingqi\",\n  \"role\": \"api-debugger\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "/post"
+            }
+          }
+        },
+        {
+          "name": "POST x-www-form-urlencoded",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "name",
+                  "value": "qingqi api debugger",
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "value": "tool",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "/post"
+            }
+          }
+        },
+        {
+          "name": "POST multipart/form-data",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "qingqi",
+                  "type": "text"
+                },
+                {
+                  "key": "kind",
+                  "value": "api-debugger",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "/post"
+            }
+          }
+        },
+        {
+          "name": "PUT JSON",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": 42,\n  \"status\": \"updated\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "/put"
+            }
+          }
+        },
+        {
+          "name": "PATCH JSON",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"patched\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "/patch"
+            }
+          }
+        },
+        {
+          "name": "DELETE",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "/delete"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1733,6 +1733,7 @@ fn launcher_icon(
     tint: gpui::Rgba,
 ) -> impl IntoElement {
     let icon = item.icon.clone();
+    let label = launcher_icon_label(item);
 
     div()
         .size(px(36.0))
@@ -1750,10 +1751,13 @@ fn launcher_icon(
                     .text_size(px(10.0))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(tint)
-                    .child(launcher_icon_label(item))
+                    .child(label)
                     .into_any_element()
             } else {
-                ui::icon_element(icon.as_str(), tint, 28.0).into_any_element()
+                qingqi_ui::components::Icon::from_lucide_path(&icon)
+                    .size(px(28.0))
+                    .text_color(tint)
+                    .into_any_element()
             }
         })
 }

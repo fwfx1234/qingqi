@@ -1,5 +1,6 @@
 pub mod manifest;
 pub mod model;
+pub mod notification;
 pub mod plugin;
 pub mod service;
 pub mod store;

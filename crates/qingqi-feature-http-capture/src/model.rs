@@ -406,6 +406,15 @@ impl HeaderEntry {
     }
 }
 
+/// Extract host from a URL string
+pub fn extract_host_from_url(url: &str) -> String {
+    if let Ok(uri) = url.parse::<hyper::Uri>() {
+        uri.host().unwrap_or("unknown").to_string()
+    } else {
+        "unknown".to_string()
+    }
+}
+
 pub fn format_bytes(bytes: i64) -> String {
     if bytes < 0 {
         return "0 B".to_string();

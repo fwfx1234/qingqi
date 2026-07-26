@@ -221,6 +221,55 @@ impl CaptureStore {
         Ok(count)
     }
 
+    /// Get all exchanges (for tree view and performance analysis)
+    pub fn get_all_exchanges(&self) -> anyhow::Result<Vec<crate::model::CapturedExchange>> {
+        self.query(&crate::model::FilterState::default(), 0, i64::MAX)
+    }
+
+    /// Export all captured exchanges as HAR JSON
+    pub fn export_har(&self) -> anyhow::Result<String> {
+        let exchanges = self.query(&crate::model::FilterState::default(), 0, i64::MAX)?;
+        crate::har::export_exchanges_as_har(&exchanges)
+            .map_err(|e| anyhow::anyhow!("导出 HAR 失败: {e}"))
+    }
+
+    /// Import exchanges from HAR file (returns count of imported entries)
+    pub fn import_har(&self, json: &str) -> anyhow::Result<usize> {
+        let har = crate::har::import_har(json)
+            .map_err(|e| anyhow::anyhow!("解析 HAR 失败: {e}"))?;
+
+        let mut count = 0;
+        for entry in &har.log.entries {
+            let req_headers_json = serde_json::to_string(&entry.request.headers)
+                .unwrap_or_default();
+            let resp_headers_json = serde_json::to_string(&entry.response.headers)
+                .unwrap_or_default();
+            let req_body = entry.request.post_data.as_ref()
+                .map(|p| p.text.clone())
+                .unwrap_or_default();
+            let resp_body = entry.response.content.text.clone().unwrap_or_default();
+
+            self.insert(
+                &entry.request.method,
+                &entry.request.url,
+                &crate::model::extract_host_from_url(&entry.request.url),
+                entry.response.status as i64,
+                entry.request.http_version.as_deref().unwrap_or("HTTP/1.1"),
+                entry.time as i64,
+                0,
+                entry.response.content.size,
+                &req_headers_json,
+                &resp_headers_json,
+                &req_body,
+                &resp_body,
+                entry.request.url.starts_with("https"),
+            )?;
+            count += 1;
+        }
+
+        Ok(count)
+    }
+
     fn build_filter(
         filter: &FilterState,
     ) -> (

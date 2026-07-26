@@ -11,7 +11,11 @@ use gpui::{
 };
 use qingqi_ui::components::root::Root;
 
-use crate::app::{app_catalog::AppCatalog, launcher::Launcher};
+use crate::app::{
+    app_catalog::AppCatalog,
+    dock_agent::{DockAgentConfig, DockAgentEvent, DockAgentManager},
+    launcher::Launcher,
+};
 use qingqi_core::lock_or_recover;
 use qingqi_core::plugin::{PluginManager, WindowView};
 use qingqi_plugin::command::{Action, Activation, CommandInvocation};
@@ -43,6 +47,7 @@ pub struct WindowController {
     events: AppEventBus,
     launcher_window: Option<AnyWindowHandle>,
     plugin_windows: HashMap<String, AnyWindowHandle>,
+    dock_agents: DockAgentManager,
     #[cfg(target_os = "windows")]
     keep_alive_window: Option<AnyWindowHandle>,
 }
@@ -59,6 +64,7 @@ impl WindowController {
             events,
             launcher_window: None,
             plugin_windows: HashMap::new(),
+            dock_agents: DockAgentManager::default(),
             #[cfg(target_os = "windows")]
             keep_alive_window: None,
         }
@@ -173,7 +179,7 @@ impl WindowController {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             display_id: display.map(|display| display.id()),
             titlebar: Some(TitlebarOptions {
-                title: Some("Qingqi".into()),
+                title: Some("启程 (Qingqi)".into()),
                 appears_transparent: true,
                 traffic_light_position: Some(gpui::point(px(-80.0), px(-80.0))),
                 ..Default::default()
@@ -188,7 +194,7 @@ impl WindowController {
         };
         let controller_for_entity = Arc::clone(&controller);
         match cx.open_window(options, move |window, cx| {
-            window.set_window_title("Qingqi");
+            window.set_window_title("启程 (Qingqi)");
             let query_input =
                 cx.new(|cx| InputState::new(window, cx).placeholder("搜索工具、命令、文件..."));
             let launcher = cx
@@ -292,17 +298,28 @@ impl WindowController {
             let plugin = cx.new(|cx| {
                 PluginWindow::new(cx, Arc::clone(&controller_for_window), view, client_drawn)
             });
-            cx.new(|cx| Root::new(plugin, window, cx))
+            cx.new(|cx| {
+                let mut root = Root::new(plugin, window, cx);
+                if client_drawn {
+                    root.set_background(gpui::transparent_black());
+                }
+                root
+            })
         }) {
             Ok(handle) => {
                 log_plugin_window_step(&plugin_id, "open plugin window", window_started, trace);
+                lock_or_recover(&controller, "window_controller")
+                    .set_plugin_window(plugin_id_for_window, handle.into());
+                if let Some(config) = dock_agent_config(manifest.as_ref()) {
+                    let _ = update_plugin_window(handle.into(), cx, |plugin, _window, cx| {
+                        plugin.attach_dock_agent(config, cx);
+                    });
+                }
                 let _ = handle.update(cx, |_, window, cx| {
                     qingqi_platform::macos::activate_frontmost();
                     cx.activate(true);
                     window.activate_window();
                 });
-                lock_or_recover(&controller, "window_controller")
-                    .set_plugin_window(plugin_id_for_window, handle.into());
             }
             Err(error) => tracing::warn!(
                 plugin_id,
@@ -331,8 +348,10 @@ impl WindowController {
         };
         if let Some(window_handle) = stored_window_handle {
             match update_plugin_window(window_handle, cx, |plugin_window, window, cx| {
+                qingqi_platform::macos::activate_frontmost();
                 cx.activate(true);
                 plugin_window.reopen(window, cx);
+                qingqi_platform::macos::restore_window(window);
                 window.activate_window();
             }) {
                 Ok(_) => {
@@ -357,8 +376,10 @@ impl WindowController {
             }
 
             let _ = update_plugin_window(window_handle, cx, |plugin_window, window, cx| {
+                qingqi_platform::macos::activate_frontmost();
                 cx.activate(true);
                 plugin_window.reopen(window, cx);
+                qingqi_platform::macos::restore_window(window);
                 window.activate_window();
             });
             lock_or_recover(&controller, "window_controller")
@@ -568,16 +589,28 @@ impl WindowController {
             let plugin = cx.new(|cx| {
                 PluginWindow::new(cx, Arc::clone(&controller_for_window), view, client_drawn)
             });
-            cx.new(|cx| Root::new(plugin, window, cx))
+            cx.new(|cx| {
+                let mut root = Root::new(plugin, window, cx);
+                if client_drawn {
+                    root.set_background(gpui::transparent_black());
+                }
+                root
+            })
         }) {
             Ok(handle) => {
                 log_plugin_window_step(&plugin_id, "open plugin window", window_started, trace);
+                lock_or_recover(&controller, "window_controller")
+                    .set_plugin_window(plugin_id_for_window, handle.into());
+                if let Some(config) = dock_agent_config(manifest.as_ref()) {
+                    let _ = update_plugin_window(handle.into(), cx, |plugin, _window, cx| {
+                        plugin.attach_dock_agent(config, cx);
+                    });
+                }
                 let _ = handle.update(cx, |_, window, cx| {
+                    qingqi_platform::macos::activate_frontmost();
                     cx.activate(true);
                     window.activate_window();
                 });
-                lock_or_recover(&controller, "window_controller")
-                    .set_plugin_window(plugin_id_for_window, handle.into());
             }
             Err(error) => tracing::warn!(
                 plugin_id,
@@ -615,6 +648,7 @@ impl WindowController {
                 {
                     plugin_window.input_changed(input, cx);
                 }
+                qingqi_platform::macos::restore_window(window);
                 window.activate_window();
             }) {
                 Ok(_) => {
@@ -647,6 +681,7 @@ impl WindowController {
                 {
                     plugin_window.input_changed(input, cx);
                 }
+                qingqi_platform::macos::restore_window(window);
                 window.activate_window();
             });
             lock_or_recover(&controller, "window_controller")
@@ -678,6 +713,55 @@ impl WindowController {
         lock_or_recover(&self.plugin_manager, "window_controller").close_idle(plugin_id);
         self.clear_plugin_window(plugin_id);
     }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn handle_dock_agent_event(
+        controller: WindowControllerHandle,
+        plugin_id: String,
+        generation: u64,
+        event: DockAgentEvent,
+        cx: &mut App,
+    ) {
+        match event {
+            DockAgentEvent::Ready => {
+                if lock_or_recover(&controller, "window_controller")
+                    .dock_agents
+                    .is_current(&plugin_id, generation)
+                {
+                    tracing::debug!(plugin_id, generation, "Dock agent ready");
+                }
+            }
+            DockAgentEvent::Activate => {
+                let current = lock_or_recover(&controller, "window_controller")
+                    .dock_agents
+                    .is_current(&plugin_id, generation);
+                if current {
+                    Self::activate_existing_plugin(controller, &plugin_id, cx);
+                }
+            }
+            DockAgentEvent::Quit => {
+                let current = lock_or_recover(&controller, "window_controller")
+                    .dock_agents
+                    .mark_stopping(&plugin_id, generation);
+                if current {
+                    Self::close_existing_plugin_window(controller, &plugin_id, cx);
+                }
+            }
+            DockAgentEvent::Exited => {
+                lock_or_recover(&controller, "window_controller")
+                    .dock_agents
+                    .handle_exit(&plugin_id, generation, Arc::clone(&controller), cx);
+            }
+        }
+    }
+}
+
+fn dock_agent_config(
+    manifest: Option<&qingqi_plugin::plugin::Manifest>,
+) -> Option<DockAgentConfig> {
+    manifest
+        .filter(|manifest| manifest.window.show_in_dock)
+        .map(DockAgentConfig::from_manifest)
 }
 
 fn plugin_reopens_in_active_space(manifest: Option<&qingqi_plugin::plugin::Manifest>) -> bool {
@@ -945,6 +1029,7 @@ struct PluginWindow {
     /// Set to true after the app-aware on_release hook has run, so that
     /// `Drop` does not redundantly invoke `on_close` / `close_idle_plugin`.
     closed: bool,
+    dock_agent_registered: bool,
 }
 
 impl PluginWindow {
@@ -965,7 +1050,11 @@ impl PluginWindow {
             if let Some(mut view) = this.view.take() {
                 view.on_close_with_app(cx);
             }
-            lock_or_recover(&controller2, "window_controller").close_idle_plugin(&plugin_id2);
+            let mut controller = lock_or_recover(&controller2, "window_controller");
+            controller.close_idle_plugin(&plugin_id2);
+            if this.dock_agent_registered {
+                controller.dock_agents.release(&plugin_id2);
+            }
         })
         .detach();
         Self {
@@ -974,7 +1063,19 @@ impl PluginWindow {
             plugin_id,
             client_drawn,
             closed: false,
+            dock_agent_registered: false,
         }
+    }
+
+    fn attach_dock_agent(&mut self, config: DockAgentConfig, cx: &mut Context<Self>) {
+        if self.dock_agent_registered {
+            return;
+        }
+        let controller = Arc::clone(&self.controller);
+        lock_or_recover(&self.controller, "window_controller")
+            .dock_agents
+            .acquire(config, controller, cx);
+        self.dock_agent_registered = true;
     }
 
     fn reopen(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -1035,7 +1136,11 @@ impl Drop for PluginWindow {
         if let Some(mut view) = self.view.take() {
             view.on_close();
         }
-        lock_or_recover(&self.controller, "window_controller").close_idle_plugin(&self.plugin_id);
+        let mut controller = lock_or_recover(&self.controller, "window_controller");
+        controller.close_idle_plugin(&self.plugin_id);
+        if self.dock_agent_registered {
+            controller.dock_agents.release(&self.plugin_id);
+        }
     }
 }
 

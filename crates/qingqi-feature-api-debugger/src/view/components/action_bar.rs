@@ -4,13 +4,14 @@ use super::shared::circle_badge;
 use crate::service::{ApiEnvironment, ApiRequest, HttpMethod};
 use crate::view::ApiDebuggerView;
 use gpui::{App, Entity, InteractiveElement, IntoElement, ParentElement, Styled, div, px};
-use qingqi_ui::components::button::{Button, ButtonVariants};
-use qingqi_ui::components::input::{Input, InputState};
-use qingqi_ui::components::styled::Sizable;
-use qingqi_ui::components::styled::Size;
-use qingqi_ui::components::theme::Theme;
-use qingqi_ui::layer::popover::Popover;
-use qingqi_ui::{icon, theme, ui, ui::glass};
+use gpui_component::popover::Popover;
+use gpui_component::theme::Theme;
+use gpui_component::{
+    Icon, IconName, Sizable, Size,
+    button::{Button, ButtonVariants},
+    input::{Input, InputState},
+};
+use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn action_bar(
     view: Entity<ApiDebuggerView>,
@@ -72,7 +73,11 @@ pub fn action_bar(
                                         .flex_1()
                                         .child(current.label()),
                                 )
-                                .child(icon!(chevron_down).size(px(10.0)).text_color(method_color)),
+                                .child(
+                                    Icon::new(IconName::ChevronDown)
+                                        .size(px(10.0))
+                                        .text_color(method_color),
+                                ),
                         )
                 })
                 .content(move |_state, _window, _cx| {
@@ -189,7 +194,7 @@ pub fn action_bar(
                                         .child(selected_env.name.clone()),
                                 )
                                 .child(
-                                    icon!(chevron_down)
+                                    Icon::new(IconName::ChevronDown)
                                         .size(px(10.0))
                                         .text_color(ui::text_secondary(cx)),
                                 ),
@@ -244,13 +249,15 @@ pub fn action_bar(
                         .collect();
                     items.push(
                         DropdownItem::new(
-                            div().px(px(4.0)).child(
-                                div()
-                                    .text_size(px(11.0))
-                                    .font_weight(gpui::FontWeight::NORMAL)
-                                    .text_color(ui::text_secondary(_cx))
-                                    .child("环境管理"),
-                            ),
+                            div()
+                                .px(px(4.0))
+                                .child(
+                                    div()
+                                        .text_size(px(11.0))
+                                        .font_weight(gpui::FontWeight::NORMAL)
+                                        .text_color(ui::text_secondary(_cx))
+                                        .child("环境管理"),
+                                ),
                         )
                         .on_select(move |_, cx| {
                             v.update(cx, |view, _cx| view.show_env_popover = false);
@@ -272,7 +279,7 @@ pub fn action_bar(
         } else {
             Button::new("api-send-btn")
                 .primary()
-                .icon(icon!(arrow_right))
+                .icon(IconName::ArrowRight)
                 .label("发送")
                 .with_size(Size::Small)
                 .on_click({

@@ -3,6 +3,7 @@ use std::{
     sync::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
+        mpsc::{Receiver, Sender, channel},
     },
     thread,
     time::Instant,
@@ -21,12 +22,21 @@ use crate::{
     variable_service,
 };
 use qingqi_plugin::{database::DatabaseService, log_error, storage::AppPaths};
+#[cfg(not(test))]
+use qingqi_plugin::dict_store::PluginDictStore;
 
 // Re-export model types for backward compatibility
 pub use crate::model::{
     ApiEnvironment, ApiGroup, ApiRequest, ApiScenario, AuthType, BodyMode, EnvHeader, EnvVariable,
-    EnvironmentFull, HttpHistory, HttpMethod, KeyValueRow,
+    EnvironmentFull, HttpHistory, HttpMethod, KeyValueRow, RequestBody,
 };
+
+#[cfg(not(test))]
+const UI_PREFS_NAMESPACE: &str = "api_debugger.ui";
+#[cfg(not(test))]
+const PREF_REQUEST_PANEL_RATIO: &str = "request_panel_ratio";
+#[cfg(not(test))]
+const PREF_RESPONSE_TAB: &str = "response_tab";
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct EnvironmentExport {
@@ -59,6 +69,32 @@ impl EditorTab {
             Self::Auth => "Auth",
             Self::PreOps => "Pre-ops",
             Self::PostOps => "Post-ops",
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Params => "params",
+            Self::Path => "path",
+            Self::Body => "body",
+            Self::Headers => "headers",
+            Self::Cookies => "cookies",
+            Self::Auth => "auth",
+            Self::PreOps => "pre_ops",
+            Self::PostOps => "post_ops",
+        }
+    }
+
+    pub fn from_db(value: &str) -> Self {
+        match value {
+            "path" => Self::Path,
+            "body" => Self::Body,
+            "headers" => Self::Headers,
+            "cookies" => Self::Cookies,
+            "auth" => Self::Auth,
+            "pre_ops" => Self::PreOps,
+            "post_ops" => Self::PostOps,
+            _ => Self::Params,
         }
     }
 }
@@ -128,6 +164,32 @@ impl ResponseTab {
             Self::Code,
         ]
     }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Body => "body",
+            Self::Cookies => "cookies",
+            Self::Headers => "headers",
+            Self::Request => "request",
+            Self::Curl => "curl",
+            Self::Logs => "logs",
+            Self::History => "history",
+            Self::Code => "code",
+        }
+    }
+
+    pub fn from_db(value: &str) -> Self {
+        match value {
+            "cookies" => Self::Cookies,
+            "headers" => Self::Headers,
+            "request" => Self::Request,
+            "curl" => Self::Curl,
+            "logs" => Self::Logs,
+            "history" => Self::History,
+            "code" => Self::Code,
+            _ => Self::Body,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -161,6 +223,10 @@ pub struct ApiResponse {
     pub curl: String,
     pub logs: Vec<String>,
     pub assertion_results: Vec<(String, bool)>,
+    /// Raw response bytes for binary responses (images, PDFs, etc.).
+    /// When `Some`, `body` is a lossy UTF-8 preview and `body_bytes` holds the
+    /// original data for accurate save / image preview.
+    pub body_bytes: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug)]
@@ -174,22 +240,26 @@ struct ApiServiceState {
 }
 
 pub struct ApiService {
-    revision: AtomicU64,
     /// Monotonic request generation. Each send claims the next value; a cancel
     /// (or a superseding send) advances it so the in-flight worker discards its
     /// result instead of clobbering newer state.
     generation: AtomicU64,
     state: Mutex<ApiServiceState>,
+    update_subscribers: Mutex<Vec<Sender<()>>>,
     data_source: ApiDebuggerDataSource,
+    #[cfg(not(test))]
+    preferences: PluginDictStore,
 }
 
 impl ApiService {
     pub fn new(database: Arc<DatabaseService>, paths: AppPaths) -> Self {
         let _ = paths;
+        #[cfg(not(test))]
+        let preferences =
+            PluginDictStore::for_database(database.as_ref().clone(), "plugin-dict.db");
         let data_source = ApiDebuggerDataSource::open(database, "api_debugger/main")
             .expect("无法打开 API 调试器数据库");
         Self {
-            revision: AtomicU64::new(0),
             generation: AtomicU64::new(0),
             state: Mutex::new(ApiServiceState {
                 in_flight: false,
@@ -199,12 +269,80 @@ impl ApiService {
                 pending_groups: None,
                 pending_environments: None,
             }),
+            update_subscribers: Mutex::new(Vec::new()),
             data_source,
+            #[cfg(not(test))]
+            preferences,
         }
     }
 
-    pub fn revision(&self) -> u64 {
-        self.revision.load(Ordering::SeqCst)
+    pub fn load_request_panel_ratio(&self) -> f32 {
+        #[cfg(test)]
+        return 0.4;
+        #[cfg(not(test))]
+        self.preferences
+            .get_u64(UI_PREFS_NAMESPACE, PREF_REQUEST_PANEL_RATIO)
+            .ok()
+            .flatten()
+            .map(|value| (value.clamp(2000, 8000) as f32) / 10_000.0)
+            .unwrap_or(0.4)
+    }
+
+    pub fn save_request_panel_ratio(&self, ratio: f32) {
+        #[cfg(test)]
+        let _ = ratio;
+        #[cfg(not(test))]
+        {
+        let value = (ratio.clamp(0.2, 0.8) * 10_000.0).round() as u64;
+        if let Err(error) = self.preferences.set_u64(
+            UI_PREFS_NAMESPACE,
+            PREF_REQUEST_PANEL_RATIO,
+            value,
+        ) {
+            tracing::warn!("保存 API 调试器分栏比例失败: {error}");
+        }
+        }
+    }
+
+    pub fn load_response_tab(&self) -> ResponseTab {
+        #[cfg(test)]
+        return ResponseTab::Body;
+        #[cfg(not(test))]
+        self.preferences
+            .get_string(UI_PREFS_NAMESPACE, PREF_RESPONSE_TAB)
+            .ok()
+            .flatten()
+            .map(|value| ResponseTab::from_db(&value))
+            .unwrap_or(ResponseTab::Body)
+    }
+
+    pub fn save_response_tab(&self, tab: ResponseTab) {
+        #[cfg(test)]
+        let _ = tab;
+        #[cfg(not(test))]
+        {
+        if let Err(error) = self.preferences.set_string(
+            UI_PREFS_NAMESPACE,
+            PREF_RESPONSE_TAB,
+            tab.as_str(),
+        ) {
+            tracing::warn!("保存 API 调试器响应标签失败: {error}");
+        }
+        }
+    }
+
+    pub fn subscribe_updates(&self) -> Receiver<()> {
+        let (sender, receiver) = channel();
+        if let Ok(mut subscribers) = self.update_subscribers.lock() {
+            subscribers.push(sender);
+        }
+        receiver
+    }
+
+    fn notify_updated(&self) {
+        if let Ok(mut subscribers) = self.update_subscribers.lock() {
+            subscribers.retain(|subscriber| subscriber.send(()).is_ok());
+        }
     }
 
     pub fn is_in_flight(&self) -> bool {
@@ -224,7 +362,7 @@ impl ApiService {
             state.in_flight = false;
             state.pending_notice = Some(String::from("请求已取消"));
         }
-        self.revision.fetch_add(1, Ordering::SeqCst);
+        self.notify_updated();
     }
 
     pub fn take_pending_response(&self) -> Option<ApiResponse> {
@@ -270,14 +408,14 @@ impl ApiService {
             state.pending_environments = Some(environments);
             state.pending_notice = Some(notice);
         }
-        self.revision.fetch_add(1, Ordering::SeqCst);
+        self.notify_updated();
     }
 
     fn publish_notice(&self, notice: String) {
         if let Ok(mut state) = self.state.lock() {
             state.pending_notice = Some(notice);
         }
-        self.revision.fetch_add(1, Ordering::SeqCst);
+        self.notify_updated();
     }
 
     pub fn load_workspace(&self) -> Result<ApiWorkspace> {
@@ -293,6 +431,45 @@ impl ApiService {
             }
             _ => default_environments(),
         }
+    }
+
+    pub fn list_global_variables(&self) -> Vec<KeyValueRow> {
+        self.data_source
+            .list_variables(VariableScope::Global, "")
+            .unwrap_or_default()
+            .into_iter()
+            .map(|variable| KeyValueRow::new(variable.var_key, variable.var_value))
+            .collect()
+    }
+
+    pub fn save_global_variables(&self, rows: &[KeyValueRow]) -> Result<()> {
+        let desired = rows
+            .iter()
+            .filter_map(|row| {
+                let key = row.key.trim();
+                (!key.is_empty()).then(|| (key.to_string(), row.value.clone()))
+            })
+            .collect::<HashMap<_, _>>();
+
+        for (key, value) in &desired {
+            self.data_source
+                .upsert_variable(VariableScope::Global, "", key, value)?;
+        }
+        for variable in self.data_source.list_variables(VariableScope::Global, "")? {
+            if !desired.contains_key(&variable.var_key) {
+                self.data_source
+                    .delete_variable(VariableScope::Global, "", &variable.var_key)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn save_global_variables_async(self: &Arc<Self>, rows: Vec<KeyValueRow>) {
+        let service = Arc::clone(self);
+        thread::spawn(move || match service.save_global_variables(&rows) {
+            Ok(()) => service.publish_notice(String::from("已保存全局变量")),
+            Err(error) => service.publish_notice(format!("保存全局变量失败: {error}")),
+        });
     }
 
     pub fn export_environments_json(&self) -> Result<String> {
@@ -322,7 +499,6 @@ impl ApiService {
             })
             .collect::<Vec<_>>();
         self.data_source.save_environments_full(&envs_full)?;
-        self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(environments.len())
     }
 
@@ -374,7 +550,6 @@ impl ApiService {
             .map(|(i, env)| env_ui_to_full(env, &format!("env-{i}")))
             .collect();
         self.data_source.save_environments_full(&envs_full)?;
-        self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 
@@ -413,7 +588,6 @@ impl ApiService {
             url,
             &snapshot,
         )?;
-        self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(node)
     }
 
@@ -443,7 +617,7 @@ impl ApiService {
         if parent.kind != NodeKind::Endpoint {
             bail!("用例只能创建在端点下");
         }
-        let parent_snapshot = RequestSnapshot::from_json(&parent.request_json);
+        let parent_snapshot = parent.request.clone();
         let id = format!("case-{}", Uuid::new_v4().simple());
         let node = self.data_source.create_collection_node(
             &id,
@@ -454,7 +628,6 @@ impl ApiService {
             &parent.url,
             &parent_snapshot,
         )?;
-        self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(node)
     }
 
@@ -477,7 +650,6 @@ impl ApiService {
             "",
             &RequestSnapshot::default(),
         )?;
-        self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(node)
     }
 
@@ -493,7 +665,6 @@ impl ApiService {
 
     pub fn delete_collection_item(&self, node_id: &str) -> Result<usize> {
         let count = self.data_source.delete_collection_node_recursive(node_id)?;
-        self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(count)
     }
 
@@ -506,29 +677,356 @@ impl ApiService {
     }
 
     pub fn rename_collection_item(&self, node_id: &str, new_name: &str) -> Result<()> {
-        let node = self
-            .data_source
-            .get_collection_node(node_id)?
-            .ok_or_else(|| anyhow!("节点不存在"))?;
-        let snapshot = RequestSnapshot::from_json(&node.request_json);
-        self.data_source.update_collection_node(
+        let operation_id = Uuid::new_v4().simple().to_string();
+        self.rename_collection_item_traced(node_id, new_name, &operation_id, Instant::now())
+    }
+
+    fn rename_collection_item_traced(
+        &self,
+        node_id: &str,
+        new_name: &str,
+        operation_id: &str,
+        operation_started: Instant,
+    ) -> Result<()> {
+        tracing::info!(
+            target: "qingqi::api_debugger::rename",
+            operation_id,
+            node_id,
+            new_name_len = new_name.chars().count(),
+            queue_duration_ms = operation_started.elapsed().as_millis(),
+            step = "rename_started",
+            "API 调试器重命名：开始执行"
+        );
+
+        let step_started = Instant::now();
+        tracing::info!(
+            target: "qingqi::api_debugger::rename",
+            operation_id,
+            node_id,
+            step = "load_node_started",
+            "API 调试器重命名：开始读取节点"
+        );
+        let node = match self.data_source.get_collection_node(node_id) {
+            Ok(Some(node)) => {
+                tracing::info!(
+                    target: "qingqi::api_debugger::rename",
+                    operation_id,
+                    node_id,
+                    node_kind = ?node.kind,
+                    step_duration_ms = step_started.elapsed().as_millis(),
+                    total_duration_ms = operation_started.elapsed().as_millis(),
+                    step = "load_node_completed",
+                    "API 调试器重命名：节点读取完成"
+                );
+                node
+            }
+            Ok(None) => {
+                tracing::warn!(
+                    target: "qingqi::api_debugger::rename",
+                    operation_id,
+                    node_id,
+                    step_duration_ms = step_started.elapsed().as_millis(),
+                    total_duration_ms = operation_started.elapsed().as_millis(),
+                    step = "load_node_failed",
+                    "API 调试器重命名：节点不存在"
+                );
+                return Err(anyhow!("节点不存在"));
+            }
+            Err(error) => {
+                tracing::warn!(
+                    target: "qingqi::api_debugger::rename",
+                    operation_id,
+                    node_id,
+                    error = %error,
+                    step_duration_ms = step_started.elapsed().as_millis(),
+                    total_duration_ms = operation_started.elapsed().as_millis(),
+                    step = "load_node_failed",
+                    "API 调试器重命名：读取节点失败"
+                );
+                return Err(error);
+            }
+        };
+
+        let step_started = Instant::now();
+        tracing::info!(
+            target: "qingqi::api_debugger::rename",
+            operation_id,
+            node_id,
+            step = "clone_snapshot_started",
+            "API 调试器重命名：开始复制请求快照"
+        );
+        let snapshot = node.request.clone();
+        tracing::info!(
+            target: "qingqi::api_debugger::rename",
+            operation_id,
+            node_id,
+            step_duration_ms = step_started.elapsed().as_millis(),
+            total_duration_ms = operation_started.elapsed().as_millis(),
+            step = "clone_snapshot_completed",
+            "API 调试器重命名：请求快照复制完成"
+        );
+
+        let step_started = Instant::now();
+        tracing::info!(
+            target: "qingqi::api_debugger::rename",
+            operation_id,
+            node_id,
+            step = "database_update_started",
+            "API 调试器重命名：开始更新数据库"
+        );
+        if let Err(error) = self.data_source.update_collection_node(
             node_id,
             new_name,
             &node.method,
             &node.url,
             &snapshot,
-        )?;
-        self.revision.fetch_add(1, Ordering::SeqCst);
+        ) {
+            tracing::warn!(
+                target: "qingqi::api_debugger::rename",
+                operation_id,
+                node_id,
+                error = %error,
+                step_duration_ms = step_started.elapsed().as_millis(),
+                total_duration_ms = operation_started.elapsed().as_millis(),
+                step = "database_update_failed",
+                "API 调试器重命名：数据库更新失败"
+            );
+            return Err(error);
+        }
+        tracing::info!(
+            target: "qingqi::api_debugger::rename",
+            operation_id,
+            node_id,
+            step_duration_ms = step_started.elapsed().as_millis(),
+            total_duration_ms = operation_started.elapsed().as_millis(),
+            step = "database_update_completed",
+            "API 调试器重命名：数据库更新完成"
+        );
+
+        tracing::info!(
+            target: "qingqi::api_debugger::rename",
+            operation_id,
+            node_id,
+            total_duration_ms = operation_started.elapsed().as_millis(),
+            step = "rename_persisted",
+            "API 调试器重命名：持久化阶段完成"
+        );
         Ok(())
     }
 
     pub fn rename_collection_item_async(self: &Arc<Self>, node_id: String, new_name: String) {
         let service = Arc::clone(self);
-        thread::spawn(
-            move || match service.rename_collection_item(&node_id, &new_name) {
-                Ok(()) => service.reload_workspace_with_notice(format!("已重命名为 {}", new_name)),
-                Err(e) => service.publish_notice(format!("重命名失败: {e}")),
-            },
+        let operation_id = Uuid::new_v4().simple().to_string();
+        let operation_started = Instant::now();
+        tracing::info!(
+            target: "qingqi::api_debugger::rename",
+            operation_id,
+            node_id,
+            new_name_len = new_name.chars().count(),
+            step = "worker_queued",
+            "API 调试器重命名：后台任务已排队"
+        );
+        let worker_operation_id = operation_id.clone();
+        let worker_node_id = node_id.clone();
+        let worker_new_name = new_name.clone();
+        let spawn_started = Instant::now();
+        match thread::Builder::new()
+            .name(String::from("api-debugger-rename"))
+            .spawn(move || {
+                tracing::info!(
+                    target: "qingqi::api_debugger::rename",
+                    operation_id = worker_operation_id,
+                    node_id = worker_node_id,
+                    queue_duration_ms = operation_started.elapsed().as_millis(),
+                    step = "worker_started",
+                    "API 调试器重命名：后台任务开始执行"
+                );
+                match service.rename_collection_item_traced(
+                    &worker_node_id,
+                    &worker_new_name,
+                    &worker_operation_id,
+                    operation_started,
+                ) {
+                    Ok(()) => service.reload_workspace_after_rename(
+                        format!("已重命名为 {}", worker_new_name),
+                        &worker_operation_id,
+                        &worker_node_id,
+                        operation_started,
+                    ),
+                    Err(error) => {
+                        tracing::warn!(
+                            target: "qingqi::api_debugger::rename",
+                            operation_id = worker_operation_id,
+                            node_id = worker_node_id,
+                            error = %error,
+                            total_duration_ms = operation_started.elapsed().as_millis(),
+                            step = "rename_failed",
+                            "API 调试器重命名：执行失败，开始发布错误通知"
+                        );
+                        let step_started = Instant::now();
+                        service.publish_notice(format!("重命名失败: {error}"));
+                        tracing::info!(
+                            target: "qingqi::api_debugger::rename",
+                            operation_id = worker_operation_id,
+                            node_id = worker_node_id,
+                            step_duration_ms = step_started.elapsed().as_millis(),
+                            total_duration_ms = operation_started.elapsed().as_millis(),
+                            step = "failure_notice_published",
+                            "API 调试器重命名：错误通知发布完成"
+                        );
+                    }
+                }
+            }) {
+            Ok(_) => tracing::info!(
+                target: "qingqi::api_debugger::rename",
+                operation_id,
+                spawn_duration_ms = spawn_started.elapsed().as_millis(),
+                step = "worker_spawned",
+                "API 调试器重命名：后台线程创建完成"
+            ),
+            Err(error) => {
+                tracing::warn!(
+                    target: "qingqi::api_debugger::rename",
+                    operation_id,
+                    node_id,
+                    error = %error,
+                    spawn_duration_ms = spawn_started.elapsed().as_millis(),
+                    total_duration_ms = operation_started.elapsed().as_millis(),
+                    step = "worker_spawn_failed",
+                    "API 调试器重命名：后台线程创建失败"
+                );
+                self.publish_notice(format!("重命名失败: 无法创建后台任务: {error}"));
+            }
+        }
+    }
+
+    fn reload_workspace_after_rename(
+        &self,
+        notice: String,
+        operation_id: &str,
+        node_id: &str,
+        operation_started: Instant,
+    ) {
+        let step_started = Instant::now();
+        tracing::info!(
+            target: "qingqi::api_debugger::rename",
+            operation_id,
+            node_id,
+            step = "collection_tree_reload_started",
+            "API 调试器重命名：开始重载集合树"
+        );
+        let groups = match self.build_collection_tree() {
+            Ok(groups) => {
+                tracing::info!(
+                    target: "qingqi::api_debugger::rename",
+                    operation_id,
+                    node_id,
+                    group_count = groups.len(),
+                    step_duration_ms = step_started.elapsed().as_millis(),
+                    total_duration_ms = operation_started.elapsed().as_millis(),
+                    step = "collection_tree_reload_completed",
+                    "API 调试器重命名：集合树重载完成"
+                );
+                groups
+            }
+            Err(error) => {
+                tracing::warn!(
+                    target: "qingqi::api_debugger::rename",
+                    operation_id,
+                    node_id,
+                    error = %error,
+                    step_duration_ms = step_started.elapsed().as_millis(),
+                    total_duration_ms = operation_started.elapsed().as_millis(),
+                    step = "collection_tree_reload_failed",
+                    "API 调试器重命名：集合树重载失败，使用空列表"
+                );
+                Vec::new()
+            }
+        };
+
+        let step_started = Instant::now();
+        tracing::info!(
+            target: "qingqi::api_debugger::rename",
+            operation_id,
+            node_id,
+            step = "environments_reload_started",
+            "API 调试器重命名：开始重载环境列表"
+        );
+        let environments = self.list_environments_ui();
+        tracing::info!(
+            target: "qingqi::api_debugger::rename",
+            operation_id,
+            node_id,
+            environment_count = environments.len(),
+            step_duration_ms = step_started.elapsed().as_millis(),
+            total_duration_ms = operation_started.elapsed().as_millis(),
+            step = "environments_reload_completed",
+            "API 调试器重命名：环境列表重载完成"
+        );
+
+        let step_started = Instant::now();
+        tracing::info!(
+            target: "qingqi::api_debugger::rename",
+            operation_id,
+            node_id,
+            step = "state_lock_wait_started",
+            "API 调试器重命名：开始等待状态锁"
+        );
+        match self.state.lock() {
+            Ok(mut state) => {
+                let lock_wait_duration_ms = step_started.elapsed().as_millis();
+                state.pending_groups = Some(groups);
+                state.pending_environments = Some(environments);
+                state.pending_notice = Some(notice);
+                tracing::info!(
+                    target: "qingqi::api_debugger::rename",
+                    operation_id,
+                    node_id,
+                    lock_wait_duration_ms,
+                    step_duration_ms = step_started.elapsed().as_millis(),
+                    total_duration_ms = operation_started.elapsed().as_millis(),
+                    step = "state_published",
+                    "API 调试器重命名：工作区状态发布完成"
+                );
+            }
+            Err(error) => tracing::warn!(
+                target: "qingqi::api_debugger::rename",
+                operation_id,
+                node_id,
+                error = %error,
+                step_duration_ms = step_started.elapsed().as_millis(),
+                total_duration_ms = operation_started.elapsed().as_millis(),
+                step = "state_publish_failed",
+                "API 调试器重命名：状态锁已损坏，工作区状态发布失败"
+            ),
+        }
+
+        let notify_started = Instant::now();
+        tracing::info!(
+            target: "qingqi::api_debugger::rename",
+            operation_id,
+            node_id,
+            total_duration_ms = operation_started.elapsed().as_millis(),
+            step = "render_event_publish_started",
+            "API 调试器重命名：开始发布状态变更事件"
+        );
+        self.notify_updated();
+        tracing::info!(
+            target: "qingqi::api_debugger::rename",
+            operation_id,
+            node_id,
+            step_duration_ms = notify_started.elapsed().as_millis(),
+            total_duration_ms = operation_started.elapsed().as_millis(),
+            step = "render_event_publish_completed",
+            "API 调试器重命名：状态变更事件发布完成"
+        );
+        tracing::info!(
+            target: "qingqi::api_debugger::rename",
+            operation_id,
+            node_id,
+            total_duration_ms = operation_started.elapsed().as_millis(),
+            step = "rename_completed",
+            "API 调试器重命名：全部步骤完成"
         );
     }
 
@@ -537,10 +1035,21 @@ impl ApiService {
     pub fn import_from_curl(&self, curl_text: &str) -> Result<CollectionNode> {
         let parsed =
             crate::curl_parser::parse_curl(curl_text).map_err(|e| anyhow!("cURL 解析失败: {e}"))?;
+        let (url, query_rows) = split_request_url(&parsed.url);
+        let path_rows = extract_path_parameter_names(&url)
+            .into_iter()
+            .map(|name| KeyValueRow::new(name, ""))
+            .collect::<Vec<_>>();
+        let mut body_payloads = RequestBody::migrate_legacy(parsed.body_mode, &parsed.body);
+        if !parsed.form_data.is_empty() {
+            body_payloads.form_data = parsed.form_data.clone();
+        }
         let id = format!("node-{}", Uuid::new_v4().simple());
         let snapshot = RequestSnapshot {
             method: parsed.method.clone(),
-            url: parsed.url.clone(),
+            url: url.clone(),
+            params_text: format_kv_rows(&query_rows),
+            path_params_text: format_kv_rows(&path_rows),
             headers_text: parsed
                 .headers
                 .iter()
@@ -549,6 +1058,7 @@ impl ApiService {
                 .join("\n"),
             body_text: parsed.body.clone(),
             body_mode: parsed.body_mode.as_str().to_string(),
+            body_payloads,
             auth_type: parsed.auth_type.clone(),
             auth_value: parsed.auth_value.clone(),
             ..Default::default()
@@ -559,7 +1069,7 @@ impl ApiService {
             NodeKind::Endpoint,
             &parsed.url,
             &parsed.method,
-            &parsed.url,
+            &url,
             &snapshot,
         )
     }
@@ -577,35 +1087,56 @@ impl ApiService {
     pub fn import_from_openapi(&self, content: &str) -> Result<Vec<CollectionNode>> {
         let collection = crate::import_openapi::parse_openapi(content)
             .map_err(|e| anyhow!("OpenAPI 解析失败: {e}"))?;
-        let mut nodes = Vec::new();
-        for endpoint in &collection.endpoints {
-            let id = format!("node-{}", Uuid::new_v4().simple());
-            let parent_id = endpoint.parent_folder.as_deref();
-            let node = self.data_source.create_collection_node(
-                &id,
-                parent_id,
-                NodeKind::Endpoint,
-                &endpoint.name,
-                &endpoint.method,
-                &endpoint.url,
-                &endpoint.snapshot,
-            )?;
-            nodes.push(node);
-        }
-        self.revision.fetch_add(1, Ordering::SeqCst);
-        Ok(nodes)
+        self.persist_imported_collection(collection)
     }
 
     pub fn import_from_postman(&self, content: &str) -> Result<Vec<CollectionNode>> {
         let collection = crate::import_postman::parse_postman(content)
             .map_err(|e| anyhow!("Postman 解析失败: {e}"))?;
+        self.persist_imported_collection(collection)
+    }
+
+    fn persist_imported_collection(
+        &self,
+        collection: crate::import_openapi::ImportedCollection,
+    ) -> Result<Vec<CollectionNode>> {
         let mut nodes = Vec::new();
+        let mut folder_ids = HashMap::<String, String>::new();
         for endpoint in &collection.endpoints {
             let id = format!("node-{}", Uuid::new_v4().simple());
-            let parent_id = endpoint.parent_folder.as_deref();
+            let parent_id = if let Some(folder_path) = endpoint.parent_folder.as_deref() {
+                let mut parent_id = None;
+                let mut current_path = String::new();
+                for folder_name in folder_path.split('/').filter(|name| !name.is_empty()) {
+                    if !current_path.is_empty() {
+                        current_path.push('/');
+                    }
+                    current_path.push_str(folder_name);
+                    let folder_id = if let Some(existing_id) = folder_ids.get(&current_path) {
+                        existing_id.clone()
+                    } else {
+                        let folder_id = format!("folder-{}", Uuid::new_v4().simple());
+                        self.data_source.create_collection_node(
+                            &folder_id,
+                            parent_id.as_deref(),
+                            NodeKind::Folder,
+                            folder_name,
+                            "",
+                            "",
+                            &RequestSnapshot::default(),
+                        )?;
+                        folder_ids.insert(current_path.clone(), folder_id.clone());
+                        folder_id
+                    };
+                    parent_id = Some(folder_id);
+                }
+                parent_id
+            } else {
+                None
+            };
             let node = self.data_source.create_collection_node(
                 &id,
-                parent_id,
+                parent_id.as_deref(),
                 NodeKind::Endpoint,
                 &endpoint.name,
                 &endpoint.method,
@@ -614,7 +1145,6 @@ impl ApiService {
             )?;
             nodes.push(node);
         }
-        self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(nodes)
     }
 
@@ -645,7 +1175,7 @@ impl ApiService {
             if node.kind != NodeKind::Endpoint {
                 continue;
             }
-            let snapshot = RequestSnapshot::from_json(&node.request_json);
+            let snapshot = &node.request;
             let method = snapshot.method.to_lowercase();
             let path_key = if snapshot.url.is_empty() {
                 node.url.clone()
@@ -716,7 +1246,7 @@ impl ApiService {
                 .fetch_add(1, Ordering::SeqCst)
                 .wrapping_add(1)
         };
-        self.revision.fetch_add(1, Ordering::SeqCst);
+        self.notify_updated();
 
         let service = Arc::clone(self);
         let pre_ops = pre_ops_text.to_string();
@@ -819,6 +1349,7 @@ impl ApiService {
                             curl: String::new(),
                             logs: vec![format!("请求失败: {error}")],
                             assertion_results: Vec::new(),
+                            body_bytes: None,
                         };
                         let snapshot = resp.clone();
                         state.pending_response = Some(resp);
@@ -847,7 +1378,7 @@ impl ApiService {
                 );
             }
 
-            service.revision.fetch_add(1, Ordering::SeqCst);
+            service.notify_updated();
         });
 
         Ok(())
@@ -875,7 +1406,6 @@ impl ApiService {
                 variables: Vec::new(),
                 headers: Vec::new(),
             });
-        self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(result)
     }
 
@@ -916,7 +1446,6 @@ impl ApiService {
             self.data_source
                 .replace_env_headers(&new_id, &header_rows)?;
         }
-        self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(ApiEnvironment {
             name: new_env.name,
             badge: new_name
@@ -968,9 +1497,6 @@ impl ApiService {
             .get(index)
             .ok_or_else(|| anyhow!("环境索引 {index} 超出范围"))?;
         let deleted = self.data_source.delete_environment(&target.env.id)?;
-        if deleted {
-            self.revision.fetch_add(1, Ordering::SeqCst);
-        }
         Ok(deleted)
     }
 
@@ -1002,7 +1528,6 @@ impl ApiService {
         self.data_source.replace_env_variables(&env_id, &var_rows)?;
         let hdr_rows: Vec<(bool, String, String)> = parse_kv_lines(headers_kv);
         self.data_source.replace_env_headers(&env_id, &hdr_rows)?;
-        self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 
@@ -1068,7 +1593,7 @@ fn perform_request(
     module_store: &[ApiVariable],
     global_store: &[ApiVariable],
 ) -> Result<ApiResponse> {
-    let request_path = request_path_with_segments(request, |value| value.to_string());
+    let request_path = request_path_with_segments(request, |value| value.to_string())?;
     let mut draft = script_service::RequestDraft {
         method: request.method.label().to_string(),
         url: request_path,
@@ -1281,8 +1806,22 @@ fn perform_request(
         }
     }
 
-    let resp_body = resp.text()?;
-    let size_bytes = resp_body.len();
+    // For binary content types, read raw bytes to preserve data integrity.
+    // For text content types, read as text directly.
+    let is_binary = is_binary_response_content_type(&content_type);
+    let (resp_body, body_bytes) = if is_binary {
+        let bytes = resp.bytes()?.to_vec();
+        let text = String::from_utf8_lossy(&bytes).into_owned();
+        (text, Some(bytes))
+    } else {
+        let text = resp.text()?;
+        (text, None)
+    };
+    let size_bytes = if body_bytes.is_some() {
+        body_bytes.as_ref().map(|b| b.len()).unwrap_or(0)
+    } else {
+        resp_body.len()
+    };
 
     Ok(ApiResponse {
         status_line: status_line.clone(),
@@ -1301,6 +1840,7 @@ fn perform_request(
             format!("耗时 {} ms", duration_ms),
         ],
         assertion_results: Vec::new(),
+        body_bytes,
     })
 }
 
@@ -1390,10 +1930,142 @@ fn append_query_params(base_url: &str, params: &[(String, String)]) -> String {
     url.to_string()
 }
 
+pub fn split_request_url(raw: &str) -> (String, Vec<KeyValueRow>) {
+    let (without_fragment, fragment) = raw
+        .split_once('#')
+        .map(|(url, fragment)| (url, Some(fragment)))
+        .unwrap_or((raw, None));
+    let (base, query) = without_fragment
+        .split_once('?')
+        .map(|(base, query)| (base, query))
+        .unwrap_or((without_fragment, ""));
+    let mut clean_base = base.to_string();
+    if let Some(fragment) = fragment {
+        clean_base.push('#');
+        clean_base.push_str(fragment);
+    }
+    let params = url::form_urlencoded::parse(query.as_bytes())
+        .map(|(key, value)| KeyValueRow::new(key.into_owned(), value.into_owned()))
+        .collect();
+    (clean_base, params)
+}
+
+pub fn compose_request_url(base: &str, rows: &[KeyValueRow]) -> String {
+    let (without_fragment, fragment) = base
+        .split_once('#')
+        .map(|(url, fragment)| (url, Some(fragment)))
+        .unwrap_or((base, None));
+    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+    for row in rows
+        .iter()
+        .filter(|row| row.enabled && !row.key.trim().is_empty())
+    {
+        serializer.append_pair(row.key.trim(), &row.value);
+    }
+    let query = serializer.finish();
+    let mut result = without_fragment.to_string();
+    if !query.is_empty() {
+        result.push('?');
+        result.push_str(&query);
+    }
+    if let Some(fragment) = fragment {
+        result.push('#');
+        result.push_str(fragment);
+    }
+    result
+}
+
+pub fn merge_url_query_rows(existing: &[KeyValueRow], parsed: Vec<KeyValueRow>) -> Vec<KeyValueRow> {
+    let mut used = vec![false; existing.len()];
+    let mut merged = Vec::with_capacity(parsed.len() + existing.len());
+    for parsed_row in parsed {
+        let matching = existing.iter().enumerate().find(|(index, row)| {
+            !used[*index] && row.enabled && row.key == parsed_row.key
+        });
+        if let Some((index, row)) = matching {
+            used[index] = true;
+            let mut row = row.clone();
+            row.value = parsed_row.value;
+            merged.push(row);
+        } else {
+            merged.push(parsed_row);
+        }
+    }
+    merged.extend(
+        existing
+            .iter()
+            .enumerate()
+            .filter(|(index, row)| !used[*index] && !row.enabled)
+            .map(|(_, row)| row.clone()),
+    );
+    merged
+}
+
+pub fn extract_path_parameter_names(raw_url: &str) -> Vec<String> {
+    let path = raw_url
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(raw_url);
+    let mut names = Vec::new();
+    let chars: Vec<char> = path.chars().collect();
+    let mut index = 0;
+    while index < chars.len() {
+        if chars[index] == '{' && (index == 0 || chars[index - 1] != '{') {
+            if let Some(end_offset) = chars[index + 1..].iter().position(|ch| *ch == '}') {
+                let end = index + 1 + end_offset;
+                if end + 1 >= chars.len() || chars[end + 1] != '}' {
+                    let name: String = chars[index + 1..end].iter().collect();
+                    if valid_path_parameter_name(&name) && !names.contains(&name) {
+                        names.push(name);
+                    }
+                }
+                index = end;
+            }
+        }
+        index += 1;
+    }
+    for segment in path.split('/') {
+        if let Some(name) = segment.strip_prefix(':') {
+            if valid_path_parameter_name(name) && !names.iter().any(|item| item == name) {
+                names.push(name.to_string());
+            }
+        }
+    }
+    names
+}
+
+fn valid_path_parameter_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+}
+
+pub fn merge_path_parameter_rows(
+    existing: &[KeyValueRow],
+    names: &[String],
+) -> Vec<KeyValueRow> {
+    if names.is_empty() {
+        return existing.to_vec();
+    }
+    names
+        .iter()
+        .map(|name| {
+            existing
+                .iter()
+                .find(|row| row.key == *name)
+                .cloned()
+                .unwrap_or_else(|| KeyValueRow::new(name, ""))
+        })
+        .collect()
+}
+
 fn build_final_url(environment: &ApiEnvironment, request: &ApiRequest) -> String {
     let base_url = substitute_vars(environment.base_url.trim(), environment);
-    let request_path =
-        request_path_with_segments(request, |value| substitute_vars(value, environment));
+    let request_path = request_path_with_segments(request, |value| {
+        substitute_vars(value, environment)
+    })
+    .unwrap_or_else(|_| request.path.clone());
     let path = substitute_vars(request_path.trim(), environment);
     let path = if path.starts_with("http://") || path.starts_with("https://") {
         path
@@ -1425,11 +2097,42 @@ fn build_final_url(environment: &ApiEnvironment, request: &ApiRequest) -> String
     }
 }
 
-fn request_path_with_segments<F>(request: &ApiRequest, resolve: F) -> String
+fn request_path_with_segments<F>(request: &ApiRequest, resolve: F) -> Result<String>
 where
     F: Fn(&str) -> String,
 {
     let base_path = resolve(request.path.trim());
+    let names = extract_path_parameter_names(&base_path);
+    if !names.is_empty() {
+        let mut path = base_path;
+        for name in names {
+            let row = request
+                .path_rows
+                .iter()
+                .find(|row| row.key == name)
+                .ok_or_else(|| anyhow!("Path 参数 {name} 未配置"))?;
+            if !row.enabled || row.value.trim().is_empty() {
+                bail!("Path 参数 {name} 未启用或未填写");
+            }
+            let value = resolve(row.value.trim());
+            let encoded = url::form_urlencoded::byte_serialize(value.as_bytes())
+                .collect::<String>()
+                .replace('+', "%20");
+            path = path.replace(&format!("{{{name}}}"), &encoded);
+            path = path
+                .split('/')
+                .map(|segment| {
+                    if segment == format!(":{name}") {
+                        encoded.as_str()
+                    } else {
+                        segment
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("/");
+        }
+        return Ok(path);
+    }
     let extra_path = request
         .path_rows
         .iter()
@@ -1438,13 +2141,13 @@ where
         .filter(|value| !value.is_empty())
         .collect::<Vec<_>>();
     if extra_path.is_empty() {
-        base_path
+        Ok(base_path)
     } else {
-        format!(
+        Ok(format!(
             "{}/{}",
             base_path.trim_end_matches('/'),
             extra_path.join("/")
-        )
+        ))
     }
 }
 
@@ -1499,6 +2202,17 @@ fn default_content_type(mode: BodyMode) -> Option<&'static str> {
 /// so the `multipart/form-data` body is assembled by hand.
 const MULTIPART_BOUNDARY: &str = "----QingqiFormBoundary7MA4YWxkTrZu0gW";
 
+/// Detect MIME type from file bytes (magic bytes) with extension fallback.
+fn detect_file_mime_type(bytes: &[u8], path: &str) -> String {
+    if let Some(kind) = infer::get(bytes) {
+        return kind.mime_type().to_string();
+    }
+    mime_guess::from_path(path)
+        .first()
+        .map(|m| m.to_string())
+        .unwrap_or_else(|| "application/octet-stream".to_string())
+}
+
 /// Build a `multipart/form-data` body from `key=value` lines. A value of the
 /// form `@<path>` is sent as a file part (the file is read here); other values
 /// are plain text fields. Lines starting with `#` are skipped (disabled).
@@ -1525,13 +2239,14 @@ fn build_multipart_body(raw_body: &str, boundary: &str) -> Result<Vec<u8>> {
                 .file_name()
                 .and_then(|s| s.to_str())
                 .unwrap_or("file");
+            let content_type = detect_file_mime_type(&bytes, path);
             out.extend_from_slice(
                 format!(
                     "Content-Disposition: form-data; name=\"{key}\"; filename=\"{filename}\"\r\n"
                 )
                 .as_bytes(),
             );
-            out.extend_from_slice(b"Content-Type: application/octet-stream\r\n\r\n");
+            out.extend_from_slice(format!("Content-Type: {content_type}\r\n\r\n").as_bytes());
             out.extend_from_slice(&bytes);
             out.extend_from_slice(b"\r\n");
         } else {
@@ -1544,6 +2259,25 @@ fn build_multipart_body(raw_body: &str, boundary: &str) -> Result<Vec<u8>> {
     }
     out.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
     Ok(out)
+}
+
+/// Check if a response Content-Type indicates binary data that should be
+/// read as raw bytes (not converted to UTF-8 text).
+fn is_binary_response_content_type(content_type: &str) -> bool {
+    let ct = content_type.to_ascii_lowercase();
+    let ct = ct.split(';').next().unwrap_or("").trim();
+    ct.starts_with("image/")
+        || ct.starts_with("audio/")
+        || ct.starts_with("video/")
+        || ct.starts_with("font/")
+        || ct == "application/octet-stream"
+        || ct == "application/pdf"
+        || ct == "application/zip"
+        || ct == "application/gzip"
+        || ct == "application/x-gzip"
+        || ct == "application/vnd.apache.parquet"
+        || ct.starts_with("application/vnd.")
+        || ct.starts_with("application/x-")
 }
 
 fn prettify_body(body: &str) -> String {
@@ -1740,9 +2474,9 @@ fn build_group_from_node(node: &CollectionNode, nodes: &[CollectionNode]) -> Api
 }
 
 fn node_to_request(node: &CollectionNode, nodes: &[CollectionNode]) -> ApiRequest {
-    let snapshot = RequestSnapshot::from_json(&node.request_json);
+    let snapshot = node.request.clone();
     let method = HttpMethod::from_label(&node.method);
-    ApiRequest {
+    let mut request = ApiRequest {
         node_id: node.id.clone(),
         title: node.name.clone(),
         method,
@@ -1755,13 +2489,17 @@ fn node_to_request(node: &CollectionNode, nodes: &[CollectionNode]) -> ApiReques
         path_rows: parse_kv_text(&snapshot.path_params_text),
         body: snapshot.body_text,
         body_mode: BodyMode::from_db(&snapshot.body_mode),
+        body_payloads: snapshot.body_payloads,
+        editor_tab: snapshot.editor_tab,
         headers: parse_kv_text(&snapshot.headers_text),
         cookies: parse_kv_text(&snapshot.cookies_text),
         auth: parse_kv_text(&format_auth(&snapshot.auth_type, &snapshot.auth_value)),
         pre_ops: snapshot.pre_ops_text,
         post_ops: snapshot.post_ops_text,
         scenarios: node_scenarios(node, nodes),
-    }
+    };
+    request.ensure_body_payloads();
+    request
 }
 
 /// Collect the `Case` child nodes of an endpoint as scenarios, ordered by
@@ -1786,10 +2524,10 @@ fn node_scenarios(endpoint: &CollectionNode, nodes: &[CollectionNode]) -> Vec<Ap
 }
 
 fn case_node_to_request(case: &CollectionNode, endpoint: &CollectionNode) -> ApiRequest {
-    let snapshot = if case.request_json.trim().is_empty() || case.request_json.trim() == "{}" {
-        RequestSnapshot::from_json(&endpoint.request_json)
+    let snapshot = if case.request.is_empty() {
+        endpoint.request.clone()
     } else {
-        RequestSnapshot::from_json(&case.request_json)
+        case.request.clone()
     };
     let method_label = if snapshot.method.is_empty() {
         if case.method.is_empty() {
@@ -1809,7 +2547,7 @@ fn case_node_to_request(case: &CollectionNode, endpoint: &CollectionNode) -> Api
     } else {
         snapshot.url.clone()
     };
-    ApiRequest {
+    let mut request = ApiRequest {
         node_id: case.id.clone(),
         title: case.name.clone(),
         method: HttpMethod::from_label(method_label),
@@ -1818,16 +2556,21 @@ fn case_node_to_request(case: &CollectionNode, endpoint: &CollectionNode) -> Api
         path_rows: parse_kv_text(&snapshot.path_params_text),
         body: snapshot.body_text,
         body_mode: BodyMode::from_db(&snapshot.body_mode),
+        body_payloads: snapshot.body_payloads,
+        editor_tab: snapshot.editor_tab,
         headers: parse_kv_text(&snapshot.headers_text),
         cookies: parse_kv_text(&snapshot.cookies_text),
         auth: parse_kv_text(&format_auth(&snapshot.auth_type, &snapshot.auth_value)),
         pre_ops: snapshot.pre_ops_text,
         post_ops: snapshot.post_ops_text,
         scenarios: Vec::new(),
-    }
+    };
+    request.ensure_body_payloads();
+    request
 }
 
 fn request_to_snapshot(method: &str, url: &str, request: &ApiRequest) -> RequestSnapshot {
+    let body_text = request.active_body_text();
     RequestSnapshot {
         method: method.to_string(),
         url: url.to_string(),
@@ -1835,8 +2578,10 @@ fn request_to_snapshot(method: &str, url: &str, request: &ApiRequest) -> Request
         path_params_text: format_kv_rows(&request.path_rows),
         headers_text: format_kv_rows(&request.headers),
         cookies_text: format_kv_rows(&request.cookies),
-        body_text: request.body.clone(),
+        body_text,
         body_mode: request.body_mode.as_str().to_string(),
+        body_payloads: request.body_payloads.clone(),
+        editor_tab: request.editor_tab.clone(),
         auth_type: extract_auth_type(&request.auth),
         auth_value: extract_auth_value(&request.auth),
         pre_ops_text: request.pre_ops.clone(),
@@ -2064,7 +2809,7 @@ mod tests {
     use qingqi_plugin::{database::DatabaseService, storage::AppPaths};
     use std::fs;
     use std::sync::Arc;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     fn temp_store() -> ApiDebuggerDataSource {
         let nanos = SystemTime::now()
@@ -2085,7 +2830,6 @@ mod tests {
 
     fn service_with_store(store: ApiDebuggerDataSource) -> ApiService {
         ApiService {
-            revision: AtomicU64::new(0),
             state: Mutex::new(ApiServiceState {
                 in_flight: false,
                 pending_response: None,
@@ -2094,9 +2838,23 @@ mod tests {
                 pending_groups: None,
                 pending_environments: None,
             }),
+            update_subscribers: Mutex::new(Vec::new()),
             data_source: store,
             generation: AtomicU64::new(0),
         }
+    }
+
+    #[test]
+    fn state_change_notifies_subscribers() {
+        let service = service_with_store(temp_store());
+        let updates = service.subscribe_updates();
+
+        service.publish_notice(String::from("updated"));
+
+        updates
+            .recv_timeout(Duration::from_secs(1))
+            .expect("state change event");
+        assert_eq!(service.take_pending_notice().as_deref(), Some("updated"));
     }
 
     #[test]
@@ -2277,6 +3035,8 @@ mod tests {
             path_rows: Vec::new(),
             body: r#"{"account":"demo"}"#.into(),
             body_mode: BodyMode::Json,
+            body_payloads: RequestBody::default(),
+            editor_tab: String::from("params"),
             headers: vec![KeyValueRow::new("X-App", "qingqi")],
             cookies: Vec::new(),
             auth: Vec::new(),
@@ -2289,7 +3049,7 @@ mod tests {
             .expect("persist endpoint");
 
         let case = service.create_case(&parent.id, "错误密码").expect("case");
-        let snapshot = RequestSnapshot::from_json(&case.request_json);
+        let snapshot = &case.request;
         assert_eq!(case.parent_id.as_deref(), Some(parent.id.as_str()));
         assert_eq!(case.method, "POST");
         assert_eq!(case.url, "/login");
@@ -2307,7 +3067,7 @@ mod tests {
             .get_collection_node(&case.id)
             .unwrap()
             .expect("case node");
-        let updated_snapshot = RequestSnapshot::from_json(&updated_case.request_json);
+        let updated_snapshot = &updated_case.request;
         assert_eq!(updated_case.name, "错误密码");
         assert_eq!(updated_snapshot.body_text, r#"{"account":"wrong"}"#);
     }
@@ -2373,6 +3133,8 @@ mod tests {
             path_rows: vec![KeyValueRow::new("id", "42")],
             body: String::from(r#"{"key":"val"}"#),
             body_mode: BodyMode::Json,
+            body_payloads: RequestBody::default(),
+            editor_tab: String::from("params"),
             headers: vec![KeyValueRow::new("Content-Type", "application/json")],
             cookies: vec![KeyValueRow::new("sid", "abc")],
             auth: vec![KeyValueRow::new("Authorization", "Bearer tok")],
@@ -2421,6 +3183,8 @@ mod tests {
             path_rows: Vec::new(),
             body: String::new(),
             body_mode: BodyMode::None,
+            body_payloads: RequestBody::default(),
+            editor_tab: String::from("params"),
             headers: vec![KeyValueRow::new("Accept", "application/json")],
             cookies: vec![KeyValueRow::new("sid", "abc")],
             auth: vec![apikey],
@@ -2462,6 +3226,8 @@ mod tests {
             path_rows: vec![KeyValueRow::new("id", "{{USER_ID}}"), disabled],
             body: String::new(),
             body_mode: BodyMode::None,
+            body_payloads: RequestBody::default(),
+            editor_tab: String::from("params"),
             headers: Vec::new(),
             cookies: Vec::new(),
             auth: Vec::new(),
@@ -2491,6 +3257,8 @@ mod tests {
             path_rows: vec![KeyValueRow::new("version", "/v1/"), disabled],
             body: String::new(),
             body_mode: BodyMode::None,
+            body_payloads: RequestBody::default(),
+            editor_tab: String::from("params"),
             headers: Vec::new(),
             cookies: Vec::new(),
             auth: Vec::new(),
@@ -2500,7 +3268,7 @@ mod tests {
         };
 
         let path = request_path_with_segments(&request, |value| value.to_string());
-        assert_eq!(path, "/api/v1");
+        assert_eq!(path.unwrap(), "/api/v1");
     }
 
     #[test]
@@ -2522,6 +3290,8 @@ mod tests {
             path_rows: Vec::new(),
             body: "a=1\nb=2".into(),
             body_mode: BodyMode::FormUrlEncoded,
+            body_payloads: RequestBody::default(),
+            editor_tab: String::from("params"),
             headers: Vec::new(),
             cookies: Vec::new(),
             auth: Vec::new(),
@@ -2566,6 +3336,8 @@ mod tests {
             path_rows: Vec::new(),
             body: String::from(r#"{"data": true}"#),
             body_mode: BodyMode::Json,
+            body_payloads: RequestBody::default(),
+            editor_tab: String::from("params"),
             headers: vec![KeyValueRow::new("X-Test", "yes")],
             cookies: Vec::new(),
             auth: Vec::new(),
@@ -2583,7 +3355,7 @@ mod tests {
         assert_eq!(node.method, "POST");
         assert_eq!(node.url, "/api/test/v2");
 
-        let restored = RequestSnapshot::from_json(&node.request_json);
+        let restored = &node.request;
         assert_eq!(restored.method, "POST");
         assert_eq!(restored.url, "/api/test/v2");
         assert!(restored.body_text.contains("data"));
@@ -2902,7 +3674,6 @@ mod tests {
     fn service_create_environment() {
         let store = temp_store();
         let service = ApiService {
-            revision: AtomicU64::new(0),
             state: Mutex::new(ApiServiceState {
                 in_flight: false,
                 pending_response: None,
@@ -2911,6 +3682,7 @@ mod tests {
                 pending_groups: None,
                 pending_environments: None,
             }),
+            update_subscribers: Mutex::new(Vec::new()),
             data_source: store,
             generation: AtomicU64::new(0),
         };
@@ -2920,14 +3692,12 @@ mod tests {
         assert_eq!(env.name, "测试环境");
         assert_eq!(env.base_url, "http://test.api.com");
         assert_eq!(env.badge, "测");
-        assert!(service.revision() > 0);
     }
 
     #[test]
     fn service_duplicate_environment() {
         let store = temp_store();
         let service = ApiService {
-            revision: AtomicU64::new(0),
             state: Mutex::new(ApiServiceState {
                 in_flight: false,
                 pending_response: None,
@@ -2936,6 +3706,7 @@ mod tests {
                 pending_groups: None,
                 pending_environments: None,
             }),
+            update_subscribers: Mutex::new(Vec::new()),
             data_source: store,
             generation: AtomicU64::new(0),
         };
@@ -2950,7 +3721,6 @@ mod tests {
     fn service_delete_environment_fails_if_last() {
         let store = temp_store();
         let service = ApiService {
-            revision: AtomicU64::new(0),
             state: Mutex::new(ApiServiceState {
                 in_flight: false,
                 pending_response: None,
@@ -2959,6 +3729,7 @@ mod tests {
                 pending_groups: None,
                 pending_environments: None,
             }),
+            update_subscribers: Mutex::new(Vec::new()),
             data_source: store,
             generation: AtomicU64::new(0),
         };
@@ -2972,7 +3743,6 @@ mod tests {
     fn service_delete_environment_succeeds_with_multiple() {
         let store = temp_store();
         let service = ApiService {
-            revision: AtomicU64::new(0),
             state: Mutex::new(ApiServiceState {
                 in_flight: false,
                 pending_response: None,
@@ -2981,6 +3751,7 @@ mod tests {
                 pending_groups: None,
                 pending_environments: None,
             }),
+            update_subscribers: Mutex::new(Vec::new()),
             data_source: store,
             generation: AtomicU64::new(0),
         };
@@ -2995,7 +3766,6 @@ mod tests {
     fn service_save_environment_fields() {
         let store = temp_store();
         let service = ApiService {
-            revision: AtomicU64::new(0),
             state: Mutex::new(ApiServiceState {
                 in_flight: false,
                 pending_response: None,
@@ -3004,6 +3774,7 @@ mod tests {
                 pending_groups: None,
                 pending_environments: None,
             }),
+            update_subscribers: Mutex::new(Vec::new()),
             data_source: store,
             generation: AtomicU64::new(0),
         };
@@ -3021,6 +3792,28 @@ mod tests {
         assert_eq!(envs[0].base_url, "http://updated.com");
         assert_eq!(envs[0].variables.len(), 2);
         assert_eq!(envs[0].headers.len(), 1);
+    }
+
+    #[test]
+    fn global_variables_can_be_replaced() {
+        let service = service_with_store(temp_store());
+        service
+            .save_global_variables(&[
+                KeyValueRow::new("TOKEN", "first"),
+                KeyValueRow::new("HOST", "localhost"),
+            ])
+            .unwrap();
+        service
+            .save_global_variables(&[
+                KeyValueRow::new("TOKEN", "updated"),
+                KeyValueRow::new("", "ignored"),
+            ])
+            .unwrap();
+
+        let rows = service.list_global_variables();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].key, "TOKEN");
+        assert_eq!(rows[0].value, "updated");
     }
 
     #[test]
@@ -3051,6 +3844,36 @@ mod tests {
         assert_eq!(envs[0].variables[0].key, "TOKEN");
         assert!(!envs[0].variables[1].enabled);
         assert_eq!(envs[0].headers[0].key, "Accept");
+    }
+
+    #[test]
+    fn public_echo_files_import_through_service() {
+        let service = service_with_store(temp_store());
+        let collection = include_str!("../examples/postman-echo-scenarios.postman_collection.json");
+        let environments = include_str!("../examples/postman-echo-environments.json");
+
+        let imported = service.import_from_postman(collection).unwrap();
+        assert_eq!(imported.len(), 14);
+        let groups = service.build_collection_tree().unwrap();
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].name, "基础请求");
+        assert_eq!(groups[0].requests.len(), 8);
+        assert_eq!(groups[1].name, "请求体与方法");
+        assert_eq!(groups[1].requests.len(), 6);
+
+        assert_eq!(service.import_environments_json(environments).unwrap(), 1);
+        let imported_environments = service.list_environments_ui();
+        assert_eq!(imported_environments.len(), 1);
+        assert_eq!(
+            imported_environments[0].base_url,
+            "https://postman-echo.com"
+        );
+        assert!(
+            imported_environments[0]
+                .variables
+                .iter()
+                .any(|variable| variable.key == "SEARCH_TERM" && variable.value == "qingqi")
+        );
     }
 
     #[test]
@@ -3130,6 +3953,60 @@ mod tests {
         assert_eq!(pairs[2], ("expr".into(), "x=y".into()));
     }
 
+    #[test]
+    fn request_url_split_and_compose_preserves_duplicates_and_fragment() {
+        let (base, rows) = split_request_url("/search?q=a+b&q=%E4%B8%AD%E6%96%87&empty=#part");
+        assert_eq!(base, "/search#part");
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].value, "a b");
+        assert_eq!(rows[1].value, "中文");
+        assert_eq!(compose_request_url(&base, &rows), "/search?q=a+b&q=%E4%B8%AD%E6%96%87&empty=#part");
+    }
+
+    #[test]
+    fn path_parameter_extraction_ignores_template_variables() {
+        assert_eq!(
+            extract_path_parameter_names("/{{HOST}}/users/{id}/:section?x=1"),
+            vec![String::from("id"), String::from("section")]
+        );
+    }
+
+    #[test]
+    fn request_path_replaces_named_parameters_and_validates_missing_values() {
+        let mut request = ApiRequest {
+            node_id: String::new(),
+            title: String::from("path"),
+            method: HttpMethod::Get,
+            path: String::from("/users/{id}/:section"),
+            params: Vec::new(),
+            path_rows: vec![
+                KeyValueRow::new("id", "a b"),
+                KeyValueRow::new("section", "detail"),
+            ],
+            body: String::new(),
+            body_mode: BodyMode::None,
+            body_payloads: RequestBody::default(),
+            editor_tab: String::from("path"),
+            headers: Vec::new(),
+            cookies: Vec::new(),
+            auth: Vec::new(),
+            pre_ops: String::new(),
+            post_ops: String::new(),
+            scenarios: Vec::new(),
+        };
+        assert_eq!(
+            request_path_with_segments(&request, str::to_string).unwrap(),
+            "/users/a%20b/detail"
+        );
+        request.path_rows[0].enabled = false;
+        assert!(
+            request_path_with_segments(&request, str::to_string)
+                .unwrap_err()
+                .to_string()
+                .contains("id")
+        );
+    }
+
     /// Query-located auth must go through the same encoding path as regular
     /// params so `&`/`=` in the value don't corrupt the URL.
     #[test]
@@ -3153,6 +4030,8 @@ mod tests {
             path_rows: Vec::new(),
             body: String::new(),
             body_mode: BodyMode::None,
+            body_payloads: RequestBody::default(),
+            editor_tab: String::from("params"),
             headers: Vec::new(),
             cookies: Vec::new(),
             auth: vec![apikey],
@@ -3220,6 +4099,8 @@ mod tests {
             path_rows: Vec::new(),
             body: String::new(),
             body_mode: BodyMode::None,
+            body_payloads: RequestBody::default(),
+            editor_tab: String::from("params"),
             headers: Vec::new(),
             cookies: Vec::new(),
             auth: Vec::new(),
@@ -3235,5 +4116,313 @@ mod tests {
         assert_eq!(pairs[0], ("q".into(), "a b".into()));
         assert_eq!(pairs[1], ("filter".into(), "x=y".into()));
         assert_eq!(pairs[2], ("tag".into(), "中文".into()));
+    }
+
+    // ── URL sync edge cases ──
+
+    #[test]
+    fn url_sync_preserves_fragment_only() {
+        let (base, rows) = split_request_url("/api/users#section-1");
+        assert_eq!(base, "/api/users#section-1");
+        assert!(rows.is_empty());
+        let composed = compose_request_url(&base, &rows);
+        assert_eq!(composed, "/api/users#section-1");
+    }
+
+    #[test]
+    fn url_sync_preserves_empty_query_value() {
+        let (base, rows) = split_request_url("/api/search?q=&page=1");
+        assert_eq!(base, "/api/search");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].key, "q");
+        assert_eq!(rows[0].value, "");
+        assert_eq!(rows[1].key, "page");
+        assert_eq!(rows[1].value, "1");
+        let composed = compose_request_url(&base, &rows);
+        assert_eq!(composed, "/api/search?q=&page=1");
+    }
+
+    #[test]
+    fn url_sync_handles_relative_url_with_query() {
+        let (base, rows) = split_request_url("api/v2/items?category=books&sort=asc");
+        assert_eq!(base, "api/v2/items");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].key, "category");
+        assert_eq!(rows[0].value, "books");
+    }
+
+    #[test]
+    fn url_sync_handles_duplicate_query_keys() {
+        let (base, rows) = split_request_url("/api/filter?tag=a&tag=b&tag=c");
+        assert_eq!(base, "/api/filter");
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].value, "a");
+        assert_eq!(rows[1].value, "b");
+        assert_eq!(rows[2].value, "c");
+        let composed = compose_request_url(&base, &rows);
+        assert_eq!(composed, "/api/filter?tag=a&tag=b&tag=c");
+    }
+
+    #[test]
+    fn merge_url_query_rows_preserves_disabled_rows() {
+        let existing = vec![
+            KeyValueRow::new("a", "old"),
+            KeyValueRow {
+                enabled: false,
+                key: "b".into(),
+                value: "disabled".into(),
+                value_type: String::new(),
+                description: String::new(),
+            },
+        ];
+        let parsed = vec![
+            KeyValueRow::new("a", "new"),
+            KeyValueRow::new("c", "added"),
+        ];
+        let merged = merge_url_query_rows(&existing, parsed);
+        // a should be updated to new value, b should remain disabled, c added
+        assert_eq!(merged.len(), 3);
+        assert!(merged.iter().any(|r| r.key == "a" && r.value == "new"));
+        assert!(merged.iter().any(|r| r.key == "b" && !r.enabled));
+        assert!(merged.iter().any(|r| r.key == "c" && r.value == "added"));
+    }
+
+    // ── Path parameter edge cases ──
+
+    #[test]
+    fn path_param_missing_blocks_send() {
+        let request = ApiRequest {
+            node_id: String::new(),
+            title: String::from("test"),
+            method: HttpMethod::Get,
+            path: String::from("/users/{id}"),
+            params: Vec::new(),
+            path_rows: vec![KeyValueRow {
+                enabled: true,
+                key: "id".into(),
+                value: String::new(),
+                value_type: String::new(),
+                description: String::new(),
+            }],
+            body: String::new(),
+            body_mode: BodyMode::None,
+            body_payloads: RequestBody::default(),
+            editor_tab: String::from("params"),
+            headers: Vec::new(),
+            cookies: Vec::new(),
+            auth: Vec::new(),
+            pre_ops: String::new(),
+            post_ops: String::new(),
+            scenarios: Vec::new(),
+        };
+        let err = request_path_with_segments(&request, str::to_string).unwrap_err();
+        assert!(err.to_string().contains("id"));
+    }
+
+    #[test]
+    fn path_param_disabled_blocks_send() {
+        let request = ApiRequest {
+            node_id: String::new(),
+            title: String::from("test"),
+            method: HttpMethod::Get,
+            path: String::from("/users/{id}/posts/{post_id}"),
+            params: Vec::new(),
+            path_rows: vec![
+                KeyValueRow::new("id", "123"),
+                KeyValueRow {
+                    enabled: false,
+                    key: "post_id".into(),
+                    value: "456".into(),
+                    value_type: String::new(),
+                    description: String::new(),
+                },
+            ],
+            body: String::new(),
+            body_mode: BodyMode::None,
+            body_payloads: RequestBody::default(),
+            editor_tab: String::from("params"),
+            headers: Vec::new(),
+            cookies: Vec::new(),
+            auth: Vec::new(),
+            pre_ops: String::new(),
+            post_ops: String::new(),
+            scenarios: Vec::new(),
+        };
+        let err = request_path_with_segments(&request, str::to_string).unwrap_err();
+        assert!(err.to_string().contains("post_id"));
+    }
+
+    #[test]
+    fn path_param_ignores_double_braces_as_variable() {
+        let names = extract_path_parameter_names("/api/{{HOST}}/{env}/:version");
+        assert_eq!(names, vec!["env", "version"]);
+    }
+
+    // ── Request panel ratio default ──
+
+    #[test]
+    fn request_panel_ratio_default_is_40_percent() {
+        let service = service_with_store(temp_store());
+        let ratio = service.load_request_panel_ratio();
+        assert!((ratio - 0.4).abs() < f32::EPSILON);
+    }
+
+    // ── cURL import populates structured body ──
+
+    #[test]
+    fn curl_import_form_data_populates_structured_body() {
+        let service = service_with_store(temp_store());
+        let curl = "curl -X POST https://api.example.com/upload -F 'file=@/tmp/test.png' -F 'title=demo'";
+        let node = service.import_from_curl(curl).expect("import cURL");
+        let snapshot = &node.request;
+        assert_eq!(snapshot.body_mode, "formdata");
+        assert_eq!(snapshot.body_payloads.form_data.len(), 2);
+        assert_eq!(snapshot.body_payloads.form_data[0].key, "file");
+        assert_eq!(snapshot.body_payloads.form_data[0].value, "@/tmp/test.png");
+        assert_eq!(snapshot.body_payloads.form_data[1].key, "title");
+        assert_eq!(snapshot.body_payloads.form_data[1].value, "demo");
+    }
+
+    #[test]
+    fn curl_import_json_body_populates_structured_json() {
+        let service = service_with_store(temp_store());
+        let curl = r#"curl -X POST https://api.example.com/users -H 'Content-Type: application/json' -d '{"name":"alice"}'"#;
+        let node = service.import_from_curl(curl).expect("import cURL");
+        let snapshot = &node.request;
+        assert_eq!(snapshot.body_mode, "json");
+        assert_eq!(snapshot.body_payloads.json, r#"{"name":"alice"}"#);
+    }
+
+    // ── Per-request editor tab and body mode ──
+
+    #[test]
+    fn per_request_editor_tab_restored_on_reload() {
+        let service = service_with_store(temp_store());
+        let node = service
+            .create_endpoint(None, "test", "GET", "/api/test")
+            .expect("create endpoint");
+
+        // Update the endpoint with body tab and JSON body mode
+        let mut request = ApiRequest {
+            node_id: node.id.clone(),
+            title: "test".into(),
+            method: HttpMethod::Get,
+            path: "/api/test".into(),
+            params: Vec::new(),
+            path_rows: Vec::new(),
+            body: String::new(),
+            body_mode: BodyMode::Json,
+            body_payloads: RequestBody {
+                json: r#"{"key":"value"}"#.into(),
+                ..Default::default()
+            },
+            editor_tab: String::from("body"),
+            headers: Vec::new(),
+            cookies: Vec::new(),
+            auth: Vec::new(),
+            pre_ops: String::new(),
+            post_ops: String::new(),
+            scenarios: Vec::new(),
+        };
+        service
+            .persist_endpoint_snapshot("test", "GET", "/api/test", &request)
+            .expect("persist");
+
+        // Reload and verify
+        let groups = service.build_collection_tree().expect("build tree");
+        let reloaded = &groups[0].requests[0];
+        assert_eq!(reloaded.editor_tab, "body");
+        assert_eq!(reloaded.body_mode, BodyMode::Json);
+        assert_eq!(reloaded.body_payloads.json, r#"{"key":"value"}"#);
+
+        // Switch to params tab and verify it persists differently
+        request.editor_tab = String::from("params");
+        request.body_mode = BodyMode::Text;
+        request.body_payloads.text = "plain".into();
+        service
+            .persist_endpoint_snapshot("test", "GET", "/api/test", &request)
+            .expect("persist");
+
+        let groups = service.build_collection_tree().expect("build tree");
+        let reloaded = &groups[0].requests[0];
+        assert_eq!(reloaded.editor_tab, "params");
+        assert_eq!(reloaded.body_mode, BodyMode::Text);
+        assert_eq!(reloaded.body_payloads.text, "plain");
+        // JSON content should still be preserved from earlier
+        assert_eq!(reloaded.body_payloads.json, r#"{"key":"value"}"#);
+    }
+
+    // ── response_tab persistence (PluginDictStore) ──
+
+    #[test]
+    fn response_tab_has_all_variants() {
+        let tabs = [
+            (ResponseTab::Body, "body"),
+            (ResponseTab::Cookies, "cookies"),
+            (ResponseTab::Headers, "headers"),
+            (ResponseTab::Request, "request"),
+            (ResponseTab::Curl, "curl"),
+            (ResponseTab::Logs, "logs"),
+            (ResponseTab::History, "history"),
+            (ResponseTab::Code, "code"),
+        ];
+        for (tab, expected) in tabs {
+            assert_eq!(tab.as_str(), expected);
+            assert_eq!(ResponseTab::from_db(expected), tab);
+        }
+    }
+
+    // ── Body mode roundtrip ──
+
+    #[test]
+    fn body_mode_roundtrip_all_variants() {
+        for mode in BodyMode::all() {
+            let s = mode.as_str();
+            assert_eq!(BodyMode::from_db(s), mode, "roundtrip failed for {:?}", mode);
+        }
+    }
+
+    // ── Send only reads active body mode ──
+
+    #[test]
+    fn send_ignores_inactive_body_modes() {
+        let mut request = ApiRequest {
+            node_id: String::new(),
+            title: String::from("test"),
+            method: HttpMethod::Post,
+            path: String::from("/api/test"),
+            params: Vec::new(),
+            path_rows: Vec::new(),
+            body: String::new(),
+            body_mode: BodyMode::Json,
+            body_payloads: RequestBody {
+                json: r#"{"active":true}"#.into(),
+                text: "should not be sent".into(),
+                xml: "<inactive/>".into(),
+                binary_path: "/tmp/ignored.bin".into(),
+                urlencoded: vec![KeyValueRow::new("x", "should-not-send")],
+                form_data: vec![KeyValueRow::new("f", "should-not-send")],
+            },
+            editor_tab: String::from("body"),
+            headers: Vec::new(),
+            cookies: Vec::new(),
+            auth: Vec::new(),
+            pre_ops: String::new(),
+            post_ops: String::new(),
+            scenarios: Vec::new(),
+        };
+
+        // Verify active_body_text returns only the active mode
+        request.body_mode = BodyMode::Json;
+        assert_eq!(request.active_body_text(), r#"{"active":true}"#);
+
+        request.body_mode = BodyMode::Text;
+        assert_eq!(request.active_body_text(), "should not be sent");
+
+        request.body_mode = BodyMode::Xml;
+        assert_eq!(request.active_body_text(), "<inactive/>");
+
+        request.body_mode = BodyMode::None;
+        assert!(request.active_body_text().is_empty());
     }
 }

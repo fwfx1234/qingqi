@@ -28,6 +28,7 @@ pub struct Input {
     bordered: bool,
     focus_bordered: bool,
     size: Size,
+    on_submit: Option<Arc<dyn Fn(&str, &mut Window, &mut Context<InputState>)>>,
     on_blur: Option<Arc<dyn Fn(&mut Window, &mut Context<InputState>)>>,
 }
 
@@ -46,15 +47,21 @@ impl Input {
             bordered: true,
             focus_bordered: true,
             size: Size::Medium,
+            on_submit: None,
             on_blur: None,
         }
     }
 
-    pub fn on_blur(
-        mut self,
-        f: impl Fn(&mut Window, &mut Context<InputState>) + 'static,
-    ) -> Self {
+    pub fn on_blur(mut self, f: impl Fn(&mut Window, &mut Context<InputState>) + 'static) -> Self {
         self.on_blur = Some(Arc::new(f));
+        self
+    }
+
+    pub fn on_submit(
+        mut self,
+        f: impl Fn(&str, &mut Window, &mut Context<InputState>) + 'static,
+    ) -> Self {
+        self.on_submit = Some(Arc::new(f));
         self
     }
 
@@ -138,6 +145,12 @@ impl Disableable for Input {
 
 impl RenderOnce for Input {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        if self.on_submit.is_some() {
+            let on_submit = self.on_submit.unwrap();
+            cx.update_entity(&self.state, |state, _cx| {
+                state.on_submit = Some(on_submit);
+            });
+        }
         if self.on_blur.is_some() {
             let on_blur = self.on_blur.unwrap();
             cx.update_entity(&self.state, |state, _cx| {

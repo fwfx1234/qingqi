@@ -140,10 +140,18 @@ impl AppIndexService {
     }
 
     pub fn request_scan(self: &Arc<Self>) -> bool {
+        self.request_scan_inner(false)
+    }
+
+    pub fn force_rescan(self: &Arc<Self>) -> bool {
+        self.request_scan_inner(true)
+    }
+
+    fn request_scan_inner(self: &Arc<Self>, force: bool) -> bool {
         let started = Instant::now();
         {
             let mut state = lock_or_recover(&self.state, "app-index");
-            if state.scan_running {
+            if state.scan_running && !force {
                 log_slow_app_index_step("app index request_scan skipped", started, &[]);
                 return false;
             }
@@ -152,7 +160,11 @@ impl AppIndexService {
             state.last_error = None;
             state.revision += 1;
         }
-        log_slow_app_index_step("app index request_scan", started, &[]);
+        log_slow_app_index_step(
+            "app index request_scan",
+            started,
+            &[("force", &force.to_string())],
+        );
 
         let service = Arc::clone(self);
         thread::spawn(move || service.refresh_index());

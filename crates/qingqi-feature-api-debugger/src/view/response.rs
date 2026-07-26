@@ -43,6 +43,7 @@ impl ApiDebuggerView {
 
     pub(crate) fn set_response_tab(&mut self, tab: ResponseTab) {
         self.response_tab = tab;
+        self.service.save_response_tab(tab);
         if tab == ResponseTab::History {
             self.refresh_history();
         }
@@ -86,6 +87,7 @@ impl ApiDebuggerView {
         self.response.cookies = String::new();
         self.response.content_type = String::new();
         self.response.assertion_results = Vec::new();
+        self.response.body_bytes = None;
         self.response.logs = vec![format!("历史响应 @ {created_at}")];
         self.response_tab = ResponseTab::Body;
         self.notice = format!("已载入历史响应（{created_at}）");
@@ -123,7 +125,12 @@ impl ApiDebuggerView {
             self.notice = String::from("已取消保存");
             return;
         };
-        match std::fs::write(&path, self.response.body.as_bytes()) {
+        // Use raw bytes for binary responses to avoid UTF-8 corruption
+        let data: &[u8] = match &self.response.body_bytes {
+            Some(bytes) => bytes.as_slice(),
+            None => self.response.body.as_bytes(),
+        };
+        match std::fs::write(&path, data) {
             Ok(()) => self.notice = format!("响应已保存: {}", path.display()),
             Err(error) => self.notice = format!("保存失败: {error}"),
         }

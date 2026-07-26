@@ -1,8 +1,8 @@
 //! List component — local replacement for qingqi-ui::list.
 
 use gpui::{
-    App, IntoElement, Pixels, RenderOnce, StatefulInteractiveElement, StyleRefinement, Styled,
-    Window, div, prelude::*, px,
+    App, InteractiveElement, Interactivity, IntoElement, Pixels, RenderOnce,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window, div, prelude::*, px,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -54,6 +54,14 @@ impl Styled for ListItem {
         &mut self.style
     }
 }
+
+impl InteractiveElement for ListItem {
+    fn interactivity(&mut self) -> &mut Interactivity {
+        self.base.interactivity()
+    }
+}
+
+impl StatefulInteractiveElement for ListItem {}
 
 impl RenderOnce for ListItem {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {

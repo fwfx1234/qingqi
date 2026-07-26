@@ -1,6 +1,6 @@
 use super::ApiDebuggerView;
 use super::types::AuthFormInputs;
-use crate::service::{AuthType, EditorTab, KeyValueRow};
+use crate::service::{AuthType, BodyMode, EditorTab, KeyValueRow};
 use gpui::{App, Entity};
 use qingqi_ui::components::input::InputState;
 
@@ -130,6 +130,58 @@ impl ApiDebuggerView {
         }
     }
 
+    pub fn kv_editor_target_mut(
+        &mut self,
+        target: super::types::KvEditorTarget,
+    ) -> Option<&mut super::types::KvEditor> {
+        match target {
+            super::types::KvEditorTarget::Tab(tab) => self.kv_editor_mut(tab),
+            super::types::KvEditorTarget::Body(BodyMode::FormUrlEncoded) => {
+                Some(&mut self.body_urlencoded_kv)
+            }
+            super::types::KvEditorTarget::Body(BodyMode::FormData) => {
+                Some(&mut self.body_form_data_kv)
+            }
+            super::types::KvEditorTarget::Body(_) => None,
+        }
+    }
+
+    pub fn update_kv_target(&mut self, target: super::types::KvEditorTarget, cx: &App) {
+        match target {
+            super::types::KvEditorTarget::Tab(EditorTab::Headers) => {
+                let rows = self.headers_kv.to_rows(cx);
+                self.selected_request_mut().headers = rows;
+            }
+            super::types::KvEditorTarget::Tab(EditorTab::Cookies) => {
+                let rows = self.cookies_kv.to_rows(cx);
+                self.selected_request_mut().cookies = rows;
+            }
+            super::types::KvEditorTarget::Body(BodyMode::FormUrlEncoded) => {
+                let rows = self.body_urlencoded_kv.to_rows(cx);
+                self.selected_request_mut().body_payloads.urlencoded = rows;
+            }
+            super::types::KvEditorTarget::Body(BodyMode::FormData) => {
+                let rows = self.body_form_data_kv.to_rows(cx);
+                self.selected_request_mut().body_payloads.form_data = rows;
+            }
+            _ => {}
+        }
+    }
+
+    pub fn set_body_mode(&mut self, mode: BodyMode, cx: &mut App) {
+        self.sync_models(cx);
+        self.body_mode = mode;
+        let value = self
+            .selected_request()
+            .body_payloads
+            .raw(mode)
+            .to_string();
+        self.body_input
+            .update(cx, |input, input_cx| input.reset_value(value, input_cx));
+        self.sync_models(cx);
+        self.persist_workspace();
+    }
+
     pub fn format_json_body(&mut self, cx: &mut App) {
         let text = self.body_input.read(cx).value().to_string();
         match serde_json::from_str::<serde_json::Value>(&text) {
@@ -160,5 +212,10 @@ impl ApiDebuggerView {
         });
         self.sync_models(cx);
         self.notice = format!("已选择文件: {path_string}");
+    }
+
+    pub fn sync_auth_to_model(&mut self, cx: &App) {
+        let auth = self.auth_rows(cx);
+        self.selected_request_mut().auth = auth;
     }
 }

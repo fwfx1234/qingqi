@@ -25,6 +25,7 @@ pub fn context_menu_overlay(
         .absolute()
         .top_0()
         .left_0()
+        .occlude()
         .child(
             div()
                 .id("api-collection-menu-backdrop")
@@ -32,10 +33,12 @@ pub fn context_menu_overlay(
                 .absolute()
                 .top_0()
                 .left_0()
+                .occlude()
                 .bg(gpui::transparent_black())
-                .on_click({
+                .on_mouse_down(MouseButton::Left, {
                     let view = view.clone();
                     move |_, window, cx| {
+                        cx.stop_propagation();
                         view.update(cx, |view, _cx| view.close_collection_menu());
                         window.refresh();
                     }
@@ -43,6 +46,7 @@ pub fn context_menu_overlay(
         )
         .child(
             div()
+                .id("api-collection-menu")
                 .absolute()
                 .top(px(y))
                 .left(px(x))
@@ -53,7 +57,10 @@ pub fn context_menu_overlay(
                 .rounded(px(8.0))
                 .shadow_md()
                 .overflow_hidden()
+                .occlude()
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
+                .on_click(|_, _, cx| cx.stop_propagation())
                 .flex()
                 .flex_col()
                 .child(menu_header(title, kind, cx))

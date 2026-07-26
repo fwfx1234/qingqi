@@ -1,7 +1,7 @@
 use super::ApiDebuggerView;
 use super::types::format_rows;
 use crate::service::ApiEnvironment;
-use gpui::App;
+use gpui::{App, Context};
 
 impl ApiDebuggerView {
     pub(crate) fn selected_environment(&self) -> &ApiEnvironment {
@@ -16,12 +16,13 @@ impl ApiDebuggerView {
             .expect("environment should exist")
     }
 
-    pub(crate) fn select_environment(&mut self, index: usize, cx: &mut App) {
+    pub(crate) fn select_environment(&mut self, index: usize, cx: &mut Context<Self>) {
         self.sync_models(cx);
         self.persist_workspace();
         self.selected_environment = index;
         self.reload_environment_inputs(cx);
         self.notice = format!("已切换到 {}", self.selected_environment().name);
+        cx.notify();
     }
 
     pub(crate) fn reload_environment_inputs(&mut self, cx: &mut App) {

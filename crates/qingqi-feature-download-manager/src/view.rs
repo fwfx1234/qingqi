@@ -24,7 +24,7 @@ use qingqi_ui::{
 };
 
 use super::{
-    model::{DownloadTask, TaskStatus},
+    model::{DownloadTask, TaskPriority, TaskStatus},
     service::DownloadService,
     store::{DownloadStats, TaskCounts},
 };
@@ -101,6 +101,7 @@ pub struct DownloadManagerView {
     save_root_input: Option<Entity<InputState>>,
     concurrent_input: Option<Entity<InputState>>,
     speed_limit_input: Option<Entity<InputState>>,
+    segment_count_input: Option<Entity<InputState>>,
     timeout_input: Option<Entity<InputState>>,
     retry_input: Option<Entity<InputState>>,
     proxy_input: Option<Entity<InputState>>,
@@ -108,6 +109,9 @@ pub struct DownloadManagerView {
     referer_input: Option<Entity<InputState>>,
     cookie_input: Option<Entity<InputState>>,
     headers_input: Option<Entity<InputState>>,
+    // Scheduled download inputs
+    scheduled_time_input: Option<Entity<InputState>>,
+    selected_priority: TaskPriority,
 }
 
 impl DownloadManagerView {
@@ -154,6 +158,7 @@ impl DownloadManagerView {
             save_root_input: None,
             concurrent_input: None,
             speed_limit_input: None,
+            segment_count_input: None,
             timeout_input: None,
             retry_input: None,
             proxy_input: None,
@@ -161,6 +166,8 @@ impl DownloadManagerView {
             referer_input: None,
             cookie_input: None,
             headers_input: None,
+            scheduled_time_input: None,
+            selected_priority: TaskPriority::Normal,
         }
     }
 
@@ -196,6 +203,10 @@ impl DownloadManagerView {
             };
             self.speed_limit_input = Some(self.make_settings_input(window, cx, speed_val));
         }
+        if self.segment_count_input.is_none() {
+            self.segment_count_input =
+                Some(self.make_settings_input(window, cx, settings.segment_count.to_string()));
+        }
         if self.timeout_input.is_none() {
             self.timeout_input =
                 Some(self.make_settings_input(window, cx, settings.timeout_secs.to_string()));
@@ -222,6 +233,10 @@ impl DownloadManagerView {
         if self.headers_input.is_none() {
             self.headers_input =
                 Some(self.make_settings_input(window, cx, settings.custom_headers.clone()));
+        }
+
+        if self.scheduled_time_input.is_none() {
+            self.scheduled_time_input = Some(self.make_settings_input(window, cx, String::new()));
         }
 
         if self.settings_need_reload {
@@ -461,6 +476,11 @@ impl DownloadManagerView {
             };
             input.update(cx, |input, input_cx| input.reset_value(val, input_cx));
         }
+        if let Some(input) = &self.segment_count_input {
+            input.update(cx, |input, input_cx| {
+                input.reset_value(settings.segment_count.to_string(), input_cx)
+            });
+        }
         if let Some(input) = &self.timeout_input {
             input.update(cx, |input, input_cx| {
                 input.reset_value(settings.timeout_secs.to_string(), input_cx)
@@ -514,6 +534,11 @@ impl DownloadManagerView {
             .as_ref()
             .map(|e| e.read(cx).value().parse().unwrap_or(0))
             .unwrap_or(0);
+        let segment_count: usize = self
+            .segment_count_input
+            .as_ref()
+            .map(|e| e.read(cx).value().parse().unwrap_or(4))
+            .unwrap_or(4);
         let timeout: u32 = self
             .timeout_input
             .as_ref()
@@ -572,6 +597,15 @@ impl DownloadManagerView {
         {
             tracing::error!(error = %e, "限速设置失败");
             self.message = format!("限速设置失败: {e}");
+        }
+        {
+            let mut settings = lock_or_recover(&self.service, "download-service").settings_snapshot();
+            settings.segment_count = segment_count;
+            if let Err(e) = lock_or_recover(&self.service, "download-service").update_settings(settings)
+            {
+                tracing::error!(error = %e, "分片数设置失败");
+                self.message = format!("分片数设置失败: {e}");
+            }
         }
         if let Err(e) = lock_or_recover(&self.service, "download-service").set_network_options(
             &user_agent,
@@ -718,6 +752,84 @@ impl DownloadManagerView {
             Err(e) => self.message = format!("打开失败: {e}"),
         }
     }
+
+    pub fn export_history(&mut self, cx: &mut Context<Self>) {
+        match lock_or_recover(&self.service, "download-service").export_history() {
+            Ok(json) => {
+                qingqi_platform::clipboard::write_text(cx, &json);
+                self.message = String::from("已导出下载历史到剪贴板");
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "导出历史失败");
+                self.message = format!("导出失败: {e}");
+            }
+        }
+    }
+
+    pub fn import_urls(&mut self, cx: &mut Context<Self>) {
+        let text = qingqi_platform::clipboard::read_text(cx).unwrap_or_default();
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            self.message = String::from("剪贴板为空");
+            return;
+        }
+        // Try JSON import first, then fall back to plain text
+        let result = {
+            let svc = lock_or_recover(&self.service, "download-service");
+            svc.import_urls_json(trimmed)
+                .or_else(|_| svc.import_urls_text(trimmed))
+        };
+        match result {
+            Ok(tasks) => {
+                self.message = format!("已导入 {} 个下载任务", tasks.len());
+                self.refresh();
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "导入失败");
+                self.message = format!("导入失败: {e}");
+            }
+        }
+    }
+
+    pub fn add_download_scheduled(&mut self, cx: &mut Context<Self>) {
+        let text = self.url_text.trim().to_string();
+        if text.is_empty() {
+            self.message = String::from("请输入下载链接");
+            return;
+        }
+        let urls = super::model::extract_urls_from_text(&text);
+        if urls.is_empty() {
+            self.message = String::from("未识别到有效 HTTP/HTTPS 链接");
+            return;
+        }
+        let scheduled_at = self
+            .scheduled_time_input
+            .as_ref()
+            .map(|e| e.read(cx).value().to_string())
+            .unwrap_or_default();
+        if scheduled_at.is_empty() {
+            self.message = String::from("请设置定时下载时间");
+            return;
+        }
+        let priority = self.selected_priority.to_i32();
+        let mut added = Vec::new();
+        let mut errors = Vec::new();
+        for url in urls {
+            match lock_or_recover(&self.service, "download-service")
+                .add_task_scheduled(&url, &scheduled_at, priority)
+            {
+                Ok(task) => added.push(task.file_name),
+                Err(e) => errors.push(format!("{url}: {e}")),
+            }
+        }
+        if errors.is_empty() {
+            self.clear_url_input(cx);
+            self.message = format!("已添加 {} 个定时任务", added.len());
+            self.refresh();
+        } else {
+            self.message = format!("添加失败: {}", errors.join(", "));
+        }
+    }
 }
 
 impl Render for DownloadManagerView {
@@ -741,6 +853,7 @@ impl Render for DownloadManagerView {
         let save_root_input = self.save_root_input.clone();
         let concurrent_input = self.concurrent_input.clone();
         let speed_limit_input = self.speed_limit_input.clone();
+        let segment_count_input = self.segment_count_input.clone();
         let timeout_input = self.timeout_input.clone();
         let retry_input = self.retry_input.clone();
         let proxy_input = self.proxy_input.clone();
@@ -756,8 +869,14 @@ impl Render for DownloadManagerView {
                     .flex()
                     .flex_col()
                     .gap_1p5()
-                    .child(header_bar(job_summary.active_count, cx))
-                    .child(url_input_bar(cx, url_input, handle.clone()))
+                     .child(header_bar(job_summary.active_count, cx))
+                     .child(url_input_bar(
+                         cx,
+                         url_input,
+                         self.scheduled_time_input.clone(),
+                         self.selected_priority,
+                         handle.clone(),
+                     ))
                     .child(filter_bar(cx, filter, &task_counts, handle.clone()))
                     .child(task_list(
                         cx,
@@ -779,6 +898,7 @@ impl Render for DownloadManagerView {
                             save_root_input,
                             concurrent_input,
                             speed_limit_input,
+                            segment_count_input,
                             timeout_input,
                             retry_input,
                             proxy_input,
@@ -871,8 +991,11 @@ fn header_bar(active_count: usize, cx: &App) -> impl IntoElement {
 fn url_input_bar(
     cx: &App,
     url_input: Entity<InputState>,
+    scheduled_time_input: Option<Entity<InputState>>,
+    selected_priority: TaskPriority,
     handle: Entity<DownloadManagerView>,
 ) -> impl IntoElement {
+    let priority_options = [TaskPriority::Low, TaskPriority::Normal, TaskPriority::High];
     div()
         .rounded(px(8.0))
         .bg(theme::rgba_with_alpha(
@@ -886,55 +1009,124 @@ fn url_input_bar(
         ))
         .p_1p5()
         .flex()
-        .items_center()
+        .flex_col()
         .gap_1()
         .child(
             div()
-                .size(px(30.0))
-                .rounded(px(6.0))
-                .bg(theme::rgba_with_alpha(
-                    ui::accent_color(PluginAccent::Green),
-                    0.12,
-                ))
                 .flex()
                 .items_center()
-                .justify_center()
-                .text_size(px(14.0))
-                .child("\u{1f517}"),
+                .gap_1()
+                .child(
+                    div()
+                        .size(px(30.0))
+                        .rounded(px(6.0))
+                        .bg(theme::rgba_with_alpha(
+                            ui::accent_color(PluginAccent::Green),
+                            0.12,
+                        ))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .text_size(px(14.0))
+                        .child("\u{1f517}"),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .h(px(28.0))
+                        .rounded(px(6.0))
+                        .bg(ui::bg_surface(cx))
+                        .border_1()
+                        .border_color(ui::border_light(cx))
+                        .flex()
+                        .items_center()
+                        .child(download_input(url_input)),
+                )
+                .child(action_button("download-paste", "粘贴", cx).on_click({
+                    let h = handle.clone();
+                    move |_, _window, cx| {
+                        cx.update_entity(&h, |panel, cx| {
+                            panel.paste_and_add(cx);
+                            let text = panel.url_text.clone();
+                            panel.set_url_input_text(text, cx);
+                            cx.notify();
+                        });
+                    }
+                }))
+                .child(
+                    primary_btn("download-add", "添加下载", PluginAccent::Green, cx).on_click({
+                        let h = handle.clone();
+                        move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.add_download(cx);
+                                cx.notify();
+                            });
+                        }
+                    }),
+                ),
         )
         .child(
             div()
-                .flex_1()
-                .h(px(28.0))
-                .rounded(px(6.0))
-                .bg(ui::bg_surface(cx))
-                .border_1()
-                .border_color(ui::border_light(cx))
                 .flex()
                 .items_center()
-                .child(download_input(url_input)),
-        )
-        .child(action_button("download-paste", "粘贴", cx).on_click({
-            let h = handle.clone();
-            move |_, _window, cx| {
-                cx.update_entity(&h, |panel, cx| {
-                    panel.paste_and_add(cx);
-                    let text = panel.url_text.clone();
-                    panel.set_url_input_text(text, cx);
-                    cx.notify();
-                });
-            }
-        }))
-        .child(
-            primary_btn("download-add", "添加下载", PluginAccent::Green, cx).on_click({
-                let h = handle.clone();
-                move |_, _window, cx| {
-                    cx.update_entity(&h, |panel, cx| {
-                        panel.add_download(cx);
-                        cx.notify();
-                    });
-                }
-            }),
+                .gap_1()
+                .child(
+                    div()
+                        .w(px(80.0))
+                        .text_size(px(9.0))
+                        .text_color(ui::text_tertiary(cx))
+                        .child("定时下载 (可选)"),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .h(px(26.0))
+                        .rounded(px(6.0))
+                        .bg(ui::bg_surface(cx))
+                        .border_1()
+                        .border_color(ui::border_light(cx))
+                        .flex()
+                        .items_center()
+                        .children(scheduled_time_input.map(|state| {
+                            Input::new(&state)
+                                .appearance(false)
+                                .bordered(false)
+                                .focus_bordered(false)
+                                .h(px(26.0))
+                                .text_size(px(10.0))
+                        })),
+                )
+                .child(
+                    div()
+                        .text_size(px(9.0))
+                        .text_color(ui::text_tertiary(cx))
+                        .child("优先级:"),
+                )
+                .children(priority_options.iter().map(|&priority| {
+                    let active = priority == selected_priority;
+                    let h = handle.clone();
+                    Button::new(("download-priority", priority as i32 as usize))
+                        .label(priority.label().to_string())
+                        .small()
+                        .selected(active)
+                        .on_click(move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.selected_priority = priority;
+                                cx.notify();
+                            });
+                        })
+                }))
+                .child(
+                    primary_btn("download-schedule", "定时添加", PluginAccent::Green, cx).on_click({
+                        let h = handle.clone();
+                        move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.add_download_scheduled(cx);
+                                cx.notify();
+                            });
+                        }
+                    }),
+                ),
         )
 }
 
@@ -1028,6 +1220,28 @@ fn filter_bar(
                         move |_, _window, cx| {
                             cx.update_entity(&h, |panel, cx| {
                                 panel.clear_failed();
+                                cx.notify();
+                            });
+                        }
+                    }),
+                )
+                .child(
+                    action_button("download-export", "导出历史", cx).on_click({
+                        let h = handle.clone();
+                        move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.export_history(cx);
+                                cx.notify();
+                            });
+                        }
+                    }),
+                )
+                .child(
+                    action_button("download-import", "导入URL", cx).on_click({
+                        let h = handle.clone();
+                        move |_, _window, cx| {
+                            cx.update_entity(&h, |panel, cx| {
+                                panel.import_urls(cx);
                                 cx.notify();
                             });
                         }
@@ -1457,6 +1671,7 @@ fn settings_overlay(
     save_root_input: Option<Entity<InputState>>,
     concurrent_input: Option<Entity<InputState>>,
     speed_limit_input: Option<Entity<InputState>>,
+    segment_count_input: Option<Entity<InputState>>,
     timeout_input: Option<Entity<InputState>>,
     retry_input: Option<Entity<InputState>>,
     proxy_input: Option<Entity<InputState>>,
@@ -1534,8 +1749,15 @@ fn settings_overlay(
                     div()
                         .flex()
                         .gap_1p5()
-                        .child(settings_field("超时 (秒)", timeout_input, cx))
-                        .child(settings_field("重试次数", retry_input, cx)),
+                        .child(settings_field("分片数 (0-16)", segment_count_input, cx))
+                        .child(settings_field("超时 (秒)", timeout_input, cx)),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .gap_1p5()
+                        .child(settings_field("重试次数", retry_input, cx))
+                        .child(div().flex_1()),
                 )
                 .child(settings_field("代理 URL", proxy_input, cx))
                 .child(settings_field("User-Agent", user_agent_input, cx))

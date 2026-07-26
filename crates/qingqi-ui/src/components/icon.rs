@@ -17,7 +17,7 @@ pub struct Icon {
 
 impl Icon {
     #[doc(hidden)]
-    pub fn from_lucide_path(path: &'static str) -> Self {
+    pub fn from_lucide_path(path: impl Into<SharedString>) -> Self {
         Self {
             path: path.into(),
             size: DEFAULT_ICON_SIZE,

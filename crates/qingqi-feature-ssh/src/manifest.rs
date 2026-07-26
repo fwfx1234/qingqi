@@ -33,7 +33,7 @@ pub fn manifest() -> Manifest {
         icon: IconRef::asset("icons/folder-network.svg"),
         prefixes: vec!["ssh".into(), "sftp".into(), "ftp".into()],
         mode: PluginWindowMode::Window,
-        window: WindowSpec::ratio_blurred(0.86, 0.82),
+        window: WindowSpec::ratio_blurred(0.86, 0.82).with_dock_icon(),
         category: PluginCategory::Tool,
         status: PluginStatus::Ready,
         background: false,
@@ -45,7 +45,7 @@ pub fn manifest() -> Manifest {
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Window,
-            window: WindowSpec::ratio_blurred(0.86, 0.82),
+            window: WindowSpec::ratio_blurred(0.86, 0.82).with_dock_icon(),
         }),
         stats: Some(PluginStats {
             primary: "多会话标签页".into(),

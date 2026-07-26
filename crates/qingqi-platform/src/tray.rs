@@ -153,7 +153,7 @@ pub fn install_tray(mode: PreventSleepMode) -> Result<(), String> {
             .with_id(MAIN_TRAY_ID)
             .with_menu(Box::new(menu))
             .with_menu_on_left_click(false)
-            .with_tooltip("Qingqi");
+            .with_tooltip("启程 (Qingqi)");
 
         #[cfg(target_os = "macos")]
         {

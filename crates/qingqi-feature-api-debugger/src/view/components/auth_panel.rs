@@ -116,7 +116,7 @@ fn auth_location_button(
         .on_click(move |_, _, cx| {
             view.update(cx, |view, cx| {
                 view.auth_apikey_in_query = query;
-                view.sync_models(cx);
+                view.sync_auth_to_model(cx);
                 view.persist_workspace();
             });
         })

@@ -1,5 +1,5 @@
 use std::{
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
     time::Instant,
 };
 
@@ -10,7 +10,14 @@ use hudsucker::{
 };
 use serde_json;
 
-use crate::{mock_engine::MockEngine, store::CaptureStore};
+use crate::{
+    breakpoint::BreakpointManager,
+    mock_engine::MockEngine,
+    mock_enhanced,
+    rewrite::RewriteEngine,
+    store::CaptureStore,
+    throttle::ThrottleManager,
+};
 use qingqi_plugin::events::{AppEventBus, AppEventKind};
 
 /// 请求/响应体最大截取大小（1 MB）。
@@ -24,8 +31,12 @@ const MAX_BODY_SIZE: usize = 1_024 * 1_024;
 pub struct ProxyHttpHandler {
     store: Arc<Mutex<CaptureStore>>,
     mock_engine: Arc<MockEngine>,
+    enhanced_mock_engine: Arc<Mutex<mock_enhanced::EnhancedMockEngine>>,
     events: AppEventBus,
     ca_cert: Arc<Vec<u8>>,
+    breakpoint_manager: Arc<Mutex<BreakpointManager>>,
+    throttle_manager: Arc<ThrottleManager>,
+    rewrite_engine: Arc<RwLock<RewriteEngine>>,
     pending: Option<CaptureContext>,
 }
 
@@ -33,14 +44,22 @@ impl ProxyHttpHandler {
     pub fn new(
         store: Arc<Mutex<CaptureStore>>,
         mock_engine: Arc<MockEngine>,
+        enhanced_mock_engine: Arc<Mutex<mock_enhanced::EnhancedMockEngine>>,
         events: AppEventBus,
         ca_cert: Arc<Vec<u8>>,
+        breakpoint_manager: Arc<Mutex<BreakpointManager>>,
+        throttle_manager: Arc<ThrottleManager>,
+        rewrite_engine: Arc<RwLock<RewriteEngine>>,
     ) -> Self {
         Self {
             store,
             mock_engine,
+            enhanced_mock_engine,
             events,
             ca_cert,
+            breakpoint_manager,
+            throttle_manager,
+            rewrite_engine,
             pending: None,
         }
     }
@@ -186,7 +205,54 @@ impl HttpHandler for ProxyHttpHandler {
             })
             .collect();
 
-        // 1. 检查 Mock 规则 — 匹配时直接返回模拟响应
+        // Check for request breakpoint
+        if self.breakpoint_manager.lock().map(|m| m.check_request(&method, &url)).unwrap_or(false) {
+            tracing::info!(url = %url, "Request breakpoint hit");
+        }
+
+        // Apply rewrite rules (URL rewrite)
+        if let Ok(engine) = self.rewrite_engine.read() {
+            if engine.matches(&method, &url) {
+                tracing::info!("Rewrite rule matched: {method} {url}");
+            }
+        }
+
+        // 1. Check Enhanced Mock Engine first (regex, file mapping)
+        if let Some(mock_result) = self.enhanced_mock_engine.lock().ok().and_then(|mgr| {
+            mgr.match_request(&method, &url)
+        }) {
+            // Apply delay if configured
+            if mock_result.delay_ms > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(mock_result.delay_ms)).await;
+            }
+
+            // Record mock exchange
+            let duration_ms = start.elapsed().as_millis() as i64;
+            let body_bytes = mock_result.body.as_bytes();
+            let response_headers_json = serde_json::to_string(&mock_result.headers)
+                .unwrap_or_else(|_| "[]".to_string());
+
+            self.capture_and_store(
+                &method, &url, &host,
+                mock_result.status as i64,
+                &protocol, duration_ms,
+                0, body_bytes.len() as i64,
+                &req_headers_json, &response_headers_json,
+                "", &mock_result.body,
+                is_https,
+            );
+
+            // Build response
+            let mut resp_builder = Response::builder().status(mock_result.status);
+            for (name, value) in &mock_result.headers {
+                resp_builder = resp_builder.header(name.as_str(), value.as_str());
+            }
+            return RequestOrResponse::Response(
+                resp_builder.body(Body::from(mock_result.body)).unwrap()
+            );
+        }
+
+        // 2. 检查 Mock 规则 — 匹配时直接返回模拟响应
         if let Some(mock_result) = self.mock_engine.match_request(&method, &url, &req_headers) {
             // 模拟延迟
             if mock_result.delay_ms > 0 {
@@ -274,12 +340,25 @@ impl HttpHandler for ProxyHttpHandler {
             }
         };
         let body_bytes = collected.to_bytes();
+
+        // Apply throttling if enabled
+        if let Some(delay) = self.throttle_manager.calculate_delay(body_bytes.len()) {
+            tokio::time::sleep(delay).await;
+        }
+
         let response_size = body_bytes.len() as i64;
         let response_body = Self::truncate_body(&body_bytes);
         let response_headers_json = Self::headers_to_json(&parts.headers);
         let status = parts.status.as_u16() as i64;
 
         let capture_ctx = self.pending.take();
+
+        // Check for response breakpoint
+        if let Some(ref ctx) = capture_ctx {
+            if self.breakpoint_manager.lock().map(|m| m.check_response(&ctx.method, &ctx.url)).unwrap_or(false) {
+                tracing::info!(url = %ctx.url, "Response breakpoint hit");
+            }
+        }
 
         match capture_ctx.as_ref() {
             Some(ctx) => {
@@ -372,11 +451,19 @@ mod tests {
             MockStore::open(Arc::clone(&database), &mock_key).unwrap(),
         ));
         let mock_engine = Arc::new(MockEngine::new(mock_store));
+        let breakpoint_manager = Arc::new(Mutex::new(BreakpointManager::new()));
+        let throttle_manager = Arc::new(ThrottleManager::new());
+        let rewrite_engine = Arc::new(RwLock::new(RewriteEngine::new()));
+        let enhanced_mock_engine = Arc::new(Mutex::new(mock_enhanced::EnhancedMockEngine::new()));
         ProxyHttpHandler::new(
             store,
             mock_engine,
+            enhanced_mock_engine,
             AppEventBus::new(),
             Arc::new(cert.to_vec()),
+            breakpoint_manager,
+            throttle_manager,
+            rewrite_engine,
         )
     }
 

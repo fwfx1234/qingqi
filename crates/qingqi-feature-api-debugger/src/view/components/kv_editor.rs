@@ -1,7 +1,7 @@
 use super::shared::{api_accent, transparent_surface};
 use crate::service::EditorTab;
 use crate::view::ApiDebuggerView;
-use crate::view::types::KvRow;
+use crate::view::types::{KvEditorTarget, KvRow};
 use gpui::{
     App, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
     Styled, div, hsla, prelude::FluentBuilder, px,
@@ -15,12 +15,14 @@ use qingqi_ui::{icon, theme, ui, ui::glass};
 
 pub fn kv_editor_table(
     view: Entity<ApiDebuggerView>,
-    tab: EditorTab,
+    target: KvEditorTarget,
     rows: Vec<KvRow>,
+    show_schema_columns: bool,
+    show_value_type: bool,
     cx: &App,
 ) -> impl IntoElement {
     let add_view = view.clone();
-    let show_schema_columns = tab == EditorTab::Params;
+    let change_view = view.clone();
 
     div()
         .flex()
@@ -30,6 +32,19 @@ pub fn kv_editor_table(
         .border_color(glass::divider(cx))
         .bg(glass::inset(cx))
         .overflow_hidden()
+        .on_key_down(move |_, _, cx| {
+            let view = change_view.clone();
+            cx.defer(move |cx| {
+                view.update(cx, |view, cx| {
+                    if target == KvEditorTarget::Tab(EditorTab::Params) {
+                        view.sync_url_from_parameter_table(cx);
+                    } else {
+                        view.update_kv_target(target, cx);
+                        view.persist_workspace();
+                    }
+                });
+            });
+        })
         .child(
             div()
                 .id("kv-table-header")
@@ -46,9 +61,12 @@ pub fn kv_editor_table(
                 .child(div().w(px(24.0)))
                 .child(div().flex_1().min_w(px(0.0)).child("key"))
                 .child(div().flex_1().min_w(px(0.0)).child("value"))
-                .when(show_schema_columns, |header| {
+                .when(show_value_type || show_schema_columns, |header| {
                     header
                         .child(div().w(px(108.0)).flex_none().child("type"))
+                })
+                .when(show_schema_columns, |header| {
+                    header
                         .child(div().flex_1().min_w(px(0.0)).child("desc"))
                 })
                 .child(div().w(px(24.0))),
@@ -58,9 +76,19 @@ pub fn kv_editor_table(
             let key_input = row.key.clone();
             let value_input = row.value.clone();
             let type_input = row.value_type.clone();
+            let type_control_input = row.value_type.clone();
             let desc_input = row.description.clone();
+            let file_value_input = row.value.clone();
+            let is_file = target
+                == KvEditorTarget::Body(crate::service::BodyMode::FormData)
+                && type_input
+                    .read(cx)
+                    .value()
+                    .eq_ignore_ascii_case("file");
             let toggle_view = view.clone();
             let delete_view = view.clone();
+            let file_view = view.clone();
+            let file_path_for_badge = file_value_input.read(cx).value().to_string();
 
             div()
                 .id(("kv-row", i))
@@ -104,19 +132,86 @@ pub fn kv_editor_table(
                             .child(if enabled { "✓" } else { "" })
                             .on_click(move |_, _, cx| {
                                 toggle_view.update(cx, |view, cx| {
-                                    if let Some(editor) = view.kv_editor_mut(tab) {
+                                    if let Some(editor) = view.kv_editor_target_mut(target) {
                                         editor.toggle(i);
                                     }
-                                    view.sync_models(cx);
-                                    view.persist_workspace();
+                                    if target == KvEditorTarget::Tab(EditorTab::Params) {
+                                        view.sync_url_from_parameter_table(cx);
+                                    } else {
+                                        view.update_kv_target(target, cx);
+                                        view.persist_workspace();
+                                    }
                                 });
                             }),
                     ),
                 )
                 .child(kv_cell(key_input, enabled, cx))
                 .child(kv_cell(value_input, enabled, cx))
+                .when(is_file, |row| {
+                    row.child(
+                        Button::new(("kv-pick-file", i))
+                            .ghost()
+                            .icon(icon!(folder_open))
+                            .with_size(Size::XSmall)
+                            .on_click(move |_, _, cx| {
+                                let Some(path) = rfd::FileDialog::new().pick_file() else {
+                                    return;
+                                };
+                                let value = path.display().to_string();
+                                file_value_input.update(cx, |input, input_cx| {
+                                    input.reset_value(value, input_cx)
+                                });
+                                file_view.update(cx, |view, cx| {
+                                    view.sync_models(cx);
+                                    view.persist_workspace();
+                                });
+                            }),
+                    )
+                })
+                .when(is_file, |row| {
+                    let file_name = if file_path_for_badge.is_empty() {
+                        String::from("未选择")
+                    } else {
+                        std::path::Path::new(&file_path_for_badge)
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or(&file_path_for_badge)
+                            .to_string()
+                    };
+                    row.child(
+                        div()
+                            .id(("kv-file-badge", i))
+                            .max_w(px(120.0))
+                            .px(px(6.0))
+                            .py(px(3.0))
+                            .rounded(px(4.0))
+                            .border_1()
+                            .border_color(glass::divider(cx))
+                            .bg(glass::inset(cx))
+                            .text_size(px(9.0))
+                            .text_color(ui::text_secondary(cx))
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .child(file_name),
+                    )
+                })
+                .when(show_value_type, |row| {
+                    row.child(body_value_type_control(
+                        view.clone(),
+                        target,
+                        type_control_input,
+                        is_file,
+                        enabled,
+                        i,
+                        cx,
+                    ))
+                })
                 .when(show_schema_columns, |row| {
                     row.child(kv_cell_fixed(type_input, enabled, cx, 108.0))
+                })
+                .when(show_schema_columns, |row| {
+                    row
                         .child(kv_cell(desc_input, enabled, cx))
                 })
                 .child(
@@ -126,11 +221,15 @@ pub fn kv_editor_table(
                         .with_size(Size::XSmall)
                         .on_click(move |_, _, cx| {
                             delete_view.update(cx, |view, cx| {
-                                if let Some(editor) = view.kv_editor_mut(tab) {
+                                if let Some(editor) = view.kv_editor_target_mut(target) {
                                     editor.remove_row(i);
                                 }
-                                view.sync_models(cx);
-                                view.persist_workspace();
+                                if target == KvEditorTarget::Tab(EditorTab::Params) {
+                                    view.sync_url_from_parameter_table(cx);
+                                } else {
+                                    view.update_kv_target(target, cx);
+                                    view.persist_workspace();
+                                }
                             });
                         }),
                 )
@@ -144,14 +243,96 @@ pub fn kv_editor_table(
                     .with_size(Size::XSmall)
                     .on_click(move |_, window, cx| {
                         add_view.update(cx, |view, cx| {
-                            if let Some(editor) = view.kv_editor_mut(tab) {
+                            if let Some(editor) = view.kv_editor_target_mut(target) {
                                 editor.add_row(window, cx);
+                                if target == KvEditorTarget::Body(crate::service::BodyMode::FormData)
+                                {
+                                    if let Some(row) = editor.rows.last() {
+                                        row.value_type.update(cx, |input, input_cx| {
+                                            input.reset_value("text", input_cx)
+                                        });
+                                    }
+                                }
                             }
-                            view.persist_workspace();
+                            if target == KvEditorTarget::Tab(EditorTab::Params) {
+                                view.sync_url_from_parameter_table(cx);
+                            } else {
+                                view.update_kv_target(target, cx);
+                                view.persist_workspace();
+                            }
                         });
                     }),
             ),
         )
+}
+
+fn body_value_type_control(
+    view: Entity<ApiDebuggerView>,
+    target: KvEditorTarget,
+    input: Entity<InputState>,
+    is_file: bool,
+    enabled: bool,
+    row_index: usize,
+    cx: &App,
+) -> gpui::Div {
+    div()
+        .w(px(108.0))
+        .h(px(28.0))
+        .flex_none()
+        .rounded(px(6.0))
+        .border_1()
+        .border_color(glass::divider(cx))
+        .bg(glass::inset(cx))
+        .p(px(2.0))
+        .flex()
+        .gap(px(2.0))
+        .children([("Text", false), ("File", true)].into_iter().map(
+            move |(label, file)| {
+                let selected = is_file == file;
+                let view = view.clone();
+                let input = input.clone();
+                div()
+                    .id(("body-value-type", row_index * 2 + usize::from(file)))
+                    .flex_1()
+                    .rounded(px(4.0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(px(9.0))
+                    .text_color(if selected {
+                        Theme::global(cx).foreground
+                    } else {
+                        ui::text_tertiary(cx)
+                    })
+                    .bg(if selected {
+                        theme::rgba_with_alpha(Theme::global(cx).foreground.into(), 0.08)
+                    } else {
+                        transparent_surface(cx)
+                    })
+                    .when(enabled, |item| {
+                        item.cursor_pointer()
+                            .hover(|style| style.bg(glass::hover_bg(cx)))
+                            .on_click(move |_, _, cx| {
+                                let value = if file { "file" } else { "text" };
+                                input.update(cx, |input, input_cx| {
+                                    input.reset_value(value, input_cx)
+                                });
+                                view.update(cx, |view, cx| {
+                                    if let Some(editor) = view.kv_editor_target_mut(target) {
+                                        if let Some(row) = editor.rows.get_mut(row_index) {
+                                            row.value_type.update(cx, |state, state_cx| {
+                                                state.reset_value(value, state_cx)
+                                            });
+                                        }
+                                    }
+                                    view.update_kv_target(target, cx);
+                                    view.persist_workspace();
+                                });
+                            })
+                    })
+                    .child(label)
+            },
+        ))
 }
 
 fn kv_cell(input: Entity<InputState>, enabled: bool, cx: &App) -> gpui::Div {

@@ -130,7 +130,7 @@ fn push_app_metadata(
 
     let info = read_info_dictionary(&path);
     let bundle_id = bundle_id_from_info(&info);
-    let name = display_name_from_info(&info, &stem);
+    let name = display_name_from_info(&path, &info, &stem);
     let dedupe_key = bundle_id
         .clone()
         .unwrap_or_else(|| name.clone())
@@ -253,15 +253,290 @@ fn read_info_plist(path: &Path) -> Option<Value> {
         .ok()
 }
 
-fn display_name_from_info(info: &plist::Dictionary, stem: &str) -> String {
-    super::unique_nonempty_strings([
+fn display_name_from_info(app_path: &Path, info: &plist::Dictionary, stem: &str) -> String {
+    let english_name = super::unique_nonempty_strings([
         info.get("CFBundleDisplayName").and_then(Value::as_string),
         info.get("CFBundleName").and_then(Value::as_string),
         Some(stem),
     ])
     .into_iter()
     .next()
-    .unwrap_or_else(|| stem.to_string())
+    .unwrap_or_else(|| stem.to_string());
+
+    if let Some(chinese_name) = localized_chinese_name_from_strings(app_path) {
+        return chinese_name;
+    }
+
+    if let Some(chinese_name) = localized_chinese_name_from_loctable(app_path) {
+        return chinese_name;
+    }
+
+    english_name
+}
+
+/// Try to find a Chinese localized display name from `.lproj/InfoPlist.strings`.
+fn localized_chinese_name_from_strings(app_path: &Path) -> Option<String> {
+    let resources = app_path.join("Contents").join("Resources");
+    const CHINESE_LOCALES: &[&str] = &[
+        "zh-Hans", "zh-CN", "zh-Hant", "zh-TW", "zh-HK", "zh", "zh_CN", "cn",
+    ];
+
+    for locale in CHINESE_LOCALES {
+        let strings_path = resources.join(format!("{locale}.lproj/InfoPlist.strings"));
+        if let Some(name) = read_chinese_name_from_strings(&strings_path) {
+            return Some(name);
+        }
+    }
+
+    if let Ok(entries) = std::fs::read_dir(&resources) {
+        for entry in entries.flatten() {
+            let lproj_path = entry.path();
+            if lproj_path.extension().and_then(|e| e.to_str()) != Some("lproj") {
+                continue;
+            }
+            let strings_path = lproj_path.join("InfoPlist.strings");
+            if strings_path.exists() {
+                if let Some(name) = read_chinese_name_from_strings(&strings_path) {
+                    return Some(name);
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Try to find Chinese name from InfoPlist.loctable (used by system apps).
+/// The .loctable is a binary plist with top-level locale keys like "zh_CN" => { "CFBundleName" => "邮件" }.
+fn localized_chinese_name_from_loctable(app_path: &Path) -> Option<String> {
+    let loctable_path = app_path
+        .join("Contents")
+        .join("Resources")
+        .join("InfoPlist.loctable");
+    if !loctable_path.exists() {
+        return None;
+    }
+
+    let bytes = std::fs::read(&loctable_path).ok()?;
+    let plist = Value::from_reader(std::io::Cursor::new(&bytes)).ok()?;
+    let dict = plist.as_dictionary()?;
+
+    const CHINESE_LOCALE_KEYS: &[&str] = &[
+        "zh_CN",
+        "zh_HK",
+        "zh_TW",
+        "zh-Hans",
+        "zh-Hant",
+        "zh_CN.lproj",
+    ];
+
+    for locale_key in CHINESE_LOCALE_KEYS {
+        if let Some(Value::Dictionary(locale_dict)) = dict.get(*locale_key) {
+            for name_key in &["CFBundleDisplayName", "CFBundleName"] {
+                if let Some(name) = locale_dict.get(*name_key).and_then(Value::as_string) {
+                    let name = name.trim();
+                    if is_chinese_name(name) {
+                        return Some(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn read_chinese_name_from_strings(path: &Path) -> Option<String> {
+    let bytes = std::fs::read(path).ok()?;
+
+    let text = decode_strings_content(&bytes)?;
+
+    let dict = parse_nextstep_strings(&text)?;
+
+    for key in &["CFBundleDisplayName", "CFBundleName"] {
+        if let Some(name) = dict.get(*key) {
+            let name = name.trim();
+            if is_chinese_name(name) {
+                return Some(name.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+fn decode_strings_content(bytes: &[u8]) -> Option<String> {
+    if bytes.len() >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF {
+        return String::from_utf8(bytes[3..].to_vec()).ok();
+    }
+    if bytes.len() >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF {
+        let u16_iter = bytes[2..]
+            .chunks_exact(2)
+            .map(|chunk| u16::from_be_bytes([chunk[0], chunk[1]]));
+        return char::decode_utf16(u16_iter)
+            .collect::<Result<String, _>>()
+            .ok();
+    }
+    if bytes.len() >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE {
+        let u16_iter = bytes[2..]
+            .chunks_exact(2)
+            .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]));
+        return char::decode_utf16(u16_iter)
+            .collect::<Result<String, _>>()
+            .ok();
+    }
+    if bytes.len() >= 2 {
+        let mut null_count_even = 0usize;
+        let mut null_count_odd = 0usize;
+        for (i, &b) in bytes.iter().enumerate().take(64) {
+            if b == 0 {
+                if i % 2 == 0 {
+                    null_count_even += 1;
+                } else {
+                    null_count_odd += 1;
+                }
+            }
+        }
+        if null_count_even > 2 && null_count_odd > 2 {
+            if null_count_odd > null_count_even {
+                let u16_iter = bytes
+                    .chunks_exact(2)
+                    .map(|chunk| u16::from_be_bytes([chunk[0], chunk[1]]));
+                return char::decode_utf16(u16_iter)
+                    .collect::<Result<String, _>>()
+                    .ok();
+            } else {
+                let u16_iter = bytes
+                    .chunks_exact(2)
+                    .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]));
+                return char::decode_utf16(u16_iter)
+                    .collect::<Result<String, _>>()
+                    .ok();
+            }
+        }
+    }
+    String::from_utf8(bytes.to_vec()).ok()
+}
+
+fn parse_nextstep_strings(text: &str) -> Option<std::collections::HashMap<String, String>> {
+    let mut dict = std::collections::HashMap::new();
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        while i < chars.len() && chars[i].is_whitespace() {
+            i += 1;
+        }
+        if i >= chars.len() || chars[i] != '"' {
+            i += 1;
+            continue;
+        }
+        i += 1;
+
+        let key_start = i;
+        while i < chars.len() && chars[i] != '"' {
+            if chars[i] == '\\' {
+                i += 1;
+            }
+            if i < chars.len() {
+                i += 1;
+            }
+        }
+        let key = unescape_string(&chars[key_start..i]);
+        if i < chars.len() {
+            i += 1;
+        }
+
+        while i < chars.len() && chars[i].is_whitespace() {
+            i += 1;
+        }
+        if i >= chars.len() || chars[i] != '=' {
+            continue;
+        }
+        i += 1;
+        while i < chars.len() && chars[i].is_whitespace() {
+            i += 1;
+        }
+
+        if i >= chars.len() || chars[i] != '"' {
+            continue;
+        }
+        i += 1;
+
+        let val_start = i;
+        while i < chars.len() && chars[i] != '"' {
+            if chars[i] == '\\' {
+                i += 1;
+            }
+            if i < chars.len() {
+                i += 1;
+            }
+        }
+        let value = unescape_string(&chars[val_start..i]);
+        if i < chars.len() {
+            i += 1;
+        }
+
+        dict.entry(key).or_insert(value);
+
+        while i < chars.len() && chars[i] != ';' && chars[i] != '\n' {
+            i += 1;
+        }
+        if i < chars.len() {
+            i += 1;
+        }
+    }
+
+    if dict.is_empty() { None } else { Some(dict) }
+}
+
+fn unescape_string(chars: &[char]) -> String {
+    let mut result = String::with_capacity(chars.len());
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '\\' && i + 1 < chars.len() {
+            match chars[i + 1] {
+                'n' => {
+                    result.push('\n');
+                    i += 2;
+                }
+                't' => {
+                    result.push('\t');
+                    i += 2;
+                }
+                'r' => {
+                    result.push('\r');
+                    i += 2;
+                }
+                '\\' => {
+                    result.push('\\');
+                    i += 2;
+                }
+                '"' => {
+                    result.push('"');
+                    i += 2;
+                }
+                other => {
+                    result.push(other);
+                    i += 2;
+                }
+            }
+        } else {
+            result.push(chars[i]);
+            i += 1;
+        }
+    }
+    result
+}
+
+fn is_chinese_name(name: &str) -> bool {
+    name.chars().any(|ch| {
+        matches!(ch,
+            '\u{4E00}'..='\u{9FFF}' |  // CJK Unified Ideographs
+            '\u{3400}'..='\u{4DBF}' |  // CJK Extension A
+            '\u{20000}'..='\u{2A6DF}' // CJK Extension B
+        )
+    })
 }
 
 fn find_icon_source(app_path: &Path, info: &plist::Dictionary) -> Option<PathBuf> {

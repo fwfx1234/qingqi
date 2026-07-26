@@ -189,7 +189,7 @@ impl AuthType {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct KeyValueRow {
     pub enabled: bool,
     pub key: String,
@@ -198,6 +198,108 @@ pub struct KeyValueRow {
     pub value_type: String,
     #[serde(default)]
     pub description: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct RequestBody {
+    #[serde(default)]
+    pub json: String,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub xml: String,
+    #[serde(default)]
+    pub urlencoded: Vec<KeyValueRow>,
+    #[serde(default)]
+    pub form_data: Vec<KeyValueRow>,
+    #[serde(default)]
+    pub binary_path: String,
+}
+
+impl RequestBody {
+    pub fn is_empty(&self) -> bool {
+        self.json.is_empty()
+            && self.text.is_empty()
+            && self.xml.is_empty()
+            && self.urlencoded.is_empty()
+            && self.form_data.is_empty()
+            && self.binary_path.is_empty()
+    }
+
+    pub fn raw(&self, mode: BodyMode) -> &str {
+        match mode {
+            BodyMode::Json => &self.json,
+            BodyMode::Text => &self.text,
+            BodyMode::Xml => &self.xml,
+            BodyMode::Binary => &self.binary_path,
+            BodyMode::None | BodyMode::FormUrlEncoded | BodyMode::FormData => "",
+        }
+    }
+
+    pub fn raw_mut(&mut self, mode: BodyMode) -> Option<&mut String> {
+        match mode {
+            BodyMode::Json => Some(&mut self.json),
+            BodyMode::Text => Some(&mut self.text),
+            BodyMode::Xml => Some(&mut self.xml),
+            BodyMode::Binary => Some(&mut self.binary_path),
+            BodyMode::None | BodyMode::FormUrlEncoded | BodyMode::FormData => None,
+        }
+    }
+
+    pub fn rows(&self, mode: BodyMode) -> &[KeyValueRow] {
+        match mode {
+            BodyMode::FormUrlEncoded => &self.urlencoded,
+            BodyMode::FormData => &self.form_data,
+            _ => &[],
+        }
+    }
+
+    pub fn rows_mut(&mut self, mode: BodyMode) -> Option<&mut Vec<KeyValueRow>> {
+        match mode {
+            BodyMode::FormUrlEncoded => Some(&mut self.urlencoded),
+            BodyMode::FormData => Some(&mut self.form_data),
+            _ => None,
+        }
+    }
+
+    pub fn migrate_legacy(mode: BodyMode, body: &str) -> Self {
+        let mut payloads = Self::default();
+        match mode {
+            BodyMode::Json => payloads.json = body.to_string(),
+            BodyMode::Text => payloads.text = body.to_string(),
+            BodyMode::Xml => payloads.xml = body.to_string(),
+            BodyMode::Binary => payloads.binary_path = body.to_string(),
+            BodyMode::FormUrlEncoded => payloads.urlencoded = parse_legacy_body_rows(body, false),
+            BodyMode::FormData => payloads.form_data = parse_legacy_body_rows(body, true),
+            BodyMode::None => {}
+        }
+        payloads
+    }
+}
+
+fn parse_legacy_body_rows(text: &str, detect_files: bool) -> Vec<KeyValueRow> {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            let (enabled, pair) = line
+                .strip_prefix('#')
+                .map(|rest| (false, rest.trim()))
+                .unwrap_or((true, line));
+            let (key, value) = pair
+                .split_once('=')
+                .map(|(key, value)| (key.trim(), value.trim()))
+                .unwrap_or((pair, ""));
+            let mut row = KeyValueRow::new(key, value.trim_start_matches('@'));
+            row.enabled = enabled;
+            if detect_files && value.starts_with('@') {
+                row.value_type = String::from("file");
+            } else if detect_files {
+                row.value_type = String::from("text");
+            }
+            row
+        })
+        .collect()
 }
 
 impl KeyValueRow {
@@ -270,12 +372,57 @@ pub struct ApiRequest {
     pub body: String,
     #[serde(default)]
     pub body_mode: BodyMode,
+    #[serde(default)]
+    pub body_payloads: RequestBody,
+    #[serde(default = "default_editor_tab")]
+    pub editor_tab: String,
     pub headers: Vec<KeyValueRow>,
     pub cookies: Vec<KeyValueRow>,
     pub auth: Vec<KeyValueRow>,
     pub pre_ops: String,
     pub post_ops: String,
     pub scenarios: Vec<ApiScenario>,
+}
+
+impl ApiRequest {
+    pub fn ensure_body_payloads(&mut self) {
+        if self.body_payloads.is_empty() && !self.body.is_empty() {
+            self.body_payloads = RequestBody::migrate_legacy(self.body_mode, &self.body);
+        }
+        self.body = self.active_body_text();
+    }
+
+    pub fn active_body_text(&self) -> String {
+        if self.body_payloads.is_empty() {
+            return self.body.clone();
+        }
+        match self.body_mode {
+            BodyMode::FormUrlEncoded => format_body_rows(&self.body_payloads.urlencoded, false),
+            BodyMode::FormData => format_body_rows(&self.body_payloads.form_data, true),
+            BodyMode::None => String::new(),
+            mode => self.body_payloads.raw(mode).to_string(),
+        }
+    }
+}
+
+fn format_body_rows(rows: &[KeyValueRow], file_marker: bool) -> String {
+    rows.iter()
+        .filter(|row| !row.key.trim().is_empty())
+        .map(|row| {
+            let value = if file_marker && row.value_type.eq_ignore_ascii_case("file") {
+                format!("@{}", row.value)
+            } else {
+                row.value.clone()
+            };
+            let pair = format!("{}={value}", row.key);
+            if row.enabled { pair } else { format!("# {pair}") }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn default_editor_tab() -> String {
+    String::from("params")
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -360,7 +507,7 @@ pub struct CollectionNode {
     pub name: String,
     pub method: String,
     pub url: String,
-    pub request_json: String,
+    pub request: RequestSnapshot,
     pub sort_order: i64,
     pub expanded: bool,
     pub created_at: String,
@@ -458,9 +605,10 @@ pub struct EnvironmentFull {
     pub headers: Vec<EnvHeader>,
 }
 
-// ── Request snapshot (for collection node request_json) ──
+// ── Request snapshot (persisted as collection node request_json) ──
 
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(default)]
 pub struct RequestSnapshot {
     pub method: String,
     pub url: String,
@@ -470,6 +618,10 @@ pub struct RequestSnapshot {
     pub cookies_text: String,
     pub body_text: String,
     pub body_mode: String,
+    #[serde(default)]
+    pub body_payloads: RequestBody,
+    #[serde(default = "default_editor_tab")]
+    pub editor_tab: String,
     pub auth_type: String,
     pub auth_value: String,
     pub pre_ops_text: String,
@@ -477,12 +629,23 @@ pub struct RequestSnapshot {
 }
 
 impl RequestSnapshot {
+    pub fn is_empty(&self) -> bool {
+        self == &Self::default()
+    }
+
     pub fn to_json(&self) -> String {
         serde_json::to_string(self).unwrap_or_else(|_| String::from("{}"))
     }
 
     pub fn from_json(json: &str) -> Self {
-        serde_json::from_str(json).unwrap_or_default()
+        let mut snapshot: Self = serde_json::from_str(json).unwrap_or_default();
+        if snapshot.body_payloads.is_empty() && !snapshot.body_text.is_empty() {
+            snapshot.body_payloads = RequestBody::migrate_legacy(
+                BodyMode::from_db(&snapshot.body_mode),
+                &snapshot.body_text,
+            );
+        }
+        snapshot
     }
 }
 
@@ -526,6 +689,44 @@ mod tests {
     }
 
     #[test]
+    fn legacy_snapshot_migrates_body_to_active_payload() {
+        let restored = RequestSnapshot::from_json(
+            r#"{"body_text":"upload=@/tmp/a.png\ntitle=demo","body_mode":"form-data"}"#,
+        );
+        assert_eq!(restored.body_payloads.form_data.len(), 2);
+        assert_eq!(restored.body_payloads.form_data[0].value, "/tmp/a.png");
+        assert_eq!(restored.body_payloads.form_data[0].value_type, "file");
+        assert_eq!(restored.editor_tab, "params");
+    }
+
+    #[test]
+    fn request_body_preserves_every_mode() {
+        let payloads = RequestBody {
+            json: String::from("{\"ok\":true}"),
+            text: String::from("plain"),
+            xml: String::from("<ok/>") ,
+            urlencoded: vec![KeyValueRow::new("a", "1")],
+            form_data: vec![KeyValueRow::new("file", "/tmp/a")],
+            binary_path: String::from("/tmp/raw.bin"),
+        };
+        let json = serde_json::to_string(&payloads).unwrap();
+        let restored: RequestBody = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, payloads);
+    }
+
+    #[test]
+    fn request_snapshot_empty_detection() {
+        assert!(RequestSnapshot::default().is_empty());
+        assert!(
+            !RequestSnapshot {
+                method: "GET".into(),
+                ..Default::default()
+            }
+            .is_empty()
+        );
+    }
+
+    #[test]
     fn body_mode_roundtrip() {
         for mode in BodyMode::all() {
             let s = mode.as_str();
@@ -539,5 +740,177 @@ mod tests {
             let s = auth.as_str();
             assert_eq!(AuthType::from_db(s), auth);
         }
+    }
+
+    #[test]
+    fn body_mode_switch_preserves_other_modes() {
+        let mut payloads = RequestBody::default();
+        payloads.json = String::from(r#"{"key":"value"}"#);
+        payloads.text = String::from("plain text");
+        payloads.xml = String::from("<root/>");
+        payloads.binary_path = String::from("/tmp/file.bin");
+        payloads.urlencoded = vec![KeyValueRow::new("a", "1")];
+        payloads.form_data = vec![KeyValueRow::new("file", "/tmp/a.png")];
+
+        // Simulate switching modes: each mode should only access its own content
+        assert_eq!(payloads.raw(BodyMode::Json), r#"{"key":"value"}"#);
+        assert_eq!(payloads.raw(BodyMode::Text), "plain text");
+        assert_eq!(payloads.raw(BodyMode::Xml), "<root/>");
+        assert_eq!(payloads.raw(BodyMode::Binary), "/tmp/file.bin");
+        assert!(payloads.raw(BodyMode::FormUrlEncoded).is_empty());
+        assert!(payloads.raw(BodyMode::FormData).is_empty());
+        assert!(payloads.raw(BodyMode::None).is_empty());
+
+        // Verify rows are independent
+        assert_eq!(payloads.rows(BodyMode::FormUrlEncoded).len(), 1);
+        assert_eq!(payloads.rows(BodyMode::FormData).len(), 1);
+
+        // Mutating one mode does not affect others
+        payloads.json = String::from(r#"{"updated":true}"#);
+        assert_eq!(payloads.raw(BodyMode::Text), "plain text");
+        assert_eq!(payloads.raw(BodyMode::Xml), "<root/>");
+    }
+
+    #[test]
+    fn form_data_roundtrip_with_type_and_description() {
+        let rows = vec![
+            KeyValueRow {
+                enabled: true,
+                key: "file".into(),
+                value: "/tmp/upload.png".into(),
+                value_type: "file".into(),
+                description: "头像图片".into(),
+            },
+            KeyValueRow {
+                enabled: true,
+                key: "title".into(),
+                value: "demo".into(),
+                value_type: "text".into(),
+                description: "标题".into(),
+            },
+            KeyValueRow {
+                enabled: false,
+                key: "skip".into(),
+                value: "ignored".into(),
+                value_type: "text".into(),
+                description: "disabled row".into(),
+            },
+        ];
+
+        let payloads = RequestBody {
+            form_data: rows.clone(),
+            ..Default::default()
+        };
+
+        let json = serde_json::to_string(&payloads).unwrap();
+        let restored: RequestBody = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.form_data.len(), 3);
+        assert_eq!(restored.form_data[0].value_type, "file");
+        assert_eq!(restored.form_data[0].description, "头像图片");
+        assert_eq!(restored.form_data[1].value_type, "text");
+        assert_eq!(restored.form_data[1].description, "标题");
+        assert!(!restored.form_data[2].enabled);
+        assert_eq!(restored.form_data[2].description, "disabled row");
+    }
+
+    #[test]
+    fn urlencoded_roundtrip_with_description() {
+        let rows = vec![
+            KeyValueRow {
+                enabled: true,
+                key: "username".into(),
+                value: "admin".into(),
+                value_type: String::new(),
+                description: "登录名".into(),
+            },
+            KeyValueRow {
+                enabled: false,
+                key: "debug".into(),
+                value: "1".into(),
+                value_type: String::new(),
+                description: "debug mode".into(),
+            },
+        ];
+
+        let payloads = RequestBody {
+            urlencoded: rows,
+            ..Default::default()
+        };
+
+        let json = serde_json::to_string(&payloads).unwrap();
+        let restored: RequestBody = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.urlencoded.len(), 2);
+        assert_eq!(restored.urlencoded[0].description, "登录名");
+        assert!(!restored.urlencoded[1].enabled);
+    }
+
+    #[test]
+    fn active_body_text_returns_only_active_mode() {
+        let mut request = ApiRequest {
+            node_id: String::new(),
+            title: String::from("test"),
+            method: HttpMethod::Post,
+            path: String::from("/api/test"),
+            params: Vec::new(),
+            path_rows: Vec::new(),
+            body: String::new(),
+            body_mode: BodyMode::Json,
+            body_payloads: RequestBody {
+                json: r#"{"active":true}"#.into(),
+                text: "inactive text".into(),
+                xml: "<inactive/>".into(),
+                ..Default::default()
+            },
+            editor_tab: String::from("body"),
+            headers: Vec::new(),
+            cookies: Vec::new(),
+            auth: Vec::new(),
+            pre_ops: String::new(),
+            post_ops: String::new(),
+            scenarios: Vec::new(),
+        };
+
+        // JSON mode should return JSON content
+        request.body_mode = BodyMode::Json;
+        assert_eq!(request.active_body_text(), r#"{"active":true}"#);
+
+        // Text mode should return text content
+        request.body_mode = BodyMode::Text;
+        assert_eq!(request.active_body_text(), "inactive text");
+
+        // XML mode should return XML content
+        request.body_mode = BodyMode::Xml;
+        assert_eq!(request.active_body_text(), "<inactive/>");
+
+        // None mode should return empty
+        request.body_mode = BodyMode::None;
+        assert!(request.active_body_text().is_empty());
+    }
+
+    #[test]
+    fn legacy_snapshot_with_form_data_migrates_to_structured() {
+        let restored = RequestSnapshot::from_json(
+            r#"{"body_text":"file=@/tmp/a.png\ntitle=demo","body_mode":"form-data"}"#,
+        );
+        assert_eq!(restored.body_payloads.form_data.len(), 2);
+        assert_eq!(restored.body_payloads.form_data[0].key, "file");
+        assert_eq!(restored.body_payloads.form_data[0].value, "/tmp/a.png");
+        assert_eq!(restored.body_payloads.form_data[0].value_type, "file");
+        assert_eq!(restored.body_payloads.form_data[1].key, "title");
+        assert_eq!(restored.body_payloads.form_data[1].value, "demo");
+        assert_eq!(restored.body_payloads.form_data[1].value_type, "text");
+    }
+
+    #[test]
+    fn legacy_snapshot_with_urlencoded_migrates_to_structured() {
+        let restored = RequestSnapshot::from_json(
+            r#"{"body_text":"a=1\nb=2\n# c=3","body_mode":"urlencoded"}"#,
+        );
+        assert_eq!(restored.body_payloads.urlencoded.len(), 3);
+        assert_eq!(restored.body_payloads.urlencoded[0].key, "a");
+        assert_eq!(restored.body_payloads.urlencoded[0].value, "1");
+        assert!(!restored.body_payloads.urlencoded[2].enabled);
     }
 }

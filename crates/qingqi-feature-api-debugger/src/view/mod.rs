@@ -4,23 +4,21 @@ use std::sync::Arc;
 
 use gpui::{
     AnyWindowHandle, App, AppContext, Context, Entity, InteractiveElement, IntoElement,
-    ParentElement, Render, Styled, Subscription, Window, div, prelude::FluentBuilder, px,
+    ParentElement, Render, Styled, Window, div, prelude::FluentBuilder, px,
 };
-use qingqi_ui::components::button::{Button, ButtonVariants};
-use qingqi_ui::components::styled::Sizable;
-use qingqi_ui::components::styled::Size;
-use qingqi_ui::components::tree::TreeState;
-use qingqi_ui::components::widgets::DropdownMenu;
-use qingqi_ui::icon;
-use qingqi_ui::layer::context_menu::PopupMenuItem;
+use gpui_component::tree::TreeState;
+use gpui_component::{
+    IconName, Sizable, Size,
+    button::{Button, ButtonVariants},
+    menu::{DropdownMenu, PopupMenuItem},
+};
 
 use crate::code_gen::CodeLanguage;
 use crate::service::{
     ApiEnvironment, ApiGroup, ApiRequest, ApiResponse, ApiService, AuthType, BodyMode, EditorTab,
-    HttpHistory, HttpMethod, ResponseTab,
+    EnvDetailTab, HttpHistory, HttpMethod, ResponseTab,
 };
-use qingqi_ui::components::input::InputState;
-use qingqi_ui::components::theme::Theme;
+use gpui_component::{input::InputState, theme::Theme};
 use qingqi_ui::ui::glass;
 
 use qingqi_plugin::plugin_spec::PluginAccent;
@@ -48,6 +46,7 @@ pub struct ApiDebuggerView {
     pub(crate) response_tab: ResponseTab,
     pub(crate) response_code_lang: CodeLanguage,
     pub(crate) history_entries: Vec<HttpHistory>,
+    pub(crate) env_detail_tab: EnvDetailTab,
     pub(crate) body_mode: BodyMode,
     pub(crate) auth_type: AuthType,
     pub(crate) show_method_popover: bool,
@@ -88,7 +87,6 @@ pub struct ApiDebuggerView {
     pub(crate) last_revision: u64,
     pub(crate) tree_state: Entity<TreeState>,
     pub(crate) collapsed_nodes: RefCell<HashSet<String>>,
-    pub(crate) subscriptions: Vec<Subscription>,
 }
 
 impl ApiDebuggerView {
@@ -224,8 +222,6 @@ impl ApiDebuggerView {
             cx.new(|cx| TreeState::new(cx).items(items))
         };
 
-        let rename_inline_input = types::single_input(window, cx, "", "重命名...");
-
         Self {
             service,
             groups,
@@ -237,6 +233,7 @@ impl ApiDebuggerView {
             response_tab: ResponseTab::Body,
             response_code_lang: CodeLanguage::Curl,
             history_entries: Vec::new(),
+            env_detail_tab: EnvDetailTab::Variables,
             body_mode: BodyMode::from_db(&types::detect_body_mode(&init_body)),
             auth_type: init_auth_form.auth_type.unwrap_or(AuthType::None),
             show_method_popover: false,
@@ -252,7 +249,7 @@ impl ApiDebuggerView {
             rename_input: types::single_input(window, cx, "", "输入新名称..."),
             rename_node_id: String::new(),
             renaming_node_id: String::new(),
-            rename_inline_input,
+            rename_inline_input: types::single_input(window, cx, "", "重命名..."),
             env_editor_window: None,
             path_input: types::single_input(window, cx, &init_path, "/api/v1/user/info"),
             params_kv: types::KvEditor::from_text(window, cx, &init_params),
@@ -260,19 +257,14 @@ impl ApiDebuggerView {
             body_input: types::multiline_input(window, cx, &init_body, "{ }"),
             headers_kv: types::KvEditor::from_text(window, cx, &init_headers),
             cookies_kv: types::KvEditor::from_text(window, cx, &init_cookies),
-            auth_bearer_input: types::masked_single_input(
-                window,
-                cx,
-                &init_auth_form.bearer,
-                "Token",
-            ),
+            auth_bearer_input: types::single_input(window, cx, &init_auth_form.bearer, "Token"),
             auth_basic_user_input: types::single_input(
                 window,
                 cx,
                 &init_auth_form.basic_user,
                 "用户名",
             ),
-            auth_basic_pass_input: types::masked_single_input(
+            auth_basic_pass_input: types::single_input(
                 window,
                 cx,
                 &init_auth_form.basic_pass,
@@ -284,7 +276,7 @@ impl ApiDebuggerView {
                 &init_auth_form.apikey_name,
                 "Key（如 X-API-Key）",
             ),
-            auth_apikey_value_input: types::masked_single_input(
+            auth_apikey_value_input: types::single_input(
                 window,
                 cx,
                 &init_auth_form.apikey_value,
@@ -317,7 +309,6 @@ impl ApiDebuggerView {
             last_revision: rev,
             tree_state,
             collapsed_nodes: RefCell::new(HashSet::new()),
-            subscriptions: Vec::new(),
         }
     }
 }
@@ -421,7 +412,7 @@ impl Render for ApiDebuggerView {
                                             .child(
                                                 Button::new("api-sidebar-new")
                                                     .ghost()
-                                                    .icon(icon!(plus))
+                                                    .icon(IconName::Plus)
                                                     .with_size(Size::XSmall)
                                                     .dropdown_menu({
                                                         let view = entity.clone();

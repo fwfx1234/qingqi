@@ -295,11 +295,7 @@ mod macos {
             let max_displays = 16u32;
             let mut displays = vec![0u32; max_displays as usize];
             let mut count = 0u32;
-            let error = CGGetActiveDisplayList(
-                max_displays,
-                displays.as_mut_ptr(),
-                &mut count,
-            );
+            let error = CGGetActiveDisplayList(max_displays, displays.as_mut_ptr(), &mut count);
             if error == 0 {
                 displays.truncate(count as usize);
                 displays

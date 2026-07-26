@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "environments": [
+    {
+      "name": "Postman Echo 公共环境",
+      "badge": "E",
+      "color": 3373226,
+      "base_url": "https://postman-echo.com",
+      "variables": [
+        {
+          "enabled": true,
+          "key": "BASE_URL",
+          "value": "https://postman-echo.com",
+          "value_type": "",
+          "description": "公共 API Base URL"
+        },
+        {
+          "enabled": true,
+          "key": "ENV_NAME",
+          "value": "public-echo",
+          "value_type": "",
+          "description": "环境变量示例"
+        },
+        {
+          "enabled": true,
+          "key": "SEARCH_TERM",
+          "value": "qingqi",
+          "value_type": "",
+          "description": "查询参数变量示例"
+        }
+      ],
+      "headers": [
+        {
+          "enabled": true,
+          "key": "X-Qingqi-Environment",
+          "value": "public-echo",
+          "value_type": "",
+          "description": "公共环境 Header"
+        }
+      ]
+    }
+  ]
+}

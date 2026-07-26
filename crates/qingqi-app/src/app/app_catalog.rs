@@ -41,6 +41,10 @@ fn app_command(app: AppEntry) -> Command {
         path.clone(),
     ];
     keywords.extend(app.aliases.clone());
+    let pinyin = crate::app::app_index_store::pinyin_initials(&app.name);
+    if !pinyin.is_empty() {
+        keywords.push(pinyin);
+    }
     Command::app_launch(
         path,
         app.name,

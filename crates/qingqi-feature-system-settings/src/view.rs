@@ -214,13 +214,9 @@ impl SettingsView {
     pub fn request_rescan(&mut self) -> bool {
         match &self.app_index_handle {
             Some(svc) => {
-                if svc.request_scan() {
-                    self.message = String::from("正在后台重新扫描应用");
-                    true
-                } else {
-                    self.message = String::from("应用索引扫描已在进行中");
-                    false
-                }
+                svc.force_rescan();
+                self.message = String::from("正在后台重新扫描应用");
+                true
             }
             None => {
                 self.message = String::from("应用索引服务不可用");

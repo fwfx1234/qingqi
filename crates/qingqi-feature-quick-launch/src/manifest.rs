@@ -23,7 +23,7 @@ pub fn manifest() -> Manifest {
         icon: IconRef::asset("icons/bolt.svg"),
         prefixes: vec!["ql".into(), "quick".into()],
         mode: PluginWindowMode::Window,
-        window: WindowSpec::fixed(860.0, 620.0),
+        window: WindowSpec::fixed(860.0, 620.0).with_dock_icon(),
         category: PluginCategory::Tool,
         status: PluginStatus::Ready,
         background: false,
@@ -35,7 +35,7 @@ pub fn manifest() -> Manifest {
             category: PluginCategory::Tool,
             status: PluginStatus::Ready,
             mode: PluginWindowMode::Window,
-            window: WindowSpec::fixed(860.0, 620.0),
+            window: WindowSpec::fixed(860.0, 620.0).with_dock_icon(),
         }),
         stats: Some(PluginStats {
             primary: "动作仓库".into(),

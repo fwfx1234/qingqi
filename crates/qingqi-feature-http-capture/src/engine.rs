@@ -1,7 +1,7 @@
 use std::{
     net::{SocketAddr, TcpListener},
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, RwLock,
         atomic::{AtomicBool, Ordering},
         mpsc,
     },
@@ -11,12 +11,17 @@ use std::{
 use hudsucker::rustls::crypto::aws_lc_rs;
 
 use crate::{
+    breakpoint::BreakpointManager,
     certificate::CaManager,
+    composer,
     manifest,
     mock_engine::MockEngine,
+    mock_enhanced,
     model::{CertificateStatus, ProxyState},
     proxy_handler::ProxyHttpHandler,
+    rewrite::RewriteEngine,
     store::CaptureStore,
+    throttle::ThrottleManager,
 };
 use qingqi_plugin::events::{AppEventBus, AppEventKind};
 
@@ -39,7 +44,12 @@ pub struct CaptureEngine {
     state: Mutex<EngineState>,
     store: Arc<Mutex<CaptureStore>>,
     mock_engine: Arc<MockEngine>,
+    enhanced_mock_engine: Arc<Mutex<mock_enhanced::EnhancedMockEngine>>,
     ca_manager: Arc<Mutex<CaManager>>,
+    composer: Arc<Mutex<composer::RequestComposer>>,
+    breakpoint_manager: Arc<Mutex<BreakpointManager>>,
+    throttle_manager: Arc<ThrottleManager>,
+    rewrite_engine: Arc<RwLock<RewriteEngine>>,
     events: AppEventBus,
     /// 标记引擎是否已初始化证书（只执行一次）
     ca_initialized: AtomicBool,
@@ -61,7 +71,12 @@ impl CaptureEngine {
             }),
             store,
             mock_engine,
+            enhanced_mock_engine: Arc::new(Mutex::new(mock_enhanced::EnhancedMockEngine::new())),
             ca_manager,
+            composer: Arc::new(Mutex::new(composer::RequestComposer::new())),
+            breakpoint_manager: Arc::new(Mutex::new(BreakpointManager::new())),
+            throttle_manager: Arc::new(ThrottleManager::new()),
+            rewrite_engine: Arc::new(RwLock::new(RewriteEngine::new())),
             events,
             ca_initialized: AtomicBool::new(false),
         }
@@ -110,6 +125,10 @@ impl CaptureEngine {
         let ca_manager = Arc::clone(&self.ca_manager);
         let store = Arc::clone(&self.store);
         let mock_engine = Arc::clone(&self.mock_engine);
+        let enhanced_mock_engine = Arc::clone(&self.enhanced_mock_engine);
+        let breakpoint_manager = Arc::clone(&self.breakpoint_manager);
+        let throttle_manager = Arc::clone(&self.throttle_manager);
+        let rewrite_engine = Arc::clone(&self.rewrite_engine);
         let events = self.events.clone();
         let ca_cert = {
             let mgr = self
@@ -193,7 +212,16 @@ impl CaptureEngine {
                     )
                 };
 
-                let handler = ProxyHttpHandler::new(store, mock_engine, events, ca_cert);
+                let handler = ProxyHttpHandler::new(
+                    store,
+                    mock_engine,
+                    enhanced_mock_engine,
+                    events,
+                    ca_cert,
+                    breakpoint_manager,
+                    throttle_manager,
+                    rewrite_engine,
+                );
 
                 let proxy = match hudsucker::Proxy::builder()
                     .with_listener(listener)
@@ -337,6 +365,31 @@ impl CaptureEngine {
     /// 获取事件总线引用。
     pub fn events(&self) -> &AppEventBus {
         &self.events
+    }
+
+    /// 获取请求组合器引用。
+    pub fn composer(&self) -> &Arc<Mutex<composer::RequestComposer>> {
+        &self.composer
+    }
+
+    /// 获取断点管理器引用。
+    pub fn breakpoint_manager(&self) -> &Arc<Mutex<BreakpointManager>> {
+        &self.breakpoint_manager
+    }
+
+    /// 获取节流管理器引用。
+    pub fn throttle_manager(&self) -> &Arc<ThrottleManager> {
+        &self.throttle_manager
+    }
+
+    /// 获取增强 Mock 引擎引用。
+    pub fn enhanced_mock_engine(&self) -> &Arc<Mutex<mock_enhanced::EnhancedMockEngine>> {
+        &self.enhanced_mock_engine
+    }
+
+    /// 获取重写引擎引用。
+    pub fn rewrite_engine(&self) -> &Arc<RwLock<RewriteEngine>> {
+        &self.rewrite_engine
     }
 }
 

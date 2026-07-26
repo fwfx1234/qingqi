@@ -110,6 +110,60 @@ pub fn hide_dock_icon() {
 #[cfg(not(target_os = "macos"))]
 pub fn hide_dock_icon() {}
 
+#[cfg(target_os = "macos")]
+pub fn prepare_dock_agent_name(name: &str) {
+    use objc2_foundation::{NSProcessInfo, NSString};
+
+    NSProcessInfo::processInfo().setProcessName(&NSString::from_str(name));
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn prepare_dock_agent_name(_name: &str) {}
+
+#[cfg(target_os = "macos")]
+pub fn configure_dock_agent(name: &str, icon_png: &[u8]) -> Result<(), String> {
+    use objc2::{AnyThread, MainThreadMarker};
+    use objc2_app_kit::{NSApplication, NSImage};
+    use objc2_foundation::{NSData, NSProcessInfo, NSString};
+
+    let mtm = MainThreadMarker::new()
+        .ok_or_else(|| String::from("Dock agent must be configured on the macOS main thread"))?;
+    let data = NSData::from_vec(icon_png.to_vec());
+    let image = NSImage::initWithData(NSImage::alloc(), &data)
+        .ok_or_else(|| String::from("cannot decode Dock agent icon PNG"))?;
+    let app = NSApplication::sharedApplication(mtm);
+    unsafe { app.setApplicationIconImage(Some(&image)) };
+    NSProcessInfo::processInfo().setProcessName(&NSString::from_str(name));
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn configure_dock_agent(_name: &str, _icon_png: &[u8]) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+pub fn restore_window(window: &gpui::Window) {
+    use objc2_app_kit::NSView;
+    use raw_window_handle::RawWindowHandle;
+
+    let Ok(handle) = raw_window_handle::HasWindowHandle::window_handle(window) else {
+        return;
+    };
+    let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+        return;
+    };
+    let view = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
+    let Some(native_window) = view.window() else {
+        return;
+    };
+    native_window.deminiaturize(None);
+    native_window.makeKeyAndOrderFront(None);
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn restore_window(_window: &gpui::Window) {}
+
 /// Bring this accessory app to the foreground without changing Dock policy.
 #[cfg(target_os = "macos")]
 pub fn activate_frontmost() {

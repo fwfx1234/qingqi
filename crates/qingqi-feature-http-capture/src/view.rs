@@ -5,7 +5,9 @@ use std::{
 };
 
 use crate::{
+    breakpoint::{BreakpointPhase, BreakpointRule},
     certificate::CaManager,
+    composer::{ComposedResponse, ComposedRequest},
     engine::CaptureEngine,
     manifest,
     mock_store::MockStore,
@@ -13,7 +15,12 @@ use crate::{
         BodyDisplay, CaptureEndpoint, CaptureSetupInfo, CapturedExchange, CertificateStatus,
         DetailTab, FilterState,
     },
+    performance,
+    rewrite::{RewriteRule, RewriteTarget},
+    session_tree::{self, FlatRow},
     store::CaptureStore,
+    throttle::ThrottlePreset,
+    video_sniff,
 };
 use gpui::{
     App, AppContext, ClipboardItem, Context, Entity, InteractiveElement, IntoElement,
@@ -66,6 +73,38 @@ pub struct CaptureView {
     detail_task: Option<Task<()>>,
     event_task: Option<Task<()>>,
     subscriptions: Vec<Subscription>,
+    // Composer state
+    composer_visible: bool,
+    composer_method: String,
+    composer_url: Option<Entity<InputState>>,
+    composer_headers: Option<Entity<InputState>>,
+    composer_body: Option<Entity<InputState>>,
+    composer_response: Option<ComposedResponse>,
+    composer_sending: bool,
+    // Tree view state
+    tree_view_mode: bool,
+    tree_rows: Vec<FlatRow>,
+    tree_expanded: std::collections::HashSet<String>,
+    tree_load_generation: u64,
+    tree_task: Option<Task<()>>,
+    // Performance panel state
+    performance_visible: bool,
+    performance_stats: Option<performance::PerformanceStats>,
+    performance_task: Option<Task<()>>,
+    performance_load_generation: u64,
+    // Breakpoint panel state
+    breakpoint_visible: bool,
+    breakpoint_rules: Vec<BreakpointRule>,
+    breakpoint_url_input: Option<Entity<InputState>>,
+    breakpoint_method_input: Option<Entity<InputState>>,
+    // Throttle panel state
+    throttle_visible: bool,
+    throttle_custom_input: Option<Entity<InputState>>,
+    // Rewrite panel state
+    rewrite_visible: bool,
+    rewrite_rules: Vec<RewriteRule>,
+    rewrite_name_input: Option<Entity<InputState>>,
+    rewrite_url_input: Option<Entity<InputState>>,
 }
 
 impl CaptureView {
@@ -101,6 +140,32 @@ impl CaptureView {
             detail_task: None,
             event_task: None,
             subscriptions: Vec::new(),
+            composer_visible: false,
+            composer_method: "GET".to_string(),
+            composer_url: None,
+            composer_headers: None,
+            composer_body: None,
+            composer_response: None,
+            composer_sending: false,
+            tree_view_mode: false,
+            tree_rows: Vec::new(),
+            tree_expanded: std::collections::HashSet::new(),
+            tree_load_generation: 0,
+            tree_task: None,
+            performance_visible: false,
+            performance_stats: None,
+            performance_task: None,
+            performance_load_generation: 0,
+            breakpoint_visible: false,
+            breakpoint_rules: Vec::new(),
+            breakpoint_url_input: None,
+            breakpoint_method_input: None,
+            throttle_visible: false,
+            throttle_custom_input: None,
+            rewrite_visible: false,
+            rewrite_rules: Vec::new(),
+            rewrite_name_input: None,
+            rewrite_url_input: None,
         };
         this.start_event_watch(events, cx);
         this.refresh_from_store(cx);
@@ -117,6 +182,31 @@ impl CaptureView {
                 Some(cx.new(|cx| InputState::new(window, cx).placeholder("Host 过滤")));
         }
         self.observe_inputs(cx);
+    }
+
+    fn ensure_composer_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.composer_url.is_none() {
+            self.composer_url =
+                Some(cx.new(|cx| InputState::new(window, cx).placeholder("https://example.com/api")));
+        }
+        if self.composer_headers.is_none() {
+            self.composer_headers = Some(
+                cx.new(|cx| {
+                    InputState::new(window, cx)
+                        .multi_line(true)
+                        .rows(4)
+                        .placeholder("Content-Type: application/json\nAuthorization: Bearer token")
+                }),
+            );
+        }
+        if self.composer_body.is_none() {
+            self.composer_body = Some(cx.new(|cx| {
+                InputState::new(window, cx)
+                    .multi_line(true)
+                    .rows(6)
+                    .placeholder("{\"key\": \"value\"}")
+            }));
+        }
     }
 
     fn observe_inputs(&mut self, cx: &mut Context<Self>) {
@@ -401,6 +491,355 @@ impl CaptureView {
         cx.notify();
     }
 
+    fn export_har(&mut self, cx: &mut Context<Self>) {
+        let result = match self.store.lock() {
+            Ok(store) => store.export_har(),
+            Err(error) => Err(anyhow::anyhow!("获取存储锁失败: {error}")),
+        };
+        match result {
+            Ok(json) => {
+                self.copy_text(json, "HAR 已复制到剪贴板", cx);
+            }
+            Err(error) => {
+                self.notice = Some(format!("导出 HAR 失败: {error}"));
+                cx.notify();
+            }
+        }
+    }
+
+    fn copy_as_curl(&mut self, exchange: &CapturedExchange, cx: &mut Context<Self>) {
+        let mut cmd = format!("curl -X {} '{}'", exchange.method, exchange.url);
+        let headers: Vec<(String, String)> =
+            serde_json::from_str(&exchange.request_headers_json).unwrap_or_default();
+        for (key, value) in &headers {
+            if key.eq_ignore_ascii_case("host") {
+                continue;
+            }
+            cmd.push_str(&format!(" -H '{key}: {value}'"));
+        }
+        if !exchange.request_body.is_empty() {
+            cmd.push_str(&format!(" -d '{}'", exchange.request_body.replace('\'', r"'\''")));
+        }
+        self.copy_text(cmd, "cURL 命令已复制到剪贴板", cx);
+    }
+
+    fn toggle_composer(&mut self, cx: &mut Context<Self>) {
+        self.composer_visible = !self.composer_visible;
+        if self.composer_visible {
+            self.composer_response = None;
+        }
+        cx.notify();
+    }
+
+    fn set_composer_method(&mut self, method: String, cx: &mut Context<Self>) {
+        self.composer_method = method;
+        cx.notify();
+    }
+
+    fn toggle_tree_view(&mut self, cx: &mut Context<Self>) {
+        self.tree_view_mode = !self.tree_view_mode;
+        if self.tree_view_mode {
+            self.load_tree_data(cx);
+        }
+        cx.notify();
+    }
+
+    fn load_tree_data(&mut self, cx: &mut Context<Self>) {
+        self.tree_load_generation = self.tree_load_generation.wrapping_add(1);
+        let generation = self.tree_load_generation;
+        let store = Arc::clone(&self.store);
+        self.tree_task = Some(cx.spawn(async move |panel, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let store = store
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("capture store lock poisoned"))?;
+                    let exchanges = store.get_all_exchanges()?;
+                    let domains = session_tree::build_session_tree(&exchanges);
+                    let rows = session_tree::flatten_tree(&domains);
+                    anyhow::Ok(rows)
+                })
+                .await;
+            let _ = panel.update(async_cx, |panel, cx| {
+                if panel.tree_load_generation != generation {
+                    return;
+                }
+                match result {
+                    Ok(rows) => {
+                        panel.tree_rows = rows;
+                        panel.tree_expanded = panel
+                            .tree_rows
+                            .iter()
+                            .filter(|r| r.is_domain)
+                            .map(|r| r.node_id.clone())
+                            .collect();
+                    }
+                    Err(_) => panel.tree_rows.clear(),
+                }
+                cx.notify();
+            });
+        }));
+    }
+
+    fn toggle_tree_node(&mut self, node_id: String, cx: &mut Context<Self>) {
+        if self.tree_expanded.contains(&node_id) {
+            self.tree_expanded.remove(&node_id);
+        } else {
+            self.tree_expanded.insert(node_id);
+        }
+        cx.notify();
+    }
+
+    fn toggle_performance(&mut self, cx: &mut Context<Self>) {
+        self.performance_visible = !self.performance_visible;
+        if self.performance_visible && self.performance_stats.is_none() {
+            self.load_performance_data(cx);
+        }
+        cx.notify();
+    }
+
+    fn load_performance_data(&mut self, cx: &mut Context<Self>) {
+        self.performance_load_generation = self.performance_load_generation.wrapping_add(1);
+        let generation = self.performance_load_generation;
+        let store = Arc::clone(&self.store);
+        self.performance_task = Some(cx.spawn(async move |panel, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    let store = store
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("capture store lock poisoned"))?;
+                    let exchanges = store.get_all_exchanges()?;
+                    let stats = performance::calculate_stats(&exchanges);
+                    anyhow::Ok(stats)
+                })
+                .await;
+            let _ = panel.update(async_cx, |panel, cx| {
+                if panel.performance_load_generation != generation {
+                    return;
+                }
+                match result {
+                    Ok(stats) => panel.performance_stats = Some(stats),
+                    Err(_) => panel.performance_stats = None,
+                }
+                cx.notify();
+            });
+        }));
+    }
+
+    fn toggle_breakpoint_panel(&mut self, cx: &mut Context<Self>) {
+        self.breakpoint_visible = !self.breakpoint_visible;
+        if self.breakpoint_visible {
+            self.sync_breakpoint_rules(cx);
+        }
+        cx.notify();
+    }
+
+    fn sync_breakpoint_rules(&mut self, _cx: &mut Context<Self>) {
+        if let Ok(mgr) = self.engine.breakpoint_manager().lock() {
+            self.breakpoint_rules = mgr.list_rules().to_vec();
+        }
+    }
+
+    fn add_breakpoint_rule(&mut self, cx: &mut Context<Self>) {
+        let id = format!(
+            "bp-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+        );
+        let rule = BreakpointRule::new(id, BreakpointPhase::BeforeRequest, "*");
+        if let Ok(mut mgr) = self.engine.breakpoint_manager().lock() {
+            mgr.add_rule(rule.clone());
+        }
+        self.breakpoint_rules.push(rule);
+        cx.notify();
+    }
+
+    fn remove_breakpoint_rule(&mut self, id: String, cx: &mut Context<Self>) {
+        if let Ok(mut mgr) = self.engine.breakpoint_manager().lock() {
+            mgr.remove_rule(&id);
+        }
+        self.breakpoint_rules.retain(|r| r.id != id);
+        cx.notify();
+    }
+
+    fn toggle_breakpoint_rule_enabled(&mut self, id: String, cx: &mut Context<Self>) {
+        if let Ok(mut mgr) = self.engine.breakpoint_manager().lock() {
+            mgr.update_rule(&id, |r| r.enabled = !r.enabled);
+        }
+        if let Some(rule) = self.breakpoint_rules.iter_mut().find(|r| r.id == id) {
+            rule.enabled = !rule.enabled;
+        }
+        cx.notify();
+    }
+
+    fn update_breakpoint_rule_pattern(&mut self, id: String, pattern: String, cx: &mut Context<Self>) {
+        if let Ok(mut mgr) = self.engine.breakpoint_manager().lock() {
+            mgr.update_rule(&id, |r| r.url_pattern.clone_from(&pattern));
+        }
+        if let Some(rule) = self.breakpoint_rules.iter_mut().find(|r| r.id == id) {
+            rule.url_pattern = pattern;
+        }
+        cx.notify();
+    }
+
+    fn update_breakpoint_rule_method(&mut self, id: String, method: String, cx: &mut Context<Self>) {
+        if let Ok(mut mgr) = self.engine.breakpoint_manager().lock() {
+            mgr.update_rule(&id, |r| r.method.clone_from(&method));
+        }
+        if let Some(rule) = self.breakpoint_rules.iter_mut().find(|r| r.id == id) {
+            rule.method = method;
+        }
+        cx.notify();
+    }
+
+    fn update_breakpoint_rule_phase(&mut self, id: String, phase: BreakpointPhase, cx: &mut Context<Self>) {
+        if let Ok(mut mgr) = self.engine.breakpoint_manager().lock() {
+            mgr.update_rule(&id, |r| r.phase = phase);
+        }
+        if let Some(rule) = self.breakpoint_rules.iter_mut().find(|r| r.id == id) {
+            rule.phase = phase;
+        }
+        cx.notify();
+    }
+
+    fn toggle_throttle_panel(&mut self, cx: &mut Context<Self>) {
+        self.throttle_visible = !self.throttle_visible;
+        cx.notify();
+    }
+
+    fn set_throttle_preset(&mut self, preset: ThrottlePreset, cx: &mut Context<Self>) {
+        self.engine.throttle_manager().set_preset(preset);
+        cx.notify();
+    }
+
+    fn set_custom_kbps_value(&mut self, kbps: u32, cx: &mut Context<Self>) {
+        self.engine.throttle_manager().set_custom_kbps(kbps);
+        self.engine.throttle_manager().set_preset(ThrottlePreset::Custom);
+        cx.notify();
+    }
+
+    fn toggle_rewrite_panel(&mut self, cx: &mut Context<Self>) {
+        self.rewrite_visible = !self.rewrite_visible;
+        if self.rewrite_visible {
+            self.sync_rewrite_rules();
+        }
+        cx.notify();
+    }
+
+    fn sync_rewrite_rules(&mut self) {
+        // Rewrite rules are stored locally in the view since the engine
+        // does not currently expose a rewrite_engine accessor.
+    }
+
+    fn add_rewrite_rule(&mut self, cx: &mut Context<Self>) {
+        let id = format!(
+            "rw-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+        );
+        let rule = RewriteRule {
+            id: id.clone(),
+            enabled: true,
+            name: "新规则".to_string(),
+            condition: crate::rewrite::RewriteCondition {
+                url_pattern: "*".to_string(),
+                method: String::new(),
+            },
+            actions: vec![crate::rewrite::RewriteAction {
+                target: RewriteTarget::ResponseHeader,
+                header_name: None,
+                match_pattern: String::new(),
+                replace_value: String::new(),
+                is_regex: false,
+            }],
+        };
+        self.rewrite_rules.push(rule);
+        cx.notify();
+    }
+
+    fn remove_rewrite_rule(&mut self, id: String, cx: &mut Context<Self>) {
+        self.rewrite_rules.retain(|r| r.id != id);
+        cx.notify();
+    }
+
+    fn send_composer_request(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.ensure_composer_inputs(window, cx);
+        let url = self
+            .composer_url
+            .as_ref()
+            .map(|s| s.read(cx).value().to_string())
+            .unwrap_or_default();
+        if url.is_empty() {
+            self.notice = Some(String::from("请输入请求 URL"));
+            cx.notify();
+            return;
+        }
+        let headers_raw = self
+            .composer_headers
+            .as_ref()
+            .map(|s| s.read(cx).value().to_string())
+            .unwrap_or_default();
+        let mut headers = Vec::new();
+        for line in headers_raw.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            if let Some((key, value)) = line.split_once(':') {
+                headers.push((key.trim().to_string(), value.trim().to_string()));
+            }
+        }
+        let body = self
+            .composer_body
+            .as_ref()
+            .map(|s| s.read(cx).value().to_string())
+            .unwrap_or_default();
+        let request = ComposedRequest {
+            method: self.composer_method.clone(),
+            url,
+            headers,
+            body,
+        };
+        let engine = Arc::clone(&self.engine);
+        self.composer_sending = true;
+        self.notice = Some(String::from("正在发送请求..."));
+        cx.notify();
+        cx.spawn(async move |panel, async_cx| {
+            let result = async_cx
+                .background_executor()
+                .spawn(async move {
+                    engine
+                        .composer()
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("composer lock poisoned"))?
+                        .send_request(&request)
+                        .map_err(|e| e.context("发送请求失败"))
+                })
+                .await;
+            let _ = panel.update(async_cx, |panel, cx| {
+                panel.composer_sending = false;
+                match result {
+                    Ok(response) => {
+                        panel.composer_response = Some(response);
+                        panel.notice = Some(String::from("请求已完成"));
+                    }
+                    Err(error) => {
+                        panel.composer_response = None;
+                        panel.notice = Some(format!("请求失败: {error}"));
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     fn toggle_method_filter(&mut self, method: &str, cx: &mut Context<Self>) {
         if self.filter.method == method {
             self.filter.method.clear();
@@ -460,6 +899,778 @@ impl CaptureView {
         }
     }
 
+    fn render_tree_view(
+        &self,
+        selected_id: Option<i64>,
+        dark: bool,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
+        let rows = self.tree_rows.clone();
+        let expanded = self.tree_expanded.clone();
+
+        if rows.is_empty() {
+            return div()
+                .flex_1()
+                .min_h(px(0.0))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(components::empty_state(
+                    "icons/capture.svg",
+                    "暂无树形数据",
+                    "树形视图下暂无可显示的请求",
+                    cx,
+                ))
+                .into_any_element();
+        }
+
+        div()
+            .flex_1()
+            .min_h(px(0.0))
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .flex_1()
+                    .min_h(px(0.0))
+                    .overflow_y_scrollbar()
+                    .children(rows.iter().filter_map(|row| {
+                        if row.is_domain {
+                            let is_expanded = expanded.contains(&row.node_id);
+                            let node_id = row.node_id.clone();
+                            let display = row.display.clone();
+                            Some(
+                                div()
+                                    .id(SharedString::from(format!("tree-domain-{}", &node_id)))
+                                    .h(px(28.0))
+                                    .px_3()
+                                    .pl(px(8.0))
+                                    .bg(ui::bg_subtle(cx))
+                                    .hover(|s| s.bg(ui::bg_hover(cx)).cursor_pointer())
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .text_size(px(11.0))
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(move |panel, _, _, cx| {
+                                        panel.toggle_tree_node(node_id.clone(), cx);
+                                    }))
+                                    .child(
+                                        div()
+                                            .w(px(12.0))
+                                            .text_size(px(9.0))
+                                            .text_color(ui::text_secondary(cx))
+                                            .child(if is_expanded { "▼" } else { "▶" }),
+                                    )
+                                    .child(
+                                        div()
+                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .text_color(ui::text_primary(cx))
+                                            .overflow_hidden()
+                                            .text_ellipsis()
+                                            .child(display),
+                                    ),
+                            )
+                        } else {
+                            let domain_idx = rows.iter().position(|r| r.node_id == row.node_id && !r.is_domain);
+                            let domain = domain_idx.and_then(|idx| {
+                                rows[..idx].iter().rev().find(|r| r.is_domain)
+                            })?;
+                            let domain_id = &domain.node_id;
+                            if !expanded.contains(domain_id) {
+                                return None;
+                            }
+                            let ex_id = row.exchange_id?;
+                            let is_selected = selected_id == Some(ex_id);
+                            let display = row.display.clone();
+                            let method_color = if display.starts_with("GET") {
+                                theme::http_method_color("GET", dark)
+                            } else if display.starts_with("POST") {
+                                theme::http_method_color("POST", dark)
+                            } else if display.starts_with("PUT") {
+                                theme::http_method_color("PUT", dark)
+                            } else if display.starts_with("DELETE") {
+                                theme::http_method_color("DELETE", dark)
+                            } else {
+                                theme::http_method_color("GET", dark)
+                            };
+                            Some(
+                                div()
+                                    .id(("tree-req", ex_id as u64))
+                                    .h(px(26.0))
+                                    .px_3()
+                                    .pl(px(28.0))
+                                    .bg(if is_selected {
+                                        tokens(cx).primary
+                                    } else {
+                                        ui::bg_surface(cx)
+                                    })
+                                    .hover(|s| s.bg(ui::bg_hover(cx)).cursor_pointer())
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .text_size(px(11.0))
+                                    .font_family("SF Mono")
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(move |panel, _, _, cx| {
+                                        panel.select_exchange(ex_id, cx);
+                                    }))
+                                    .child(
+                                        div()
+                                            .text_color(method_color)
+                                            .overflow_hidden()
+                                            .text_ellipsis()
+                                            .child(display),
+                                    ),
+                            )
+                        }
+                    })),
+            )
+            .into_any_element()
+    }
+
+    fn render_performance_panel(&self, cx: &App) -> gpui::AnyElement {
+        let stats = match &self.performance_stats {
+            Some(s) => s.clone(),
+            None => {
+                return div()
+                    .rounded(theme::radius_lg())
+                    .bg(ui::bg_surface(cx))
+                    .border_1()
+                    .border_color(ui::border_light(cx))
+                    .p_4()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(px(12.0))
+                    .text_color(ui::text_tertiary(cx))
+                    .child("正在加载性能数据...")
+                    .into_any_element();
+            }
+        };
+
+        let total_requests = stats.total_requests;
+        let error_rate_pct = stats.error_rate * 100.0;
+
+        div()
+            .rounded(theme::radius_lg())
+            .bg(ui::bg_surface(cx))
+            .border_1()
+            .border_color(ui::border_light(cx))
+            .p_3()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .max_h(px(400.0))
+            .overflow_y_scrollbar()
+            // Header
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_size(px(14.0))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child("性能分析"),
+                    )
+                    .child(div().flex_1())
+                    .child(
+                        div()
+                            .text_size(px(11.0))
+                            .text_color(ui::text_secondary(cx))
+                            .child(format!("共 {} 条请求", total_requests)),
+                    ),
+            )
+            .child(Divider::horizontal().color(ui::border_light(cx)))
+            // Key metrics row
+            .child(
+                div()
+                    .flex()
+                    .gap_2()
+                    .child(perf_metric_card(
+                        "总请求数",
+                        &format!("{total_requests}"),
+                        PluginAccent::Blue,
+                        cx,
+                    ))
+                    .child(perf_metric_card(
+                        "总流量",
+                        &crate::model::format_bytes(stats.total_bytes),
+                        PluginAccent::Cyan,
+                        cx,
+                    ))
+                    .child(perf_metric_card(
+                        "平均响应",
+                        &format!("{:.0}ms", stats.avg_response_time_ms),
+                        PluginAccent::Green,
+                        cx,
+                    ))
+                    .child(perf_metric_card(
+                        "错误率",
+                        &format!("{:.1}%", error_rate_pct),
+                        if error_rate_pct > 10.0 {
+                            PluginAccent::Rose
+                        } else {
+                            PluginAccent::Amber
+                        },
+                        cx,
+                    )),
+            )
+            // Response time row
+            .child(
+                div()
+                    .flex()
+                    .gap_2()
+                    .child(perf_metric_card(
+                        "最大响应",
+                        &format!("{}ms", stats.max_response_time_ms),
+                        PluginAccent::Rose,
+                        cx,
+                    ))
+                    .child(perf_metric_card(
+                        "最小响应",
+                        &format!("{}ms", stats.min_response_time_ms),
+                        PluginAccent::Green,
+                        cx,
+                    ))
+                    .child(perf_metric_card(
+                        "请求/秒",
+                        &format!("{:.1}", stats.requests_per_second),
+                        PluginAccent::Purple,
+                        cx,
+                    ))
+                    .child(perf_metric_card(
+                        "",
+                        "",
+                        PluginAccent::Blue,
+                        cx,
+                    )),
+            )
+            .child(Divider::horizontal().color(ui::border_light(cx)))
+            // Status distribution
+            .child(section_label("状态码分布", cx))
+            .child(
+                div()
+                    .flex()
+                    .gap_2()
+                    .child(perf_metric_card(
+                        "2xx 成功",
+                        &format!("{}", stats.status_code_distribution.ok_2xx),
+                        PluginAccent::Green,
+                        cx,
+                    ))
+                    .child(perf_metric_card(
+                        "3xx 重定向",
+                        &format!("{}", stats.status_code_distribution.redirect_3xx),
+                        PluginAccent::Blue,
+                        cx,
+                    ))
+                    .child(perf_metric_card(
+                        "4xx 客户端错误",
+                        &format!("{}", stats.status_code_distribution.client_error_4xx),
+                        PluginAccent::Amber,
+                        cx,
+                    ))
+                    .child(perf_metric_card(
+                        "5xx 服务端错误",
+                        &format!("{}", stats.status_code_distribution.server_error_5xx),
+                        PluginAccent::Rose,
+                        cx,
+                    )),
+            )
+            .child(Divider::horizontal().color(ui::border_light(cx)))
+            // Content type distribution
+            .child(section_label("内容类型分布", cx))
+            .child(
+                div()
+                    .flex()
+                    .gap_2()
+                    .child(perf_metric_card(
+                        "HTML",
+                        &format!("{}", stats.content_type_distribution.html),
+                        PluginAccent::Blue,
+                        cx,
+                    ))
+                    .child(perf_metric_card(
+                        "JSON",
+                        &format!("{}", stats.content_type_distribution.json),
+                        PluginAccent::Green,
+                        cx,
+                    ))
+                    .child(perf_metric_card(
+                        "图片",
+                        &format!("{}", stats.content_type_distribution.image),
+                        PluginAccent::Purple,
+                        cx,
+                    ))
+                    .child(perf_metric_card(
+                        "其他",
+                        &format!(
+                            "{}",
+                            stats.content_type_distribution.css
+                                + stats.content_type_distribution.javascript
+                                + stats.content_type_distribution.other
+                        ),
+                        PluginAccent::Slate,
+                        cx,
+                    )),
+            )
+            .child(Divider::horizontal().color(ui::border_light(cx)))
+            // Slowest endpoints
+            .child(section_label("最慢的 Top 10 端点", cx))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_px()
+                    .children(
+                        stats
+                            .slowest_endpoints
+                            .iter()
+                            .take(10)
+                            .map(|ep| {
+                                let method_color = theme::http_method_color(&ep.method, tokens(cx).is_dark());
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .p_1()
+                                    .rounded(theme::radius_sm())
+                                    .hover(|s| s.bg(ui::bg_subtle(cx)))
+                                    .child(
+                                        div()
+                                            .w(px(54.0))
+                                            .text_size(px(11.0))
+                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .text_color(method_color)
+                                            .child(ep.method.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .text_size(px(11.0))
+                                            .font_family(ui::font_mono())
+                                            .text_color(ui::text_primary(cx))
+                                            .overflow_hidden()
+                                            .text_ellipsis()
+                                            .child(ep.url.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .w(px(60.0))
+                                            .text_align(gpui::TextAlign::Right)
+                                            .text_size(px(11.0))
+                                            .text_color(ui::text_secondary(cx))
+                                            .child(format!("{:.0}ms", ep.avg_duration_ms)),
+                                    )
+                                    .child(
+                                        div()
+                                            .w(px(40.0))
+                                            .text_align(gpui::TextAlign::Right)
+                                            .text_size(px(10.0))
+                                            .text_color(ui::text_tertiary(cx))
+                                            .child(format!("×{}", ep.count)),
+                                    )
+                            }),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn ensure_breakpoint_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.breakpoint_url_input.is_none() {
+            self.breakpoint_url_input =
+                Some(cx.new(|cx| InputState::new(window, cx).placeholder("*")));
+        }
+        if self.breakpoint_method_input.is_none() {
+            self.breakpoint_method_input =
+                Some(cx.new(|cx| InputState::new(window, cx).placeholder("ALL")));
+        }
+    }
+
+    fn ensure_rewrite_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.rewrite_name_input.is_none() {
+            self.rewrite_name_input =
+                Some(cx.new(|cx| InputState::new(window, cx).placeholder("规则名称")));
+        }
+        if self.rewrite_url_input.is_none() {
+            self.rewrite_url_input =
+                Some(cx.new(|cx| InputState::new(window, cx).placeholder("*")));
+        }
+    }
+
+    fn render_breakpoint_panel(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let rules = self.breakpoint_rules.clone();
+        div()
+            .rounded(theme::radius_lg())
+            .bg(ui::bg_surface(cx))
+            .border_1()
+            .border_color(ui::border_light(cx))
+            .p_3()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .max_h(px(400.0))
+            .overflow_y_scrollbar()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_size(px(14.0))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child("断点规则"),
+                    )
+                    .child(div().flex_1())
+                    .child(
+                        Button::new("add-breakpoint-rule-btn")
+                            .label("添加规则")
+                            .with_size(Size::XSmall)
+                            .with_variant(ButtonVariant::Primary)
+                            .on_click(cx.listener(|panel, _, _, cx| {
+                                panel.add_breakpoint_rule(cx);
+                            })),
+                    ),
+            )
+            .child(Divider::horizontal().color(ui::border_light(cx)))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .children(rules.iter().map(|rule| {
+                        let url_pattern = rule.url_pattern.clone();
+                        let method = rule.method.clone();
+                        let phase = rule.phase;
+                        let enabled = rule.enabled;
+                        let id_enabled = rule.id.clone();
+                        let id_delete = rule.id.clone();
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .p_2()
+                            .rounded(theme::radius_sm())
+                            .bg(ui::bg_subtle(cx))
+                            .child(
+                                div()
+                                    .id(SharedString::from(format!("bp-enabled-{}", rule.id)))
+                                    .w(px(20.0))
+                                    .h(px(20.0))
+                                    .rounded(theme::radius_sm())
+                                    .bg(if enabled { ui::success(cx) } else { ui::bg_subtle(cx) })
+                                    .border_1()
+                                    .border_color(if enabled { ui::success(cx) } else { ui::border_light(cx) })
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_size(px(10.0))
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(move |panel, _, _, cx| {
+                                        panel.toggle_breakpoint_rule_enabled(id_enabled.clone(), cx);
+                                    }))
+                                    .child(if enabled { "✓" } else { "" }),
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .h(px(24.0))
+                                    .rounded(theme::radius_sm())
+                                    .bg(ui::bg_canvas(cx))
+                                    .border_1()
+                                    .border_color(ui::border_light(cx))
+                                    .px_2()
+                                    .flex()
+                                    .items_center()
+                                    .text_size(px(11.0))
+                                    .text_color(ui::text_primary(cx))
+                                    .child(url_pattern),
+                            )
+                            .child(
+                                div()
+                                    .w(px(70.0))
+                                    .h(px(24.0))
+                                    .rounded(theme::radius_sm())
+                                    .bg(ui::bg_canvas(cx))
+                                    .border_1()
+                                    .border_color(ui::border_light(cx))
+                                    .px_1()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_size(px(10.0))
+                                    .text_color(if method.is_empty() || method == "ALL" {
+                                        ui::text_secondary(cx)
+                                    } else {
+                                        ui::text_primary(cx)
+                                    })
+                                    .child(if method.is_empty() { "ALL".to_string() } else { method.clone() }),
+                            )
+                            .child(
+                                div()
+                                    .w(px(60.0))
+                                    .h(px(24.0))
+                                    .rounded(theme::radius_sm())
+                                    .bg(ui::bg_canvas(cx))
+                                    .border_1()
+                                    .border_color(ui::border_light(cx))
+                                    .px_1()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_size(px(10.0))
+                                    .text_color(ui::text_primary(cx))
+                                    .child(phase.label()),
+                            )
+                            .child(
+                                div()
+                                    .id(SharedString::from(format!("bp-del-{}", rule.id)))
+                                    .w(px(20.0))
+                                    .h(px(20.0))
+                                    .rounded(theme::radius_sm())
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_size(px(12.0))
+                                    .text_color(ui::danger(cx))
+                                    .cursor_pointer()
+                                    .hover(|s| s.bg(theme::rgba_with_alpha(ui::danger(cx).into(), 0.1)))
+                                    .on_click(cx.listener(move |panel, _, _, cx| {
+                                        panel.remove_breakpoint_rule(id_delete.clone(), cx);
+                                    }))
+                                    .child("✕"),
+                            )
+                    })),
+            )
+            .into_any_element()
+    }
+
+    fn render_throttle_panel(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let current_config = self.engine.throttle_manager().config();
+        let presets = [
+            ThrottlePreset::Off,
+            ThrottlePreset::ThreeG,
+            ThrottlePreset::FourG,
+            ThrottlePreset::Custom,
+        ];
+        let custom_kbps = current_config.custom_kbps;
+        div()
+            .rounded(theme::radius_lg())
+            .bg(ui::bg_surface(cx))
+            .border_1()
+            .border_color(ui::border_light(cx))
+            .p_3()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_size(px(14.0))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child("限速控制"),
+                    )
+                    .child(div().flex_1())
+                    .child(
+                        div()
+                            .text_size(px(11.0))
+                            .text_color(ui::text_secondary(cx))
+                            .child(format!("当前: {}", current_config.preset.label())),
+                    ),
+            )
+            .child(Divider::horizontal().color(ui::border_light(cx)))
+            .child(
+                div()
+                    .flex()
+                    .gap_2()
+                    .children(presets.iter().map(|&preset| {
+                        let is_active = current_config.preset == preset;
+                        let color = if is_active { ui::success(cx) } else { ui::text_secondary(cx) };
+                        div()
+                            .id(SharedString::from(format!("throttle-preset-{:?}", preset)))
+                            .px_3()
+                            .h(px(28.0))
+                            .rounded(theme::radius_sm())
+                            .bg(if is_active {
+                                theme::rgba_with_alpha(color.into(), 0.12)
+                            } else {
+                                ui::bg_subtle(cx)
+                            })
+                            .border_1()
+                            .border_color(if is_active { color } else { ui::border_light(cx) })
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_size(px(11.0))
+                            .text_color(if is_active { color } else { ui::text_secondary(cx) })
+                            .font_weight(if is_active { gpui::FontWeight::SEMIBOLD } else { gpui::FontWeight::NORMAL })
+                            .cursor_pointer()
+                            .on_click(cx.listener(move |panel, _, _, cx| {
+                                panel.set_throttle_preset(preset, cx);
+                            }))
+                            .child(preset.label())
+                    })),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_size(px(11.0))
+                            .text_color(ui::text_secondary(cx))
+                            .child("自定义 Kbps:"),
+                    )
+                    .child(
+                        div()
+                            .w(px(80.0))
+                            .h(px(24.0))
+                            .rounded(theme::radius_sm())
+                            .bg(ui::bg_canvas(cx))
+                            .border_1()
+                            .border_color(ui::border_light(cx))
+                            .px_2()
+                            .flex()
+                            .items_center()
+                            .text_size(px(11.0))
+                            .text_color(ui::text_primary(cx))
+                            .child(format!("{custom_kbps}")),
+                    )
+                    .child(
+                        Button::new("throttle-custom-apply-btn")
+                            .label("应用")
+                            .with_size(Size::XSmall)
+                            .with_variant(ButtonVariant::Secondary)
+                            .on_click(cx.listener(move |panel, _, _, cx| {
+                                panel.set_custom_kbps_value(custom_kbps, cx);
+                            })),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn render_rewrite_panel(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let rules = self.rewrite_rules.clone();
+        div()
+            .rounded(theme::radius_lg())
+            .bg(ui::bg_surface(cx))
+            .border_1()
+            .border_color(ui::border_light(cx))
+            .p_3()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .max_h(px(400.0))
+            .overflow_y_scrollbar()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_size(px(14.0))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child("改写规则"),
+                    )
+                    .child(div().flex_1())
+                    .child(
+                        Button::new("add-rewrite-rule-btn")
+                            .label("添加规则")
+                            .with_size(Size::XSmall)
+                            .with_variant(ButtonVariant::Primary)
+                            .on_click(cx.listener(|panel, _, _, cx| {
+                                panel.add_rewrite_rule(cx);
+                            })),
+                    ),
+            )
+            .child(Divider::horizontal().color(ui::border_light(cx)))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .children(rules.iter().map(|rule| {
+                        let id = rule.id.clone();
+                        let name = rule.name.clone();
+                        let url_pattern = rule.condition.url_pattern.clone();
+                        let action_target = rule.actions.first().map(|a| a.target).unwrap_or(RewriteTarget::ResponseHeader);
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .p_2()
+                            .rounded(theme::radius_sm())
+                            .bg(ui::bg_subtle(cx))
+                            .child(
+                                div()
+                                    .w(px(20.0))
+                                    .h(px(20.0))
+                                    .rounded(theme::radius_sm())
+                                    .bg(if rule.enabled { ui::success(cx) } else { ui::bg_subtle(cx) })
+                                    .border_1()
+                                    .border_color(if rule.enabled { ui::success(cx) } else { ui::border_light(cx) })
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_size(px(10.0))
+                                    .child(if rule.enabled { "✓" } else { "" }),
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .text_size(px(11.0))
+                                    .text_color(ui::text_primary(cx))
+                                    .overflow_hidden()
+                                    .text_ellipsis()
+                                    .child(name),
+                            )
+                            .child(
+                                div()
+                                    .w(px(60.0))
+                                    .text_size(px(10.0))
+                                    .text_color(ui::text_secondary(cx))
+                                    .child(url_pattern),
+                            )
+                            .child(
+                                div()
+                                    .w(px(70.0))
+                                    .text_size(px(10.0))
+                                    .text_color(ui::text_secondary(cx))
+                                    .child(action_target.label()),
+                            )
+                            .child(
+                                div()
+                                    .id(SharedString::from(format!("rw-del-{}", rule.id)))
+                                    .w(px(20.0))
+                                    .h(px(20.0))
+                                    .rounded(theme::radius_sm())
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_size(px(12.0))
+                                    .text_color(ui::danger(cx))
+                                    .cursor_pointer()
+                                    .hover(|s| s.bg(theme::rgba_with_alpha(ui::danger(cx).into(), 0.1)))
+                                    .on_click(cx.listener(move |panel, _, _, cx| {
+                                        panel.remove_rewrite_rule(id.clone(), cx);
+                                    }))
+                                    .child("✕"),
+                            )
+                    })),
+            )
+            .into_any_element()
+    }
+
     fn status_text(&self) -> String {
         if let Some(ref notice) = self.notice {
             return notice.clone();
@@ -496,7 +1707,26 @@ impl CaptureView {
             tokens(cx).muted_foreground.into()
         }
     }
+
 }
+
+fn extract_content_type(ex: &CapturedExchange) -> String {
+    let headers: Vec<(String, String)> =
+        serde_json::from_str(&ex.response_headers_json).unwrap_or_default();
+    for (key, value) in &headers {
+        if key.eq_ignore_ascii_case("content-type") {
+            return value.clone();
+        }
+    }
+    String::new()
+}
+
+fn is_video_exchange(ex: &CapturedExchange) -> bool {
+    let content_type = extract_content_type(ex);
+    video_sniff::is_video_stream(&ex.url, &content_type, ex.response_size)
+}
+
+
 
 fn build_setup_info(
     engine: &Arc<CaptureEngine>,
@@ -616,6 +1846,40 @@ fn proxy_value_row(
         .into_any_element()
 }
 
+fn perf_metric_card(
+    label: &str,
+    value: &str,
+    accent: PluginAccent,
+    cx: &App,
+) -> gpui::AnyElement {
+    let color = ui::accent_color(accent);
+    div()
+        .flex_1()
+        .rounded(theme::radius_md())
+        .bg(theme::rgba_with_alpha(color.into(), 0.06))
+        .border_1()
+        .border_color(theme::rgba_with_alpha(color.into(), 0.15))
+        .p_2()
+        .flex()
+        .flex_col()
+        .gap_0p5()
+        .child(
+            div()
+                .text_size(px(10.0))
+                .text_color(ui::text_secondary(cx))
+                .child(label.to_string()),
+        )
+                .child(
+            div()
+                .text_size(px(14.0))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(gpui::Rgba::from(color))
+                .font_family(ui::font_mono())
+                .child(value.to_string()),
+        )
+        .into_any_element()
+}
+
 fn small_action(id: &'static str, label: &str, _cx: &App) -> Button {
     Button::new(id)
         .label(label.to_string())
@@ -701,6 +1965,9 @@ fn short_path(path: &str) -> String {
 impl Render for CaptureView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.ensure_inputs(window, cx);
+        self.ensure_composer_inputs(window, cx);
+        self.ensure_breakpoint_inputs(window, cx);
+        self.ensure_rewrite_inputs(window, cx);
         let dark = tokens(cx).is_dark();
         let exchanges = self.exchanges.clone();
         let total = self.total;
@@ -710,6 +1977,13 @@ impl Render for CaptureView {
         let engine_running = self.engine_running;
         let search_input = self.search_input.clone().expect("search input initialized");
         let host_input = self.host_input.clone().expect("host input initialized");
+        let composer_visible = self.composer_visible;
+        let composer_method = self.composer_method.clone();
+        let composer_url = self.composer_url.clone().expect("composer url initialized");
+        let composer_headers = self.composer_headers.clone().expect("composer headers initialized");
+        let composer_body = self.composer_body.clone().expect("composer body initialized");
+        let composer_response = self.composer_response.clone();
+        let composer_sending = self.composer_sending;
         let filter_method = self.filter.method.clone();
         let filter_error_only = self.filter.error_only;
         let filter_https_only = self.filter.https_only;
@@ -837,6 +2111,72 @@ impl Render for CaptureView {
                         Button::new("start-proxy-btn").label("启动代理").with_size(Size::Small).with_variant(ButtonVariant::Primary)
                             .on_click(cx.listener(|panel, _, _, cx| {
                                 panel.start_proxy(cx);
+                            }))
+                    })
+                    .child({
+                        Button::new("export-har-btn").label("导出 HAR").with_size(Size::Small).with_variant(ButtonVariant::Secondary)
+                            .on_click(cx.listener(|panel, _, _, cx| {
+                                panel.export_har(cx);
+                            }))
+                    })
+                    .child({
+                        Button::new("toggle-composer-btn").label("请求构造器").with_size(Size::Small).with_variant(if self.composer_visible {
+                            ButtonVariant::Primary
+                        } else {
+                            ButtonVariant::Ghost
+                        })
+                            .on_click(cx.listener(|panel, _, _, cx| {
+                                panel.toggle_composer(cx);
+                            }))
+                    })
+                    .child({
+                        Button::new("toggle-tree-view-btn").label(if self.tree_view_mode { "列表视图" } else { "树形视图" }).with_size(Size::Small).with_variant(if self.tree_view_mode {
+                            ButtonVariant::Primary
+                        } else {
+                            ButtonVariant::Ghost
+                        })
+                            .on_click(cx.listener(|panel, _, _, cx| {
+                                panel.toggle_tree_view(cx);
+                            }))
+                    })
+                    .child({
+                        Button::new("toggle-performance-btn").label("性能分析").with_size(Size::Small).with_variant(if self.performance_visible {
+                            ButtonVariant::Primary
+                        } else {
+                            ButtonVariant::Ghost
+                        })
+                            .on_click(cx.listener(|panel, _, _, cx| {
+                                panel.toggle_performance(cx);
+                            }))
+                    })
+                    .child({
+                        Button::new("toggle-breakpoint-btn").label("断点规则").with_size(Size::Small).with_variant(if self.breakpoint_visible {
+                            ButtonVariant::Primary
+                        } else {
+                            ButtonVariant::Ghost
+                        })
+                            .on_click(cx.listener(|panel, _, _, cx| {
+                                panel.toggle_breakpoint_panel(cx);
+                            }))
+                    })
+                    .child({
+                        Button::new("toggle-throttle-btn").label("限速控制").with_size(Size::Small).with_variant(if self.throttle_visible {
+                            ButtonVariant::Primary
+                        } else {
+                            ButtonVariant::Ghost
+                        })
+                            .on_click(cx.listener(|panel, _, _, cx| {
+                                panel.toggle_throttle_panel(cx);
+                            }))
+                    })
+                    .child({
+                        Button::new("toggle-rewrite-btn").label("改写规则").with_size(Size::Small).with_variant(if self.rewrite_visible {
+                            ButtonVariant::Primary
+                        } else {
+                            ButtonVariant::Ghost
+                        })
+                            .on_click(cx.listener(|panel, _, _, cx| {
+                                panel.toggle_rewrite_panel(cx);
                             }))
                     })
                     .child({
@@ -1216,7 +2556,7 @@ impl Render for CaptureView {
                                 cx,
                             )),
                     )
-                    // ── Center: exchange list ──
+                    // ── Center: exchange list / tree view ──
                     .child(
                         div()
                             .flex_1()
@@ -1240,31 +2580,39 @@ impl Render for CaptureView {
                                     .gap_2()
                                     .text_size(px(11.0))
                                     .text_color(ui::text_secondary(cx))
-                                    .child(div().w(px(58.0)).child("时间"))
-                                    .child(div().w(px(54.0)).child("方法"))
-                                    .child(div().w(px(130.0)).child("Host"))
-                                    .child(div().flex_1().child("URL"))
-                                    .child(
+                                    .child(if self.tree_view_mode {
+                                        div().flex_1().child("Domain / Request")
+                                    } else {
                                         div()
-                                            .w(px(48.0))
-                                            .text_align(gpui::TextAlign::Right)
-                                            .child("状态"),
-                                    )
-                                    .child(
-                                        div()
-                                            .w(px(70.0))
-                                            .text_align(gpui::TextAlign::Right)
-                                            .child("大小"),
-                                    )
-                                    .child(
-                                        div()
-                                            .w(px(62.0))
-                                            .text_align(gpui::TextAlign::Right)
-                                            .child("耗时"),
-                                    ),
+                                            .child(div().w(px(58.0)).child("时间"))
+                                            .child(div().w(px(54.0)).child("方法"))
+                                            .child(div().w(px(130.0)).child("Host"))
+                                            .child(div().flex_1().child("URL"))
+                                            .child(
+                                                div()
+                                                    .w(px(48.0))
+                                                    .text_align(gpui::TextAlign::Right)
+                                                    .child("状态"),
+                                            )
+                                            .child(
+                                                div()
+                                                    .w(px(70.0))
+                                                    .text_align(gpui::TextAlign::Right)
+                                                    .child("大小"),
+                                            )
+                                            .child(
+                                                div()
+                                                    .w(px(62.0))
+                                                    .text_align(gpui::TextAlign::Right)
+                                                    .child("耗时"),
+                                            )
+                                    }),
                             )
-                            // List or empty state
-                            .child(if exchanges.is_empty() {
+                            // List or tree or empty state
+                            .child(if self.tree_view_mode {
+                                self.render_tree_view(selected_id, dark, cx)
+                            } else if exchanges.is_empty() {
+
                                 div()
                                     .flex_1()
                                     .min_h(px(0.0))
@@ -1298,24 +2646,26 @@ impl Render for CaptureView {
                                             .min_h(px(0.0))
                                             .overflow_y_scrollbar()
                                             .children(exchanges.iter().enumerate().map(
-                                                |(i, ex)| {
-                                                    let selected = selected_id == Some(ex.id);
-                                                    let ex_id = ex.id;
-                                                    let method_color = theme::http_method_color(&ex.method, dark);
-                                                    let status_color = CaptureView::status_color(
-                                                        ex.status,
-                                                        cx,
-                                                    );
-                                                    let timestamp = ex.timestamp.clone();
-                                                    let method = ex.method.clone();
-                                                    let host = ex.host.clone();
-                                                    let url = ex.url.clone();
-                                                    let status = ex.status;
-                                                    let size = ex.formatted_size();
-                                                    let duration = ex.formatted_duration();
+                                                 |(i, ex)| {
+                                                     let selected = selected_id == Some(ex.id);
+                                                     let ex_id = ex.id;
+                                                     let method_color = theme::http_method_color(&ex.method, dark);
+                                                     let status_color = CaptureView::status_color(
+                                                         ex.status,
+                                                         cx,
+                                                     );
+                                                     let timestamp = ex.timestamp.clone();
+                                                     let method = ex.method.clone();
+                                                     let host = ex.host.clone();
+                                                     let url = ex.url.clone();
+                                                     let status = ex.status;
+                                                     let size = ex.formatted_size();
+                                                     let duration = ex.formatted_duration();
+                                                     let is_video = is_video_exchange(ex);
+                                                     let video_url = ex.url.clone();
 
-                                                    div()
-                                                        .id(("exchange-row", ex_id as u64))
+                                                     div()
+                                                         .id(("exchange-row", ex_id as u64))
                                                         .h(px(32.0))
                                                         .px_3()
                                                         .bg(if selected {
@@ -1414,19 +2764,41 @@ impl Render for CaptureView {
                                                                 )
                                                                 .child(size),
                                                         )
-                                                        .child(
-                                                            div()
-                                                                .w(px(62.0))
-                                                                .text_align(
-                                                                    gpui::TextAlign::Right,
-                                                                )
-                                                                .text_color(
-                                                                    ui::text_secondary(cx),
-                                                                )
-                                                                .child(duration),
-                                                        )
-                                                },
-                                            )),
+                                                         .child(
+                                                             div()
+                                                                 .w(px(62.0))
+                                                                 .text_align(
+                                                                     gpui::TextAlign::Right,
+                                                                 )
+                                                                 .text_color(
+                                                                     ui::text_secondary(cx),
+                                                                 )
+                                                                 .child(duration),
+                                                         )
+                                                         .child(if is_video {
+                                                             let vid_url = video_url.clone();
+                                                             div()
+                                                                 .id(("video-dl", ex_id as u64))
+                                                                 .w(px(24.0))
+                                                                 .h(px(20.0))
+                                                                 .rounded(theme::radius_sm())
+                                                                 .flex()
+                                                                 .items_center()
+                                                                 .justify_center()
+                                                                 .text_size(px(12.0))
+                                                                 .text_color(ui::info(cx))
+                                                                 .cursor_pointer()
+                                                                 .hover(|s| s.bg(theme::rgba_with_alpha(ui::info(cx).into(), 0.1)))
+                                                                 .on_click(cx.listener(move |panel, _, _, cx| {
+                                                                     panel.copy_text(vid_url.clone(), "已复制视频链接", cx);
+                                                                 }))
+                                                                 .child("⬇")
+                                                                 .into_any_element()
+                                                         } else {
+                                                             div().w(px(0.0)).into_any_element()
+                                                         })
+                                                 },
+                                             )),
                                     )
                                     // Pagination row
                                     .child(
@@ -1579,6 +2951,24 @@ impl Render for CaptureView {
                                     .into_any_element(),
                                 None => div().into_any_element(),
                             })
+                            // Action buttons row
+                            .child(match selected_detail {
+                                Some(ref detail) => {
+                                    let exchange = detail.clone();
+                                    div()
+                                        .flex()
+                                        .gap_1()
+                                        .child(
+                                            small_action("copy-as-curl", "复制为 cURL", cx).on_click(
+                                                cx.listener(move |panel, _, _, cx| {
+                                                    panel.copy_as_curl(&exchange, cx);
+                                                }),
+                                            ),
+                                        )
+                                        .into_any_element()
+                                }
+                                None => div().into_any_element(),
+                            })
                             // Tab bar
                             .child(
                                 div()
@@ -1655,6 +3045,197 @@ impl Render for CaptureView {
                             ),
                     ),
             )
+            // ── Performance panel ──
+            .child(if self.performance_visible {
+                self.render_performance_panel(cx)
+            } else {
+                div().into_any_element()
+            })
+            // ── Composer panel ──
+            .child(if composer_visible {
+                let method_options = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"];
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .rounded(theme::radius_lg())
+                    .bg(ui::bg_surface(cx))
+                    .border_1()
+                    .border_color(ui::border_light(cx))
+                    .p_3()
+                    // Method + URL + Send row
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .flex()
+                                    .gap_1()
+                                    .child(section_label("方法", cx))
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .gap_px()
+                                            .child(
+                                                div()
+                                                    .w(px(72.0))
+                                                    .h(px(28.0))
+                                                    .rounded(theme::radius_sm())
+                                                    .bg(ui::bg_subtle(cx))
+                                                    .border_1()
+                                                    .border_color(ui::border_light(cx))
+                                                    .px_1()
+                                                    .flex()
+                                                    .items_center()
+                                                    .text_size(px(11.0))
+                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .text_color(theme::http_method_color(&composer_method, dark))
+                                                    .child(composer_method.clone()),
+                                            )
+                                            .children(method_options.iter().map(|&m| {
+                                                let active = composer_method == m;
+                                                let method_color = theme::http_method_color(m, dark);
+                                                div()
+                                                    .id(SharedString::from(format!("composer-method-{m}")))
+                                                    .px_1p5()
+                                                    .h(px(20.0))
+                                                    .rounded(theme::radius_sm())
+                                                    .bg(if active {
+                                                        theme::rgba_with_alpha(method_color, 0.18)
+                                                    } else {
+                                                        ui::bg_subtle(cx)
+                                                    })
+                                                    .border_1()
+                                                    .border_color(if active {
+                                                        method_color
+                                                    } else {
+                                                        ui::border_light(cx).into()
+                                                    })
+                                                    .flex()
+                                                    .items_center()
+                                                    .text_size(px(10.0))
+                                                    .text_color(if active {
+                                                        method_color
+                                                    } else {
+                                                        ui::text_secondary(cx).into()
+                                                    })
+                                                    .cursor_pointer()
+                                                    .on_click(cx.listener(move |panel, _, _, cx| {
+                                                        panel.set_composer_method(m.to_string(), cx);
+                                                    }))
+                                                    .child(m)
+                                            })),
+                                    ),
+                            )
+                            .child(div().flex_1().child(
+                                Input::new(&composer_url)
+                                    .appearance(false)
+                                    .bordered(false)
+                                    .focus_bordered(false)
+                                    .h(px(28.0))
+                                    .text_size(px(11.0))
+                                    .font_family(ui::font_mono())
+                            ))
+                            .child(
+                                Button::new("composer-send-btn")
+                                    .label(if composer_sending { "发送中..." } else { "发送" })
+                                    .with_size(Size::Small)
+                                    .with_variant(ButtonVariant::Primary)
+                                    .disabled(composer_sending)
+                                    .on_click(cx.listener(|panel, _, window, cx| {
+                                        panel.send_composer_request(window, cx);
+                                    })),
+                            ),
+                    )
+                    // Headers
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(section_label("请求头 (每行一个，格式: Key: Value)", cx))
+                            .child(
+                                div()
+                                    .h(px(80.0))
+                                    .rounded(theme::radius_sm())
+                                    .bg(ui::bg_subtle(cx))
+                                    .border_1()
+                                    .border_color(ui::border_light(cx))
+                                    .p_1()
+                                    .child(
+                                        Input::new(&composer_headers)
+                                            .appearance(false)
+                                            .bordered(false)
+                                            .focus_bordered(false)
+                                            .w(px(260.0))
+                                            .h(px(78.0))
+                                            .text_size(px(11.0))
+                                            .font_family(ui::font_mono())
+                                    ),
+                            ),
+                    )
+                    // Body
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(section_label("请求体", cx))
+                            .child(
+                                div()
+                                    .h(px(100.0))
+                                    .rounded(theme::radius_sm())
+                                    .bg(ui::bg_subtle(cx))
+                                    .border_1()
+                                    .border_color(ui::border_light(cx))
+                                    .p_1()
+                                    .child(
+                                        Input::new(&composer_body)
+                                            .appearance(false)
+                                            .bordered(false)
+                                            .focus_bordered(false)
+                                            .w(px(260.0))
+                                            .h(px(98.0))
+                                            .text_size(px(11.0))
+                                            .font_family(ui::font_mono())
+                                    ),
+                            ),
+                    )
+                    // Response
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(section_label("响应", cx))
+                            .child(
+                                render_composer_response(composer_response, cx),
+                            ),
+                    )
+                    .into_any_element()
+            } else {
+                div().into_any_element()
+            })
+            // ── Breakpoint panel ──
+            .child(if self.breakpoint_visible {
+                self.render_breakpoint_panel(cx)
+            } else {
+                div().into_any_element()
+            })
+            // ── Throttle panel ──
+            .child(if self.throttle_visible {
+                self.render_throttle_panel(cx)
+            } else {
+                div().into_any_element()
+            })
+            // ── Rewrite panel ──
+            .child(if self.rewrite_visible {
+                self.render_rewrite_panel(cx)
+            } else {
+                div().into_any_element()
+            })
             // ── Status bar ──
             .child(ui::status_bar(
                 self.status_text(),
@@ -1865,4 +3446,98 @@ fn render_empty_tab(label: &str, cx: &App) -> gpui::AnyElement {
         .text_color(ui::text_tertiary(cx))
         .child(format!("{label}无数据"))
         .into_any_element()
+}
+
+fn render_composer_response(
+    composer_response: Option<ComposedResponse>,
+    cx: &App,
+) -> gpui::AnyElement {
+    match composer_response {
+        Some(resp) => {
+            let status_color: gpui::Rgba = if resp.status >= 500 {
+                tokens(cx).danger.into()
+            } else if resp.status >= 400 {
+                tokens(cx).warning.into()
+            } else if resp.status >= 200 {
+                tokens(cx).success.into()
+            } else {
+                ui::text_secondary(cx).into()
+            };
+            let resp_headers: Vec<(String, String)> = resp.headers.clone();
+            let resp_body = resp.body.clone();
+            div()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(
+                    div()
+                        .flex()
+                        .gap_2()
+                        .text_size(px(11.0))
+                        .child(
+                            div()
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(status_color)
+                                .child(format!("{} ", resp.status)),
+                        )
+                        .child(
+                            div()
+                                .text_color(ui::text_secondary(cx))
+                                .child(format!("{}ms", resp.duration_ms)),
+                        ),
+                )
+                .child(
+                    div()
+                        .h(px(60.0))
+                        .rounded(theme::radius_sm())
+                        .bg(ui::bg_subtle(cx))
+                        .border_1()
+                        .border_color(ui::border_light(cx))
+                        .p_1()
+                        .overflow_y_scrollbar()
+                        .child(
+                            div()
+                                .text_size(px(10.0))
+                                .font_family(ui::font_mono())
+                                .text_color(ui::text_secondary(cx))
+                                .children(resp_headers.iter().map(|(k, v)| {
+                                    div().child(format!("{k}: {v}"))
+                                })),
+                        ),
+                )
+                .child(
+                    div()
+                        .h(px(120.0))
+                        .rounded(theme::radius_sm())
+                        .bg(ui::bg_subtle(cx))
+                        .border_1()
+                        .border_color(ui::border_light(cx))
+                        .p_1()
+                        .overflow_y_scrollbar()
+                        .child(
+                            div()
+                                .text_size(px(11.0))
+                                .font_family(ui::font_mono())
+                                .text_color(ui::text_primary(cx))
+                                .children(resp_body.lines().map(|line| {
+                                    div().child(line.to_string())
+                                })),
+                        ),
+                )
+                .into_any_element()
+        }
+        None => div()
+            .h(px(80.0))
+            .rounded(theme::radius_sm())
+            .bg(ui::bg_subtle(cx))
+            .border_1()
+            .border_color(ui::border_light(cx))
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_size(px(11.0))
+            .text_color(ui::text_tertiary(cx))
+            .child("发送请求后，响应将显示在这里")
+            .into_any_element(),
+    }
 }

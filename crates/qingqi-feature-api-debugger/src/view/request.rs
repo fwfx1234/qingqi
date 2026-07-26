@@ -2,7 +2,8 @@ use super::ApiDebuggerView;
 use super::components::collection_tree::build_tree_items;
 use super::types::{request_at, request_at_mut};
 use crate::service::{ApiRequest, BodyMode, HttpMethod};
-use gpui::{App, Window};
+use gpui::{App, Context, Window};
+use std::time::Instant;
 
 impl ApiDebuggerView {
     pub(crate) fn placeholder_request() -> ApiRequest {
@@ -15,6 +16,8 @@ impl ApiDebuggerView {
             path_rows: Vec::new(),
             body: String::new(),
             body_mode: BodyMode::None,
+            body_payloads: Default::default(),
+            editor_tab: String::from("params"),
             headers: Vec::new(),
             cookies: Vec::new(),
             auth: Vec::new(),
@@ -78,32 +81,40 @@ impl ApiDebuggerView {
         let had_pending_environments = self.service.take_pending_environments();
 
         if let Some(groups) = had_pending_groups {
+            let apply_started = Instant::now();
+            tracing::info!(
+                target: "qingqi::api_debugger::events",
+                group_count = groups.len(),
+                step = "pending_groups_apply_started",
+                "API 调试器：开始应用集合树状态"
+            );
             self.groups = groups;
-            self.last_revision = self.service.revision();
             self.ensure_renderable_workspace();
+            let build_started = Instant::now();
             let items = build_tree_items(&self.groups, &mut 0, &self.collapsed_nodes.borrow());
+            let item_count = items.len();
+            tracing::info!(
+                target: "qingqi::api_debugger::events",
+                item_count,
+                step_duration_ms = build_started.elapsed().as_millis(),
+                total_duration_ms = apply_started.elapsed().as_millis(),
+                step = "tree_items_build_completed",
+                "API 调试器：集合树元素构建完成"
+            );
             let saved_ix = self.tree_state.read(cx).selected_index();
+            let tree_update_started = Instant::now();
             self.tree_state.update(cx, |tree, cx| {
                 tree.set_items(items, cx);
                 tree.set_selected_index(saved_ix, cx);
             });
-        } else {
-            let current_revision = self.service.revision();
-            if current_revision != self.last_revision {
-                if let Ok(workspace) = self.service.load_workspace() {
-                    self.groups = workspace.groups;
-                    self.environments = workspace.environments;
-                    self.ensure_renderable_workspace();
-                    let items =
-                        build_tree_items(&self.groups, &mut 0, &self.collapsed_nodes.borrow());
-                    let saved_ix = self.tree_state.read(cx).selected_index();
-                    self.tree_state.update(cx, |tree, cx| {
-                        tree.set_items(items, cx);
-                        tree.set_selected_index(saved_ix, cx);
-                    });
-                }
-                self.last_revision = current_revision;
-            }
+            tracing::info!(
+                target: "qingqi::api_debugger::events",
+                item_count,
+                step_duration_ms = tree_update_started.elapsed().as_millis(),
+                total_duration_ms = apply_started.elapsed().as_millis(),
+                step = "pending_groups_apply_completed",
+                "API 调试器：集合树状态应用完成"
+            );
         }
 
         if let Some(environments) = had_pending_environments {
@@ -202,24 +213,27 @@ impl ApiDebuggerView {
     }
 
     pub(crate) fn sync_models(&mut self, cx: &App) {
-        let path = self.path_input.read(cx).value().to_string();
-        let params = self.params_kv.to_rows(cx);
-        let path_rows = self.path_kv.to_rows(cx);
         let body = self.body_input.read(cx).value().to_string();
+        let body_urlencoded = self.body_urlencoded_kv.to_rows(cx);
+        let body_form_data = self.body_form_data_kv.to_rows(cx);
         let headers = self.headers_kv.to_rows(cx);
         let cookies = self.cookies_kv.to_rows(cx);
         let auth = self.auth_rows(cx);
         let pre_ops = self.pre_ops_input.read(cx).value().to_string();
         let post_ops = self.post_ops_input.read(cx).value().to_string();
         let body_mode = self.body_mode;
+        let editor_tab = self.editor_tab.as_str().to_string();
 
         {
             let request = self.selected_request_mut();
-            request.path = path;
-            request.params = params;
-            request.path_rows = path_rows;
-            request.body = body;
+            if let Some(raw) = request.body_payloads.raw_mut(body_mode) {
+                *raw = body;
+            }
+            request.body_payloads.urlencoded = body_urlencoded;
+            request.body_payloads.form_data = body_form_data;
             request.body_mode = body_mode;
+            request.body = request.active_body_text();
+            request.editor_tab = editor_tab;
             request.headers = headers;
             request.cookies = cookies;
             request.auth = auth;
@@ -244,15 +258,24 @@ impl ApiDebuggerView {
     }
 
     pub(crate) fn reload_request_inputs(&mut self, window: &mut Window, cx: &mut App) {
-        let request = self.selected_request().clone();
+        let mut request = self.selected_request().clone();
+        request.ensure_body_payloads();
+        self.body_mode = request.body_mode;
+        self.editor_tab = crate::service::EditorTab::from_db(&request.editor_tab);
+        let display_url = crate::service::compose_request_url(&request.path, &request.params);
         self.path_input.update(cx, |input, input_cx| {
-            input.reset_value(request.path.clone(), input_cx)
+            input.reset_value(display_url, input_cx)
         });
         self.params_kv.set_rows(window, cx, &request.params);
         self.path_kv.set_rows(window, cx, &request.path_rows);
+        let active_body = request.body_payloads.raw(request.body_mode).to_string();
         self.body_input.update(cx, |input, input_cx| {
-            input.reset_value(request.body.clone(), input_cx)
+            input.reset_value(active_body, input_cx)
         });
+        self.body_urlencoded_kv
+            .set_rows(window, cx, &request.body_payloads.urlencoded);
+        self.body_form_data_kv
+            .set_rows(window, cx, &request.body_payloads.form_data);
         self.headers_kv.set_rows(window, cx, &request.headers);
         self.cookies_kv.set_rows(window, cx, &request.cookies);
         self.load_auth_form(cx, &request.auth);
@@ -264,12 +287,52 @@ impl ApiDebuggerView {
         });
     }
 
-    pub(crate) fn set_method(&mut self, method: HttpMethod, cx: &App) {
+    pub(crate) fn sync_url_from_input(&mut self, window: &mut Window, cx: &mut App) {
+        let raw = self.path_input.read(cx).value().to_string();
+        let (base, parsed_query) = crate::service::split_request_url(&raw);
+        let query_rows = crate::service::merge_url_query_rows(
+            &self.params_kv.to_rows(cx),
+            parsed_query,
+        );
+        let path_names = crate::service::extract_path_parameter_names(&base);
+        let path_rows = crate::service::merge_path_parameter_rows(
+            &self.path_kv.to_rows(cx),
+            &path_names,
+        );
+        {
+            let request = self.selected_request_mut();
+            request.path = base;
+            request.params = query_rows.clone();
+            request.path_rows = path_rows.clone();
+        }
+        self.params_kv.update_row_values(&query_rows, cx);
+        self.params_kv.adjust_row_count(window, cx, &query_rows);
+        self.path_kv.update_row_values(&path_rows, cx);
+        self.path_kv.adjust_row_count(window, cx, &path_rows);
+        self.persist_workspace();
+    }
+
+    pub(crate) fn sync_url_from_parameter_table(&mut self, cx: &mut App) {
+        let raw = self.path_input.read(cx).value().to_string();
+        let (base, _) = crate::service::split_request_url(&raw);
+        let params = self.params_kv.to_rows(cx);
+        let value = crate::service::compose_request_url(&base, &params);
+        {
+            let request = self.selected_request_mut();
+            request.params = params;
+        }
+        self.path_input
+            .update(cx, |input, input_cx| input.reset_value(value, input_cx));
+        self.persist_workspace();
+    }
+
+    pub(crate) fn set_method(&mut self, method: HttpMethod, cx: &mut Context<Self>) {
         self.sync_models(cx);
         let request = self.selected_request_mut();
         request.method = method;
         self.notice = format!("请求方法已切换为 {}", request.method.label());
         self.persist_workspace();
+        cx.notify();
     }
 
     pub(crate) fn send_request(&mut self, cx: &mut App) {

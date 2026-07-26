@@ -1,10 +1,11 @@
 use super::shared::{response_metric, status_badge, transparent_surface};
 use crate::code_gen::CodeLanguage;
 use crate::service::{ApiResponse, HttpHistory, ResponseTab};
+use crate::view::types::content_type_extension;
 use crate::view::ApiDebuggerView;
 use gpui::{
-    AnyElement, App, Entity, InteractiveElement, IntoElement, ParentElement,
-    StatefulInteractiveElement, Styled, div, prelude::FluentBuilder, px,
+    AnyElement, App, Entity, InteractiveElement, IntoElement, ObjectFit, ParentElement,
+    StatefulInteractiveElement, Styled, StyledImage, div, img, prelude::FluentBuilder, px,
 };
 use qingqi_ui::components::button::{Button, ButtonVariants};
 use qingqi_ui::components::styled::Sizable;
@@ -42,11 +43,8 @@ pub fn response_panel(
     };
 
     div()
-        .h(px(310.0))
         .min_h(px(220.0))
-        .max_h(px(380.0))
-        .flex_none()
-        .border_t_1()
+        .flex_1()
         .border_color(glass::divider(cx))
         .bg(glass::panel(cx))
         .flex()
@@ -151,6 +149,21 @@ fn response_body_view(
     cx: &App,
 ) -> impl IntoElement {
     let binary = is_binary_content_type(&content_type);
+    let is_image = content_type
+        .to_ascii_lowercase()
+        .starts_with("image/");
+    let body_bytes = view.read(cx).response.body_bytes.clone();
+    let size_bytes = view.read(cx).response.size_bytes;
+
+    // Determine which body view to render based on content type
+    let body_content: AnyElement = if is_image && body_bytes.is_some() {
+        response_image_preview(body_bytes.unwrap(), content_type.clone(), cx).into_any_element()
+    } else if binary {
+        response_binary_view(body_bytes, content_type.clone(), size_bytes, cx).into_any_element()
+    } else {
+        response_text_view(text, cx).into_any_element()
+    };
+
     div()
         .flex_1()
         .min_h(px(0.0))
@@ -172,12 +185,14 @@ fn response_body_view(
                     ResponseBodyAction::Copy,
                     cx,
                 ))
-                .child(response_action_button(
-                    view.clone(),
-                    "格式化",
-                    ResponseBodyAction::Format,
-                    cx,
-                ))
+                .when(!binary, |row| {
+                    row.child(response_action_button(
+                        view.clone(),
+                        "格式化",
+                        ResponseBodyAction::Format,
+                        cx,
+                    ))
+                })
                 .child(response_action_button(
                     view.clone(),
                     "保存",
@@ -195,30 +210,129 @@ fn response_body_view(
                     )
                 }),
         )
-        .when(binary, |panel| {
-            panel.child(
-                div()
-                    .px(px(10.0))
-                    .py(px(6.0))
-                    .bg(theme::rgba_with_alpha(
-                        Theme::global(cx).danger.into(),
-                        0.08,
-                    ))
-                    .flex()
-                    .items_center()
-                    .gap(px(6.0))
-                    .text_size(px(11.0))
-                    .text_color(Theme::global(cx).danger)
-                    .child(
-                        Button::new("api-response-binary-warning-icon")
-                            .ghost()
-                            .icon(icon!(triangle_alert))
-                            .with_size(Size::XSmall),
-                    )
-                    .child("二进制/图片响应，文本预览可能乱码，建议点击「保存」后查看"),
-            )
-        })
-        .child(response_text_view(text, cx))
+        .child(body_content)
+}
+
+/// Render an inline image preview from raw response bytes.
+/// Writes bytes to a temp file and displays using gpui's img element.
+fn response_image_preview(
+    bytes: Vec<u8>,
+    content_type: String,
+    cx: &App,
+) -> AnyElement {
+    // Write to a temp file for gpui img rendering
+    let ext = content_type_extension(&content_type);
+    let temp_dir = std::env::temp_dir();
+    let temp_path = temp_dir.join(format!("qingqi_response_preview.{}", ext));
+
+    if std::fs::write(&temp_path, &bytes).is_err() {
+        return div()
+            .p(px(12.0))
+            .text_size(px(11.0))
+            .text_color(Theme::global(cx).danger)
+            .child("无法渲染图片预览")
+            .into_any_element();
+    }
+
+    let danger_color = Theme::global(cx).danger;
+
+    div()
+        .id("api-response-image-preview")
+        .flex_1()
+        .min_h(px(0.0))
+        .overflow_y_scroll()
+        .bg(glass::inset(cx))
+        .p(px(10.0))
+        .flex()
+        .justify_center()
+        .child(
+            div()
+                .max_w(px(800.0))
+                .max_h(px(600.0))
+                .child(
+                    img(temp_path.clone())
+                        .object_fit(ObjectFit::Contain)
+                        .max_w(px(800.0))
+                        .max_h(px(600.0))
+                        .with_fallback(move || {
+                            div()
+                                .p(px(12.0))
+                                .text_size(px(11.0))
+                                .text_color(danger_color)
+                                .child("无法加载图片预览")
+                                .into_any_element()
+                        })
+                        .into_any_element(),
+                ),
+        )
+        .into_any_element()
+}
+
+/// Render a hex preview for non-image binary responses (PDF, zip, etc.)
+fn response_binary_view(
+    body_bytes: Option<Vec<u8>>,
+    content_type: String,
+    size_bytes: usize,
+    cx: &App,
+) -> AnyElement {
+    let mut preview_text = String::new();
+
+    // Show size info
+    preview_text.push_str(&format!(
+        "[二进制响应] {} ({} bytes)\n\n",
+        content_type, size_bytes
+    ));
+
+    // Show hex dump of first 256 bytes
+    if let Some(bytes) = &body_bytes {
+        let preview_len = bytes.len().min(256);
+        preview_text.push_str("── Hex 预览 (前 256 字节) ──\n\n");
+        for (offset, chunk) in bytes[..preview_len].chunks(16).enumerate() {
+            let row_offset = offset * 16;
+            // Offset
+            preview_text.push_str(&format!("{:08x}  ", row_offset));
+            // Hex bytes
+            for byte in chunk {
+                preview_text.push_str(&format!("{:02x} ", byte));
+            }
+            // Padding for incomplete lines
+            for _ in chunk.len()..16 {
+                preview_text.push_str("   ");
+            }
+            preview_text.push(' ');
+            // ASCII representation
+            for byte in chunk {
+                if byte.is_ascii_graphic() || *byte == b' ' {
+                    preview_text.push(*byte as char);
+                } else {
+                    preview_text.push('.');
+                }
+            }
+            preview_text.push('\n');
+        }
+        if bytes.len() > 256 {
+            preview_text.push_str(&format!("\n... 还有 {} 字节", bytes.len() - 256));
+        }
+    }
+
+    div()
+        .id("api-response-binary-view")
+        .flex_1()
+        .min_h(px(0.0))
+        .overflow_y_scroll()
+        .scrollbar_width(px(4.0))
+        .p(px(10.0))
+        .bg(glass::inset(cx))
+        .child(
+            div()
+                .font_family("SF Mono")
+                .text_size(px(11.0))
+                .line_height(px(16.0))
+                .text_color(Theme::global(cx).muted_foreground)
+                .whitespace_nowrap()
+                .child(preview_text),
+        )
+        .into_any_element()
 }
 
 fn response_code_view(

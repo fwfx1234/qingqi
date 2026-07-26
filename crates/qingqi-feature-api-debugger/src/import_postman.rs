@@ -65,31 +65,41 @@ fn parse_items(
 
             let url_str = extract_postman_url(request);
 
+            let (normalized_url, query_rows) = crate::service::split_request_url(&url_str);
+            let path_rows = crate::service::extract_path_parameter_names(&normalized_url)
+                .into_iter()
+                .map(|name| KeyValueRow::new(name, ""))
+                .collect::<Vec<_>>();
             let mut snapshot = crate::model::RequestSnapshot {
                 method: method.clone(),
-                url: url_str.clone(),
+                url: normalized_url,
+                params_text: format_rows(&query_rows),
+                path_params_text: format_rows(&path_rows),
                 ..Default::default()
             };
 
             // Headers
             if let Some(headers) = request.get("header").and_then(|v| v.as_array()) {
-                let rows: Vec<KeyValueRow> = headers
-                    .iter()
-                    .filter_map(|h| {
-                        let key = h.get("key").and_then(|v| v.as_str()).unwrap_or("");
-                        let val = h.get("value").and_then(|v| v.as_str()).unwrap_or("");
-                        if key.is_empty() {
-                            None
-                        } else {
-                            Some(KeyValueRow::new(key.to_string(), val.to_string()))
-                        }
-                    })
-                    .collect();
+                let mut rows = Vec::new();
+                let mut cookies = Vec::new();
+                for header in headers {
+                    let key = header.get("key").and_then(|v| v.as_str()).unwrap_or("");
+                    let value = header.get("value").and_then(|v| v.as_str()).unwrap_or("");
+                    if key.eq_ignore_ascii_case("cookie") {
+                        cookies.extend(value.split(';').filter_map(|pair| {
+                            let (key, value) = pair.trim().split_once('=')?;
+                            Some(format!("{}={}", key.trim(), value.trim()))
+                        }));
+                    } else if !key.is_empty() {
+                        rows.push(KeyValueRow::new(key.to_string(), value.to_string()));
+                    }
+                }
                 snapshot.headers_text = rows
                     .iter()
                     .map(|r| format!("{}={}", r.key, r.value))
                     .collect::<Vec<_>>()
                     .join("\n");
+                snapshot.cookies_text = cookies.join("\n");
             }
 
             // Body
@@ -131,21 +141,35 @@ fn parse_items(
                         "formdata" => {
                             snapshot.body_mode = "form-data".into();
                             if let Some(params) = body.get("formdata").and_then(|v| v.as_array()) {
-                                snapshot.body_text = params
+                                let rows = params
                                     .iter()
                                     .filter_map(|p| {
                                         let k = p.get("key").and_then(|v| v.as_str())?;
-                                        let v =
-                                            p.get("value").and_then(|v| v.as_str()).unwrap_or("");
-                                        Some(format!("{k}={v}"))
+                                        let is_file = p.get("type").and_then(|v| v.as_str())
+                                            == Some("file");
+                                        let value = if is_file {
+                                            p.get("src").and_then(|v| v.as_str()).unwrap_or("")
+                                        } else {
+                                            p.get("value").and_then(|v| v.as_str()).unwrap_or("")
+                                        };
+                                        let mut row = KeyValueRow::new(k, value);
+                                        row.value_type = if is_file { "file" } else { "text" }.into();
+                                        Some(row)
                                     })
-                                    .collect::<Vec<_>>()
-                                    .join("\n");
+                                    .collect::<Vec<_>>();
+                                snapshot.body_text = format_rows(&rows);
+                                snapshot.body_payloads.form_data = rows;
                             }
                         }
                         _ => {}
                     }
                 }
+            }
+            if snapshot.body_payloads.is_empty() && !snapshot.body_text.is_empty() {
+                snapshot.body_payloads = crate::model::RequestBody::migrate_legacy(
+                    crate::model::BodyMode::from_db(&snapshot.body_mode),
+                    &snapshot.body_text,
+                );
             }
 
             // Auth
@@ -154,42 +178,18 @@ fn parse_items(
                     match auth_type {
                         "bearer" => {
                             if let Some(token) = find_auth_value(auth, "token") {
-                                let rows = parse_or_empty(&snapshot.headers_text);
-                                let mut new_rows = rows;
-                                let has_auth = new_rows
-                                    .iter()
-                                    .any(|r| r.key.eq_ignore_ascii_case("Authorization"));
-                                if !has_auth {
-                                    new_rows.push(KeyValueRow::new(
-                                        "Authorization".to_string(),
-                                        format!("Bearer {token}"),
-                                    ));
-                                    snapshot.headers_text = new_rows
-                                        .iter()
-                                        .map(|r| format!("{}={}", r.key, r.value))
-                                        .collect::<Vec<_>>()
-                                        .join("\n");
-                                }
+                                snapshot.auth_type = "bearer".into();
+                                snapshot.auth_value = token;
                             }
                         }
                         "basic" => {
                             let user = find_auth_value(auth, "username").unwrap_or_default();
                             let pass = find_auth_value(auth, "password").unwrap_or_default();
-                            let rows = parse_or_empty(&snapshot.headers_text);
-                            let has_auth = rows
-                                .iter()
-                                .any(|r| r.key.eq_ignore_ascii_case("Authorization"));
-                            if !has_auth && (!user.is_empty() || !pass.is_empty()) {
-                                let mut new_rows = rows;
-                                new_rows.push(KeyValueRow::new(
-                                    "Authorization".to_string(),
-                                    format!("Basic {}:{}", user, pass),
-                                ));
-                                snapshot.headers_text = new_rows
-                                    .iter()
-                                    .map(|r| format!("{}={}", r.key, r.value))
-                                    .collect::<Vec<_>>()
-                                    .join("\n");
+                            if !user.is_empty() || !pass.is_empty() {
+                                snapshot.auth_type = "basic".into();
+                                snapshot.auth_value = crate::service::base64_encode(
+                                    format!("{user}:{pass}").as_bytes(),
+                                );
                             }
                         }
                         _ => {}
@@ -260,7 +260,26 @@ fn extract_postman_url(request: &Value) -> String {
     }
 }
 
+fn format_rows(rows: &[KeyValueRow]) -> String {
+    rows.iter()
+        .filter(|row| !row.key.is_empty())
+        .map(|row| format!("{}={}", row.key, row.value))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn find_auth_value(auth: &Value, key: &str) -> Option<String> {
+    if let Some(auth_type) = auth.get("type").and_then(|value| value.as_str())
+        && let Some(values) = auth.get(auth_type).and_then(|value| value.as_array())
+        && let Some(value) = values
+            .iter()
+            .find(|value| value.get("key").and_then(|value| value.as_str()) == Some(key))
+    {
+        return value
+            .get("value")
+            .and_then(|value| value.as_str())
+            .map(str::to_string);
+    }
     if let Some(arr) = auth.get(key).and_then(|v| v.as_array()) {
         return arr
             .first()
@@ -272,14 +291,6 @@ fn find_auth_value(auth: &Value, key: &str) -> Option<String> {
     auth.get(key)
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-}
-
-fn parse_or_empty(text: &str) -> Vec<KeyValueRow> {
-    text.lines()
-        .filter(|l| !l.trim().is_empty())
-        .filter_map(|l| l.split_once('='))
-        .map(|(k, v)| KeyValueRow::new(k.trim().to_string(), v.trim().to_string()))
-        .collect()
 }
 
 #[cfg(test)]
@@ -343,5 +354,54 @@ mod tests {
         let post_ep = result.endpoints.get(1).unwrap();
         assert_eq!(post_ep.snapshot.method, "POST");
         assert!(!post_ep.snapshot.body_text.is_empty());
+    }
+
+    #[test]
+    fn public_echo_fixture_covers_request_scenarios() {
+        let content = include_str!("../examples/postman-echo-scenarios.postman_collection.json");
+        let result = parse_postman(content).unwrap();
+
+        assert_eq!(result.endpoints.len(), 14);
+        assert!(result.endpoints.iter().all(|endpoint| {
+            endpoint
+                .parent_folder
+                .as_deref()
+                .is_some_and(|folder| folder == "基础请求" || folder == "请求体与方法")
+        }));
+        for method in ["GET", "POST", "PUT", "PATCH", "DELETE"] {
+            assert!(
+                result
+                    .endpoints
+                    .iter()
+                    .any(|endpoint| endpoint.method == method)
+            );
+        }
+
+        let basic_auth = result
+            .endpoints
+            .iter()
+            .find(|endpoint| endpoint.name == "Basic Auth")
+            .unwrap();
+        assert_eq!(basic_auth.snapshot.auth_type, "basic");
+        assert_eq!(basic_auth.snapshot.auth_value, "cG9zdG1hbjpwYXNzd29yZA==");
+
+        let cookies = result
+            .endpoints
+            .iter()
+            .find(|endpoint| endpoint.name == "Cookie")
+            .unwrap();
+        assert_eq!(
+            cookies.snapshot.cookies_text,
+            "session_id=qingqi-demo\ntheme=light"
+        );
+
+        let body_modes: Vec<&str> = result
+            .endpoints
+            .iter()
+            .map(|endpoint| endpoint.snapshot.body_mode.as_str())
+            .collect();
+        assert!(body_modes.contains(&"json"));
+        assert!(body_modes.contains(&"urlencoded"));
+        assert!(body_modes.contains(&"form-data"));
     }
 }

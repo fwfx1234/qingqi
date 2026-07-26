@@ -20,8 +20,9 @@ use qingqi_plugin::job::{JobId, JobProvider, JobSnapshot};
 
 use super::{
     model::{
-        DownloadSettings, DownloadTask, FileCategory, TaskStatus, file_extension, guess_file_name,
-        parse_custom_headers, sanitize_file_name,
+        calculate_segments, DownloadSegment, DownloadSettings, DownloadTask, FileCategory,
+        SegmentStatus, TaskStatus, file_extension, guess_file_name, parse_custom_headers,
+        sanitize_file_name,
     },
     store::DownloadStore,
 };
@@ -129,6 +130,11 @@ impl DownloadService {
                     "referer" => settings.referer = value,
                     "cookie" => settings.cookie = value,
                     "customHeaders" => settings.custom_headers = value,
+                    "segmentCount" => {
+                        if let Ok(v) = value.parse::<usize>() {
+                            settings.segment_count = v.clamp(0, 16);
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -225,6 +231,7 @@ impl DownloadService {
             ("referer", s.referer.as_str()),
             ("cookie", s.cookie.as_str()),
             ("customHeaders", s.custom_headers.as_str()),
+            ("segmentCount", &s.segment_count.to_string()),
         ])
     }
 
@@ -258,6 +265,8 @@ impl DownloadService {
             speed_bps: 0.0,
             created_at: now.clone(),
             updated_at: now,
+            scheduled_at: String::new(),
+            priority: 0,
         };
 
         lock_or_recover(&self.store, "download-store").insert_task(&task)?;
@@ -375,6 +384,13 @@ impl DownloadRuntime {
             return Err(anyhow!("任务已结束，无法重新下载"));
         }
 
+        if let Some(size) = task.file_size {
+            let seg_count = lock_or_recover(&self.settings, "download-settings").segment_count;
+            if seg_count > 1 && size > 1024 * 1024 {
+                return self.start_segmented_download(&task, size, seg_count);
+            }
+        }
+
         let cancel_flag = Arc::new(AtomicBool::new(false));
         let pause_flag = Arc::new(AtomicBool::new(false));
         let progress = Arc::new(AtomicU64::new(task.downloaded));
@@ -487,6 +503,132 @@ impl DownloadRuntime {
                     );
                     revision.fetch_add(1, Ordering::SeqCst);
                     tracing::warn!(task_id, error = %err, "download failed");
+                    scheduler.schedule_pending_downloads();
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    fn start_segmented_download(
+        &self,
+        task: &DownloadTask,
+        file_size: u64,
+        segment_count: usize,
+    ) -> Result<()> {
+        let task_id = task.id.clone();
+        let url = task.url.clone();
+        let save_path = task.save_path.clone();
+        let file_name = task.file_name.clone();
+
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        let pause_flag = Arc::new(AtomicBool::new(false));
+        let progress = Arc::new(AtomicU64::new(0));
+        let speed = Arc::new(Mutex::new(0.0));
+        let max_concurrent = lock_or_recover(&self.settings, "download-settings").max_concurrent;
+
+        {
+            let mut active = lock_or_recover(&self.active, "download-active");
+            if active.contains_key(&task_id) {
+                return Ok(());
+            }
+            if active.len() >= max_concurrent {
+                return Err(anyhow!("已达最大并发数 {}，请等待", max_concurrent));
+            }
+            active.insert(
+                task_id.clone(),
+                ActiveDownload {
+                    cancel_flag: cancel_flag.clone(),
+                    pause_flag: pause_flag.clone(),
+                    progress: progress.clone(),
+                    speed: speed.clone(),
+                },
+            );
+        }
+
+        if let Err(error) = lock_or_recover(&self.store, "download-store").update_status(
+            &task_id,
+            TaskStatus::Downloading,
+            "",
+        ) {
+            lock_or_recover(&self.active, "download-active").remove(&task_id);
+            return Err(error);
+        }
+        self.revision.fetch_add(1, Ordering::SeqCst);
+
+        let store = Arc::clone(&self.store);
+        let active_map = Arc::clone(&self.active);
+        let revision = Arc::clone(&self.revision);
+        let settings = Arc::clone(&self.settings);
+        let client = self.http_client();
+        let sleeper = self.sleeper.clone();
+        let scheduler = self.clone();
+
+        thread::spawn(move || {
+            let result = download_with_segments(
+                &task_id,
+                &url,
+                &save_path,
+                file_size,
+                segment_count,
+                &cancel_flag,
+                &pause_flag,
+                &progress,
+                &speed,
+                &store,
+                &settings,
+                &client,
+                &sleeper,
+            );
+
+            lock_or_recover(&active_map, "download-active-map").remove(&task_id);
+
+            match result {
+                Ok(()) => {
+                    revision.fetch_add(1, Ordering::SeqCst);
+                    tracing::info!(task_id, file_name, "segmented download completed");
+                    scheduler.schedule_pending_downloads();
+                }
+                Err(DownloadError::Cancelled) => {
+                    log_error!(
+                        store.lock().unwrap().update_status(
+                            &task_id,
+                            TaskStatus::Cancelled,
+                            "已取消"
+                        ),
+                        warn,
+                        "更新下载状态失败"
+                    );
+                    revision.fetch_add(1, Ordering::SeqCst);
+                    tracing::info!(task_id, "segmented download cancelled");
+                    scheduler.schedule_pending_downloads();
+                }
+                Err(DownloadError::Paused) => {
+                    log_error!(
+                        store
+                            .lock()
+                            .unwrap()
+                            .update_status(&task_id, TaskStatus::Paused, ""),
+                        warn,
+                        "更新下载状态失败"
+                    );
+                    revision.fetch_add(1, Ordering::SeqCst);
+                    tracing::info!(task_id, "segmented download paused");
+                    scheduler.schedule_pending_downloads();
+                }
+                Err(DownloadError::Other(err)) => {
+                    log_error!(
+                        store.lock().unwrap().update_status(
+                            &task_id,
+                            TaskStatus::Failed,
+                            &err.to_string()
+                        ),
+                        warn,
+                        "更新下载状态失败"
+                    );
+                    revision.fetch_add(1, Ordering::SeqCst);
+                    tracing::warn!(task_id, error = %err, "segmented download failed");
                     scheduler.schedule_pending_downloads();
                 }
             }
@@ -732,6 +874,78 @@ impl DownloadService {
         Ok(cleared)
     }
 
+    /// Check scheduled tasks and start any that are due
+    pub fn check_scheduled_tasks(&self) -> Result<usize> {
+        let now = OffsetDateTime::now_utc().to_string();
+        let due_tasks = {
+            let store = lock_or_recover(&self.store, "download-store");
+            store.list_scheduled_tasks()?
+                .into_iter()
+                .filter(|t| !t.scheduled_at.is_empty() && t.scheduled_at <= now)
+                .collect::<Vec<_>>()
+        };
+
+        let count = due_tasks.len();
+        for task in due_tasks {
+            log_error!(self.start_download(&task.id), warn, "启动定时下载失败");
+        }
+
+        if count > 0 {
+            self.bump_revision();
+        }
+
+        Ok(count)
+    }
+
+    /// Export download history as JSON
+    pub fn export_history(&self) -> Result<String> {
+        let tasks = self.tasks_snapshot();
+        let export = super::model::DownloadHistoryExport::new(tasks);
+        export.to_json().map_err(|e| anyhow::anyhow!("导出失败: {e}"))
+    }
+
+    /// Import URLs from a JSON string
+    pub fn import_urls_json(&self, json: &str) -> Result<Vec<DownloadTask>> {
+        let import_list = super::model::UrlImportList::from_json(json)
+            .map_err(|e| anyhow::anyhow!("解析导入数据失败: {e}"))?;
+
+        let mut tasks = Vec::new();
+        for item in &import_list.urls {
+            match self.add_task(&item.url) {
+                Ok(mut task) => {
+                    task.priority = item.priority;
+                    if let Some(ref name) = item.file_name {
+                        task.file_name = name.clone();
+                    }
+                    log_error!(lock_or_recover(&self.store, "download-store").update_task(&task), warn, "更新导入任务失败");
+                    log_error!(self.start_download(&task.id), warn, "启动下载失败");
+                    tasks.push(task);
+                }
+                Err(e) => {
+                    tracing::warn!(url = %item.url, error = %e, "导入URL失败");
+                }
+            }
+        }
+        ensure!(!tasks.is_empty(), "未能导入任何任务");
+        self.bump_revision();
+        Ok(tasks)
+    }
+
+    /// Import URLs from plain text
+    pub fn import_urls_text(&self, text: &str) -> Result<Vec<DownloadTask>> {
+        self.add_urls_from_text(text)
+    }
+
+    /// Add a task with a scheduled start time and priority
+    pub fn add_task_scheduled(&self, url: &str, scheduled_at: &str, priority: i32) -> Result<DownloadTask> {
+        let mut task = self.add_task(url)?;
+        task.scheduled_at = scheduled_at.to_string();
+        task.priority = priority;
+        lock_or_recover(&self.store, "download-store").update_task(&task)?;
+        self.bump_revision();
+        Ok(task)
+    }
+
     fn resolve_save_path_in_dir(dir: &Path, file_name: &str) -> PathBuf {
         let safe = sanitize_file_name(file_name);
         let base = dir.join(&safe);
@@ -812,10 +1026,21 @@ impl JobProvider for DownloadService {
     }
 }
 
+#[derive(Debug)]
 enum DownloadError {
     Cancelled,
     Paused,
     Other(anyhow::Error),
+}
+
+impl std::fmt::Display for DownloadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DownloadError::Cancelled => write!(f, "下载已取消"),
+            DownloadError::Paused => write!(f, "下载已暂停"),
+            DownloadError::Other(err) => write!(f, "{err}"),
+        }
+    }
 }
 
 impl From<anyhow::Error> for DownloadError {
@@ -1102,12 +1327,330 @@ fn download_file(
             .unwrap()
             .update_progress(task_id, downloaded, 0.0, TaskStatus::Completed)?;
 
+        run_post_download_action(store);
+
         return Ok(());
     }
 
     Err(DownloadError::Other(
         last_error.unwrap_or_else(|| anyhow!("所有重试均失败")),
     ))
+}
+
+fn download_with_segments(
+    task_id: &str,
+    url: &str,
+    save_path: &str,
+    file_size: u64,
+    segment_count: usize,
+    cancel_flag: &Arc<AtomicBool>,
+    pause_flag: &Arc<AtomicBool>,
+    progress: &Arc<AtomicU64>,
+    speed: &Arc<Mutex<f64>>,
+    store: &Arc<Mutex<DownloadStore>>,
+    settings: &Arc<Mutex<DownloadSettings>>,
+    client: &reqwest::blocking::Client,
+    sleeper: &DownloadSleeper,
+) -> Result<(), DownloadError> {
+    let segments = calculate_segments(file_size, segment_count);
+    let actual_count = segments.len();
+
+    // Create segment records in store
+    {
+        let store_guard = lock_or_recover(store, "download-store");
+        for (i, (start, end)) in segments.iter().enumerate() {
+            let seg = DownloadSegment {
+                id: format!("{task_id}-seg-{i}"),
+                task_id: task_id.to_string(),
+                index: i,
+                start_byte: *start,
+                end_byte: *end,
+                downloaded: 0,
+                status: SegmentStatus::Pending,
+                error_msg: String::new(),
+            };
+            log_error!(store_guard.insert_segment(&seg), warn, "插入分片记录失败");
+        }
+    }
+
+    // Download each segment in parallel
+    let mut handles = Vec::new();
+    for (i, (start, end)) in segments.into_iter().enumerate() {
+        if cancel_flag.load(Ordering::Relaxed) {
+            return Err(DownloadError::Cancelled);
+        }
+
+        let part_path = format!("{save_path}.part{i}");
+        let client = client.clone();
+        let store = Arc::clone(store);
+        let settings = Arc::clone(settings);
+        let cancel = Arc::clone(cancel_flag);
+        let pause = Arc::clone(pause_flag);
+        let progress = Arc::clone(progress);
+        let _speed = Arc::clone(speed);
+        let sleeper = sleeper.clone();
+        let task_id = task_id.to_string();
+        let url = url.to_string();
+
+        let handle = thread::spawn(move || {
+            download_segment(
+                &task_id,
+                i,
+                &url,
+                &part_path,
+                start,
+                end,
+                &*cancel,
+                &*pause,
+                &*progress,
+                &store,
+                &settings,
+                &client,
+                &sleeper,
+            )
+        });
+        handles.push(handle);
+    }
+
+    // Wait for all segments
+    let mut any_failed = false;
+    for handle in handles {
+        match handle.join() {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                any_failed = true;
+                tracing::warn!(error = %e, "segment download failed");
+            }
+            Err(e) => {
+                any_failed = true;
+                tracing::warn!(error = ?e, "segment thread panicked");
+            }
+        }
+    }
+
+    if any_failed {
+        return Err(DownloadError::Other(anyhow::anyhow!("部分分片下载失败")));
+    }
+
+    if cancel_flag.load(Ordering::Relaxed) {
+        return Err(DownloadError::Cancelled);
+    }
+
+    // Merge segments
+    merge_segments(save_path, actual_count)?;
+
+    // Update final progress
+    progress.store(file_size, Ordering::Relaxed);
+    store
+        .lock()
+        .unwrap()
+        .update_progress(task_id, file_size, 0.0, TaskStatus::Completed)?;
+
+    run_post_download_action(store);
+
+    Ok(())
+}
+
+fn download_segment(
+    task_id: &str,
+    index: usize,
+    url: &str,
+    part_path: &str,
+    start: u64,
+    end: u64,
+    cancel_flag: &AtomicBool,
+    pause_flag: &AtomicBool,
+    progress: &AtomicU64,
+    store: &Arc<Mutex<DownloadStore>>,
+    settings: &Arc<Mutex<DownloadSettings>>,
+    client: &reqwest::blocking::Client,
+    _sleeper: &DownloadSleeper,
+) -> Result<(), DownloadError> {
+    let seg_id = format!("{task_id}-seg-{index}");
+    let (user_agent, referer, cookie, custom_headers_str) = {
+        let s = lock_or_recover(settings, "download-settings");
+        (
+            s.user_agent.clone(),
+            s.referer.clone(),
+            s.cookie.clone(),
+            s.custom_headers.clone(),
+        )
+    };
+
+    let mut file = File::create(part_path).map_err(|e| DownloadError::Other(e.into()))?;
+    let total = end - start + 1;
+    let mut downloaded: u64 = 0;
+    let mut speed_tracker = SpeedTracker::new();
+
+    // Support resume for each segment
+    let resume_from = if Path::new(part_path).exists() {
+        let len = std::fs::metadata(part_path).map(|m| m.len()).unwrap_or(0);
+        if len < total {
+            len
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+
+    let range_start = start + resume_from;
+
+    let mut response = {
+        let mut req = client.get(url);
+        if !user_agent.is_empty() {
+            req = req.header("User-Agent", &user_agent);
+        }
+        if !referer.is_empty() {
+            req = req.header("Referer", &referer);
+        }
+        if !cookie.is_empty() {
+            req = req.header("Cookie", &cookie);
+        }
+        for (key, val) in parse_custom_headers(&custom_headers_str) {
+            req = req.header(&key, &val);
+        }
+        req = req.header("Range", format!("bytes={range_start}-{end}"));
+        req.send()
+            .map_err(|e| DownloadError::Other(e.into()))?
+    };
+
+    if !response.status().is_success() && response.status().as_u16() != 206 {
+        return Err(DownloadError::Other(anyhow::anyhow!(
+            "分片 {} HTTP 错误: {}",
+            index,
+            response.status()
+        )));
+    }
+
+    // Mark segment as downloading
+    store
+        .lock()
+        .unwrap()
+        .update_segment_progress(&seg_id, 0, SegmentStatus::Downloading, "")
+        .ok();
+
+    let mut buf = vec![0u8; BUFFER_SIZE];
+    loop {
+        if cancel_flag.load(Ordering::Relaxed) {
+            return Err(DownloadError::Cancelled);
+        }
+        if pause_flag.load(Ordering::Relaxed) {
+            return Err(DownloadError::Paused);
+        }
+
+        let n = response
+            .read(&mut buf)
+            .map_err(|e| DownloadError::Other(e.into()))?;
+        if n == 0 {
+            break;
+        }
+
+        file.write_all(&buf[..n])
+            .map_err(|e| DownloadError::Other(e.into()))?;
+        downloaded += n as u64;
+        progress.fetch_add(n as u64, Ordering::Relaxed);
+        speed_tracker.add_bytes(n);
+
+        // Update segment progress periodically
+        if downloaded % (256 * 1024) < BUFFER_SIZE as u64 {
+            let _ = store.lock().unwrap().update_segment_progress(
+                &seg_id,
+                resume_from + downloaded,
+                SegmentStatus::Downloading,
+                "",
+            );
+        }
+    }
+
+    file.flush()
+        .map_err(|e| DownloadError::Other(e.into()))?;
+
+    // Mark segment completed
+    store
+        .lock()
+        .unwrap()
+        .update_segment_progress(&seg_id, total, SegmentStatus::Completed, "")
+        .ok();
+
+    Ok(())
+}
+
+fn merge_segments(save_path: &str, segment_count: usize) -> Result<(), DownloadError> {
+    let mut final_file = File::create(save_path).map_err(|e| {
+        DownloadError::Other(anyhow::anyhow!("创建最终文件失败: {e}"))
+    })?;
+
+    for i in 0..segment_count {
+        let part_path = format!("{save_path}.part{i}");
+        let mut part_file = File::open(&part_path).map_err(|e| {
+            DownloadError::Other(anyhow::anyhow!("打开分片文件失败: {e}"))
+        })?;
+        std::io::copy(&mut part_file, &mut final_file).map_err(|e| {
+            DownloadError::Other(anyhow::anyhow!("合并分片失败: {e}"))
+        })?;
+        // Clean up part file
+        let _ = std::fs::remove_file(&part_path);
+    }
+
+    final_file
+        .flush()
+        .map_err(|e| DownloadError::Other(e.into()))?;
+    Ok(())
+}
+
+fn run_post_download_action(store: &Arc<Mutex<DownloadStore>>) {
+    let on_complete = match store.lock() {
+        Ok(guard) => match guard.load_settings() {
+            Ok(pairs) => pairs
+                .into_iter()
+                .find(|(k, _)| k == "onCompleteAction")
+                .map(|(_, v)| v)
+                .unwrap_or_default(),
+            Err(_) => String::new(),
+        },
+        Err(_) => String::new(),
+    };
+
+    match on_complete.as_str() {
+        "shutdown" => {
+            #[cfg(target_os = "macos")]
+            {
+                let _ = std::process::Command::new("shutdown")
+                    .arg("-h")
+                    .arg("now")
+                    .spawn();
+            }
+            #[cfg(target_os = "windows")]
+            {
+                let _ = std::process::Command::new("shutdown")
+                    .arg("/s")
+                    .arg("/t")
+                    .arg("0")
+                    .spawn();
+            }
+            #[cfg(target_os = "linux")]
+            {
+                let _ = std::process::Command::new("shutdown")
+                    .arg("-h")
+                    .arg("now")
+                    .spawn();
+            }
+        }
+        "sleep" => {
+            #[cfg(target_os = "macos")]
+            {
+                let _ = std::process::Command::new("pmset").arg("sleepnow").spawn();
+            }
+            #[cfg(target_os = "linux")]
+            {
+                let _ = std::process::Command::new("systemctl")
+                    .arg("suspend")
+                    .spawn();
+            }
+        }
+        _ => {}
+    }
 }
 
 fn try_request(

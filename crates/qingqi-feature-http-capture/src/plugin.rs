@@ -4,7 +4,7 @@ use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 
 use crate::{
     certificate::CaManager, engine::CaptureEngine, manifest, mock_engine::MockEngine,
-    mock_store::MockStore, store::CaptureStore, view::CaptureView,
+    mock_store::MockStore, rewrite::RewriteEngine, store::CaptureStore, view::CaptureView,
 };
 use qingqi_plugin::{
     command::{Command, ContextKind, ContextMatcher},
@@ -20,6 +20,7 @@ pub struct HttpCapturePlugin {
     store: Arc<Mutex<CaptureStore>>,
     mock_store: Arc<Mutex<MockStore>>,
     ca_manager: Arc<Mutex<CaManager>>,
+    rewrite_engine: Arc<Mutex<RewriteEngine>>,
     events: AppEventBus,
 }
 
@@ -54,6 +55,7 @@ impl HttpCapturePlugin {
             store,
             mock_store,
             ca_manager,
+            rewrite_engine: Arc::new(Mutex::new(RewriteEngine::new())),
             events,
         })
     }

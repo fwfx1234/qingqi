@@ -16,6 +16,7 @@ use qingqi_feature_image_compress as feature_image_compress;
 use qingqi_feature_json_parser as feature_json_parser;
 use qingqi_feature_qr_code as feature_qr_code;
 use qingqi_feature_quick_launch as feature_quick_launch;
+use qingqi_feature_remote_control as feature_remote_control;
 use qingqi_feature_ssh as feature_ssh;
 use qingqi_feature_system_settings as feature_system_settings;
 use qingqi_feature_tray as feature_tray;
@@ -123,8 +124,48 @@ pub fn register_builtin_plugins(host: &mut AppHost) -> Result<()> {
             )
         },
     );
+    registry.register(
+        PluginDescriptor::builtin(feature_remote_control::manifest::manifest()),
+        |cx| feature_remote_control::build(cx.paths.clone()),
+    );
 
     registry.build_all(&host.build_cx, &mut host.plugins)?;
     host.plugins.rebuild_command_catalog()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn long_lived_window_plugins_opt_into_dock_agents() {
+        for manifest in [
+            feature_api_debugger::manifest::manifest(),
+            feature_download_manager::manifest::manifest(),
+            feature_http_capture::manifest::manifest(),
+            feature_quick_launch::manifest::manifest(),
+            feature_ssh::manifest::manifest(),
+        ] {
+            assert!(
+                manifest.window.show_in_dock,
+                "{} should opt into a Dock agent",
+                manifest.id
+            );
+        }
+    }
+
+    #[test]
+    fn transient_window_plugins_stay_out_of_dock() {
+        for manifest in [
+            feature_clipboard::manifest::manifest(),
+            feature_anti_peeping::manifest::manifest(),
+        ] {
+            assert!(
+                !manifest.window.show_in_dock,
+                "{} should stay out of the Dock",
+                manifest.id
+            );
+        }
+    }
 }

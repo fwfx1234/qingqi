@@ -33,7 +33,7 @@ tiny-skia.workspace = true
 usvg.workspace = true
 
 [package.metadata.bundle]
-name = "Qingqi"
+name = "启程 (Qingqi)"
 identifier = "com.fwfx1234.qingqi"
 icon = [
     "assets/app_icon_16.png",
