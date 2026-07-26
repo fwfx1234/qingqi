@@ -1832,6 +1832,8 @@ impl EntityInputHandler for InputState {
             self.text = initial_text;
             self.selected_range = initial_selection;
             self.text_wrapper.reset(&self.text, cx);
+            // 清除 IME 标记范围，确保后续删除操作正常
+            self.ime_marked_range = None;
             Range::from(initial_selection)
         } else {
             range_utf16
@@ -1876,6 +1878,7 @@ impl EntityInputHandler for InputState {
                 self.text.replace(start..end, "");
                 self.selected_range = (start..start).into();
             }
+            // 清除 IME 标记范围，确保后续删除操作正常
             self.ime_marked_range = None;
         } else {
             let clamped_start = range.start.min(self.text.len());
