@@ -1,9 +1,11 @@
+pub mod custom_dir;
 pub mod manifest;
 pub mod platform;
 pub mod plugin;
 pub mod protocol;
 pub mod server;
 pub mod service;
+pub mod steam;
 pub mod view;
 
 use qingqi_plugin::{database::DatabaseSpec, plugin::Plugin, storage::AppPaths};

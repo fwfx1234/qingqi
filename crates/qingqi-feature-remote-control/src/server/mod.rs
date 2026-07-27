@@ -29,13 +29,14 @@ pub struct AppState {
 impl AppState {
     pub fn new(service: RemoteControlService) -> Self {
         let (tx, _) = broadcast::channel(256);
+        let scanner_config_path = service.paths().config("scanner_custom_dirs.json");
         Self {
             service: Arc::new(service),
             system_service: Arc::new(SystemService::new()),
             process_manager: Arc::new(std::sync::Mutex::new(ProcessManager::new())),
             token_store: Arc::new(auth::TokenStore::new()),
             events: tx,
-            app_scanner: Arc::new(AppScanner::new()),
+            app_scanner: Arc::new(AppScanner::new(scanner_config_path)),
         }
     }
 }
@@ -54,7 +55,9 @@ impl RemoteServer {
         app = app
             .route("/api/v1/auth/pair", axum::routing::post(routes::auth::pair))
             .route("/api/v1/auth/verify", axum::routing::post(routes::auth::verify))
-            .route("/api/v1/auth", axum::routing::delete(routes::auth::revoke));
+            .route("/api/v1/auth", axum::routing::delete(routes::auth::revoke))
+            .route("/api/v1/auth/devices", axum::routing::get(routes::auth::list_devices))
+            .route("/api/v1/auth/devices/:device_name", axum::routing::delete(routes::auth::revoke_device));
 
         // System routes
         app = app
@@ -86,6 +89,20 @@ impl RemoteServer {
             .route("/api/v1/scanner/apps/:id/launch", axum::routing::post(routes::scanner::launch_app))
             .route("/api/v1/scanner/refresh", axum::routing::post(routes::scanner::refresh_apps));
 
+        // Steam routes
+        app = app
+            .route("/api/v1/scanner/steam", axum::routing::get(routes::steam::list_games))
+            .route("/api/v1/scanner/steam/refresh", axum::routing::post(routes::steam::refresh))
+            .route("/api/v1/scanner/steam/:app_id/launch", axum::routing::post(routes::steam::launch_game));
+
+        // Custom directory routes
+        app = app
+            .route("/api/v1/scanner/custom-dirs", axum::routing::get(routes::custom_dir::list))
+            .route("/api/v1/scanner/custom-dirs", axum::routing::post(routes::custom_dir::add))
+            .route("/api/v1/scanner/custom-dirs/validate", axum::routing::post(routes::custom_dir::validate))
+            .route("/api/v1/scanner/custom-dirs/:id", axum::routing::put(routes::custom_dir::update))
+            .route("/api/v1/scanner/custom-dirs/:id", axum::routing::delete(routes::custom_dir::remove));
+
         // Task Manager routes
         app = app
             .route("/api/v1/tasks", axum::routing::get(routes::task::list_tasks))
@@ -110,17 +127,38 @@ impl RemoteServer {
                 .allow_headers(tower_http::cors::Any),
         );
 
+        // Request logging
+        app = app.layer(tower_http::trace::TraceLayer::new_for_http()
+            .make_span_with(|req: &axum::http::Request<_>| {
+                tracing::info_span!(
+                    "http",
+                    method = %req.method(),
+                    uri = %req.uri(),
+                )
+            })
+            .on_response(|resp: &axum::http::Response<_>, latency: std::time::Duration, _span: &tracing::Span| {
+                tracing::info!(
+                    "[远程控制] <- {} in {:?}",
+                    resp.status().as_u16(),
+                    latency,
+                );
+            }));
+
         // Provide state via Extension
         app.layer(Extension(state))
     }
 
     pub async fn run(state: AppState, port: u16) -> anyhow::Result<(SocketAddr, tokio::task::JoinHandle<()>)> {
         let app = Self::create_router(state);
+        tracing::info!("[远程控制] 正在尝试绑定端口 {}...", port);
         let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await?;
         let addr = listener.local_addr()?;
+        tracing::info!("[远程控制] 服务器已绑定: {} (0.0.0.0:{})", addr, port);
         let handle = tokio::spawn(async move {
+            tracing::info!("[远程控制] HTTP 服务开始监听...");
             let serve = axum::serve(listener, app);
             let _ = serve.into_future().await;
+            tracing::warn!("[远程控制] HTTP 服务已停止");
         });
         Ok((addr, handle))
     }

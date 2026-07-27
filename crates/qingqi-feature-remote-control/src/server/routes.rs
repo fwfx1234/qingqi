@@ -9,7 +9,7 @@ use crate::protocol::requests::{
     AuthPairRequest, AuthVerifyRequest, LaunchAppRequest, ProcessListQuery, RestartRequest,
     SearchAppsQuery, ShutdownRequest, SleepRequest,
 };
-use crate::protocol::responses::{ApiResponse, ForegroundResponse, PairResponse};
+use crate::protocol::responses::{ApiResponse, DeviceInfo, DeviceListResponse, EmptyResponse, ForegroundResponse, PairResponse};
 use crate::server::AppState;
 
 pub mod auth {
@@ -19,11 +19,12 @@ pub mod auth {
         Extension(state): Extension<AppState>,
         Json(req): Json<AuthPairRequest>,
     ) -> impl IntoResponse {
+        tracing::info!("[远程控制] 配对请求，PIN: {}", req.pin);
         if state.service.verify_pin(&req.pin) {
             let device_name = format!("手机-{}", &req.pin);
-            let token = state.token_store.create_token(&device_name, 30 * 24 * 3600);
-            let now = time::OffsetDateTime::now_utc().unix_timestamp();
-            let expires_at = now + 30 * 24 * 3600;
+            // 创建永久 Token，永不过期
+            let token = state.token_store.create_permanent_token(&device_name);
+            let expires_at = i64::MAX;
             // Register the paired device in service state
             state
                 .service
@@ -49,10 +50,55 @@ pub mod auth {
         }
     }
 
+    /// 列出所有已配对设备
+    pub async fn list_devices(
+        Extension(state): Extension<AppState>,
+    ) -> impl IntoResponse {
+        let tokens = state.token_store.list_active();
+        let devices: Vec<DeviceInfo> = tokens
+            .into_iter()
+            .map(|(token, info)| DeviceInfo {
+                device_name: info.device_name,
+                created_at: info.created_at,
+                expires_at: info.expires_at,
+                permanent: info.permanent,
+                token,
+            })
+            .collect();
+        (
+            StatusCode::OK,
+            Json(ApiResponse::success(DeviceListResponse { devices })),
+        )
+    }
+
+    /// 通过设备名称撤销配对
+    pub async fn revoke_device(
+        Extension(state): Extension<AppState>,
+        Path(device_name): Path<String>,
+    ) -> impl IntoResponse {
+        let revoked = state.token_store.revoke_by_name(&device_name);
+        if revoked {
+            state.service.revoke_device(&device_name);
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(EmptyResponse {})),
+            )
+        } else {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<EmptyResponse>::error(
+                    "DEVICE_NOT_FOUND",
+                    "Device not found",
+                )),
+            )
+        }
+    }
+
     pub async fn verify(
         Extension(state): Extension<AppState>,
         Json(req): Json<AuthVerifyRequest>,
     ) -> impl IntoResponse {
+        tracing::info!("[远程控制] 验证令牌请求");
         if state.token_store.validate(&req.token) {
             (
                 StatusCode::OK,
@@ -98,6 +144,7 @@ pub mod system {
     use super::*;
 
     pub async fn status(Extension(state): Extension<AppState>) -> impl IntoResponse {
+        tracing::debug!("[远程控制] 获取系统状态");
         let status = state.system_service.get_status();
         (StatusCode::OK, Json(ApiResponse::success(status)))
     }
@@ -401,6 +448,179 @@ pub mod scanner {
     pub async fn refresh_apps(Extension(state): Extension<AppState>) -> impl IntoResponse {
         let apps = state.app_scanner.scan();
         (StatusCode::OK, Json(ApiResponse::success(apps)))
+    }
+}
+
+pub mod steam {
+    use super::*;
+    use crate::protocol::responses::{SteamGamesResponse, SteamRefreshResponse};
+
+    /// 获取 Steam 游戏列表
+    pub async fn list_games(Extension(state): Extension<AppState>) -> impl IntoResponse {
+        let games = state.app_scanner.get_steam_games();
+        let libraries = state.app_scanner.get_steam_libraries();
+        let steam_path = state.app_scanner.get_steam_path();
+        let steam_installed = steam_path.is_some();
+
+        (
+            StatusCode::OK,
+            Json(ApiResponse::success(SteamGamesResponse {
+                steam_installed,
+                steam_path,
+                libraries,
+                total: games.len(),
+                games,
+            })),
+        )
+    }
+
+    /// 刷新 Steam 扫描
+    pub async fn refresh(Extension(state): Extension<AppState>) -> impl IntoResponse {
+        let games = state.app_scanner.refresh_steam();
+        (
+            StatusCode::OK,
+            Json(ApiResponse::success(SteamRefreshResponse {
+                scanned: games.len(),
+            })),
+        )
+    }
+
+    /// 启动 Steam 游戏
+    pub async fn launch_game(
+        Extension(state): Extension<AppState>,
+        Path(app_id): Path<u32>,
+    ) -> impl IntoResponse {
+        let games = state.app_scanner.get_steam_games();
+        let game = games.iter().find(|g| g.app_id == app_id);
+
+        match game {
+            Some(_) => {
+                let steam_url = format!("steam://rungameid/{}", app_id);
+                match crate::platform::launch_app(&steam_url, &[]) {
+                    Ok(()) => (
+                        StatusCode::OK,
+                        Json(ApiResponse::success(crate::protocol::responses::EmptyResponse {})),
+                    ),
+                    Err(e) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<crate::protocol::responses::EmptyResponse>::error(
+                            "LAUNCH_FAILED",
+                            &e.to_string(),
+                        )),
+                    ),
+                }
+            }
+            None => (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<crate::protocol::responses::EmptyResponse>::error(
+                    "GAME_NOT_FOUND",
+                    "Steam game not found",
+                )),
+            ),
+        }
+    }
+}
+
+pub mod custom_dir {
+    use super::*;
+    use crate::custom_dir::{AddCustomDirRequest, UpdateCustomDirRequest, CustomDirManager, CustomDir};
+    use crate::protocol::responses::CustomDirListResponse;
+
+    /// 获取自定义目录列表
+    pub async fn list(Extension(state): Extension<AppState>) -> impl IntoResponse {
+        let manager = state.app_scanner.custom_dir_manager().lock().unwrap();
+        let dirs: Vec<CustomDir> = manager.list().iter().map(|d| (*d).clone()).collect();
+        (
+            StatusCode::OK,
+            Json(ApiResponse::success(CustomDirListResponse { dirs })),
+        )
+    }
+
+    /// 添加自定义目录
+    pub async fn add(
+        Extension(state): Extension<AppState>,
+        Json(req): Json<AddCustomDirRequest>,
+    ) -> impl IntoResponse {
+        let manager = state.app_scanner.custom_dir_manager();
+        let mut manager = manager.lock().unwrap();
+        match manager.add(req) {
+            Ok(dir) => (
+                StatusCode::CREATED,
+                Json(ApiResponse::success(dir)),
+            ),
+            Err(e) => (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<crate::custom_dir::CustomDir>::error(
+                    "ADD_FAILED",
+                    &e.to_string(),
+                )),
+            ),
+        }
+    }
+
+    /// 更新自定义目录
+    pub async fn update(
+        Extension(state): Extension<AppState>,
+        Path(id): Path<String>,
+        Json(req): Json<UpdateCustomDirRequest>,
+    ) -> impl IntoResponse {
+        let manager = state.app_scanner.custom_dir_manager();
+        let mut manager = manager.lock().unwrap();
+        match manager.update(&id, req) {
+            Ok(dir) => (
+                StatusCode::OK,
+                Json(ApiResponse::success(dir)),
+            ),
+            Err(e) => (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<crate::custom_dir::CustomDir>::error(
+                    "UPDATE_FAILED",
+                    &e.to_string(),
+                )),
+            ),
+        }
+    }
+
+    /// 删除自定义目录
+    pub async fn remove(
+        Extension(state): Extension<AppState>,
+        Path(id): Path<String>,
+    ) -> impl IntoResponse {
+        let manager = state.app_scanner.custom_dir_manager();
+        let mut manager = manager.lock().unwrap();
+        match manager.remove(&id) {
+            Ok(()) => (
+                StatusCode::OK,
+                Json(ApiResponse::success(crate::protocol::responses::EmptyResponse {})),
+            ),
+            Err(e) => (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<crate::protocol::responses::EmptyResponse>::error(
+                    "DELETE_FAILED",
+                    &e.to_string(),
+                )),
+            ),
+        }
+    }
+
+    /// 验证目录是否可访问
+    pub async fn validate(Json(req): Json<serde_json::Value>) -> impl IntoResponse {
+        let path = req["path"].as_str().unwrap_or("");
+        if path.is_empty() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<crate::custom_dir::DirValidationResult>::error(
+                    "INVALID_INPUT",
+                    "path is required",
+                )),
+            );
+        }
+
+        let result = CustomDirManager::validate(path);
+        (
+            StatusCode::OK,
+            Json(ApiResponse::success(result)),
+        )
     }
 }
 

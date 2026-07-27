@@ -59,23 +59,32 @@ impl Plugin for RemoteControlPlugin {
         // Auto-start the remote control server on Windows
         #[cfg(target_os = "windows")]
         {
+            tracing::info!("[远程控制] 插件后台启动，准备自动启动服务器...");
+            
             // Update service state so the view shows "running" when opened
             self.service.set_server_running(true, 3721);
 
             let state = crate::server::AppState::new((*self.service).clone());
             let port = 3721;
+            tracing::info!("[远程控制] 正在后台启动服务器，端口: {}", port);
+            
             qingqi_core::tokio_runtime::spawn(async move {
                 match crate::server::RemoteServer::run(state, port).await {
                     Ok((addr, server_handle)) => {
-                        tracing::info!("远程控制服务器已自动启动: {}", addr);
+                        tracing::info!("[远程控制] 服务器自动启动成功，监听地址: {}", addr);
                         let _ = server_handle.await;
+                        tracing::warn!("[远程控制] 服务器任务已结束");
                     }
                     Err(e) => {
-                        tracing::error!("自动启动远程控制服务器失败: {}", e);
+                        tracing::error!("[远程控制] 自动启动失败: {}", e);
                     }
                 }
             });
-            tracing::info!("远程控制服务器正在后台自动启动 (Windows)");
+        }
+        
+        #[cfg(not(target_os = "windows"))]
+        {
+            tracing::info!("[远程控制] 非 Windows 系统，跳过自动启动");
         }
     }
 

@@ -22,13 +22,20 @@ pub use crate::platform::set_priority;
 pub struct AppScanner {
     renames: Arc<Mutex<HashMap<String, String>>>,
     cache: Arc<Mutex<Option<Vec<AppEntry>>>>,
+    steam_scanner: Arc<Mutex<crate::steam::SteamScanner>>,
+    steam_cache: Arc<Mutex<Option<Vec<crate::steam::SteamGame>>>>,
+    custom_dir_manager: Arc<Mutex<crate::custom_dir::CustomDirManager>>,
 }
 
 impl AppScanner {
-    pub fn new() -> Self {
+    pub fn new(config_path: PathBuf) -> Self {
+        let custom_dir_manager = crate::custom_dir::CustomDirManager::new(config_path);
         Self {
             renames: Arc::new(Mutex::new(HashMap::new())),
             cache: Arc::new(Mutex::new(None)),
+            steam_scanner: Arc::new(Mutex::new(crate::steam::SteamScanner::new())),
+            steam_cache: Arc::new(Mutex::new(None)),
+            custom_dir_manager: Arc::new(Mutex::new(custom_dir_manager)),
         }
     }
 
@@ -37,6 +44,8 @@ impl AppScanner {
         let renames = self.renames.lock().unwrap();
         apps.extend(self.scan_start_menu(&renames));
         apps.extend(self.scan_game_dirs(&renames));
+        apps.extend(self.scan_steam(&renames));
+        apps.extend(self.scan_custom_dirs());
         let mut cache = self.cache.lock().unwrap();
         *cache = Some(apps.clone());
         apps
@@ -148,8 +157,132 @@ impl AppScanner {
         }
         None
     }
+
+    /// 扫描 Steam 游戏
+    fn scan_steam(&self, renames: &HashMap<String, String>) -> Vec<AppEntry> {
+        let mut scanner = self.steam_scanner.lock().unwrap();
+        let mut steam_cache = self.steam_cache.lock().unwrap();
+
+        if let Some(games) = steam_cache.as_ref() {
+            return games
+                .iter()
+                .map(|g| self.steam_game_to_app_entry(g, renames))
+                .collect();
+        }
+
+        // 先查找 Steam 安装，再扫描游戏
+        let installed = scanner.find_steam_install().is_some();
+        let games = if installed {
+            scanner.scan_games().unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let apps: Vec<AppEntry> = games
+            .iter()
+            .map(|g| self.steam_game_to_app_entry(g, renames))
+            .collect();
+
+        *steam_cache = Some(games);
+        apps
+    }
+
+    fn steam_game_to_app_entry(
+        &self,
+        game: &crate::steam::SteamGame,
+        renames: &HashMap<String, String>,
+    ) -> AppEntry {
+        let original = game.name.clone();
+        let display = renames
+            .get(&original)
+            .cloned()
+            .unwrap_or_else(|| original.clone());
+
+        AppEntry {
+            id: format!("steam:{}", game.app_id),
+            name: display,
+            original_name: original,
+            exe_path: game.install_path.clone(),
+            icon_base64: None,
+            category: "Game".to_string(),
+            source: "Steam".to_string(),
+        }
+    }
+
+    /// 扫描自定义目录
+    fn scan_custom_dirs(&self) -> Vec<AppEntry> {
+        let manager = self.custom_dir_manager.lock().unwrap();
+        manager.scan()
+    }
+
+    /// 刷新 Steam 缓存
+    pub fn refresh_steam(&self) -> Vec<crate::steam::SteamGame> {
+        let mut scanner = self.steam_scanner.lock().unwrap();
+        let mut steam_cache = self.steam_cache.lock().unwrap();
+
+        let installed = scanner.find_steam_install().is_some();
+        let games = if installed {
+            scanner.scan_games().unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        *steam_cache = Some(games.clone());
+
+        let mut cache = self.cache.lock().unwrap();
+        *cache = None;
+
+        games
+    }
+
+    /// 获取 Steam 游戏列表
+    pub fn get_steam_games(&self) -> Vec<crate::steam::SteamGame> {
+        let mut scanner = self.steam_scanner.lock().unwrap();
+        let mut steam_cache = self.steam_cache.lock().unwrap();
+
+        if let Some(games) = steam_cache.as_ref() {
+            return games.clone();
+        }
+
+        let installed = scanner.find_steam_install().is_some();
+        let games = if installed {
+            scanner.scan_games().unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        *steam_cache = Some(games.clone());
+        games
+    }
+
+    /// 获取 Steam 库统计
+    pub fn get_steam_libraries(&self) -> Vec<crate::steam::SteamLibrary> {
+        let scanner = self.steam_scanner.lock().unwrap();
+        scanner.get_library_stats()
+    }
+
+    /// 检查 Steam 是否已安装
+    pub fn is_steam_installed(&self) -> bool {
+        let mut scanner = self.steam_scanner.lock().unwrap();
+        scanner.find_steam_install().is_some()
+    }
+
+    /// 获取 Steam 安装路径
+    pub fn get_steam_path(&self) -> Option<String> {
+        let mut scanner = self.steam_scanner.lock().unwrap();
+        scanner
+            .find_steam_install()
+            .map(|info| info.root_path.to_string_lossy().to_string())
+    }
+
+    /// 获取自定义目录管理器
+    pub fn custom_dir_manager(&self) -> &Mutex<crate::custom_dir::CustomDirManager> {
+        &self.custom_dir_manager
+    }
 }
 
 impl Default for AppScanner {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new(PathBuf::from(""))
+    }
 }

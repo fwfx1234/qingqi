@@ -97,6 +97,45 @@ pub struct SearchAppsResponse {
     pub apps: Vec<AppInfo>,
 }
 
+// === Device management responses ===
+
+#[derive(Debug, Serialize)]
+pub struct DeviceInfo {
+    pub device_name: String,
+    pub created_at: i64,
+    pub expires_at: i64,
+    pub permanent: bool,
+    pub token: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DeviceListResponse {
+    pub devices: Vec<DeviceInfo>,
+}
+
+// === Steam responses ===
+
+#[derive(Debug, Serialize)]
+pub struct SteamGamesResponse {
+    pub steam_installed: bool,
+    pub steam_path: Option<String>,
+    pub libraries: Vec<crate::steam::SteamLibrary>,
+    pub games: Vec<crate::steam::SteamGame>,
+    pub total: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SteamRefreshResponse {
+    pub scanned: usize,
+}
+
+// === Custom directory responses ===
+
+#[derive(Debug, Serialize)]
+pub struct CustomDirListResponse {
+    pub dirs: Vec<crate::custom_dir::CustomDir>,
+}
+
 // === Common responses ===
 
 #[derive(Debug, Serialize)]

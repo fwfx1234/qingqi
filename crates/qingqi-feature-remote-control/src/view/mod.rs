@@ -53,18 +53,20 @@ impl RemoteControlView {
 
     fn start_server(&mut self, cx: &mut Context<Self>) {
         let port = 3721;
+        tracing::info!("[远程控制] 用户点击启动服务器，端口: {}", port);
         let state = AppState::new((*self.service).clone());
 
         // Use the shared Tokio runtime to spawn the server task
         qingqi_core::tokio_runtime::spawn(async move {
             match RemoteServer::run(state, port).await {
                 Ok((addr, server_handle)) => {
-                    tracing::info!("远程控制服务器已启动: {}", addr);
+                    tracing::info!("[远程控制] 服务器启动成功: {}", addr);
                     // Keep the server running until the handle is dropped or aborted
                     let _ = server_handle.await;
+                    tracing::warn!("[远程控制] 服务器任务已结束");
                 }
                 Err(e) => {
-                    tracing::error!("启动远程控制服务器失败: {}", e);
+                    tracing::error!("[远程控制] 启动失败: {}", e);
                 }
             }
         });
@@ -75,6 +77,7 @@ impl RemoteControlView {
     }
 
     fn stop_server(&mut self, cx: &mut Context<Self>) {
+        tracing::info!("[远程控制] 用户点击停止服务器");
         self.server_running = false;
         self.service.set_server_running(false, 0);
         cx.notify();
