@@ -11,7 +11,7 @@ use qingqi_ui::components::button::{Button, ButtonVariants};
 use qingqi_ui::components::styled::Sizable;
 use qingqi_ui::components::styled::Size;
 use qingqi_ui::components::theme::Theme;
-use qingqi_ui::{icon, theme, ui, ui::glass};
+use qingqi_ui::{icon, theme, ui, ui::glass, ui::font_mono};
 
 pub fn response_panel(
     view: Entity<ApiDebuggerView>,
@@ -134,7 +134,7 @@ fn response_text_view(text: String, cx: &App) -> impl IntoElement {
         .bg(glass::inset(cx))
         .child(
             div()
-                .font_family("SF Mono")
+                .font_family(font_mono())
                 .text_size(px(12.0))
                 .line_height(px(18.0))
                 .text_color(Theme::global(cx).muted_foreground)
@@ -204,7 +204,7 @@ fn response_body_view(
                     row.child(
                         div()
                             .text_size(px(10.0))
-                            .font_family("SF Mono")
+                            .font_family(font_mono())
                             .text_color(ui::text_tertiary(cx))
                             .child(content_type.clone()),
                     )
@@ -325,7 +325,7 @@ fn response_binary_view(
         .bg(glass::inset(cx))
         .child(
             div()
-                .font_family("SF Mono")
+                .font_family(font_mono())
                 .text_size(px(11.0))
                 .line_height(px(16.0))
                 .text_color(Theme::global(cx).muted_foreground)
@@ -503,7 +503,7 @@ fn history_row(
                 .child(
                     div()
                         .text_size(px(10.0))
-                        .font_family("SF Mono")
+                        .font_family(font_mono())
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(Theme::global(cx).foreground)
                         .child(entry.method.clone()),
@@ -511,7 +511,7 @@ fn history_row(
                 .child(
                     div()
                         .text_size(px(10.0))
-                        .font_family("SF Mono")
+                        .font_family(font_mono())
                         .text_color(status_color)
                         .child(entry.status.to_string()),
                 )

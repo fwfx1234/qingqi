@@ -43,7 +43,7 @@ use qingqi_ui::components::theme::Theme;
 use qingqi_ui::token::tokens;
 use qingqi_ui::{
     theme,
-    ui::{self, components},
+    ui::{self, components, font_mono},
 };
 
 const PAGE_SIZE: i64 = 50;
@@ -1013,7 +1013,7 @@ impl CaptureView {
                                     .items_center()
                                     .gap_2()
                                     .text_size(px(11.0))
-                                    .font_family("SF Mono")
+                                    .font_family(font_mono())
                                     .cursor_pointer()
                                     .on_click(cx.listener(move |panel, _, _, cx| {
                                         panel.select_exchange(ex_id, cx);
@@ -2686,7 +2686,7 @@ impl Render for CaptureView {
                                                         .items_center()
                                                         .gap_2()
                                                         .text_size(px(11.0))
-                                                        .font_family("SF Mono")
+                                                        .font_family(font_mono())
                                                         .cursor_pointer()
                                                         .on_click(cx.listener(
                                                             move |panel, _, _, cx| {
@@ -2891,14 +2891,14 @@ impl Render for CaptureView {
                                             .text_size(px(11.0))
                                             .font_weight(gpui::FontWeight::SEMIBOLD)
                                             .text_color(theme::http_method_color(&detail.method, dark))
-                                            .font_family("SF Mono")
+                                            .font_family(font_mono())
                                             .child(detail.method.clone()),
                                     )
                                     .child(
                                         div()
                                             .flex_1()
                                             .text_size(px(11.0))
-                                            .font_family("SF Mono")
+                                            .font_family(font_mono())
                                             .text_color(ui::text_primary(cx))
                                             .overflow_hidden()
                                             .text_ellipsis()
@@ -3271,7 +3271,7 @@ fn detail_mini(
         .child(
             div()
                 .text_color(value_color)
-                .font_family("SF Mono")
+                .font_family(font_mono())
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .child(value.to_string()),
         )
@@ -3315,7 +3315,7 @@ fn render_timing_section(detail: &CapturedExchange, cx: &App) -> gpui::AnyElemen
             div()
                 .flex()
                 .text_size(px(11.0))
-                .font_family("SF Mono")
+                .font_family(font_mono())
                 .p_1()
                 .rounded(theme::radius_sm())
                 .hover(|s| s.bg(ui::bg_subtle(cx)))
@@ -3347,7 +3347,7 @@ fn render_headers_section(
             div()
                 .flex()
                 .text_size(px(11.0))
-                .font_family("SF Mono")
+                .font_family(font_mono())
                 .p_1()
                 .rounded(theme::radius_sm())
                 .hover(|s| s.bg(ui::bg_subtle(cx)))
@@ -3385,7 +3385,7 @@ fn render_body_section(title: &str, display: BodyDisplay, cx: &App) -> gpui::Any
             .flex_col()
             .p_1()
             .text_size(px(11.0))
-            .font_family("SF Mono")
+            .font_family(font_mono())
             .text_color(ui::text_primary(cx))
             .children(body.lines().map(|line| div().child(line.to_string())))
             .into_any_element(),
@@ -3424,7 +3424,7 @@ fn render_overview_section(detail: &CapturedExchange, cx: &App) -> gpui::AnyElem
             div()
                 .flex()
                 .text_size(px(11.0))
-                .font_family("SF Mono")
+                .font_family(font_mono())
                 .p_1()
                 .rounded(theme::radius_sm())
                 .hover(|s| s.bg(ui::bg_subtle(cx)))

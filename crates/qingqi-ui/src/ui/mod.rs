@@ -119,11 +119,18 @@ pub fn font_ui() -> &'static str {
 }
 
 pub fn font_mono() -> &'static str {
-    "SF Mono, Menlo, Monaco, Courier New, monospace"
+    #[cfg(target_os = "macos")]
+    {
+        "SF Mono, Menlo, Monaco, Courier New, monospace"
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "Consolas, Courier New, monospace"
+    }
 }
 
 pub fn font_terminal() -> &'static str {
-    "Menlo"
+    "Consolas"
 }
 
 // ── Shared UI Components ─────────────────────────────────────────────────

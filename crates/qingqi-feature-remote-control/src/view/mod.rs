@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use gpui::*;
 use gpui::prelude::FluentBuilder;
+use qingqi_plugin::database::DatabaseService;
 use qingqi_ui::components::button::Button;
 use qingqi_ui::components::styled::{h_flex, v_flex};
 
@@ -10,6 +11,7 @@ use crate::service::{PairedDevice, RemoteControlService};
 
 pub struct RemoteControlView {
     service: Arc<RemoteControlService>,
+    database: Arc<DatabaseService>,
     pin: Option<String>,
     server_running: bool,
     ip_address: String,
@@ -17,10 +19,11 @@ pub struct RemoteControlView {
 }
 
 impl RemoteControlView {
-    pub fn new(service: Arc<RemoteControlService>) -> Self {
-        let paired_devices = service.list_paired_devices();
+    pub fn new(service: Arc<RemoteControlService>, database: Arc<DatabaseService>) -> Self {
+        let paired_devices = service.list_paired_devices(&database);
         Self {
             service,
+            database,
             pin: None,
             server_running: false,
             ip_address: get_local_ip(),
@@ -40,12 +43,12 @@ impl RemoteControlView {
     }
 
     fn refresh_paired_devices(&mut self) {
-        self.paired_devices = self.service.list_paired_devices();
+        self.paired_devices = self.service.list_paired_devices(&self.database);
     }
 
     #[allow(dead_code)]
     fn revoke_device(&mut self, name: String, cx: &mut Context<Self>) {
-        if self.service.revoke_device(&name) {
+        if self.service.revoke_device(&name, &self.database) {
             self.refresh_paired_devices();
             cx.notify();
         }
@@ -54,7 +57,7 @@ impl RemoteControlView {
     fn start_server(&mut self, cx: &mut Context<Self>) {
         let port = 3721;
         tracing::info!("[远程控制] 用户点击启动服务器，端口: {}", port);
-        let state = AppState::new((*self.service).clone());
+        let state = AppState::new((*self.service).clone(), Arc::clone(&self.database));
 
         // Use the shared Tokio runtime to spawn the server task
         qingqi_core::tokio_runtime::spawn(async move {
@@ -266,6 +269,7 @@ impl RemoteControlView {
                 let expires_at = device.expires_at;
                 let paired_at = device.paired_at;
                 let svc = Arc::clone(&self.service);
+                let database = Arc::clone(&self.database);
                 let entity_id = cx.entity_id();
 
                 v_flex()
@@ -288,7 +292,7 @@ impl RemoteControlView {
                                     .label("移除")
                                     .compact()
                                     .on_click(move |_, _, _cx| {
-                                        svc.revoke_device(&name);
+                                        svc.revoke_device(&name, &database);
                                         _cx.notify(entity_id);
                                     }),
                             ),

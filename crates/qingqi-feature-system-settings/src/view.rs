@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use gpui::{
     AnyElement, App, AppContext, Context, ElementId, Entity, InteractiveElement, IntoElement,
-    ParentElement, Render, StatefulInteractiveElement, Styled, Window, div, prelude::FluentBuilder,
-    px,
+    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window, div,
+    prelude::FluentBuilder, px,
 };
 
 use qingqi_platform::macos::PermissionStatus;
@@ -26,14 +26,14 @@ use qingqi_ui::components::switch::Switch;
 use qingqi_ui::components::theme::Theme;
 use qingqi_ui::{
     theme,
-    ui::{self, components},
+    ui::{self, components, font_mono},
 };
 
 use crate::settings_store::{SettingsStore, retention_status_text};
 
 // ── SettingsView (model + rendering) ──
 
-pub struct SettingsView {
+    pub struct SettingsView {
     theme_handle: ThemeHandleRef,
     settings_store: Arc<Mutex<SettingsStore>>,
     app_index_handle: Option<AppIndexHandleRef>,
@@ -47,6 +47,8 @@ pub struct SettingsView {
     shortcut_inputs: HashMap<String, Entity<InputState>>,
     shortcut_drafts: HashMap<String, String>,
     shortcut_message: String,
+    auto_start_enabled: bool,
+    auto_start_message: String,
     /// 设置中心当前选中的分区（侧边栏导航）
     selected_section: usize,
 }
@@ -82,6 +84,11 @@ impl SettingsView {
             .ok()
             .map(|store| store.plugin_window_retention_seconds())
             .unwrap_or(300);
+        let auto_start_enabled = settings_store
+            .lock()
+            .ok()
+            .map(|store| store.auto_start())
+            .unwrap_or(false);
         let accessibility_status = qingqi_platform::macos::check_accessibility();
         Self {
             theme_handle,
@@ -97,6 +104,8 @@ impl SettingsView {
             shortcut_inputs: HashMap::new(),
             shortcut_drafts: HashMap::new(),
             shortcut_message: String::new(),
+            auto_start_enabled,
+            auto_start_message: String::new(),
             selected_section: initial_section.min(5),
         }
     }
@@ -197,6 +206,47 @@ impl SettingsView {
             },
             Err(_) => {
                 self.retention_message = String::from("设置存储不可用");
+            }
+        }
+    }
+
+    // ── Auto Start ──
+
+    pub fn auto_start_enabled(&self) -> bool {
+        self.auto_start_enabled
+    }
+
+    pub fn auto_start_message_text(&self) -> &str {
+        &self.auto_start_message
+    }
+
+    pub fn toggle_auto_start(&mut self) {
+        let new_value = !self.auto_start_enabled;
+        let result = if new_value {
+            qingqi_platform::autostart::enable_auto_start()
+        } else {
+            qingqi_platform::autostart::disable_auto_start()
+        };
+        match result {
+            Ok(()) => {
+                if let Ok(mut store) = self.settings_store.lock() {
+                    match store.set_auto_start(new_value) {
+                        Ok(_) => {
+                            self.auto_start_enabled = new_value;
+                            self.auto_start_message = if new_value {
+                                String::from("已启用开机自启动")
+                            } else {
+                                String::from("已关闭开机自启动")
+                            };
+                        }
+                        Err(error) => {
+                            self.auto_start_message = format!("保存设置失败: {error}");
+                        }
+                    }
+                }
+            }
+            Err(error) => {
+                self.auto_start_message = format!("设置失败: {error}");
             }
         }
     }
@@ -464,6 +514,8 @@ impl Render for SettingsView {
         let theme_snapshot = ThemeSectionSnapshot {
             current_mode: self.current_mode(),
             system_dark: self.system_dark(),
+            auto_start_enabled: self.auto_start_enabled(),
+            auto_start_message: self.auto_start_message_text().to_string(),
         };
         let plugin_snapshot = PluginSectionSnapshot {
             retention_seconds: self.retention_seconds(),
@@ -560,6 +612,8 @@ impl Render for SettingsView {
 struct ThemeSectionSnapshot {
     current_mode: ThemeMode,
     system_dark: bool,
+    auto_start_enabled: bool,
+    auto_start_message: String,
 }
 
 struct PluginSectionSnapshot {
@@ -632,6 +686,16 @@ fn theme_section(
             "主题选择",
             "选择内置主题配色方案",
             theme_selector(entity.clone(), cx),
+            cx,
+        ))
+        .child(components::settings_row(
+            "开机自启动",
+            if snapshot.auto_start_message.is_empty() {
+                SharedString::from("登录系统后自动启动 Qingqi")
+            } else {
+                SharedString::from(snapshot.auto_start_message.clone())
+            },
+            auto_start_toggle(entity.clone(), snapshot.auto_start_enabled, cx),
             cx,
         ))
         .into_any_element()
@@ -1597,6 +1661,21 @@ fn toggle_button(
         })
 }
 
+fn auto_start_toggle(
+    entity: Entity<SettingsView>,
+    value: bool,
+    _cx: &App,
+) -> impl IntoElement {
+    Switch::new("system-settings-auto-start")
+        .checked(value)
+        .on_click(move |_, _window, cx| {
+            entity.update(cx, |this, cx| {
+                this.toggle_auto_start();
+                cx.notify();
+            });
+        })
+}
+
 fn path_badge(path: &str, cx: &App) -> impl IntoElement {
     let t = Theme::global(cx);
     div()
@@ -1608,7 +1687,7 @@ fn path_badge(path: &str, cx: &App) -> impl IntoElement {
         .border_color(t.border)
         .flex()
         .items_center()
-        .font_family("SF Mono")
+        .font_family(font_mono())
         .text_size(theme::font_size_caption())
         .text_color(t.muted_foreground)
         .child(path.to_string())

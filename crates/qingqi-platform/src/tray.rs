@@ -649,21 +649,14 @@ fn load_tray_svg_icon() -> Option<Icon> {
     )
     .ok()?;
 
-    #[cfg(target_os = "macos")]
-    {
-        // macOS 使用模板图标：黑色剪影 + alpha（系统会根据深浅色菜单栏自动反转）
-        icon_from_rgba_template(rgba, SIZE, SIZE).ok()
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        // Windows 需要实际的 RGBA 图标，不能使用模板模式
-        Icon::from_rgba(rgba, SIZE, SIZE).ok()
-    }
+    // 统一使用黑色剪影 + alpha 模板模式
+    // macOS: 系统会根据深浅色菜单栏自动反转
+    // Windows: 黑色图标在浅色任务栏上更清晰
+    icon_from_rgba_template(rgba, SIZE, SIZE).ok()
 }
 
 /// 转为模板图标：黑色剪影 + alpha（macOS 会根据深浅色菜单栏自动反转）。
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn icon_from_rgba_template(rgba: Vec<u8>, width: u32, height: u32) -> Result<Icon, String> {
     let mut out = rgba;
     for chunk in out.chunks_exact_mut(4) {

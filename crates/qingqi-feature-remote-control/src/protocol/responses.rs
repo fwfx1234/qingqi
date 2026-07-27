@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
 pub struct ApiResponse<T: Serialize> {
@@ -134,6 +134,37 @@ pub struct SteamRefreshResponse {
 #[derive(Debug, Serialize)]
 pub struct CustomDirListResponse {
     pub dirs: Vec<crate::custom_dir::CustomDir>,
+}
+
+// === Server management responses ===
+
+#[derive(Debug, Serialize)]
+pub struct QrCodeResponse {
+    pub pin: String,
+    pub connection_url: String,
+    pub qr_base64: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ServerSettings {
+    pub port: u16,
+    pub auto_start: bool,
+    pub minimize_to_tray: bool,
+}
+
+impl Default for ServerSettings {
+    fn default() -> Self {
+        Self {
+            port: 3721,
+            auto_start: false,
+            minimize_to_tray: false,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct LogResponse {
+    pub entries: Vec<crate::server::log_store::LogEntry>,
 }
 
 // === Common responses ===

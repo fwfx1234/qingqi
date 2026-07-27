@@ -1,10 +1,14 @@
+//! 核心服务 - SQLite 持久化
+
 pub mod app_scanner;
 pub mod process;
 pub mod system;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use qingqi_plugin::storage::AppPaths;
+use qingqi_plugin::{database::DatabaseService, storage::AppPaths};
+use serde::{Deserialize, Serialize};
 
 use self::process::ProcessManager;
 use self::system::SystemService;
@@ -17,7 +21,7 @@ pub struct RemoteControlService {
     inner: Arc<std::sync::Mutex<ServiceInner>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PairedDevice {
     pub name: String,
     pub token: String,
@@ -33,12 +37,16 @@ struct ServiceInner {
     server_running: bool,
     /// The port the server listens on.
     server_port: u16,
-    /// List of paired devices.
-    paired_devices: Vec<PairedDevice>,
+    /// 服务器设置
+    auto_start: bool,
+    minimize_to_tray: bool,
+    /// 本地 IP 地址
+    local_ip: String,
 }
 
 impl RemoteControlService {
     pub fn new(paths: AppPaths) -> Self {
+        let local_ip = Self::obtain_local_ip();
         Self {
             paths,
             system_service: Arc::new(SystemService::new()),
@@ -47,9 +55,19 @@ impl RemoteControlService {
                 pairing_pin: None,
                 server_running: false,
                 server_port: 3721,
-                paired_devices: Vec::new(),
+                auto_start: false,
+                minimize_to_tray: false,
+                local_ip,
             })),
         }
+    }
+
+    /// 获取本地 IP 地址
+    fn obtain_local_ip() -> String {
+        use local_ip_address::local_ip;
+        local_ip()
+            .map(|ip| ip.to_string())
+            .unwrap_or_else(|_| "127.0.0.1".to_string())
     }
 
     pub fn paths(&self) -> &AppPaths {
@@ -102,37 +120,77 @@ impl RemoteControlService {
         self.inner.lock().unwrap().server_port
     }
 
-    /// List all paired devices (active tokens).
-    pub fn list_paired_devices(&self) -> Vec<PairedDevice> {
-        // We need access to the token store. For now, we'll store paired devices in the inner state.
+    /// 获取当前 PIN 码
+    pub fn get_current_pin(&self) -> Option<String> {
+        self.inner.lock().unwrap().pairing_pin.clone()
+    }
+
+    /// 获取本地 IP
+    pub fn local_ip(&self) -> String {
+        self.inner.lock().unwrap().local_ip.clone()
+    }
+
+    /// 获取服务器设置
+    pub fn get_settings(&self) -> crate::protocol::responses::ServerSettings {
         let inner = self.inner.lock().unwrap();
-        inner.paired_devices.clone()
+        crate::protocol::responses::ServerSettings {
+            port: inner.server_port,
+            auto_start: inner.auto_start,
+            minimize_to_tray: inner.minimize_to_tray,
+        }
     }
 
-    /// Register a newly paired device.
-    pub fn register_paired_device(&self, name: String, token: String, expires_at: i64) {
+    /// 更新服务器设置
+    pub fn update_settings(&self, req: crate::protocol::requests::UpdateSettingsRequest) {
         let mut inner = self.inner.lock().unwrap();
-        // Remove existing device with same name
-        inner.paired_devices.retain(|d| d.name != name);
-        inner.paired_devices.push(PairedDevice {
-            name,
-            token,
-            expires_at,
-            paired_at: time::OffsetDateTime::now_utc().unix_timestamp(),
-        });
+        if let Some(port) = req.port {
+            inner.server_port = port;
+        }
+        if let Some(auto_start) = req.auto_start {
+            inner.auto_start = auto_start;
+        }
+        if let Some(minimize_to_tray) = req.minimize_to_tray {
+            inner.minimize_to_tray = minimize_to_tray;
+        }
     }
 
-    /// Revoke a paired device by name.
-    pub fn revoke_device(&self, name: &str) -> bool {
-        let mut inner = self.inner.lock().unwrap();
-        let len_before = inner.paired_devices.len();
-        inner.paired_devices.retain(|d| d.name != name);
-        inner.paired_devices.len() < len_before
+    /// 列出已配对设备
+    pub fn list_paired_devices(&self, database: &DatabaseService) -> Vec<PairedDevice> {
+        let key = "remote-control/data";
+        let conn = match database.connection(key) {
+            Ok(c) => c,
+            Err(_) => return Vec::new(),
+        };
+        let mut stmt = match conn.prepare(
+            "SELECT device_name, token, expires_at, created_at FROM tokens ORDER BY created_at DESC",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let rows = match stmt.query_map([], |row| {
+            Ok(PairedDevice {
+                name: row.get(0)?,
+                token: row.get(1)?,
+                expires_at: row.get(2)?,
+                paired_at: row.get(3)?,
+            })
+        }) {
+            Ok(rows) => rows,
+            Err(_) => return Vec::new(),
+        };
+        rows.filter_map(|r| r.ok()).collect()
     }
 
-    /// Check if there are any paired devices.
-    pub fn has_paired_devices(&self) -> bool {
-        let inner = self.inner.lock().unwrap();
-        !inner.paired_devices.is_empty()
+    /// 撤销设备配对
+    pub fn revoke_device(&self, name: &str, database: &DatabaseService) -> bool {
+        let key = "remote-control/data";
+        let conn = match database.connection(key) {
+            Ok(c) => c,
+            Err(_) => return false,
+        };
+        let affected = conn
+            .execute("DELETE FROM tokens WHERE device_name = ?1", [name])
+            .unwrap_or(0);
+        affected > 0
     }
 }

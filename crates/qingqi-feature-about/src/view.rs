@@ -1,6 +1,6 @@
 use gpui::{App, Context, IntoElement, ParentElement, Render, Styled, Window, div, px};
 
-use qingqi_ui::{theme, ui};
+use qingqi_ui::{theme, ui, ui::font_mono};
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -51,7 +51,7 @@ impl Render for AboutView {
                         div()
                             .text_size(px(12.0))
                             .text_color(t.muted_foreground)
-                            .font_family("SF Mono")
+                            .font_family(font_mono())
                             .child("Rust + GPUI"),
                     )
                     .child(
@@ -157,7 +157,7 @@ fn tech_row(label: &'static str, value: &'static str, cx: &App) -> impl IntoElem
         .child(
             div()
                 .text_size(px(13.0))
-                .font_family("SF Mono")
+                .font_family(font_mono())
                 .text_color(t.foreground)
                 .child(value),
         )

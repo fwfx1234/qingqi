@@ -2,7 +2,7 @@
 
 use gpui::{
     App, ElementId, InteractiveElement, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
     px,
 };
 use std::rc::Rc;
@@ -105,37 +105,51 @@ impl RenderOnce for Switch {
         } else {
             px(0.)
         };
-        div().refine_style(&self.style).child(
-            div()
-                .flex()
-                .flex_row()
-                .gap_2()
-                .items_center()
-                .when(self.label_side.is_left(), |this| this.flex_row_reverse())
-                .child(
-                    div()
-                        .w(bg_width)
-                        .h(bg_height)
-                        .rounded(bg_height)
-                        .flex()
-                        .items_center()
-                        .border(inset)
-                        .border_color(cx.theme().transparent())
-                        .bg(if self.disabled { bg.alpha(0.5) } else { bg })
-                        .child(
-                            div()
-                                .rounded(bg_height)
-                                .bg(if self.disabled {
-                                    toggle_bg.alpha(0.35)
-                                } else {
-                                    toggle_bg
-                                })
-                                .w(bar_width)
-                                .h(bar_width)
-                                .ml(x),
-                        ),
-                )
-                .when_some(self.label.clone(), |this, _label| this),
-        )
+        let on_click = self.on_click.clone();
+        let disabled = self.disabled;
+
+        let switch = div()
+            .id(self.id.clone())
+            .flex()
+            .flex_row()
+            .gap_2()
+            .items_center()
+            .when(self.label_side.is_left(), |this| this.flex_row_reverse())
+            .child(
+                div()
+                    .w(bg_width)
+                    .h(bg_height)
+                    .rounded(bg_height)
+                    .flex()
+                    .items_center()
+                    .border(inset)
+                    .border_color(cx.theme().transparent())
+                    .bg(if self.disabled { bg.alpha(0.5) } else { bg })
+                    .child(
+                        div()
+                            .rounded(bg_height)
+                            .bg(if self.disabled {
+                                toggle_bg.alpha(0.35)
+                            } else {
+                                toggle_bg
+                            })
+                            .w(bar_width)
+                            .h(bar_width)
+                            .ml(x),
+                    ),
+            )
+            .when_some(self.label.clone(), |this, _label| this);
+
+        let switch = if let Some(on_click) = on_click {
+            switch.on_click(move |_, window, cx| {
+                if !disabled {
+                    on_click(&!checked, window, cx);
+                }
+            })
+        } else {
+            switch
+        };
+
+        div().refine_style(&self.style).child(switch)
     }
 }

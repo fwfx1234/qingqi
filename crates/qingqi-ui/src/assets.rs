@@ -95,6 +95,10 @@ const EMBEDDED_ASSETS: &[(&str, &[u8])] = &[
         include_bytes!("../../qingqi/assets/icons/qr.svg"),
     ),
     (
+        "icons/remote.svg",
+        include_bytes!("../../qingqi/assets/icons/remote.svg"),
+    ),
+    (
         "icons/school.svg",
         include_bytes!("../../qingqi/assets/icons/school.svg"),
     ),

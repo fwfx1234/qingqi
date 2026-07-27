@@ -7,9 +7,12 @@ use axum::{
 
 use crate::protocol::requests::{
     AuthPairRequest, AuthVerifyRequest, LaunchAppRequest, ProcessListQuery, RestartRequest,
-    SearchAppsQuery, ShutdownRequest, SleepRequest,
+    SearchAppsQuery, ShutdownRequest, SleepRequest, UpdateSettingsRequest,
 };
-use crate::protocol::responses::{ApiResponse, DeviceInfo, DeviceListResponse, EmptyResponse, ForegroundResponse, PairResponse};
+use crate::protocol::responses::{
+    ApiResponse, DeviceInfo, DeviceListResponse, EmptyResponse, ForegroundResponse, LogResponse,
+    PairResponse, QrCodeResponse, ServerSettings,
+};
 use crate::server::AppState;
 
 pub mod auth {
@@ -25,10 +28,6 @@ pub mod auth {
             // 创建永久 Token，永不过期
             let token = state.token_store.create_permanent_token(&device_name);
             let expires_at = i64::MAX;
-            // Register the paired device in service state
-            state
-                .service
-                .register_paired_device(device_name, token.clone(), expires_at);
             // 获取本机 MAC 地址，用于 Wake-on-LAN
             let mac_address = state.system_service.get_mac_address();
             (
@@ -78,7 +77,6 @@ pub mod auth {
     ) -> impl IntoResponse {
         let revoked = state.token_store.revoke_by_name(&device_name);
         if revoked {
-            state.service.revoke_device(&device_name);
             (
                 StatusCode::OK,
                 Json(ApiResponse::success(EmptyResponse {})),
@@ -630,7 +628,7 @@ pub mod task {
     /// List all running processes (task manager)
     pub async fn list_tasks(Extension(state): Extension<AppState>) -> impl IntoResponse {
         let mut pm = state.process_manager.lock().unwrap();
-        let result = pm.list_processes(None, 0, 200);
+        let result = pm.list_processes(None, 0, 500);
         (StatusCode::OK, Json(ApiResponse::success(result)))
     }
 
@@ -728,5 +726,85 @@ pub mod web {
         category: String,
         source: String,
         exe_path: String,
+    }
+}
+
+pub mod server_mgmt {
+    use super::*;
+    use crate::qrcode_gen;
+
+    /// 获取配对二维码
+    pub async fn qrcode(Extension(state): Extension<AppState>) -> impl IntoResponse {
+        let pin = match &state.service.get_current_pin() {
+            Some(p) => p.clone(),
+            None => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(ApiResponse::<QrCodeResponse>::error(
+                        "NO_PIN",
+                        "No active PIN. Please generate one first.",
+                    )),
+                );
+            }
+        };
+
+        let ip = state.service.local_ip();
+        let port = state.service.server_port();
+        let connection_url = format!("{}:{}", ip, port);
+        let qr_data = qrcode_gen::generate_pairing_qr_data(&ip, port, &pin);
+
+        match qrcode_gen::generate_qr_png_base64(&qr_data, 200) {
+            Ok(qr_base64) => (
+                StatusCode::OK,
+                Json(ApiResponse::success(QrCodeResponse {
+                    pin,
+                    connection_url,
+                    qr_base64,
+                })),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<QrCodeResponse>::error(
+                    "QR_GENERATION_FAILED",
+                    &e.to_string(),
+                )),
+            ),
+        }
+    }
+
+    /// 获取日志列表
+    pub async fn list_logs(Extension(state): Extension<AppState>) -> impl IntoResponse {
+        let entries = state.log_store.list();
+        (
+            StatusCode::OK,
+            Json(ApiResponse::success(LogResponse { entries })),
+        )
+    }
+
+    /// 清空日志
+    pub async fn clear_logs(Extension(state): Extension<AppState>) -> impl IntoResponse {
+        state.log_store.clear();
+        (
+            StatusCode::OK,
+            Json(ApiResponse::success(EmptyResponse {})),
+        )
+    }
+
+    /// 获取服务器设置
+    pub async fn get_settings(Extension(state): Extension<AppState>) -> impl IntoResponse {
+        let settings = state.service.get_settings();
+        (StatusCode::OK, Json(ApiResponse::success(settings)))
+    }
+
+    /// 更新服务器设置
+    pub async fn update_settings(
+        Extension(state): Extension<AppState>,
+        Json(req): Json<UpdateSettingsRequest>,
+    ) -> impl IntoResponse {
+        state.service.update_settings(req);
+        (
+            StatusCode::OK,
+            Json(ApiResponse::success(EmptyResponse {})),
+        )
     }
 }

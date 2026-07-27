@@ -20,6 +20,7 @@ use qingqi_ui::components::widgets::{Slider, SliderState};
 use qingqi_plugin::plugin::{InlineView, PluginId};
 use qingqi_ui::ui::components;
 use qingqi_ui::{theme, ui};
+use qingqi_ui::ui::font_mono;
 
 use crate::{
     service::NetworkSpeedService,
@@ -509,7 +510,7 @@ fn slider_row(
             div()
                 .min_w(px(54.0))
                 .text_right()
-                .font_family("SF Mono")
+                .font_family(font_mono())
                 .text_size(theme::font_size_caption())
                 .text_color(t.muted_foreground)
                 .child(value_label),

@@ -249,6 +249,9 @@ pub fn run(host: AppHost) -> Result<()> {
 
         qingqi_platform::macos::hide_dock_icon();
 
+        // Sync auto-start registration with saved setting on launch
+        sync_auto_start_setting();
+
         qingqi_ui::components::init(cx);
 
         // 初始化主题服务
@@ -577,6 +580,42 @@ pub fn run_command_with_input_with_trace(
         trace,
         launch_input,
     )
+}
+
+/// On startup, ensure the system auto-start registration matches the saved
+/// setting. If the user enabled auto-start but the registration is missing
+/// (e.g. the executable was moved), re-register it.
+fn sync_auto_start_setting() {
+    let settings_path = AppPaths::resolve()
+        .ok()
+        .map(|p| p.config("settings.json"));
+
+    let Some(path) = settings_path else {
+        return;
+    };
+
+    let enabled: bool = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| v.get("auto_start").and_then(|v| v.as_bool()))
+        .unwrap_or(false);
+
+    if !enabled {
+        return;
+    }
+
+    match qingqi_platform::autostart::is_auto_start_enabled() {
+        Ok(true) => {}
+        Ok(false) => {
+            tracing::info!("auto-start setting enabled but system registration missing, re-registering");
+            if let Err(e) = qingqi_platform::autostart::enable_auto_start() {
+                tracing::warn!(error = %e, "failed to re-enable auto-start on launch");
+            }
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to check auto-start status on launch");
+        }
+    }
 }
 
 fn set_menus(cx: &mut App) {

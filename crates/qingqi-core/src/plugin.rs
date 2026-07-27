@@ -510,6 +510,9 @@ impl PluginManager {
             if !background {
                 continue;
             }
+            if !plugin.should_start_background() {
+                continue;
+            }
             let id = plugin.manifest().id.clone();
             let events = self.events.clone();
             let tray_host = self.tray_host.clone();

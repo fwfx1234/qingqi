@@ -21,7 +21,7 @@ use qingqi_ui::components::styled::Sizable;
 use qingqi_ui::components::theme::Theme;
 use qingqi_ui::{
     theme,
-    ui::{self, components},
+    ui::{self, components, font_mono},
 };
 
 /// Pre-computed theme colors used for uniform_list rows (must be Copy/'static for lifetime compatibility)
@@ -1660,7 +1660,7 @@ fn action_row(
                 .child(
                     div()
                         .text_size(px(10.0))
-                        .font_family("SF Mono")
+                        .font_family(font_mono())
                         .text_color(theme.text_secondary)
                         .child(subtitle_for(&action)),
                 ),
@@ -2515,7 +2515,7 @@ fn history_row(
                     div()
                         .flex_1()
                         .text_size(px(10.0))
-                        .font_family("SF Mono")
+                        .font_family(font_mono())
                         .text_color(if run.stderr.trim().is_empty() {
                             ui::text_secondary(cx)
                         } else {
@@ -2728,7 +2728,7 @@ fn result_block(
                         .px_2()
                         .py_1()
                         .text_size(px(10.0))
-                        .font_family("SF Mono")
+                        .font_family(font_mono())
                         .text_color(text_color)
                         .child(result_block_text(&content)),
                 ),

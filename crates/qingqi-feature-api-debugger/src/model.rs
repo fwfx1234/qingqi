@@ -1,4 +1,5 @@
 use gpui::{IntoElement, ParentElement, SharedString, Styled};
+use qingqi_ui::ui::font_mono;
 use serde::{Deserialize, Serialize};
 
 // ── Shared service/request types ──
@@ -67,7 +68,7 @@ impl qingqi_ui::components::widgets::SelectItem for HttpMethod {
     fn display_title(&self) -> Option<gpui::AnyElement> {
         Some(
             gpui::div()
-                .font_family("SF Mono")
+                .font_family(font_mono())
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(gpui::rgb(self.color()))
                 .child(self.label())

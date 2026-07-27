@@ -11,7 +11,7 @@ use qingqi_ui::components::{
     input::{Input, InputState},
 };
 use qingqi_ui::layer::popover::Popover;
-use qingqi_ui::{theme, ui, ui::glass};
+use qingqi_ui::{theme, ui, ui::glass, ui::font_mono};
 
 pub fn action_bar(
     view: Entity<ApiDebuggerView>,
@@ -65,7 +65,7 @@ pub fn action_bar(
                                 .gap(px(4.0))
                                 .child(
                                     div()
-                                        .font_family("SF Mono")
+                                        .font_family(font_mono())
                                         .text_size(px(11.0))
                                         .font_weight(gpui::FontWeight::BOLD)
                                         .text_color(method_color)
@@ -97,7 +97,7 @@ pub fn action_bar(
                                 DropdownItem::new(
                                     div().flex().items_center().child(
                                         div()
-                                            .font_family("SF Mono")
+                                            .font_family(font_mono())
                                             .text_size(px(12.0))
                                             .font_weight(gpui::FontWeight::BOLD)
                                             .text_color(mc)
@@ -140,7 +140,7 @@ pub fn action_bar(
                 .child(
                     div()
                         .flex_shrink_0()
-                        .font_family("SF Mono")
+                        .font_family(font_mono())
                         .text_size(px(11.0))
                         .text_color(ui::text_tertiary(cx))
                         .child(environment.base_url.clone()),

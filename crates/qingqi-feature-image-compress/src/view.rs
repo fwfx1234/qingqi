@@ -23,7 +23,7 @@ use qingqi_ui::token::tokens;
 use qingqi_plugin::plugin_spec::PluginAccent;
 use qingqi_ui::{
     theme,
-    ui::{self, components},
+    ui::{self, components, font_mono},
 };
 
 use super::service::{
@@ -885,7 +885,7 @@ impl Render for ImageCompressView {
                                     .child(
                                         div()
                                             .text_size(px(11.0))
-                                            .font_family("SF Mono")
+                                            .font_family(font_mono())
                                             .text_color(t.muted_foreground)
                                             .child(format!("{quality}%")),
                                     )
@@ -1155,7 +1155,7 @@ fn image_row(
                         .child(
                             div()
                                 .text_size(px(10.0))
-                                .font_family("SF Mono")
+                                .font_family(font_mono())
                                 .text_color(ui::text_tertiary(cx))
                                 .child(format!(
                                     "{} x {}{}",
@@ -1173,7 +1173,7 @@ fn image_row(
                     div()
                         .w(px(96.0))
                         .text_size(px(10.0))
-                        .font_family("SF Mono")
+                        .font_family(font_mono())
                         .text_color(ui::text_tertiary(cx))
                         .child(format_size(item.source.original_size)),
                 )
@@ -1181,7 +1181,7 @@ fn image_row(
                     div()
                         .w(px(96.0))
                         .text_size(px(10.0))
-                        .font_family("SF Mono")
+                        .font_family(font_mono())
                         .text_color(ui::text_tertiary(cx))
                         .child(
                             item.output_size
@@ -1586,7 +1586,7 @@ fn footer_bar(
                     div()
                         .w(px(320.0))
                         .text_size(px(10.0))
-                        .font_family("SF Mono")
+                        .font_family(font_mono())
                         .text_color(ui::text_tertiary(cx))
                         .child(output_dir),
                 ),

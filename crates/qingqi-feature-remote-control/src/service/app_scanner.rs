@@ -198,15 +198,84 @@ impl AppScanner {
             .cloned()
             .unwrap_or_else(|| original.clone());
 
+        // 查找游戏目录下的主可执行文件
+        let exe_path = Self::find_steam_game_exe(&game.install_path, &game.name)
+            .unwrap_or_else(|| game.install_path.clone());
+
         AppEntry {
             id: format!("steam:{}", game.app_id),
             name: display,
             original_name: original,
-            exe_path: game.install_path.clone(),
+            exe_path,
             icon_base64: None,
             category: "Game".to_string(),
             source: "Steam".to_string(),
         }
+    }
+
+    /// 查找 Steam 游戏的主可执行文件
+    fn find_steam_game_exe(install_path: &str, game_name: &str) -> Option<String> {
+        let dir = std::path::Path::new(install_path);
+        if !dir.is_dir() {
+            return None;
+        }
+
+        // 1. 尝试在根目录查找与游戏名匹配的 exe
+        let game_name_normalized = game_name.replace([' ', ':', '-', '.'], "").to_lowercase();
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("exe") {
+                    let exe_name = path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .replace([' ', ':', '-', '.'], "")
+                        .to_lowercase();
+                    if exe_name == game_name_normalized {
+                        return Some(path.to_str()?.to_string());
+                    }
+                }
+            }
+        }
+
+        // 2. 尝试在根目录查找任何 exe
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("exe") {
+                    return Some(path.to_str()?.to_string());
+                }
+            }
+        }
+
+        // 3. 递归搜索子目录（深度 2）
+        Self::find_exe_recursive(dir, 2)
+    }
+
+    fn find_exe_recursive(dir: &std::path::Path, max_depth: u32) -> Option<String> {
+        if max_depth == 0 {
+            return None;
+        }
+
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("exe") {
+                    return Some(path.to_str()?.to_string());
+                }
+            }
+
+            for entry in std::fs::read_dir(dir).ok()?.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    if let Some(exe) = Self::find_exe_recursive(&path, max_depth - 1) {
+                        return Some(exe);
+                    }
+                }
+            }
+        }
+        None
     }
 
     /// 扫描自定义目录

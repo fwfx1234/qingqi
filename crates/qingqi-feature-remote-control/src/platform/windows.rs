@@ -103,6 +103,8 @@ pub fn shutdown(force: bool, _delay_secs: u64) -> anyhow::Result<()> {
 }
 
 pub fn sleep(hibernate: bool) -> anyhow::Result<()> {
+    // 需要 SE_SHUTDOWN_NAME 权限才能执行睡眠/休眠
+    enable_privilege(windows::core::s!("SeShutdownPrivilege"))?;
     unsafe {
         let result = SetSuspendState(hibernate, true, false);
         if !result {

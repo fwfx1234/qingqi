@@ -10,7 +10,7 @@ use qingqi_ui::components::input::{Input, InputState};
 use qingqi_ui::components::list::ListItem;
 use qingqi_ui::components::theme::Theme;
 use qingqi_ui::components::tree::{TreeEntry, TreeItem, TreeState, tree};
-use qingqi_ui::{icon, theme, ui};
+use qingqi_ui::{icon, theme, ui, ui::font_mono};
 use std::time::Instant;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -731,7 +731,7 @@ pub fn collection_tree(
                                                 .flex()
                                                 .items_center()
                                                 .mr(px(8.0))
-                                                .font_family("SF Mono")
+                                                .font_family(font_mono())
                                                 .text_size(px(11.0))
                                                 .font_weight(gpui::FontWeight::BOLD)
                                                 .text_color(method_color)

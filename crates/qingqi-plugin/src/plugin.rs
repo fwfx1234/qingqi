@@ -201,6 +201,12 @@ pub trait Plugin {
 
     fn start_background(&mut self, _cx: &mut PluginCx<'_>) {}
 
+    /// 是否应该在后台自动启动（默认 true）。
+    /// 平台特定插件可覆写此方法以在特定平台上禁用后台启动。
+    fn should_start_background(&self) -> bool {
+        true
+    }
+
     fn clipboard_boost(&self, _payload: &ClipboardPayload) -> Option<i32> {
         None
     }

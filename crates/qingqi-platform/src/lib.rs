@@ -1,4 +1,5 @@
 pub mod apps;
+pub mod autostart;
 pub mod clipboard;
 pub mod display;
 pub mod hotkey;

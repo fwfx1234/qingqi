@@ -1,6 +1,6 @@
 use gpui::{App, IntoElement, ParentElement, Styled, div, px, rgb};
 use qingqi_ui::components::theme::Theme;
-use qingqi_ui::{theme, ui};
+use qingqi_ui::{theme, ui, ui::font_mono};
 
 pub fn transparent_surface(cx: &App) -> gpui::Hsla {
     theme::rgba_with_alpha(Theme::global(cx).list.into(), 0.0)
@@ -34,7 +34,7 @@ pub fn response_metric(text: String, cx: &App) -> impl IntoElement {
         .flex()
         .items_center()
         .text_size(px(10.0))
-        .font_family("SF Mono")
+        .font_family(font_mono())
         .text_color(Theme::global(cx).muted_foreground)
         .child(text)
 }
@@ -67,7 +67,7 @@ pub fn status_badge(response: &crate::service::ApiResponse, cx: &App) -> impl In
         .rounded(px(6.0))
         .bg(theme::rgba_with_alpha(color.into(), 0.10))
         .text_size(px(12.0))
-        .font_family("SF Mono")
+        .font_family(font_mono())
         .font_weight(gpui::FontWeight::BOLD)
         .text_color(color)
         .child(response.status_line.clone())

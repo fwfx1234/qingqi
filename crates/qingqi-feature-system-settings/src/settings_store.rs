@@ -13,12 +13,14 @@ const MAX_RETENTION_SECONDS: u64 = 3600;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct SettingsData {
     plugin_window_retention_seconds: u64,
+    auto_start: bool,
 }
 
 impl Default for SettingsData {
     fn default() -> Self {
         Self {
             plugin_window_retention_seconds: DEFAULT_PLUGIN_WINDOW_RETENTION_SECONDS,
+            auto_start: false,
         }
     }
 }
@@ -56,6 +58,16 @@ impl SettingsStore {
         self.data.plugin_window_retention_seconds = DEFAULT_PLUGIN_WINDOW_RETENTION_SECONDS;
         self.save()?;
         Ok(DEFAULT_PLUGIN_WINDOW_RETENTION_SECONDS)
+    }
+
+    pub fn auto_start(&self) -> bool {
+        self.data.auto_start
+    }
+
+    pub fn set_auto_start(&mut self, enabled: bool) -> Result<bool> {
+        self.data.auto_start = enabled;
+        self.save()?;
+        Ok(enabled)
     }
 
     fn load(path: &Path) -> Result<SettingsData> {

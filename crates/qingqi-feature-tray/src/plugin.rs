@@ -53,6 +53,11 @@ impl Plugin for TrayPlugin {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    fn should_start_background(&self) -> bool {
+        false
+    }
+
     fn on_tray_item_click(
         &mut self,
         item_id: &TrayItemId,

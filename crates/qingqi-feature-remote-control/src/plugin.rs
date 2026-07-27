@@ -3,6 +3,7 @@ use std::sync::Arc;
 use gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 use qingqi_plugin::{
     command::Command,
+    database::DatabaseService,
     plugin::{Manifest, Plugin, PluginCx, PluginId, PluginView, WindowView},
 };
 
@@ -11,12 +12,14 @@ use crate::service::RemoteControlService;
 
 pub struct RemoteControlPlugin {
     service: Arc<RemoteControlService>,
+    database: Arc<DatabaseService>,
 }
 
 impl RemoteControlPlugin {
-    pub fn new(paths: qingqi_plugin::storage::AppPaths) -> anyhow::Result<Self> {
+    pub fn new(database: Arc<DatabaseService>, paths: qingqi_plugin::storage::AppPaths) -> anyhow::Result<Self> {
         Ok(Self {
             service: Arc::new(RemoteControlService::new(paths)),
+            database,
         })
     }
 
@@ -48,7 +51,10 @@ impl Plugin for RemoteControlPlugin {
 
     fn open(&mut self, cx: &mut PluginCx<'_>) -> anyhow::Result<PluginView> {
         let view = cx.app.new(|cx| {
-            let mut view = super::view::RemoteControlView::new(Arc::clone(&self.service));
+            let mut view = super::view::RemoteControlView::new(
+                Arc::clone(&self.service),
+                Arc::clone(&self.database),
+            );
             view.init(cx);
             view
         });
@@ -60,14 +66,17 @@ impl Plugin for RemoteControlPlugin {
         #[cfg(target_os = "windows")]
         {
             tracing::info!("[远程控制] 插件后台启动，准备自动启动服务器...");
-            
+
             // Update service state so the view shows "running" when opened
             self.service.set_server_running(true, 3721);
 
-            let state = crate::server::AppState::new((*self.service).clone());
+            let state = crate::server::AppState::new(
+                (*self.service).clone(),
+                Arc::clone(&self.database),
+            );
             let port = 3721;
             tracing::info!("[远程控制] 正在后台启动服务器，端口: {}", port);
-            
+
             qingqi_core::tokio_runtime::spawn(async move {
                 match crate::server::RemoteServer::run(state, port).await {
                     Ok((addr, server_handle)) => {
@@ -81,7 +90,7 @@ impl Plugin for RemoteControlPlugin {
                 }
             });
         }
-        
+
         #[cfg(not(target_os = "windows"))]
         {
             tracing::info!("[远程控制] 非 Windows 系统，跳过自动启动");

@@ -20,7 +20,7 @@ use qingqi_plugin::{
 };
 use qingqi_ui::{
     theme,
-    ui::{self, components},
+    ui::{self, components, font_mono},
 };
 
 use super::{
@@ -1407,7 +1407,7 @@ fn task_row(
                 .child(
                     div()
                         .text_size(px(9.0))
-                        .font_family("SF Mono")
+                        .font_family(font_mono())
                         .text_color(ui::text_tertiary(cx))
                         .child(truncate_url(&task.url, 56)),
                 ),
@@ -1416,7 +1416,7 @@ fn task_row(
             div()
                 .w(px(90.0))
                 .text_size(px(9.0))
-                .font_family("SF Mono")
+                .font_family(font_mono())
                 .text_color(ui::text_tertiary(cx))
                 .child(format_progress(&task, true)),
         )
@@ -1424,7 +1424,7 @@ fn task_row(
             div()
                 .w(px(80.0))
                 .text_size(px(9.0))
-                .font_family("SF Mono")
+                .font_family(font_mono())
                 .text_color(if is_active {
                     ui::accent_color(PluginAccent::Green).into()
                 } else {
@@ -1451,7 +1451,7 @@ fn task_row(
                     div()
                         .w(px(36.0))
                         .text_size(px(9.0))
-                        .font_family("SF Mono")
+                        .font_family(font_mono())
                         .text_align(gpui::TextAlign::Right)
                         .text_color(ui::text_tertiary(cx))
                         .child(format!("{:.0}%", task.progress_percent())),

@@ -1754,9 +1754,7 @@ fn launcher_icon(
                     .child(label)
                     .into_any_element()
             } else {
-                qingqi_ui::components::Icon::from_lucide_path(&icon)
-                    .size(px(28.0))
-                    .text_color(tint)
+                qingqi_ui::ui::icon_element(&icon, tint, 28.0)
                     .into_any_element()
             }
         })

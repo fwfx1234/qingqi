@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod log_store;
 pub mod routes;
 pub mod ws_handler;
 
@@ -6,6 +7,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::Router;
+use qingqi_plugin::database::DatabaseService;
 use tokio::sync::broadcast;
 
 use crate::protocol::requests::WsEvent;
@@ -24,19 +26,21 @@ pub struct AppState {
     pub token_store: Arc<auth::TokenStore>,
     pub events: EventSender,
     pub app_scanner: Arc<AppScanner>,
+    pub log_store: Arc<log_store::LogStore>,
 }
 
 impl AppState {
-    pub fn new(service: RemoteControlService) -> Self {
+    pub fn new(service: RemoteControlService, database: Arc<DatabaseService>) -> Self {
         let (tx, _) = broadcast::channel(256);
         let scanner_config_path = service.paths().config("scanner_custom_dirs.json");
         Self {
             service: Arc::new(service),
             system_service: Arc::new(SystemService::new()),
             process_manager: Arc::new(std::sync::Mutex::new(ProcessManager::new())),
-            token_store: Arc::new(auth::TokenStore::new()),
+            token_store: Arc::new(auth::TokenStore::new(database.clone())),
             events: tx,
             app_scanner: Arc::new(AppScanner::new(scanner_config_path)),
+            log_store: Arc::new(log_store::LogStore::new(database)),
         }
     }
 }
@@ -115,6 +119,14 @@ impl RemoteServer {
             .route("/", axum::routing::get(routes::web::index))
             .route("/api/v1/web/apps", axum::routing::get(routes::web::mobile_apps))
             .route("/api/v1/web/tasks", axum::routing::get(routes::web::mobile_tasks));
+
+        // Server management routes
+        app = app
+            .route("/api/v1/qrcode", axum::routing::get(routes::server_mgmt::qrcode))
+            .route("/api/v1/server/logs", axum::routing::get(routes::server_mgmt::list_logs))
+            .route("/api/v1/server/logs", axum::routing::delete(routes::server_mgmt::clear_logs))
+            .route("/api/v1/server/settings", axum::routing::get(routes::server_mgmt::get_settings))
+            .route("/api/v1/server/settings", axum::routing::put(routes::server_mgmt::update_settings));
 
         // WebSocket
         app = app.route("/api/v1/events", axum::routing::get(ws_handler::ws_handler));
