@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>远程控制 -  Qingqi</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            padding-bottom: 80px;
+        }
+        .header {
+            background: linear-gradient(135deg, #16213e, #0f3460);
+            padding: 20px;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .header h1 { font-size: 1.5em; margin-bottom: 5px; }
+        .header p { font-size: 0.9em; color: #aaa; }
+        .tabs {
+            display: flex;
+            background: #16213e;
+            padding: 10px;
+            gap: 10px;
+            overflow-x: auto;
+        }
+        .tab {
+            flex: 1;
+            min-width: 80px;
+            padding: 12px;
+            background: #0f3460;
+            border: none;
+            border-radius: 10px;
+            color: #aaa;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .tab.active {
+            background: #e94560;
+            color: white;
+        }
+        .content { padding: 15px; }
+        .section { display: none; }
+        .section.active { display: block; }
+        .card {
+            background: #16213e;
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .card-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            background: #0f3460;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            overflow: hidden;
+        }
+        .card-icon img { width: 100%; height: 100%; object-fit: cover; }
+        .card-info { flex: 1; }
+        .card-name { font-weight: bold; margin-bottom: 3px; }
+        .card-meta { font-size: 0.8em; color: #888; }
+        .card-actions { display: flex; gap: 8px; }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: #e94560; color: white; }
+        .btn-secondary { background: #0f3460; color: #aaa; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn:active { transform: scale(0.95); }
+        .search-box {
+            width: 100%;
+            padding: 15px;
+            background: #16213e;
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 1em;
+            margin-bottom: 15px;
+        }
+        .search-box::placeholder { color: #666; }
+        .empty { text-align: center; padding: 40px; color: #666; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .stat-card {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+        }
+        .stat-value { font-size: 1.8em; font-weight: bold; color: #e94560; }
+        .stat-label { font-size: 0.8em; color: #888; margin-top: 5px; }
+        .process-item {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 12px 15px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .process-name { font-weight: 500; }
+        .process-pid { font-size: 0.8em; color: #888; }
+        .process-mem { font-size: 0.85em; color: #e94560; }
+        .fab {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: #e94560;
+            border: none;
+            color: white;
+            font-size: 1.5em;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(233, 69, 96, 0.4);
+            z-index: 1000;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: #16213e;
+            border-radius: 20px;
+            padding: 25px;
+            width: 90%;
+            max-width: 400px;
+        }
+        .modal-title { font-size: 1.2em; margin-bottom: 15px; }
+        .modal-input {
+            width: 100%;
+            padding: 12px;
+            background: #0f3460;
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 1em;
+            margin-bottom: 15px;
+        }
+        .modal-buttons { display: flex; gap: 10px; }
+        .modal-buttons .btn { flex: 1; padding: 12px; }
+        .refresh-btn {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: #0f3460;
+            border: none;
+            color: white;
+            font-size: 1.2em;
+            cursor: pointer;
+            z-index: 1000;
+        }
+        .loading { text-align: center; padding: 20px; }
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #e94560;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎮 远程控制</h1>
+        <p>Qingqi Remote Control</p>
+    </div>
+
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab('apps')">📱 应用</button>
+        <button class="tab" onclick="switchTab('games')">🎮 游戏</button>
+        <button class="tab" onclick="switchTab('tasks')">⚙️ 任务</button>
+        <button class="tab" onclick="switchTab('system')">📊 系统</button>
+    </div>
+
+    <div class="content">
+        <!-- Apps Section -->
+        <div id="apps-section" class="section active">
+            <input type="text" class="search-box" placeholder="搜索应用..." id="app-search" oninput="filterApps()">
+            <div id="apps-list"></div>
+        </div>
+
+        <!-- Games Section -->
+        <div id="games-section" class="section">
+            <input type="text" class="search-box" placeholder="搜索游戏..." id="game-search" oninput="filterGames()">
+            <div id="games-list"></div>
+        </div>
+
+        <!-- Tasks Section -->
+        <div id="tasks-section" class="section">
+            <div class="stats" id="task-stats"></div>
+            <div id="tasks-list"></div>
+        </div>
+
+        <!-- System Section -->
+        <div id="system-section" class="section">
+            <div class="stats" id="system-stats"></div>
+            <div id="system-info"></div>
+        </div>
+    </div>
+
+    <button class="fab" onclick="refreshAll()">🔄</button>
+
+    <!-- Rename Modal -->
+    <div id="rename-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-title">重命名</div>
+            <input type="text" class="modal-input" id="rename-input" placeholder="新名称">
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+                <button class="btn btn-primary" onclick="confirmRename()">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let appsData = [];
+        let gamesData = [];
+        let tasksData = [];
+        let currentRenameId = null;
+        let currentRenameOriginal = null;
+
+        async function fetchApps() {
+            try {
+                const res = await fetch('/api/v1/scanner/apps');
+                const data = await res.json();
+                if (data.success) {
+                    appsData = data.data.filter(a => a.category !== 'Game');
+                    gamesData = data.data.filter(a => a.category === 'Game');
+                    renderApps();
+                    renderGames();
+                }
+            } catch (e) {
+                console.error('Failed to fetch apps:', e);
+            }
+        }
+
+        async function fetchTasks() {
+            try {
+                const res = await fetch('/api/v1/tasks');
+                const data = await res.json();
+                if (data.success) {
+                    tasksData = data.data.processes;
+                    renderTasks();
+                }
+            } catch (e) {
+                console.error('Failed to fetch tasks:', e);
+            }
+        }
+
+        async function fetchSystemStats() {
+            try {
+                const res = await fetch('/api/v1/tasks/stats');
+                const data = await res.json();
+                if (data.success) {
+                    renderSystemStats(data.data);
+                }
+            } catch (e) {
+                console.error('Failed to fetch stats:', e);
+            }
+        }
+
+        function renderApps() {
+            const list = document.getElementById('apps-list');
+            const query = document.getElementById('app-search').value.toLowerCase();
+            const filtered = appsData.filter(a => a.name.toLowerCase().includes(query));
+
+            if (filtered.length === 0) {
+                list.innerHTML = '<div class="empty">没有找到应用</div>';
+                return;
+            }
+
+            list.innerHTML = filtered.map(app => `
+                <div class="card">
+                    <div class="card-icon">
+                        ${app.icon_base64 ? `<img src="data:image/png;base64,${app.icon_base64}" alt="">` : '📦'}
+                    </div>
+                    <div class="card-info">
+                        <div class="card-name">${escapeHtml(app.name)}</div>
+                        <div class="card-meta">${app.source} · ${app.exe_path ? '可启动' : '仅信息'}</div>
+                    </div>
+                    <div class="card-actions">
+                        <button class="btn btn-secondary" onclick="showRename('${escapeHtml(app.id)}', '${escapeHtml(app.original_name)}')">✏️</button>
+                        ${app.exe_path ? `<button class="btn btn-primary" onclick="launchApp('${escapeHtml(app.id)}')">▶</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderGames() {
+            const list = document.getElementById('games-list');
+            const query = document.getElementById('game-search').value.toLowerCase();
+            const filtered = gamesData.filter(a => a.name.toLowerCase().includes(query));
+
+            if (filtered.length === 0) {
+                list.innerHTML = '<div class="empty">没有找到游戏</div>';
+                return;
+            }
+
+            list.innerHTML = filtered.map(app => `
+                <div class="card">
+                    <div class="card-icon">
+                        ${app.icon_base64 ? `<img src="data:image/png;base64,${app.icon_base64}" alt="">` : '🎮'}
+                    </div>
+                    <div class="card-info">
+                        <div class="card-name">${escapeHtml(app.name)}</div>
+                        <div class="card-meta">${app.source} · ${app.category}</div>
+                    </div>
+                    <div class="card-actions">
+                        <button class="btn btn-secondary" onclick="showRename('${escapeHtml(app.id)}', '${escapeHtml(app.original_name)}')">✏️</button>
+                        ${app.exe_path ? `<button class="btn btn-primary" onclick="launchApp('${escapeHtml(app.id)}')">▶</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderTasks() {
+            const list = document.getElementById('tasks-list');
+            const stats = document.getElementById('task-stats');
+
+            stats.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-value">${tasksData.length}</div>
+                    <div class="stat-label">进程数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${tasksData.reduce((s, p) => s + (p.memory_mb || 0), 0).toFixed(0)}</div>
+                    <div class="stat-label">总内存 (MB)</div>
+                </div>
+            `;
+
+            if (tasksData.length === 0) {
+                list.innerHTML = '<div class="empty">没有运行中的进程</div>';
+                return;
+            }
+
+            list.innerHTML = tasksData.map(p => `
+                <div class="process-item">
+                    <div>
+                        <div class="process-name">${escapeHtml(p.name)}</div>
+                        <div class="process-pid">PID: ${p.pid}</div>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <span class="process-mem">${(p.memory_mb || 0).toFixed(1)} MB</span>
+                        <button class="btn btn-danger" onclick="killTask(${p.pid})" style="padding:6px 12px;font-size:0.75em;">结束</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderSystemStats(data) {
+            const stats = document.getElementById('system-stats');
+            const info = document.getElementById('system-info');
+
+            stats.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-value">${data.cpu_usage.toFixed(1)}%</div>
+                    <div class="stat-label">CPU</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${data.memory_percent.toFixed(1)}%</div>
+                    <div class="stat-label">内存</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${(data.memory_used / 1024 / 1024 / 1024).toFixed(1)}</div>
+                    <div class="stat-label">已用内存 (GB)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${(data.memory_total / 1024 / 1024 / 1024).toFixed(1)}</div>
+                    <div class="stat-label">总内存 (GB)</div>
+                </div>
+            `;
+
+            const hours = Math.floor(data.uptime_seconds / 3600);
+            const minutes = Math.floor((data.uptime_seconds % 3600) / 60);
+
+            info.innerHTML = `
+                <div class="card">
+                    <div class="card-info">
+                        <div class="card-name">运行时间</div>
+                        <div class="card-meta">${hours}小时 ${minutes}分钟</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(tab + '-section').classList.add('active');
+
+            if (tab === 'tasks') fetchTasks();
+            if (tab === 'system') fetchSystemStats();
+        }
+
+        function filterApps() { renderApps(); }
+        function filterGames() { renderGames(); }
+
+        function showRename(id, originalName) {
+            currentRenameId = id;
+            currentRenameOriginal = originalName;
+            document.getElementById('rename-input').value = originalName;
+            document.getElementById('rename-modal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('rename-modal').classList.remove('active');
+            currentRenameId = null;
+            currentRenameOriginal = null;
+        }
+
+        async function confirmRename() {
+            const newName = document.getElementById('rename-input').value.trim();
+            if (!newName || !currentRenameOriginal) return;
+
+            try {
+                const res = await fetch('/api/v1/scanner/apps/rename', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        original_name: currentRenameOriginal,
+                        new_name: newName
+                    })
+                });
+                if (res.ok) {
+                    closeModal();
+                    fetchApps();
+                }
+            } catch (e) {
+                console.error('Rename failed:', e);
+            }
+        }
+
+        async function launchApp(id) {
+            try {
+                await fetch(`/api/v1/scanner/apps/${id}/launch`, { method: 'POST' });
+            } catch (e) {
+                console.error('Launch failed:', e);
+            }
+        }
+
+        async function killTask(pid) {
+            if (!confirm('确定要结束此进程吗？')) return;
+            try {
+                await fetch(`/api/v1/tasks/${pid}/kill`, { method: 'POST' });
+                fetchTasks();
+            } catch (e) {
+                console.error('Kill failed:', e);
+            }
+        }
+
+        function refreshAll() {
+            fetchApps();
+            fetchTasks();
+            fetchSystemStats();
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // Initial load
+        fetchApps();
+        fetchTasks();
+        fetchSystemStats();
+
+        // Auto refresh every 10 seconds
+        setInterval(() => {
+            if (document.getElementById('tasks-section').classList.contains('active')) {
+                fetchTasks();
+                fetchSystemStats();
+            }
+        }, 10000);
+    </script>
+</body>
+</html>

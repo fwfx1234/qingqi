@@ -20,15 +20,21 @@ pub mod auth {
         Json(req): Json<AuthPairRequest>,
     ) -> impl IntoResponse {
         if state.service.verify_pin(&req.pin) {
-            let token = state.token_store.create_token("mobile", 30 * 24 * 3600);
+            let device_name = format!("手机-{}", &req.pin);
+            let token = state.token_store.create_token(&device_name, 30 * 24 * 3600);
             let now = time::OffsetDateTime::now_utc().unix_timestamp();
+            let expires_at = now + 30 * 24 * 3600;
+            // Register the paired device in service state
+            state
+                .service
+                .register_paired_device(device_name, token.clone(), expires_at);
             // 获取本机 MAC 地址，用于 Wake-on-LAN
             let mac_address = state.system_service.get_mac_address();
             (
                 StatusCode::OK,
                 Json(ApiResponse::success(PairResponse {
                     token,
-                    expires_at: now + 30 * 24 * 3600,
+                    expires_at,
                     mac_address,
                 })),
             )
@@ -316,5 +322,191 @@ pub mod app {
                 crate::protocol::responses::SearchAppsResponse { apps },
             )),
         )
+    }
+}
+
+pub mod scanner {
+    use super::*;
+    #[allow(unused_imports)]
+    use crate::service::app_scanner::AppEntry;
+
+    /// Scan all installed applications
+    pub async fn scan_apps(Extension(state): Extension<AppState>) -> impl IntoResponse {
+        let apps = state.app_scanner.get_or_scan();
+        (StatusCode::OK, Json(ApiResponse::success(apps)))
+    }
+
+    /// Rename an application
+    pub async fn rename_app(
+        Extension(state): Extension<AppState>,
+        Json(req): Json<serde_json::Value>,
+    ) -> impl IntoResponse {
+        let original_name = req["original_name"].as_str().unwrap_or("");
+        let new_name = req["new_name"].as_str().unwrap_or("");
+
+        if original_name.is_empty() || new_name.is_empty() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<crate::protocol::responses::EmptyResponse>::error(
+                    "INVALID_INPUT",
+                    "original_name and new_name are required",
+                )),
+            );
+        }
+
+        state.app_scanner.rename(original_name, new_name);
+        (
+            StatusCode::OK,
+            Json(ApiResponse::success(crate::protocol::responses::EmptyResponse {})),
+        )
+    }
+
+    /// Launch an application by ID
+    pub async fn launch_app(
+        Extension(state): Extension<AppState>,
+        Path(id): Path<String>,
+    ) -> impl IntoResponse {
+        let apps = state.app_scanner.get_or_scan();
+        let app = apps.iter().find(|a| a.id == id);
+
+        match app {
+            Some(app) => {
+                let exe_path = app.exe_path.clone();
+                let args: Vec<String> = Vec::new();
+                match crate::platform::launch_app(&exe_path, &args) {
+                    Ok(()) => (
+                        StatusCode::OK,
+                        Json(ApiResponse::success(crate::protocol::responses::EmptyResponse {})),
+                    ),
+                    Err(e) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<crate::protocol::responses::EmptyResponse>::error(
+                            "LAUNCH_FAILED",
+                            &e.to_string(),
+                        )),
+                    ),
+                }
+            }
+            None => (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<crate::protocol::responses::EmptyResponse>::error(
+                    "APP_NOT_FOUND",
+                    "Application not found",
+                )),
+            ),
+        }
+    }
+
+    /// Refresh the app scan cache
+    pub async fn refresh_apps(Extension(state): Extension<AppState>) -> impl IntoResponse {
+        let apps = state.app_scanner.scan();
+        (StatusCode::OK, Json(ApiResponse::success(apps)))
+    }
+}
+
+pub mod task {
+    use super::*;
+
+    /// List all running processes (task manager)
+    pub async fn list_tasks(Extension(state): Extension<AppState>) -> impl IntoResponse {
+        let mut pm = state.process_manager.lock().unwrap();
+        let result = pm.list_processes(None, 0, 200);
+        (StatusCode::OK, Json(ApiResponse::success(result)))
+    }
+
+    /// Kill a process by PID
+    pub async fn kill_task(
+        Extension(state): Extension<AppState>,
+        Path(pid): Path<u32>,
+    ) -> impl IntoResponse {
+        let pm = state.process_manager.lock().unwrap();
+        match pm.kill_process(pid) {
+            Ok(()) => (
+                StatusCode::OK,
+                Json(ApiResponse::success(crate::protocol::responses::EmptyResponse {})),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<crate::protocol::responses::EmptyResponse>::error(
+                    "KILL_FAILED",
+                    &e.to_string(),
+                )),
+            ),
+        }
+    }
+
+    /// Set process priority
+    pub async fn set_priority(
+        Extension(state): Extension<AppState>,
+        Path(pid): Path<u32>,
+        Json(req): Json<serde_json::Value>,
+    ) -> impl IntoResponse {
+        let priority = req["priority"].as_str().unwrap_or("normal");
+        let pm = state.process_manager.lock().unwrap();
+        match pm.set_process_priority(pid, priority) {
+            Ok(()) => (
+                StatusCode::OK,
+                Json(ApiResponse::success(crate::protocol::responses::EmptyResponse {})),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<crate::protocol::responses::EmptyResponse>::error(
+                    "PRIORITY_FAILED",
+                    &e.to_string(),
+                )),
+            ),
+        }
+    }
+
+    /// Get system stats (CPU, memory, etc.)
+    pub async fn system_stats(Extension(state): Extension<AppState>) -> impl IntoResponse {
+        let status = state.system_service.get_status();
+        (StatusCode::OK, Json(ApiResponse::success(status)))
+    }
+}
+
+pub mod web {
+    use super::*;
+
+    /// Serve the mobile-friendly web interface
+    pub async fn index() -> impl IntoResponse {
+        let html = include_str!("../assets/mobile.html");
+        axum::response::Html(html)
+    }
+
+    /// Get apps formatted for mobile display
+    pub async fn mobile_apps(Extension(state): Extension<AppState>) -> impl IntoResponse {
+        let apps = state.app_scanner.get_or_scan();
+        let mobile_apps: Vec<MobileAppEntry> = apps
+            .into_iter()
+            .map(|a| MobileAppEntry {
+                id: a.id,
+                name: a.name,
+                original_name: a.original_name,
+                icon: a.icon_base64,
+                category: a.category,
+                source: a.source,
+                exe_path: a.exe_path,
+            })
+            .collect();
+        (StatusCode::OK, Json(ApiResponse::success(mobile_apps)))
+    }
+
+    /// Get tasks formatted for mobile display
+    pub async fn mobile_tasks(Extension(state): Extension<AppState>) -> impl IntoResponse {
+        let mut pm = state.process_manager.lock().unwrap();
+        let result = pm.list_processes(None, 0, 200);
+        (StatusCode::OK, Json(ApiResponse::success(result)))
+    }
+
+    #[derive(serde::Serialize)]
+    struct MobileAppEntry {
+        id: String,
+        name: String,
+        original_name: String,
+        icon: Option<String>,
+        category: String,
+        source: String,
+        exe_path: String,
     }
 }

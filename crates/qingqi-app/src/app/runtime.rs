@@ -244,6 +244,9 @@ pub fn run(host: AppHost) -> Result<()> {
     });
     let database_for_shutdown = Arc::clone(&build_cx.database);
     app.run(move |cx| {
+        // Initialize shared Tokio runtime for all plugins that need async support
+        qingqi_core::tokio_runtime::init();
+
         qingqi_platform::macos::hide_dock_icon();
 
         qingqi_ui::components::init(cx);

@@ -74,4 +74,8 @@ impl ProcessManager {
     pub fn resume_process(&self, pid: u32) -> anyhow::Result<()> {
         ProcessActions::resume(pid)
     }
+
+    pub fn set_process_priority(&self, pid: u32, priority: &str) -> anyhow::Result<()> {
+        crate::platform::set_priority(pid, priority)
+    }
 }

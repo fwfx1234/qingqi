@@ -12,6 +12,7 @@ use crate::protocol::requests::WsEvent;
 use crate::service::RemoteControlService;
 use crate::service::system::SystemService;
 use crate::service::process::ProcessManager;
+use crate::service::app_scanner::AppScanner;
 
 pub type EventSender = broadcast::Sender<WsEvent>;
 
@@ -22,6 +23,7 @@ pub struct AppState {
     pub process_manager: Arc<std::sync::Mutex<ProcessManager>>,
     pub token_store: Arc<auth::TokenStore>,
     pub events: EventSender,
+    pub app_scanner: Arc<AppScanner>,
 }
 
 impl AppState {
@@ -33,6 +35,7 @@ impl AppState {
             process_manager: Arc::new(std::sync::Mutex::new(ProcessManager::new())),
             token_store: Arc::new(auth::TokenStore::new()),
             events: tx,
+            app_scanner: Arc::new(AppScanner::new()),
         }
     }
 }
@@ -75,6 +78,26 @@ impl RemoteServer {
         app = app
             .route("/api/v1/apps/launch", axum::routing::post(routes::app::launch))
             .route("/api/v1/apps/search", axum::routing::get(routes::app::search));
+
+        // App Scanner routes
+        app = app
+            .route("/api/v1/scanner/apps", axum::routing::get(routes::scanner::scan_apps))
+            .route("/api/v1/scanner/apps/rename", axum::routing::post(routes::scanner::rename_app))
+            .route("/api/v1/scanner/apps/:id/launch", axum::routing::post(routes::scanner::launch_app))
+            .route("/api/v1/scanner/refresh", axum::routing::post(routes::scanner::refresh_apps));
+
+        // Task Manager routes
+        app = app
+            .route("/api/v1/tasks", axum::routing::get(routes::task::list_tasks))
+            .route("/api/v1/tasks/:pid/kill", axum::routing::post(routes::task::kill_task))
+            .route("/api/v1/tasks/:pid/priority", axum::routing::post(routes::task::set_priority))
+            .route("/api/v1/tasks/stats", axum::routing::get(routes::task::system_stats));
+
+        // Mobile Web Interface
+        app = app
+            .route("/", axum::routing::get(routes::web::index))
+            .route("/api/v1/web/apps", axum::routing::get(routes::web::mobile_apps))
+            .route("/api/v1/web/tasks", axum::routing::get(routes::web::mobile_tasks));
 
         // WebSocket
         app = app.route("/api/v1/events", axum::routing::get(ws_handler::ws_handler));
