@@ -2,7 +2,8 @@ use gpui::*;
 use std::time::Duration;
 
 use crate::token::tokens;
-use crate::{components::Icon, icon};
+use crate::components::Icon;
+use crate::icon;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum NotificationType {

@@ -27,7 +27,7 @@ pub use crate::token::Token;
 pub use button::{Button, ButtonCustomVariant, ButtonRounded, ButtonVariant, ButtonVariants};
 pub use checkbox::Checkbox;
 pub use divider::{Divider, DividerStyle};
-pub use icon::Icon;
+pub use icon::{Icon, IconName};
 pub use input::{Input, InputState};
 pub use list::ListItem;
 pub use root::{Root, WindowExt};

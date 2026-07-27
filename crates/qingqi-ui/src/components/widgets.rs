@@ -2,8 +2,8 @@
 //! — migrated APIs from vendor/qingqi-ui with local minimal implementations.
 
 use gpui::{
-    AnyElement, App, Div, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window, div, percentage, prelude::*, px,
+    AnyElement, App, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
+    Styled, Window, div, prelude::*, px,
     relative,
 };
 
@@ -191,7 +191,7 @@ impl Progress {
         self.bg = Some(c.into());
         self
     }
-    pub fn h(mut self, h: Pixels) -> Self {
+    pub fn h(self, _h: Pixels) -> Self {
         self
     }
 }
@@ -270,7 +270,7 @@ impl Slider {
         self.max = v;
         self
     }
-    pub fn horizontal(mut self) -> Self {
+    pub fn horizontal(self) -> Self {
         self
     }
 }

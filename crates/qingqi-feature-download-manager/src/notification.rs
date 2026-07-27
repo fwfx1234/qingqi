@@ -1,5 +1,5 @@
 /// Show a system notification for download completion
-pub fn notify_download_complete(file_name: &str, save_path: &str) {
+pub fn notify_download_complete(file_name: &str, _save_path: &str) {
     #[cfg(target_os = "macos")]
     {
         let script = format!(
@@ -33,7 +33,7 @@ pub fn notify_download_complete(file_name: &str, save_path: &str) {
 }
 
 /// Notify when a download fails
-pub fn notify_download_failed(file_name: &str, error: &str) {
+pub fn notify_download_failed(_file_name: &str, _error: &str) {
     #[cfg(target_os = "macos")]
     {
         let script = format!(

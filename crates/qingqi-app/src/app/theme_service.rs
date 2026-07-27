@@ -60,7 +60,7 @@ impl ThemeService {
         Ok(())
     }
 
-    pub fn init(&self, cx: &mut App) -> Result<()> {
+    pub fn init(&self, _cx: &mut App) -> Result<()> {
         self.seed_builtin_themes()?;
 
         // load user themes from disk

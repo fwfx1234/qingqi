@@ -1,4 +1,3 @@
-use gpui::Styled;
 use std::{
     cell::Cell,
     ops::Deref,
@@ -382,12 +381,14 @@ impl Scrollbar {
     /// If you have very high CPU usage, consider reducing this value to improve performance.
     ///
     /// Available values: 30..120
+    #[allow(dead_code)]
     pub(crate) fn max_fps(mut self, max_fps: usize) -> Self {
         self.max_fps = max_fps.clamp(30, 120);
         self
     }
 
     // Get the width of the scrollbar.
+    #[allow(dead_code)]
     pub(crate) const fn width() -> Pixels {
         WIDTH
     }

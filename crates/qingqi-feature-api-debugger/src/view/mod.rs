@@ -6,19 +6,22 @@ use gpui::{
     AnyWindowHandle, App, AppContext, Context, Entity, InteractiveElement, IntoElement,
     ParentElement, Render, Styled, Window, div, prelude::FluentBuilder, px,
 };
-use gpui_component::tree::TreeState;
-use gpui_component::{
+use qingqi_ui::components::tree::TreeState;
+use qingqi_ui::components::{
     IconName, Sizable, Size,
     button::{Button, ButtonVariants},
-    menu::{DropdownMenu, PopupMenuItem},
+    input::InputState,
+    theme::Theme,
 };
+#[allow(unused_imports)]
+use qingqi_ui::components::widgets::DropdownMenu;
+use qingqi_ui::layer::PopupMenuItem;
 
 use crate::code_gen::CodeLanguage;
 use crate::service::{
     ApiEnvironment, ApiGroup, ApiRequest, ApiResponse, ApiService, AuthType, BodyMode, EditorTab,
     EnvDetailTab, HttpHistory, HttpMethod, ResponseTab,
 };
-use gpui_component::{input::InputState, theme::Theme};
 use qingqi_ui::ui::glass;
 
 use qingqi_plugin::plugin_spec::PluginAccent;
@@ -70,6 +73,9 @@ pub struct ApiDebuggerView {
     pub(crate) body_input: Entity<InputState>,
     pub(crate) headers_kv: types::KvEditor,
     pub(crate) cookies_kv: types::KvEditor,
+    pub(crate) body_urlencoded_kv: types::KvEditor,
+    pub(crate) body_form_data_kv: types::KvEditor,
+    pub(crate) focus_inline_rename: bool,
     pub(crate) auth_bearer_input: Entity<InputState>,
     pub(crate) auth_basic_user_input: Entity<InputState>,
     pub(crate) auth_basic_pass_input: Entity<InputState>,
@@ -84,6 +90,7 @@ pub struct ApiDebuggerView {
     pub(crate) env_headers_input: Entity<InputState>,
     pub(crate) response: ApiResponse,
     pub(crate) notice: String,
+    #[allow(dead_code)]
     pub(crate) last_revision: u64,
     pub(crate) tree_state: Entity<TreeState>,
     pub(crate) collapsed_nodes: RefCell<HashSet<String>>,
@@ -106,6 +113,8 @@ impl ApiDebuggerView {
                         path_rows: Vec::new(),
                         body: String::new(),
                         body_mode: BodyMode::None,
+                        body_payloads: Default::default(),
+                        editor_tab: String::from("params"),
                         headers: Vec::new(),
                         cookies: Vec::new(),
                         auth: Vec::new(),
@@ -141,6 +150,8 @@ impl ApiDebuggerView {
                     path_rows: Vec::new(),
                     body: String::new(),
                     body_mode: BodyMode::None,
+                    body_payloads: Default::default(),
+                    editor_tab: String::from("params"),
                     headers: Vec::new(),
                     cookies: Vec::new(),
                     auth: Vec::new(),
@@ -308,6 +319,9 @@ impl ApiDebuggerView {
             notice,
             last_revision: rev,
             tree_state,
+            body_urlencoded_kv: types::KvEditor::new(window, cx, &[]),
+            body_form_data_kv: types::KvEditor::new(window, cx, &[]),
+            focus_inline_rename: false,
             collapsed_nodes: RefCell::new(HashSet::new()),
         }
     }
@@ -463,6 +477,7 @@ impl Render for ApiDebuggerView {
                                     .child(components::collection_tree::collection_tree(
                                         entity.clone(),
                                         self.tree_state.clone(),
+                                        self.focus_inline_rename,
                                         app,
                                     )),
                             )
@@ -497,9 +512,12 @@ impl Render for ApiDebuggerView {
                                                 editor_tab,
                                                 editor_text_input,
                                                 editor_kv_rows,
+                                                self.body_urlencoded_kv.rows.clone(),
+                                                self.body_form_data_kv.rows.clone(),
                                                 editor_auth_form,
                                                 body_mode,
                                                 auth_type,
+                                                current_request.clone(),
                                                 app,
                                             ))
                                             .child(components::response_panel::response_panel(

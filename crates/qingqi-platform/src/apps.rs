@@ -133,6 +133,7 @@ fn save_icon_image(image: DynamicImage, out_path: &Path) -> Result<String, Strin
     Ok(out_path.to_string_lossy().to_string())
 }
 
+#[allow(dead_code)]
 fn convert_icon_with_image(icon_path: &Path, out_path: &Path) -> Result<String, String> {
     let image = ImageReader::open(icon_path)
         .map_err(|error| error.to_string())?

@@ -10,7 +10,6 @@ use gpui::{
 };
 
 use qingqi_ui::components::button::{Button, ButtonVariant, ButtonVariants};
-use qingqi_ui::components::scroll::ScrollableElement;
 use qingqi_ui::components::scroll::ScrollbarExt;
 use qingqi_ui::components::styled::Sizable;
 use qingqi_ui::components::styled::Size;

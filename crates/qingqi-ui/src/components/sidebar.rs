@@ -132,6 +132,7 @@ impl SidebarMenuItem {
         self.collapsed = collapsed;
         self
     }
+    #[allow(dead_code)]
     fn id(mut self, id: impl Into<ElementId>) -> Self {
         self.id = id.into();
         self

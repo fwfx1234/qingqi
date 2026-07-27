@@ -4,13 +4,13 @@ use super::shared::circle_badge;
 use crate::service::{ApiEnvironment, ApiRequest, HttpMethod};
 use crate::view::ApiDebuggerView;
 use gpui::{App, Entity, InteractiveElement, IntoElement, ParentElement, Styled, div, px};
-use gpui_component::popover::Popover;
-use gpui_component::theme::Theme;
-use gpui_component::{
+use qingqi_ui::components::theme::Theme;
+use qingqi_ui::components::{
     Icon, IconName, Sizable, Size,
     button::{Button, ButtonVariants},
     input::{Input, InputState},
 };
+use qingqi_ui::layer::popover::Popover;
 use qingqi_ui::{theme, ui, ui::glass};
 
 pub fn action_bar(

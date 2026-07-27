@@ -44,6 +44,7 @@ struct ShortcutMetadata {
     name: String,
     target_path: Option<PathBuf>,
     icon_path: Option<PathBuf>,
+    #[allow(dead_code)]
     icon_index: i32,
 }
 

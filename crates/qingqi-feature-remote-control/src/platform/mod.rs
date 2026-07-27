@@ -60,6 +60,10 @@ pub fn get_process_info(process: &sysinfo::Process) -> ProcessInfo {
     platform_impl::get_process_info(process)
 }
 
+pub fn set_priority(pid: u32, priority: &str) -> anyhow::Result<()> {
+    platform_impl::set_priority(pid, priority)
+}
+
 // === Platform-specific implementations ===
 
 #[cfg(target_os = "windows")]

@@ -20,6 +20,7 @@ pub struct HttpCapturePlugin {
     store: Arc<Mutex<CaptureStore>>,
     mock_store: Arc<Mutex<MockStore>>,
     ca_manager: Arc<Mutex<CaManager>>,
+    #[allow(dead_code)]
     rewrite_engine: Arc<Mutex<RewriteEngine>>,
     events: AppEventBus,
 }

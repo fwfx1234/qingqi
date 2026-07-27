@@ -4,7 +4,6 @@ use gpui::prelude::*;
 use gpui::{point, *};
 use qingqi_ui::components::button::{Button, ButtonVariants};
 use qingqi_ui::components::input::{Input, InputState};
-use qingqi_ui::components::scroll::ScrollableElement;
 use qingqi_ui::components::scroll::ScrollbarExt;
 use qingqi_ui::components::styled::Sizable;
 use qingqi_ui::components::theme::Theme;

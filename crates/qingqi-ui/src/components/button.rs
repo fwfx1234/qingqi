@@ -7,7 +7,7 @@ use super::styled::focus_ring;
 use super::styled::{Sizable, Size};
 use super::theme::ActiveTheme;
 use gpui::{
-    Action, AnyElement, App, ClickEvent, Corners, Div, Edges, ElementId, Hsla, InteractiveElement,
+    AnyElement, App, ClickEvent, Corners, Div, Edges, ElementId, Hsla, InteractiveElement,
     Interactivity, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce, SharedString,
     Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _, px, relative,
@@ -129,6 +129,7 @@ impl ButtonVariant {
     fn is_text(&self) -> bool {
         matches!(self, Self::Text)
     }
+    #[allow(dead_code)]
     fn is_ghost(&self) -> bool {
         matches!(self, Self::Ghost)
     }
@@ -487,6 +488,7 @@ struct StyledState {
     border: Hsla,
     fg: Hsla,
     underline: bool,
+    #[allow(dead_code)]
     shadow: bool,
 }
 
@@ -505,7 +507,9 @@ pub struct Button {
     variant: ButtonVariant,
     rounded: ButtonRounded,
     outline: bool,
+    #[allow(dead_code)]
     border_corners: Corners<bool>,
+    #[allow(dead_code)]
     border_edges: Edges<bool>,
     size: Size,
     compact: bool,
@@ -770,7 +774,7 @@ impl RenderOnce for Button {
                     })
                     .children(self.children),
             )
-            .when_some(self.tooltip.clone(), |this, tooltip| this)
+            .when_some(self.tooltip.clone(), |this, _tooltip| this)
             .when(is_focused, |this| {
                 focus_ring(this, is_focused, px(2.0), window, cx)
             })

@@ -6,11 +6,9 @@ use gpui::{
     Render, SharedString, StatefulInteractiveElement, Styled, Subscription, TitlebarOptions,
     Window, WindowBounds, WindowKind, WindowOptions, div, px, size,
 };
-use gpui_component::{
+use qingqi_ui::components::{
     IconName, Root, Sizable, Size,
     button::{Button, ButtonVariants},
-};
-use gpui_component::{
     input::{Input, InputState},
     theme::Theme,
 };

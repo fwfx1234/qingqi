@@ -175,7 +175,7 @@ fn windows_window_chrome(
     } else {
         t.background()
     };
-    let borderColor = if config.transparent {
+    let border_color = if config.transparent {
         hsla(0.0, 0.0, 0.0, 0.0)
     } else {
         t.border()
@@ -188,7 +188,7 @@ fn windows_window_chrome(
         .h(px(TITLE_BAR_HEIGHT))
         .bg(background.clone())
         .border_b_1()
-        .border_color(borderColor)
+        .border_color(border_color)
         .px_3()
         .child(
             div()
@@ -419,4 +419,5 @@ fn title_drag_spacer(width: f32) -> gpui::Div {
 // Re-export names commonly used by plugin code:
 // Icon is exported from crate::components.
 // Theme (= Token), Sizable, Size — exported from crate::components.
+#[allow(dead_code)]
 pub type Theme = Token;

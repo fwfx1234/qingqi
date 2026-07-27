@@ -287,6 +287,7 @@ impl ApiDebuggerView {
         });
     }
 
+    #[allow(dead_code)]
     pub(crate) fn sync_url_from_input(&mut self, window: &mut Window, cx: &mut App) {
         let raw = self.path_input.read(cx).value().to_string();
         let (base, parsed_query) = crate::service::split_request_url(&raw);

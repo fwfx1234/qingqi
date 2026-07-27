@@ -1,7 +1,7 @@
 //! Scrollable extension trait — local replacement for qingqi-ui::scroll::ScrollableElement.
 
 use gpui::{
-    Div, Element, InteractiveElement, IntoElement, Stateful, StatefulInteractiveElement, prelude::*,
+    Element, InteractiveElement, Stateful, StatefulInteractiveElement, prelude::*,
 };
 
 #[derive(Clone, Copy)]

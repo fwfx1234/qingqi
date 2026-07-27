@@ -38,7 +38,6 @@ use qingqi_plugin::{
 };
 use qingqi_ui::components::divider::Divider;
 use qingqi_ui::components::input::{Input, InputState};
-use qingqi_ui::components::scroll::ScrollableElement;
 use qingqi_ui::components::scroll::ScrollbarExt;
 use qingqi_ui::components::theme::Theme;
 use qingqi_ui::token::tokens;
@@ -99,6 +98,7 @@ pub struct CaptureView {
     breakpoint_method_input: Option<Entity<InputState>>,
     // Throttle panel state
     throttle_visible: bool,
+    #[allow(dead_code)]
     throttle_custom_input: Option<Entity<InputState>>,
     // Rewrite panel state
     rewrite_visible: bool,
@@ -676,6 +676,7 @@ impl CaptureView {
         cx.notify();
     }
 
+    #[allow(dead_code)]
     fn update_breakpoint_rule_pattern(&mut self, id: String, pattern: String, cx: &mut Context<Self>) {
         if let Ok(mut mgr) = self.engine.breakpoint_manager().lock() {
             mgr.update_rule(&id, |r| r.url_pattern.clone_from(&pattern));
@@ -686,6 +687,7 @@ impl CaptureView {
         cx.notify();
     }
 
+    #[allow(dead_code)]
     fn update_breakpoint_rule_method(&mut self, id: String, method: String, cx: &mut Context<Self>) {
         if let Ok(mut mgr) = self.engine.breakpoint_manager().lock() {
             mgr.update_rule(&id, |r| r.method.clone_from(&method));
@@ -696,6 +698,7 @@ impl CaptureView {
         cx.notify();
     }
 
+    #[allow(dead_code)]
     fn update_breakpoint_rule_phase(&mut self, id: String, phase: BreakpointPhase, cx: &mut Context<Self>) {
         if let Ok(mut mgr) = self.engine.breakpoint_manager().lock() {
             mgr.update_rule(&id, |r| r.phase = phase);

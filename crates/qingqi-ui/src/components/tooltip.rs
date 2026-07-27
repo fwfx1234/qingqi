@@ -1,6 +1,6 @@
 use gpui::{
     App, IntoElement, ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, Window,
-    div, prelude::FluentBuilder, px,
+    div, px,
 };
 
 use crate::token::tokens;

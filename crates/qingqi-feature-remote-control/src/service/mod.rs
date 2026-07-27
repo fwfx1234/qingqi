@@ -1,3 +1,4 @@
+pub mod app_scanner;
 pub mod process;
 pub mod system;
 
@@ -8,11 +9,20 @@ use qingqi_plugin::storage::AppPaths;
 use self::process::ProcessManager;
 use self::system::SystemService;
 
+#[derive(Clone)]
 pub struct RemoteControlService {
     paths: AppPaths,
     system_service: Arc<SystemService>,
     process_manager: Arc<std::sync::Mutex<ProcessManager>>,
     inner: Arc<std::sync::Mutex<ServiceInner>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PairedDevice {
+    pub name: String,
+    pub token: String,
+    pub expires_at: i64,
+    pub paired_at: i64,
 }
 
 #[derive(Default)]
@@ -23,6 +33,8 @@ struct ServiceInner {
     server_running: bool,
     /// The port the server listens on.
     server_port: u16,
+    /// List of paired devices.
+    paired_devices: Vec<PairedDevice>,
 }
 
 impl RemoteControlService {
@@ -35,6 +47,7 @@ impl RemoteControlService {
                 pairing_pin: None,
                 server_running: false,
                 server_port: 3721,
+                paired_devices: Vec::new(),
             })),
         }
     }
@@ -87,5 +100,39 @@ impl RemoteControlService {
 
     pub fn server_port(&self) -> u16 {
         self.inner.lock().unwrap().server_port
+    }
+
+    /// List all paired devices (active tokens).
+    pub fn list_paired_devices(&self) -> Vec<PairedDevice> {
+        // We need access to the token store. For now, we'll store paired devices in the inner state.
+        let inner = self.inner.lock().unwrap();
+        inner.paired_devices.clone()
+    }
+
+    /// Register a newly paired device.
+    pub fn register_paired_device(&self, name: String, token: String, expires_at: i64) {
+        let mut inner = self.inner.lock().unwrap();
+        // Remove existing device with same name
+        inner.paired_devices.retain(|d| d.name != name);
+        inner.paired_devices.push(PairedDevice {
+            name,
+            token,
+            expires_at,
+            paired_at: time::OffsetDateTime::now_utc().unix_timestamp(),
+        });
+    }
+
+    /// Revoke a paired device by name.
+    pub fn revoke_device(&self, name: &str) -> bool {
+        let mut inner = self.inner.lock().unwrap();
+        let len_before = inner.paired_devices.len();
+        inner.paired_devices.retain(|d| d.name != name);
+        inner.paired_devices.len() < len_before
+    }
+
+    /// Check if there are any paired devices.
+    pub fn has_paired_devices(&self) -> bool {
+        let inner = self.inner.lock().unwrap();
+        !inner.paired_devices.is_empty()
     }
 }

@@ -191,6 +191,7 @@ pub struct ContextMenu<E: ParentElement + Styled> {
 }
 
 impl<E: ParentElement + Styled> ContextMenu<E> {
+    #[allow(dead_code)]
     fn new(element: E) -> Self {
         Self { element }
     }

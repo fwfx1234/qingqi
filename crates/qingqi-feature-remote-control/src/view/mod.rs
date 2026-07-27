@@ -5,27 +5,32 @@ use gpui::prelude::FluentBuilder;
 use qingqi_ui::components::button::Button;
 use qingqi_ui::components::styled::{h_flex, v_flex};
 
-use crate::service::RemoteControlService;
+use crate::server::{AppState, RemoteServer};
+use crate::service::{PairedDevice, RemoteControlService};
 
 pub struct RemoteControlView {
     service: Arc<RemoteControlService>,
     pin: Option<String>,
     server_running: bool,
     ip_address: String,
+    paired_devices: Vec<PairedDevice>,
 }
 
 impl RemoteControlView {
     pub fn new(service: Arc<RemoteControlService>) -> Self {
+        let paired_devices = service.list_paired_devices();
         Self {
             service,
             pin: None,
             server_running: false,
             ip_address: get_local_ip(),
+            paired_devices,
         }
     }
 
     pub fn init(&mut self, _cx: &mut Context<Self>) {
         self.server_running = self.service.is_server_running();
+        self.refresh_paired_devices();
     }
 
     fn generate_pin(&mut self, cx: &mut Context<Self>) {
@@ -34,9 +39,38 @@ impl RemoteControlView {
         cx.notify();
     }
 
+    fn refresh_paired_devices(&mut self) {
+        self.paired_devices = self.service.list_paired_devices();
+    }
+
+    #[allow(dead_code)]
+    fn revoke_device(&mut self, name: String, cx: &mut Context<Self>) {
+        if self.service.revoke_device(&name) {
+            self.refresh_paired_devices();
+            cx.notify();
+        }
+    }
+
     fn start_server(&mut self, cx: &mut Context<Self>) {
+        let port = 3721;
+        let state = AppState::new((*self.service).clone());
+
+        // Use the shared Tokio runtime to spawn the server task
+        qingqi_core::tokio_runtime::spawn(async move {
+            match RemoteServer::run(state, port).await {
+                Ok((addr, server_handle)) => {
+                    tracing::info!("远程控制服务器已启动: {}", addr);
+                    // Keep the server running until the handle is dropped or aborted
+                    let _ = server_handle.await;
+                }
+                Err(e) => {
+                    tracing::error!("启动远程控制服务器失败: {}", e);
+                }
+            }
+        });
+
         self.server_running = true;
-        self.service.set_server_running(true, 3721);
+        self.service.set_server_running(true, port);
         cx.notify();
     }
 
@@ -141,6 +175,7 @@ impl RemoteControlView {
     fn render_pin_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let has_pin = self.pin.is_some();
         let pin_text = self.pin.clone().unwrap_or_default();
+        let has_paired = !self.paired_devices.is_empty();
 
         v_flex()
             .gap_3()
@@ -153,16 +188,13 @@ impl RemoteControlView {
                     .font_weight(FontWeight::SEMIBOLD)
                     .child("设备配对"),
             )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(gpui::rgba(0x888888))
-                    .child("点击生成 PIN 码，在手机上输入以完成配对"),
-            )
+            .when(has_paired, |this| {
+                this.child(self.render_paired_devices(cx))
+            })
             .when(!has_pin, |this| {
                 this.child(
                     Button::new("btn-gen-pin")
-                        .label("生成配对 PIN")
+                        .label(if has_paired { "配对新设备" } else { "生成配对 PIN" })
                         .compact()
                         .on_click(cx.listener(|view, _, _window, cx| {
                             view.generate_pin(cx);
@@ -187,6 +219,15 @@ impl RemoteControlView {
                                 .text_xs()
                                 .text_color(gpui::rgba(0x888888))
                                 .child("请在手机上输入此 PIN 码"),
+                        )
+                        .child(
+                            Button::new("btn-cancel-pin")
+                                .label("取消")
+                                .compact()
+                                .on_click(cx.listener(|view, _, _window, cx| {
+                                    view.pin = None;
+                                    cx.notify();
+                                })),
                         ),
                 )
             })
@@ -210,6 +251,86 @@ impl RemoteControlView {
                         })),
                 )
             })
+    }
+
+    fn render_paired_devices(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let devices: Vec<_> = self
+            .paired_devices
+            .iter()
+            .enumerate()
+            .map(|(idx, device)| {
+                let name = device.name.clone();
+                let expires_at = device.expires_at;
+                let paired_at = device.paired_at;
+                let svc = Arc::clone(&self.service);
+                let entity_id = cx.entity_id();
+
+                v_flex()
+                    .gap_1()
+                    .p_2()
+                    .bg(gpui::rgba(0x2a2a2a))
+                    .rounded_md()
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(device.name.clone()),
+                            )
+                            .child(
+                                Button::new(("btn-revoke", idx as u64))
+                                    .label("移除")
+                                    .compact()
+                                    .on_click(move |_, _, _cx| {
+                                        svc.revoke_device(&name);
+                                        _cx.notify(entity_id);
+                                    }),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(gpui::rgba(0x888888))
+                            .child(format!(
+                                "配对时间: {} · 过期时间: {}",
+                                format_time(paired_at),
+                                format_time(expires_at)
+                            )),
+                    )
+            })
+            .collect();
+
+        v_flex()
+            .gap_2()
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(gpui::rgba(0x888888))
+                    .child(format!("已配对设备 ({})", self.paired_devices.len())),
+            )
+            .children(devices)
+    }
+}
+
+fn format_time(timestamp: i64) -> String {
+    use time::OffsetDateTime;
+    match OffsetDateTime::from_unix_timestamp(timestamp) {
+        Ok(dt) => {
+            let date = dt.date();
+            let time = dt.time();
+            format!(
+                "{:04}-{:02}-{:02} {:02}:{:02}",
+                date.year(),
+                date.month() as u8,
+                date.day(),
+                time.hour(),
+                time.minute()
+            )
+        }
+        Err(_) => "未知".to_string(),
     }
 }
 

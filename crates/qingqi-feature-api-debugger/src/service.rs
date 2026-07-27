@@ -244,6 +244,8 @@ pub struct ApiService {
     /// (or a superseding send) advances it so the in-flight worker discards its
     /// result instead of clobbering newer state.
     generation: AtomicU64,
+    /// Monotonic revision counter for tracking data changes.
+    revision: AtomicU64,
     state: Mutex<ApiServiceState>,
     update_subscribers: Mutex<Vec<Sender<()>>>,
     data_source: ApiDebuggerDataSource,
@@ -261,6 +263,7 @@ impl ApiService {
             .expect("无法打开 API 调试器数据库");
         Self {
             generation: AtomicU64::new(0),
+            revision: AtomicU64::new(0),
             state: Mutex::new(ApiServiceState {
                 in_flight: false,
                 pending_response: None,
@@ -274,6 +277,11 @@ impl ApiService {
             #[cfg(not(test))]
             preferences,
         }
+    }
+
+    /// Returns the current revision counter value.
+    pub fn revision(&self) -> u64 {
+        self.revision.load(Ordering::SeqCst)
     }
 
     pub fn load_request_panel_ratio(&self) -> f32 {

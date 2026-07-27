@@ -5739,6 +5739,7 @@ dependencies = [
  "qingqi-feature-json-parser",
  "qingqi-feature-qr-code",
  "qingqi-feature-quick-launch",
+ "qingqi-feature-remote-control",
  "qingqi-feature-ssh",
  "qingqi-feature-system-settings",
  "qingqi-feature-tray",
@@ -5782,6 +5783,7 @@ dependencies = [
  "rusqlite",
  "serde_json",
  "time",
+ "tokio",
  "tracing",
 ]
 
@@ -6001,7 +6003,9 @@ dependencies = [
  "axum-server",
  "futures",
  "gpui",
+ "image",
  "local-ip-address",
+ "qingqi-core",
  "qingqi-platform",
  "qingqi-plugin",
  "qingqi-ui",

@@ -8,7 +8,6 @@ use gpui::{
 };
 
 use super::list::ListItem;
-use super::styled::StyledExt;
 use crate::ui;
 
 #[derive(Clone)]
@@ -171,7 +170,7 @@ impl TreeState {
 }
 
 impl Render for TreeState {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let render_item_cell = self.render_item_cell.clone();
         let entry_click_handler = self.entry_click_handler.clone();
         let entity = cx.entity().clone();

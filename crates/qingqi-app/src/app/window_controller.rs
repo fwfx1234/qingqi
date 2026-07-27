@@ -13,7 +13,7 @@ use qingqi_ui::components::root::Root;
 
 use crate::app::{
     app_catalog::AppCatalog,
-    dock_agent::{DockAgentConfig, DockAgentEvent, DockAgentManager},
+    dock_agent::{DockAgentConfig, DockAgentManager},
     launcher::Launcher,
 };
 use qingqi_core::lock_or_recover;
@@ -941,7 +941,7 @@ fn activate_launcher_window(launcher: &Launcher, window: &mut Window, cx: &mut A
     launcher.focus_query_input(window, cx);
     // Ensure blink cursor starts even if on_focus callback has timing issues
     if let Some(input) = launcher.query_input.as_ref() {
-        input.update(cx, |input, cx| {
+        input.update(cx, |_input, _cx| {
             // input.start_blink_cursor(cx); // method not available in this gpui version
         });
     }

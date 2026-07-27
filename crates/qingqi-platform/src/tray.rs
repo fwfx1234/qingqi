@@ -149,16 +149,19 @@ pub fn install_tray(mode: PreventSleepMode) -> Result<(), String> {
     {
         let menu = build_menu(mode)?;
         let icon = default_icon()?;
-        let mut builder = TrayIconBuilder::new()
+        #[cfg(target_os = "macos")]
+        let builder = TrayIconBuilder::new()
+            .with_id(MAIN_TRAY_ID)
+            .with_menu(Box::new(menu))
+            .with_menu_on_left_click(false)
+            .with_tooltip("启程 (Qingqi)")
+            .with_icon_as_template(true);
+        #[cfg(not(target_os = "macos"))]
+        let builder = TrayIconBuilder::new()
             .with_id(MAIN_TRAY_ID)
             .with_menu(Box::new(menu))
             .with_menu_on_left_click(false)
             .with_tooltip("启程 (Qingqi)");
-
-        #[cfg(target_os = "macos")]
-        {
-            builder = builder.with_icon_as_template(true);
-        }
 
         let tray = builder
             .with_icon(icon)

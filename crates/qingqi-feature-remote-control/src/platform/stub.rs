@@ -45,3 +45,7 @@ pub fn launch_app(_path: &str, _args: &[String]) -> anyhow::Result<()> {
 pub fn search_installed_apps(_query: &str) -> Vec<AppInfo> {
     Vec::new()
 }
+
+pub fn set_priority(_pid: u32, _priority: &str) -> anyhow::Result<()> {
+    anyhow::bail!("Process priority adjustment is only supported on Windows")
+}

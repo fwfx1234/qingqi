@@ -3,7 +3,7 @@ use std::{
     fs,
     io::Cursor,
     path::{Path, PathBuf},
-    process::Command,
+
     sync::Mutex,
 };
 
@@ -400,6 +400,7 @@ fn run_osascript(script: &str, arguments: &[&str]) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub(crate) fn is_supported_version_string(version: &str) -> bool {
     let mut parts = version.trim().split('.');
     let major = parts.next().and_then(|part| part.parse::<u32>().ok());

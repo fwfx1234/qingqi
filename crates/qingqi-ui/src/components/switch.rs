@@ -2,7 +2,7 @@
 
 use gpui::{
     App, ElementId, InteractiveElement, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
     px,
 };
 use std::rc::Rc;
@@ -24,6 +24,7 @@ impl Side2 {
 
 #[derive(IntoElement)]
 pub struct Switch {
+    #[allow(dead_code)]
     id: ElementId,
     style: StyleRefinement,
     checked: bool,

@@ -72,6 +72,7 @@ impl DockAgentConfig {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(dead_code)]
 pub(crate) enum DockAgentEvent {
     Ready,
     Activate,
@@ -490,6 +491,7 @@ fn send_event(output: &Arc<Mutex<std::io::Stdout>>, event: &str) {
     let _ = output.flush();
 }
 
+#[allow(dead_code)]
 fn parse_agent_event(line: &str) -> Option<DockAgentEvent> {
     match line.trim() {
         EVENT_READY => Some(DockAgentEvent::Ready),

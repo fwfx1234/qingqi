@@ -2,7 +2,7 @@
 
 use gpui::{
     App, Element, ElementId, Entity, InteractiveElement, IntoElement, ParentElement, RenderOnce,
-    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div, hsla,
+    SharedString, StyleRefinement, Styled, Window, div, hsla,
     prelude::FluentBuilder, px,
 };
 use qingqi_ui::token::tokens;

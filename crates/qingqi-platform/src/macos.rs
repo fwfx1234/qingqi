@@ -88,6 +88,7 @@ fn prompt_accessibility() {
 }
 
 #[cfg(not(target_os = "macos"))]
+#[allow(dead_code)]
 fn prompt_accessibility() {}
 
 /// Hide the app from the macOS Dock while keeping menu bar/status item behavior available.

@@ -105,7 +105,7 @@ pub fn online_displays() -> anyhow::Result<Vec<DisplayDescriptor>> {
     }
 }
 
-pub fn display_modes(display_id: u32) -> anyhow::Result<Vec<DisplayMode>> {
+pub fn display_modes(_display_id: u32) -> anyhow::Result<Vec<DisplayMode>> {
     #[cfg(target_os = "macos")]
     {
         macos::display_modes(display_id)
@@ -116,7 +116,7 @@ pub fn display_modes(display_id: u32) -> anyhow::Result<Vec<DisplayMode>> {
     }
 }
 
-pub fn display_descriptor(display_id: u32) -> anyhow::Result<DisplayDescriptor> {
+pub fn display_descriptor(_display_id: u32) -> anyhow::Result<DisplayDescriptor> {
     #[cfg(target_os = "macos")]
     {
         macos::display_descriptor(display_id)
@@ -127,7 +127,7 @@ pub fn display_descriptor(display_id: u32) -> anyhow::Result<DisplayDescriptor> 
     }
 }
 
-pub fn set_display_mode(display_id: u32, mode: DisplayModeKey) -> anyhow::Result<()> {
+pub fn set_display_mode(_display_id: u32, _mode: DisplayModeKey) -> anyhow::Result<()> {
     #[cfg(target_os = "macos")]
     {
         macos::set_display_mode(display_id, mode)

@@ -3,7 +3,6 @@
 use gpui::prelude::*;
 use gpui::*;
 use qingqi_ui::components::root::Root;
-use qingqi_ui::components::scroll::ScrollableElement;
 use qingqi_ui::components::scroll::ScrollbarExt;
 use qingqi_ui::components::theme::Theme;
 

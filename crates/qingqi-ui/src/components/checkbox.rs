@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use gpui::{
     App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
-    StatefulInteractiveElement, Styled, Window, div, hsla, prelude::FluentBuilder, px,
+    StatefulInteractiveElement, Styled, Window, div, px,
 };
 
 use crate::token::tokens;
@@ -12,6 +12,7 @@ pub struct Checkbox {
     id: ElementId,
     label: Option<SharedString>,
     checked: bool,
+    #[allow(dead_code)]
     disabled: bool,
     on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
     style: gpui::StyleRefinement,
@@ -79,7 +80,6 @@ impl RenderOnce for Checkbox {
             .child(if checked { "✓" } else { "" });
 
         let checkbox = if let Some(on_click) = self.on_click {
-            let id = self.id.clone();
             checkbox.on_click(move |_, window, cx| {
                 let new_state = !checked;
                 on_click(&new_state, window, cx);
