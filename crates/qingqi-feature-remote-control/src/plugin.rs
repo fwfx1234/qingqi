@@ -62,18 +62,24 @@ impl Plugin for RemoteControlPlugin {
     }
 
     fn start_background(&mut self, _cx: &mut PluginCx<'_>) {
-        // Auto-start the remote control server on Windows
         #[cfg(target_os = "windows")]
         {
             tracing::info!("[远程控制] 插件后台启动，准备自动启动服务器...");
 
-            // Update service state so the view shows "running" when opened
             self.service.set_server_running(true, 3721);
 
             let state = crate::server::AppState::new(
                 (*self.service).clone(),
                 Arc::clone(&self.database),
             );
+
+            // 启动窗口监控线程
+            {
+                let mut monitor = state.window_monitor.lock().unwrap();
+                monitor.start();
+                tracing::info!("[远程控制] 窗口监控线程已启动");
+            }
+
             let port = 3721;
             tracing::info!("[远程控制] 正在后台启动服务器，端口: {}", port);
 

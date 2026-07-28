@@ -3,6 +3,8 @@ pub mod log_store;
 pub mod routes;
 pub mod ws_handler;
 
+use log_store::LogStore;
+
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -15,6 +17,7 @@ use crate::service::RemoteControlService;
 use crate::service::system::SystemService;
 use crate::service::process::ProcessManager;
 use crate::service::app_scanner::AppScanner;
+use crate::service::window_monitor::WindowMonitor;
 
 pub type EventSender = broadcast::Sender<WsEvent>;
 
@@ -27,12 +30,15 @@ pub struct AppState {
     pub events: EventSender,
     pub app_scanner: Arc<AppScanner>,
     pub log_store: Arc<log_store::LogStore>,
+    pub window_monitor: Arc<std::sync::Mutex<WindowMonitor>>,
 }
 
 impl AppState {
     pub fn new(service: RemoteControlService, database: Arc<DatabaseService>) -> Self {
         let (tx, _) = broadcast::channel(256);
         let scanner_config_path = service.paths().config("scanner_custom_dirs.json");
+        let mut window_monitor = WindowMonitor::new();
+        window_monitor.set_event_sender(tx.clone());
         Self {
             service: Arc::new(service),
             system_service: Arc::new(SystemService::new()),
@@ -40,7 +46,8 @@ impl AppState {
             token_store: Arc::new(auth::TokenStore::new(database.clone())),
             events: tx,
             app_scanner: Arc::new(AppScanner::new(scanner_config_path)),
-            log_store: Arc::new(log_store::LogStore::new(database)),
+            log_store: Arc::new(LogStore::new(database)),
+            window_monitor: Arc::new(std::sync::Mutex::new(window_monitor)),
         }
     }
 }
@@ -107,12 +114,23 @@ impl RemoteServer {
             .route("/api/v1/scanner/custom-dirs/:id", axum::routing::put(routes::custom_dir::update))
             .route("/api/v1/scanner/custom-dirs/:id", axum::routing::delete(routes::custom_dir::remove));
 
-        // Task Manager routes
-        app = app
-            .route("/api/v1/tasks", axum::routing::get(routes::task::list_tasks))
-            .route("/api/v1/tasks/:pid/kill", axum::routing::post(routes::task::kill_task))
-            .route("/api/v1/tasks/:pid/priority", axum::routing::post(routes::task::set_priority))
-            .route("/api/v1/tasks/stats", axum::routing::get(routes::task::system_stats));
+    // Task Manager routes
+    app = app
+        .route("/api/v1/tasks", axum::routing::get(routes::task::list_tasks))
+        .route("/api/v1/tasks/:pid/kill", axum::routing::post(routes::task::kill_task))
+        .route("/api/v1/tasks/:pid/priority", axum::routing::post(routes::task::set_priority))
+        .route("/api/v1/tasks/stats", axum::routing::get(routes::task::system_stats));
+
+    // Window management routes
+    app = app
+        .route("/api/v1/windows", axum::routing::get(routes::windows::list))
+        .route("/api/v1/windows/active", axum::routing::get(routes::windows::active))
+        .route("/api/v1/windows/:id/focus", axum::routing::post(routes::windows::focus));
+
+    // File browser routes
+    app = app
+        .route("/api/v1/files/browse", axum::routing::get(routes::files::browse))
+        .route("/api/v1/files/quick-access", axum::routing::get(routes::files::quick_access));
 
         // Mobile Web Interface
         app = app

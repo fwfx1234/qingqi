@@ -49,3 +49,22 @@ pub fn search_installed_apps(_query: &str) -> Vec<AppInfo> {
 pub fn set_priority(_pid: u32, _priority: &str) -> anyhow::Result<()> {
     anyhow::bail!("Process priority adjustment is only supported on Windows")
 }
+
+#[derive(Debug, Clone)]
+pub struct WindowInfo {
+    pub hwnd: usize,
+    pub title: String,
+    pub pid: u32,
+    pub exe_path: Option<String>,
+    pub is_visible: bool,
+    pub is_foreground: bool,
+    pub is_fullscreen: bool,
+}
+
+pub fn enum_windows() -> Vec<WindowInfo> {
+    Vec::new()
+}
+
+pub fn focus_window(_hwnd: usize) -> anyhow::Result<()> {
+    anyhow::bail!("Window management is only supported on Windows")
+}

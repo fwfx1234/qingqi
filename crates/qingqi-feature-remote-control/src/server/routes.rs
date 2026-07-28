@@ -419,10 +419,14 @@ pub mod scanner {
                 let exe_path = app.exe_path.clone();
                 let args: Vec<String> = Vec::new();
                 match crate::platform::launch_app(&exe_path, &args) {
-                    Ok(()) => (
-                        StatusCode::OK,
-                        Json(ApiResponse::success(crate::protocol::responses::EmptyResponse {})),
-                    ),
+                    Ok(()) => {
+                        // 标记游戏状态，暂停窗口监控
+                        state.window_monitor.lock().unwrap().set_gaming(true);
+                        (
+                            StatusCode::OK,
+                            Json(ApiResponse::success(crate::protocol::responses::EmptyResponse {})),
+                        )
+                    }
                     Err(e) => (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(ApiResponse::<crate::protocol::responses::EmptyResponse>::error(
@@ -495,10 +499,14 @@ pub mod steam {
             Some(_) => {
                 let steam_url = format!("steam://rungameid/{}", app_id);
                 match crate::platform::launch_app(&steam_url, &[]) {
-                    Ok(()) => (
-                        StatusCode::OK,
-                        Json(ApiResponse::success(crate::protocol::responses::EmptyResponse {})),
-                    ),
+                    Ok(()) => {
+                        // 标记游戏状态，暂停窗口监控
+                        state.window_monitor.lock().unwrap().set_gaming(true);
+                        (
+                            StatusCode::OK,
+                            Json(ApiResponse::success(crate::protocol::responses::EmptyResponse {})),
+                        )
+                    }
                     Err(e) => (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(ApiResponse::<crate::protocol::responses::EmptyResponse>::error(
@@ -806,5 +814,91 @@ pub mod server_mgmt {
             StatusCode::OK,
             Json(ApiResponse::success(EmptyResponse {})),
         )
+    }
+}
+
+// === 窗口管理路由 ===
+
+pub mod windows {
+    use super::*;
+    use crate::protocol::requests::WindowInfo;
+
+    pub async fn list(
+        Extension(_state): Extension<AppState>,
+    ) -> impl IntoResponse {
+        let windows = crate::platform::enum_windows();
+        let active = windows.iter().find(|w| w.is_foreground).map(|w| w.hwnd);
+        let response = crate::protocol::requests::WindowListResponse {
+            windows: windows
+                .into_iter()
+                .map(|w| WindowInfo {
+                    id: w.hwnd,
+                    title: w.title,
+                    pid: w.pid,
+                    exe_path: w.exe_path,
+                    is_visible: w.is_visible,
+                    is_foreground: w.is_foreground,
+                    is_fullscreen: w.is_fullscreen,
+                })
+                .collect(),
+            active_id: active,
+        };
+        (StatusCode::OK, Json(ApiResponse::success(response)))
+    }
+
+    pub async fn focus(
+        Extension(_state): Extension<AppState>,
+        Path(id): Path<usize>,
+    ) -> impl IntoResponse {
+        match crate::platform::focus_window(id) {
+            Ok(()) => (StatusCode::OK, Json(ApiResponse::success("ok"))),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error("FOCUS_FAILED", &e.to_string())),
+            ),
+        }
+    }
+
+    pub async fn active(
+        Extension(_state): Extension<AppState>,
+    ) -> impl IntoResponse {
+        match crate::platform::get_foreground_window_info() {
+            Ok(info) => (StatusCode::OK, Json(ApiResponse::success(info))),
+            Err(e) => (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::error("NO_FOREGROUND", &e.to_string())),
+            ),
+        }
+    }
+}
+
+// === 文件浏览路由 ===
+
+pub mod files {
+    use super::*;
+
+    pub async fn browse(
+        Extension(_state): Extension<AppState>,
+        Query(query): Query<crate::service::file_browser::BrowseQuery>,
+    ) -> impl IntoResponse {
+        let path = query.path.unwrap_or_else(|| {
+            dirs::home_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| "/".to_string())
+        });
+        match crate::service::file_browser::browse_directory(&path) {
+            Ok(listing) => (StatusCode::OK, Json(ApiResponse::success(listing))),
+            Err(e) => (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::error("BROWSE_FAILED", &e)),
+            ),
+        }
+    }
+
+    pub async fn quick_access(
+        Extension(_state): Extension<AppState>,
+    ) -> impl IntoResponse {
+        let items = crate::service::file_browser::get_quick_access();
+        (StatusCode::OK, Json(ApiResponse::success(items)))
     }
 }

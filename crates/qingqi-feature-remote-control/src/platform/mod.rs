@@ -4,6 +4,9 @@
 
 use crate::protocol::responses::{AppInfo, ForegroundResponse, ProcessInfo};
 
+#[cfg(target_os = "windows")]
+pub use windows::WindowInfo;
+
 pub struct ProcessActions;
 
 impl ProcessActions {
@@ -62,6 +65,28 @@ pub fn get_process_info(process: &sysinfo::Process) -> ProcessInfo {
 
 pub fn set_priority(pid: u32, priority: &str) -> anyhow::Result<()> {
     platform_impl::set_priority(pid, priority)
+}
+
+// === 窗口管理 ===
+
+#[cfg(target_os = "windows")]
+pub fn enum_windows() -> Vec<WindowInfo> {
+    windows::enum_windows()
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn enum_windows() -> Vec<WindowInfo> {
+    stub::enum_windows()
+}
+
+#[cfg(target_os = "windows")]
+pub fn focus_window(hwnd: usize) -> anyhow::Result<()> {
+    windows::focus_window(hwnd)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn focus_window(hwnd: usize) -> anyhow::Result<()> {
+    stub::focus_window(hwnd)
 }
 
 // === Platform-specific implementations ===

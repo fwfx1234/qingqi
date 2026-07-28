@@ -3,6 +3,8 @@
 pub mod app_scanner;
 pub mod process;
 pub mod system;
+pub mod window_monitor;
+pub mod file_browser;
 
 use std::path::PathBuf;
 use std::sync::Arc;
