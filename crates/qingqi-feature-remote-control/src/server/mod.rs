@@ -125,12 +125,24 @@ impl RemoteServer {
     app = app
         .route("/api/v1/windows", axum::routing::get(routes::windows::list))
         .route("/api/v1/windows/active", axum::routing::get(routes::windows::active))
-        .route("/api/v1/windows/:id/focus", axum::routing::post(routes::windows::focus));
+        .route("/api/v1/windows/:id/focus", axum::routing::post(routes::windows::focus))
+        .route("/api/v1/windows/:id/minimize", axum::routing::post(routes::windows::minimize))
+        .route("/api/v1/windows/:id/maximize", axum::routing::post(routes::windows::maximize))
+        .route("/api/v1/windows/:id/restore", axum::routing::post(routes::windows::restore))
+        .route("/api/v1/windows/:id/close", axum::routing::post(routes::windows::close))
+        .route("/api/v1/windows/:id/move", axum::routing::post(routes::windows::r#move))
+        .route("/api/v1/windows/:id/always-on-top", axum::routing::post(routes::windows::always_on_top));
 
-    // File browser routes
+    // File management routes
     app = app
         .route("/api/v1/files/browse", axum::routing::get(routes::files::browse))
-        .route("/api/v1/files/quick-access", axum::routing::get(routes::files::quick_access));
+        .route("/api/v1/files/quick-access", axum::routing::get(routes::files::quick_access))
+        .route("/api/v1/files/download", axum::routing::get(routes::files::download))
+        .route("/api/v1/files/upload", axum::routing::post(routes::files::upload))
+        .route("/api/v1/files", axum::routing::delete(routes::files::delete))
+        .route("/api/v1/files/rename", axum::routing::put(routes::files::rename))
+        .route("/api/v1/files/create-dir", axum::routing::post(routes::files::create_dir))
+        .route("/api/v1/files/info", axum::routing::get(routes::files::info));
 
         // Mobile Web Interface
         app = app

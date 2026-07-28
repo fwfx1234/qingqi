@@ -6,12 +6,13 @@ use axum::{
 };
 
 use crate::protocol::requests::{
-    AuthPairRequest, AuthVerifyRequest, LaunchAppRequest, ProcessListQuery, RestartRequest,
-    SearchAppsQuery, ShutdownRequest, SleepRequest, UpdateSettingsRequest,
+    AuthPairRequest, AuthVerifyRequest, CreateDirRequest, FilePathQuery, LaunchAppRequest,
+    MoveWindowRequest, ProcessListQuery, RenameFileRequest, RestartRequest, SearchAppsQuery,
+    SetAlwaysOnTopRequest, ShutdownRequest, SleepRequest, UpdateSettingsRequest,
 };
 use crate::protocol::responses::{
     ApiResponse, DeviceInfo, DeviceListResponse, EmptyResponse, ForegroundResponse, LogResponse,
-    PairResponse, QrCodeResponse, ServerSettings,
+    PairResponse, QrCodeResponse,
 };
 use crate::server::AppState;
 
@@ -839,6 +840,7 @@ pub mod windows {
                     is_visible: w.is_visible,
                     is_foreground: w.is_foreground,
                     is_fullscreen: w.is_fullscreen,
+                    is_topmost: w.is_topmost,
                 })
                 .collect(),
             active_id: active,
@@ -859,6 +861,86 @@ pub mod windows {
         }
     }
 
+    pub async fn minimize(
+        Extension(_state): Extension<AppState>,
+        Path(id): Path<usize>,
+    ) -> impl IntoResponse {
+        match crate::platform::minimize_window(id) {
+            Ok(()) => (StatusCode::OK, Json(ApiResponse::success("ok"))),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error("MINIMIZE_FAILED", &e.to_string())),
+            ),
+        }
+    }
+
+    pub async fn maximize(
+        Extension(_state): Extension<AppState>,
+        Path(id): Path<usize>,
+    ) -> impl IntoResponse {
+        match crate::platform::maximize_window(id) {
+            Ok(()) => (StatusCode::OK, Json(ApiResponse::success("ok"))),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error("MAXIMIZE_FAILED", &e.to_string())),
+            ),
+        }
+    }
+
+    pub async fn restore(
+        Extension(_state): Extension<AppState>,
+        Path(id): Path<usize>,
+    ) -> impl IntoResponse {
+        match crate::platform::restore_window(id) {
+            Ok(()) => (StatusCode::OK, Json(ApiResponse::success("ok"))),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error("RESTORE_FAILED", &e.to_string())),
+            ),
+        }
+    }
+
+    pub async fn close(
+        Extension(_state): Extension<AppState>,
+        Path(id): Path<usize>,
+    ) -> impl IntoResponse {
+        match crate::platform::close_window(id) {
+            Ok(()) => (StatusCode::OK, Json(ApiResponse::success("ok"))),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error("CLOSE_FAILED", &e.to_string())),
+            ),
+        }
+    }
+
+    pub async fn r#move(
+        Extension(_state): Extension<AppState>,
+        Path(id): Path<usize>,
+        Json(req): Json<MoveWindowRequest>,
+    ) -> impl IntoResponse {
+        match crate::platform::move_window(id, req.x, req.y, req.width, req.height) {
+            Ok(()) => (StatusCode::OK, Json(ApiResponse::success("ok"))),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error("MOVE_FAILED", &e.to_string())),
+            ),
+        }
+    }
+
+    pub async fn always_on_top(
+        Extension(_state): Extension<AppState>,
+        Path(id): Path<usize>,
+        Json(req): Json<SetAlwaysOnTopRequest>,
+    ) -> impl IntoResponse {
+        match crate::platform::set_always_on_top(id, req.enable) {
+            Ok(()) => (StatusCode::OK, Json(ApiResponse::success("ok"))),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error("ALWAYS_ON_TOP_FAILED", &e.to_string())),
+            ),
+        }
+    }
+
     pub async fn active(
         Extension(_state): Extension<AppState>,
     ) -> impl IntoResponse {
@@ -872,10 +954,13 @@ pub mod windows {
     }
 }
 
-// === 文件浏览路由 ===
+// === 文件管理路由 ===
 
 pub mod files {
     use super::*;
+    use axum::body::Bytes;
+    use axum::response::Response;
+    use http::{header, StatusCode as HttpStatusCode};
 
     pub async fn browse(
         Extension(_state): Extension<AppState>,
@@ -900,5 +985,162 @@ pub mod files {
     ) -> impl IntoResponse {
         let items = crate::service::file_browser::get_quick_access();
         (StatusCode::OK, Json(ApiResponse::success(items)))
+    }
+
+    pub async fn download(
+        Extension(_state): Extension<AppState>,
+        Query(query): Query<FilePathQuery>,
+    ) -> Response {
+        let path = std::path::Path::new(&query.path);
+        if !path.exists() || path.is_dir() {
+            return (
+                HttpStatusCode::BAD_REQUEST,
+                Json(ApiResponse::<crate::protocol::responses::EmptyResponse>::error(
+                    "INVALID_PATH",
+                    "文件路径不存在或为目录",
+                )),
+            )
+                .into_response();
+        }
+        let filename = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("download");
+        let content_type = mime_guess::from_path(path)
+            .first_or_octet_stream()
+            .to_string();
+        match std::fs::read(path) {
+            Ok(data) => (
+                HttpStatusCode::OK,
+                [
+                    (header::CONTENT_TYPE, content_type),
+                    (
+                        header::CONTENT_DISPOSITION,
+                        format!("attachment; filename=\"{filename}\""),
+                    ),
+                ],
+                Bytes::from(data),
+            )
+                .into_response(),
+            Err(e) => (
+                HttpStatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<crate::protocol::responses::EmptyResponse>::error(
+                    "READ_FAILED",
+                    &e.to_string(),
+                )),
+            )
+                .into_response(),
+        }
+    }
+
+    pub async fn upload(
+        Extension(_state): Extension<AppState>,
+        mut multipart: axum::extract::Multipart,
+    ) -> impl IntoResponse {
+        let mut saved_files: Vec<String> = Vec::new();
+        while let Ok(Some(field)) = multipart.next_field().await {
+            let name = field.name().unwrap_or("file").to_string();
+            let file_name = field.file_name().map(|s| s.to_string());
+            if let Ok(bytes) = field.bytes().await {
+                let dest_name = file_name.unwrap_or_else(|| format!("upload_{}", name));
+                let dest_path = std::env::temp_dir().join(&dest_name);
+                match std::fs::write(&dest_path, &bytes) {
+                    Ok(()) => saved_files.push(dest_path.to_string_lossy().to_string()),
+                    Err(e) => {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(ApiResponse::<Vec<String>>::error(
+                                "WRITE_FAILED",
+                                &format!("写入 {dest_name} 失败: {e}"),
+                            )),
+                        );
+                    }
+                }
+            }
+        }
+        if saved_files.is_empty() {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<Vec<String>>::error(
+                    "NO_FILES",
+                    "未收到任何文件",
+                )),
+            )
+        } else {
+            (StatusCode::OK, Json(ApiResponse::success(saved_files)))
+        }
+    }
+
+    pub async fn delete(
+        Extension(_state): Extension<AppState>,
+        Query(query): Query<FilePathQuery>,
+    ) -> impl IntoResponse {
+        match crate::service::file_browser::delete_path(&query.path) {
+            Ok(()) => (
+                StatusCode::OK,
+                Json(ApiResponse::success(crate::protocol::responses::EmptyResponse {})),
+            ),
+            Err(e) => (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<crate::protocol::responses::EmptyResponse>::error(
+                    "DELETE_FAILED",
+                    &e,
+                )),
+            ),
+        }
+    }
+
+    pub async fn rename(
+        Extension(_state): Extension<AppState>,
+        Json(req): Json<RenameFileRequest>,
+    ) -> impl IntoResponse {
+        match crate::service::file_browser::rename_path(&req.old_path, &req.new_path) {
+            Ok(()) => (
+                StatusCode::OK,
+                Json(ApiResponse::success(crate::protocol::responses::EmptyResponse {})),
+            ),
+            Err(e) => (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<crate::protocol::responses::EmptyResponse>::error(
+                    "RENAME_FAILED",
+                    &e,
+                )),
+            ),
+        }
+    }
+
+    pub async fn create_dir(
+        Extension(_state): Extension<AppState>,
+        Json(req): Json<CreateDirRequest>,
+    ) -> impl IntoResponse {
+        match crate::service::file_browser::create_directory(&req.path, &req.name) {
+            Ok(()) => (
+                StatusCode::OK,
+                Json(ApiResponse::success(crate::protocol::responses::EmptyResponse {})),
+            ),
+            Err(e) => (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<crate::protocol::responses::EmptyResponse>::error(
+                    "CREATE_DIR_FAILED",
+                    &e,
+                )),
+            ),
+        }
+    }
+
+    pub async fn info(
+        Extension(_state): Extension<AppState>,
+        Query(query): Query<FilePathQuery>,
+    ) -> impl IntoResponse {
+        match crate::service::file_browser::get_file_info(&query.path) {
+            Ok(info) => (StatusCode::OK, Json(ApiResponse::success(info))),
+            Err(e) => (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<crate::service::file_browser::FileInfo>::error(
+                    "INFO_FAILED",
+                    &e,
+                )),
+            ),
+        }
     }
 }

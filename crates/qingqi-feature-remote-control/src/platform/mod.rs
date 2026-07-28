@@ -89,6 +89,66 @@ pub fn focus_window(hwnd: usize) -> anyhow::Result<()> {
     stub::focus_window(hwnd)
 }
 
+#[cfg(target_os = "windows")]
+pub fn minimize_window(hwnd: usize) -> anyhow::Result<()> {
+    windows::minimize_window(hwnd)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn minimize_window(hwnd: usize) -> anyhow::Result<()> {
+    stub::minimize_window(hwnd)
+}
+
+#[cfg(target_os = "windows")]
+pub fn maximize_window(hwnd: usize) -> anyhow::Result<()> {
+    windows::maximize_window(hwnd)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn maximize_window(hwnd: usize) -> anyhow::Result<()> {
+    stub::maximize_window(hwnd)
+}
+
+#[cfg(target_os = "windows")]
+pub fn restore_window(hwnd: usize) -> anyhow::Result<()> {
+    windows::restore_window(hwnd)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn restore_window(hwnd: usize) -> anyhow::Result<()> {
+    stub::restore_window(hwnd)
+}
+
+#[cfg(target_os = "windows")]
+pub fn close_window(hwnd: usize) -> anyhow::Result<()> {
+    windows::close_window(hwnd)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn close_window(hwnd: usize) -> anyhow::Result<()> {
+    stub::close_window(hwnd)
+}
+
+#[cfg(target_os = "windows")]
+pub fn move_window(hwnd: usize, x: i32, y: i32, width: u32, height: u32) -> anyhow::Result<()> {
+    windows::move_window(hwnd, x, y, width, height)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn move_window(hwnd: usize, x: i32, y: i32, width: u32, height: u32) -> anyhow::Result<()> {
+    stub::move_window(hwnd, x, y, width, height)
+}
+
+#[cfg(target_os = "windows")]
+pub fn set_always_on_top(hwnd: usize, enable: bool) -> anyhow::Result<()> {
+    windows::set_always_on_top(hwnd, enable)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn set_always_on_top(hwnd: usize, enable: bool) -> anyhow::Result<()> {
+    stub::set_always_on_top(hwnd, enable)
+}
+
 // === Platform-specific implementations ===
 
 #[cfg(target_os = "windows")]

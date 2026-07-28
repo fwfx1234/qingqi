@@ -59,6 +59,7 @@ pub struct WindowInfo {
     pub is_visible: bool,
     pub is_foreground: bool,
     pub is_fullscreen: bool,
+    pub is_topmost: bool,
 }
 
 pub fn enum_windows() -> Vec<WindowInfo> {
@@ -67,4 +68,28 @@ pub fn enum_windows() -> Vec<WindowInfo> {
 
 pub fn focus_window(_hwnd: usize) -> anyhow::Result<()> {
     anyhow::bail!("Window management is only supported on Windows")
+}
+
+pub fn minimize_window(_hwnd: usize) -> anyhow::Result<()> {
+    anyhow::bail!("Window minimize is only supported on Windows")
+}
+
+pub fn maximize_window(_hwnd: usize) -> anyhow::Result<()> {
+    anyhow::bail!("Window maximize is only supported on Windows")
+}
+
+pub fn restore_window(_hwnd: usize) -> anyhow::Result<()> {
+    anyhow::bail!("Window restore is only supported on Windows")
+}
+
+pub fn close_window(_hwnd: usize) -> anyhow::Result<()> {
+    anyhow::bail!("Window close is only supported on Windows")
+}
+
+pub fn move_window(_hwnd: usize, _x: i32, _y: i32, _width: u32, _height: u32) -> anyhow::Result<()> {
+    anyhow::bail!("Window move is only supported on Windows")
+}
+
+pub fn set_always_on_top(_hwnd: usize, _enable: bool) -> anyhow::Result<()> {
+    anyhow::bail!("Window always-on-top is only supported on Windows")
 }

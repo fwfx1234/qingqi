@@ -15,9 +15,10 @@ use windows::Win32::System::Threading::{
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId, SW_SHOWNORMAL,
     EnumWindows, IsWindowVisible, SetForegroundWindow, ShowWindow,
-    SW_RESTORE,
+    SW_RESTORE, SW_SHOWMINIMIZED, SW_SHOWMAXIMIZED, HWND_TOPMOST, HWND_NOTOPMOST,
+    SetWindowPos, PostMessageW, WM_CLOSE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW,
 };
-use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, LPARAM};
+use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, LPARAM, WPARAM};
 use windows::Win32::System::ProcessStatus::GetModuleFileNameExW;
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromWindow, MONITOR_DEFAULTTONEAREST, MONITORINFO,
@@ -259,6 +260,7 @@ pub struct WindowInfo {
     pub is_visible: bool,
     pub is_foreground: bool,
     pub is_fullscreen: bool,
+    pub is_topmost: bool,
 }
 
 /// 一次性枚举所有可见窗口（不轮询，调用完释放）
@@ -300,6 +302,7 @@ pub fn enum_windows() -> Vec<WindowInfo> {
                 };
                 let hwnd_ptr = hwnd.0 as usize;
                 let is_fullscreen = is_fullscreen_window(hwnd);
+                let is_topmost = is_topmost_window(hwnd);
                 let _ = results.lock().unwrap().push(WindowInfo {
                     hwnd: hwnd_ptr,
                     title,
@@ -308,6 +311,7 @@ pub fn enum_windows() -> Vec<WindowInfo> {
                     is_visible: true,
                     is_foreground: false,
                     is_fullscreen,
+                    is_topmost,
                 });
             }
         }
@@ -342,6 +346,87 @@ pub fn focus_window(hwnd: usize) -> anyhow::Result<()> {
         let _ = SetForegroundWindow(hwnd);
     }
     Ok(())
+}
+
+/// 最小化窗口
+pub fn minimize_window(hwnd: usize) -> anyhow::Result<()> {
+    let hwnd = HWND(hwnd as *mut _);
+    unsafe {
+        let _ = ShowWindow(hwnd, SW_SHOWMINIMIZED);
+    }
+    Ok(())
+}
+
+/// 最大化窗口
+pub fn maximize_window(hwnd: usize) -> anyhow::Result<()> {
+    let hwnd = HWND(hwnd as *mut _);
+    unsafe {
+        let _ = ShowWindow(hwnd, SW_SHOWMAXIMIZED);
+    }
+    Ok(())
+}
+
+/// 还原窗口
+pub fn restore_window(hwnd: usize) -> anyhow::Result<()> {
+    let hwnd = HWND(hwnd as *mut _);
+    unsafe {
+        let _ = ShowWindow(hwnd, SW_RESTORE);
+    }
+    Ok(())
+}
+
+/// 关闭窗口
+pub fn close_window(hwnd: usize) -> anyhow::Result<()> {
+    let hwnd = HWND(hwnd as *mut _);
+    unsafe {
+        let _ = PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0));
+    }
+    Ok(())
+}
+
+/// 移动/调整窗口大小
+pub fn move_window(hwnd: usize, x: i32, y: i32, width: u32, height: u32) -> anyhow::Result<()> {
+    let hwnd = HWND(hwnd as *mut _);
+    unsafe {
+        let _ = SetWindowPos(
+            hwnd,
+            None,
+            x,
+            y,
+            width as i32,
+            height as i32,
+            SWP_NOZORDER | SWP_SHOWWINDOW,
+        );
+    }
+    Ok(())
+}
+
+/// 设置窗口置顶/取消置顶
+pub fn set_always_on_top(hwnd: usize, enable: bool) -> anyhow::Result<()> {
+    let hwnd = HWND(hwnd as *mut _);
+    let z_order = if enable { HWND_TOPMOST } else { HWND_NOTOPMOST };
+    unsafe {
+        let _ = SetWindowPos(
+            hwnd,
+            Some(z_order),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOSIZE | SWP_SHOWWINDOW,
+        );
+    }
+    Ok(())
+}
+
+/// 检测窗口是否置顶
+fn is_topmost_window(hwnd: HWND) -> bool {
+    unsafe {
+        use windows::Win32::UI::WindowsAndMessaging::GWL_EXSTYLE;
+        use windows::Win32::UI::WindowsAndMessaging::WS_EX_TOPMOST;
+        let ex_style = windows::Win32::UI::WindowsAndMessaging::GetWindowLongW(hwnd, GWL_EXSTYLE);
+        (ex_style as u32 & WS_EX_TOPMOST.0) != 0
+    }
 }
 
 /// 检测窗口是否全屏
